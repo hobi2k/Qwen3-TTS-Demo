@@ -504,7 +504,7 @@ export default function App() {
         <section className="workspace workspace--stacked">
           <div className="panel-grid">
             <section className="panel">
-              <h2>VoiceDesign -> clone prompt -> 프리셋</h2>
+              <h2>VoiceDesign {"->"} clone prompt {"->"} 프리셋</h2>
               <p>VoiceDesign 샘플을 선택해 Base에서 재사용 가능한 clone prompt를 만듭니다.</p>
               <label>
                 VoiceDesign 샘플
@@ -532,7 +532,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <h2>사용자 음성 업로드 -> clone prompt</h2>
+              <h2>사용자 음성 업로드 {"->"} clone prompt</h2>
               <p>참조 음성과 참조 텍스트를 넣어 업로드 기반 고정 캐릭터 음성의 출발점을 만듭니다.</p>
               <label className="upload-field">
                 음성 파일 업로드
@@ -837,4 +837,3 @@ export default function App() {
     </div>
   );
 }
-

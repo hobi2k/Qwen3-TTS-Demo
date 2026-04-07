@@ -1,3 +1,5 @@
+"""Filesystem-backed storage helpers for the Qwen3-TTS demo."""
+
 import json
 import os
 import uuid
@@ -7,11 +9,29 @@ from typing import Any, Dict, List, Optional
 
 
 def utc_now() -> str:
+    """현재 UTC 시각을 ISO 8601 문자열로 반환한다.
+
+    Returns:
+        타임존 정보가 포함된 UTC 타임스탬프 문자열.
+    """
+
     return datetime.now(timezone.utc).isoformat()
 
 
 class Storage:
+    """데모 앱이 사용하는 파일 기반 저장소 경로와 입출력을 관리한다.
+
+    Args:
+        repo_root: 프로젝트 루트 경로.
+    """
+
     def __init__(self, repo_root: Path):
+        """저장소 디렉터리 구조를 초기화하고 필요한 폴더를 생성한다.
+
+        Args:
+            repo_root: 프로젝트 루트 경로.
+        """
+
         self.repo_root = repo_root
         self.data_dir = repo_root / "data"
         self.uploads_dir = self.data_dir / "uploads"
@@ -23,6 +43,8 @@ class Storage:
         self.ensure_dirs()
 
     def ensure_dirs(self) -> None:
+        """데모에서 참조하는 모든 데이터 디렉터리를 생성한다."""
+
         for directory in [
             self.data_dir,
             self.uploads_dir,
@@ -35,19 +57,62 @@ class Storage:
             directory.mkdir(parents=True, exist_ok=True)
 
     def new_id(self, prefix: str) -> str:
+        """레코드 종류를 구분할 수 있는 짧은 식별자를 생성한다.
+
+        Args:
+            prefix: ID 용도 구분을 위한 접두사.
+
+        Returns:
+            접두사와 랜덤 UUID 일부를 결합한 식별자.
+        """
+
         return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
     def relpath(self, path: Path) -> str:
+        """절대 경로를 저장용 상대 경로 문자열로 변환한다.
+
+        Args:
+            path: 프로젝트 내부 파일 경로.
+
+        Returns:
+            프로젝트 루트 기준 상대 경로.
+        """
+
         return os.path.relpath(path, self.repo_root)
 
     def write_json(self, path: Path, payload: Dict[str, Any]) -> None:
+        """JSON 레코드를 UTF-8과 들여쓰기로 저장한다.
+
+        Args:
+            path: 저장할 JSON 파일 경로.
+            payload: 직렬화할 레코드 데이터.
+        """
+
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def read_json(self, path: Path) -> Dict[str, Any]:
+        """JSON 파일을 읽어 딕셔너리로 반환한다.
+
+        Args:
+            path: 읽을 JSON 파일 경로.
+
+        Returns:
+            디코딩된 JSON 데이터.
+        """
+
         return json.loads(path.read_text(encoding="utf-8"))
 
     def list_json_records(self, directory: Path) -> List[Dict[str, Any]]:
+        """디렉터리 아래 JSON 레코드를 생성 시각 역순으로 반환한다.
+
+        Args:
+            directory: 조회할 JSON 레코드 디렉터리.
+
+        Returns:
+            최신 생성 시각 기준으로 정렬된 레코드 목록.
+        """
+
         items: List[Dict[str, Any]] = []
         if not directory.exists():
             return items
@@ -59,11 +124,30 @@ class Storage:
         return items
 
     def record_path(self, directory: Path, record_id: str) -> Path:
+        """레코드 ID에 해당하는 JSON 파일 경로를 계산한다.
+
+        Args:
+            directory: 레코드가 저장된 디렉터리.
+            record_id: 레코드 식별자.
+
+        Returns:
+            JSON 파일 전체 경로.
+        """
+
         return directory / f"{record_id}.json"
 
     def get_record(self, directory: Path, record_id: str) -> Optional[Dict[str, Any]]:
+        """레코드가 있으면 읽고 없으면 `None`을 반환한다.
+
+        Args:
+            directory: 레코드가 저장된 디렉터리.
+            record_id: 조회할 레코드 식별자.
+
+        Returns:
+            조회된 레코드 데이터 또는 `None`.
+        """
+
         path = self.record_path(directory, record_id)
         if not path.exists():
             return None
         return self.read_json(path)
-

@@ -191,9 +191,17 @@ cython_debug/
 # Frontend
 node_modules/
 app/frontend/dist/
+app/frontend/tsconfig.tsbuildinfo
 
 # Local demo runtime
 .pycache/
+.uv-cache/
+.venv/
+.cache/
+models/
+models/**
+data/models/
+data/models/**
 data/generated/*.wav
 data/generated/*.json
 data/uploads/*
