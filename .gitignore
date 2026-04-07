@@ -188,6 +188,24 @@ cython_debug/
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
+# Frontend
+node_modules/
+app/frontend/dist/
+
+# Local demo runtime
+.pycache/
+data/generated/*.wav
+data/generated/*.json
+data/uploads/*
+!data/uploads/.gitkeep
+data/clone-prompts/*.json
+data/clone-prompts/*.pkl
+data/presets/*.json
+data/datasets/*.jsonl
+data/datasets/*.json
+data/finetune-runs/*
+!data/finetune-runs/.gitkeep
+
 # Ruff stuff:
 .ruff_cache/
 
