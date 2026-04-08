@@ -14,16 +14,178 @@ import type {
 } from "./lib/types";
 
 type TabKey = "custom" | "design" | "character" | "finetune";
+type GenerationModeKey = "custom" | "design" | "clone";
+type GenerationControlsForm = {
+  seed: string;
+  non_streaming_mode: boolean;
+  do_sample: boolean;
+  top_k: string;
+  top_p: string;
+  temperature: string;
+  repetition_penalty: string;
+  subtalker_dosample: boolean;
+  subtalker_top_k: string;
+  subtalker_top_p: string;
+  subtalker_temperature: string;
+  max_new_tokens: string;
+  extra_generate_kwargs: string;
+};
 
 const tabs: { key: TabKey; label: string; description: string }[] = [
-  { key: "custom", label: "CustomVoice", description: "빠른 품질 확인과 speaker 실험" },
-  { key: "design", label: "VoiceDesign", description: "독립 음성 디자인 스튜디오" },
-  { key: "character", label: "Fixed Character", description: "clone prompt와 캐릭터 프리셋" },
-  { key: "finetune", label: "Fine-tuning", description: "데이터셋 빌더와 학습 실행" },
+  { key: "custom", label: "Quick Check", description: "" },
+  { key: "design", label: "Design Lab", description: "" },
+  { key: "character", label: "Character Builder", description: "" },
+  { key: "finetune", label: "Training Lab", description: "" },
 ];
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString("ko-KR");
+}
+
+function createGenerationControls(mode: GenerationModeKey): GenerationControlsForm {
+  return {
+    seed: "",
+    non_streaming_mode: mode === "clone" ? false : true,
+    do_sample: true,
+    top_k: "50",
+    top_p: "1.0",
+    temperature: "0.9",
+    repetition_penalty: "1.05",
+    subtalker_dosample: true,
+    subtalker_top_k: "50",
+    subtalker_top_p: "1.0",
+    subtalker_temperature: "0.9",
+    max_new_tokens: "2048",
+    extra_generate_kwargs: "{}",
+  };
+}
+
+function serializeGenerationControls(value: GenerationControlsForm): Record<string, unknown> {
+  let extraGenerateKwargs: Record<string, unknown> = {};
+  const raw = value.extra_generate_kwargs.trim();
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      extraGenerateKwargs = parsed as Record<string, unknown>;
+    } else {
+      throw new Error("extra_generate_kwargs는 JSON object여야 합니다.");
+    }
+  }
+
+  return {
+    seed: value.seed.trim() ? Number(value.seed) : undefined,
+    non_streaming_mode: value.non_streaming_mode,
+    do_sample: value.do_sample,
+    top_k: value.top_k.trim() ? Number(value.top_k) : undefined,
+    top_p: value.top_p.trim() ? Number(value.top_p) : undefined,
+    temperature: value.temperature.trim() ? Number(value.temperature) : undefined,
+    repetition_penalty: value.repetition_penalty.trim() ? Number(value.repetition_penalty) : undefined,
+    subtalker_dosample: value.subtalker_dosample,
+    subtalker_top_k: value.subtalker_top_k.trim() ? Number(value.subtalker_top_k) : undefined,
+    subtalker_top_p: value.subtalker_top_p.trim() ? Number(value.subtalker_top_p) : undefined,
+    subtalker_temperature: value.subtalker_temperature.trim() ? Number(value.subtalker_temperature) : undefined,
+    max_new_tokens: value.max_new_tokens.trim() ? Number(value.max_new_tokens) : undefined,
+    extra_generate_kwargs: extraGenerateKwargs,
+  };
+}
+
+function GenerationControlsEditor({
+  value,
+  onChange,
+}: {
+  value: GenerationControlsForm;
+  onChange: (next: GenerationControlsForm) => void;
+}) {
+  return (
+    <details className="advanced-controls">
+      <summary>Advanced Controls</summary>
+      <div className="advanced-controls__grid">
+        <label>
+          seed
+          <input value={value.seed} onChange={(event) => onChange({ ...value, seed: event.target.value })} />
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={value.non_streaming_mode}
+            onChange={(event) => onChange({ ...value, non_streaming_mode: event.target.checked })}
+          />
+          non_streaming_mode
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={value.do_sample}
+            onChange={(event) => onChange({ ...value, do_sample: event.target.checked })}
+          />
+          do_sample
+        </label>
+        <label>
+          top_k
+          <input value={value.top_k} onChange={(event) => onChange({ ...value, top_k: event.target.value })} />
+        </label>
+        <label>
+          top_p
+          <input value={value.top_p} onChange={(event) => onChange({ ...value, top_p: event.target.value })} />
+        </label>
+        <label>
+          temperature
+          <input value={value.temperature} onChange={(event) => onChange({ ...value, temperature: event.target.value })} />
+        </label>
+        <label>
+          repetition_penalty
+          <input
+            value={value.repetition_penalty}
+            onChange={(event) => onChange({ ...value, repetition_penalty: event.target.value })}
+          />
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={value.subtalker_dosample}
+            onChange={(event) => onChange({ ...value, subtalker_dosample: event.target.checked })}
+          />
+          subtalker_dosample
+        </label>
+        <label>
+          subtalker_top_k
+          <input
+            value={value.subtalker_top_k}
+            onChange={(event) => onChange({ ...value, subtalker_top_k: event.target.value })}
+          />
+        </label>
+        <label>
+          subtalker_top_p
+          <input
+            value={value.subtalker_top_p}
+            onChange={(event) => onChange({ ...value, subtalker_top_p: event.target.value })}
+          />
+        </label>
+        <label>
+          subtalker_temperature
+          <input
+            value={value.subtalker_temperature}
+            onChange={(event) => onChange({ ...value, subtalker_temperature: event.target.value })}
+          />
+        </label>
+        <label>
+          max_new_tokens
+          <input
+            value={value.max_new_tokens}
+            onChange={(event) => onChange({ ...value, max_new_tokens: event.target.value })}
+          />
+        </label>
+      </div>
+      <label>
+        extra_generate_kwargs
+        <textarea
+          className="json-textarea"
+          value={value.extra_generate_kwargs}
+          onChange={(event) => onChange({ ...value, extra_generate_kwargs: event.target.value })}
+        />
+      </label>
+    </details>
+  );
 }
 
 function AudioCard({
@@ -83,6 +245,8 @@ export default function App() {
   });
   const [lastCustomRecord, setLastCustomRecord] = useState<GenerationRecord | null>(null);
   const [lastDesignRecord, setLastDesignRecord] = useState<GenerationRecord | null>(null);
+  const [customControls, setCustomControls] = useState<GenerationControlsForm>(createGenerationControls("custom"));
+  const [designControls, setDesignControls] = useState<GenerationControlsForm>(createGenerationControls("design"));
 
   const [selectedDesignSampleId, setSelectedDesignSampleId] = useState("");
   const [selectedBaseModelId, setSelectedBaseModelId] = useState("");
@@ -94,6 +258,7 @@ export default function App() {
   });
   const [presetGenerateText, setPresetGenerateText] = useState("이 캐릭터는 앞으로도 같은 목소리로 말해야 해.");
   const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [presetControls, setPresetControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
 
   const [uploadedRef, setUploadedRef] = useState<UploadResponse | null>(null);
   const [uploadRefText, setUploadRefText] = useState("안녕하세요. 이 목소리를 기준으로 계속 말하게 해주세요.");
@@ -184,27 +349,33 @@ export default function App() {
   async function handleCustomSubmit(event: FormEvent) {
     event.preventDefault();
     await runAction(async () => {
-      const result = await api.generateCustomVoice(customForm);
+      const result = await api.generateCustomVoice({
+        ...customForm,
+        ...serializeGenerationControls(customControls),
+      });
       setLastCustomRecord(result.record);
       await refreshAll();
-      setMessage("CustomVoice 샘플을 생성했습니다.");
+      setMessage("빠른 샘플을 생성했습니다.");
     });
   }
 
   async function handleVoiceDesignSubmit(event: FormEvent) {
     event.preventDefault();
     await runAction(async () => {
-      const result = await api.generateVoiceDesign(designForm);
+      const result = await api.generateVoiceDesign({
+        ...designForm,
+        ...serializeGenerationControls(designControls),
+      });
       setLastDesignRecord(result.record);
       setSelectedDesignSampleId(result.record.id);
       await refreshAll();
-      setMessage("VoiceDesign 샘플을 생성했습니다.");
+      setMessage("디자인 샘플을 생성했습니다.");
     });
   }
 
   async function handleCreateCloneFromDesign() {
     if (!selectedDesignSampleId) {
-      setMessage("먼저 VoiceDesign 샘플을 선택해주세요.");
+      setMessage("먼저 디자인 샘플을 선택해주세요.");
       return;
     }
     await runAction(async () => {
@@ -218,7 +389,7 @@ export default function App() {
         ...prev,
         ref_audio_path: result.reference_audio_path,
       }));
-      setMessage("VoiceDesign 샘플에서 clone prompt를 만들었습니다.");
+      setMessage("디자인 샘플에서 clone prompt를 만들었습니다.");
     });
   }
 
@@ -279,6 +450,7 @@ export default function App() {
       await api.generateFromPreset(selectedPresetId, {
         text: presetGenerateText,
         language: "Auto",
+        ...serializeGenerationControls(presetControls),
       });
       await refreshAll();
       setMessage("프리셋으로 음성을 생성했습니다.");
@@ -358,34 +530,8 @@ export default function App() {
     <div className="page-shell">
       <header className="hero">
         <div className="hero__copy">
-          <span className="eyebrow">Qwen3-TTS Character Platform Demo</span>
-          <h1>VoiceDesign, clone prompt, 고정 캐릭터 프리셋, 파인튜닝 흐름을 한 화면에서 연결합니다.</h1>
-          <p>
-            빠른 음질 확인부터 VoiceDesign 실험, Base 기반 캐릭터 고정화, 데이터셋 빌드와 파인튜닝
-            진입점까지 한 번에 검증할 수 있는 로컬 데모입니다.
-          </p>
-        </div>
-        <div className="status-grid">
-          <div className="status-card">
-            <strong>백엔드 상태</strong>
-            <span>{health?.status ?? "loading"}</span>
-          </div>
-          <div className="status-card">
-            <strong>실행 모드</strong>
-            <span>{health?.runtime_mode === "simulation" ? "Simulation" : "Real qwen-tts"}</span>
-          </div>
-          <div className="status-card">
-            <strong>모델 연동</strong>
-            <span>{health?.qwen_tts_available ? "qwen-tts import OK" : "미설치 또는 미연동"}</span>
-          </div>
-          <div className="status-card">
-            <strong>Device</strong>
-            <span>{health?.device ?? "unknown"}</span>
-          </div>
-          <div className="status-card">
-            <strong>Attention</strong>
-            <span>{health?.attention_implementation ?? "unknown"}</span>
-          </div>
+          <span className="eyebrow">Voice Demo Tool</span>
+          <h1>Voice Demo Tool</h1>
         </div>
       </header>
 
@@ -404,32 +550,10 @@ export default function App() {
       </nav>
 
       {message ? <div className="message-banner">{message}</div> : null}
-
-      <section className="models-panel">
-        <div>
-          <h3>활성 모델 구성</h3>
-          <p>현재 백엔드가 사용하는 모델 id와 역할입니다.</p>
-        </div>
-        <div className="model-list">
-          {models.map((model) => (
-            <article className="model-card" key={model.key}>
-              <h4>{model.label}</h4>
-              <span>{model.category}</span>
-              <code>{model.model_id}</code>
-              <p>{model.notes}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
       {activeTab === "custom" ? (
         <section className="workspace">
           <form className="panel" onSubmit={handleCustomSubmit}>
-            <h2>Quick CustomVoice Check</h2>
-            <p>
-              한국어 대사는 `language="Korean"`으로 유지하고, 스타일 instruction은 영어로 넣는 기본값으로
-              바꿨습니다. 문서상 의무는 아니지만 현재 데모에서는 이 조합을 우선 권장합니다.
-            </p>
+            <h2>Quick Voice Check</h2>
             <label>
               텍스트
               <textarea
@@ -479,6 +603,7 @@ export default function App() {
                 onChange={(event) => setCustomForm({ ...customForm, instruct: event.target.value })}
               />
             </label>
+            <GenerationControlsEditor value={customControls} onChange={setCustomControls} />
             <button className="primary-button" disabled={loading} type="submit">
               샘플 생성
             </button>
@@ -496,7 +621,7 @@ export default function App() {
               ))}
             </div>
             {lastCustomRecord ? (
-              <AudioCard title="방금 생성한 CustomVoice 결과" record={lastCustomRecord} />
+              <AudioCard title="방금 생성한 샘플" record={lastCustomRecord} />
             ) : null}
           </aside>
         </section>
@@ -505,11 +630,7 @@ export default function App() {
       {activeTab === "design" ? (
         <section className="workspace">
           <form className="panel" onSubmit={handleVoiceDesignSubmit}>
-            <h2>VoiceDesign Studio</h2>
-            <p>
-              대사는 한국어로 넣되, 음성 디자인 설명문은 영어로 시작하도록 바꿨습니다. VoiceDesign은 자연어
-              설명을 받지만, 이 데모에서는 영어 설명문을 기본 가이드로 사용합니다.
-            </p>
+            <h2>Voice Design Studio</h2>
             <label>
               모델
               <select
@@ -544,14 +665,14 @@ export default function App() {
                 onChange={(event) => setDesignForm({ ...designForm, language: event.target.value })}
               />
             </label>
+            <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
             <button className="primary-button" disabled={loading} type="submit">
-              VoiceDesign 생성
+              디자인 샘플 생성
             </button>
           </form>
 
           <aside className="panel">
-            <h3>VoiceDesign 샘플 기록</h3>
-            <p>여기서 만든 샘플은 나중에 Base clone prompt 생성이나 데이터셋 빌드에 재사용할 수 있습니다.</p>
+            <h3>디자인 샘플 기록</h3>
             <div className="history-list">
               {voiceDesignHistory.slice(0, 6).map((record) => (
                 <button
@@ -567,7 +688,7 @@ export default function App() {
             </div>
             {lastDesignRecord ? (
               <AudioCard
-                title="방금 생성한 VoiceDesign 결과"
+                title="방금 생성한 디자인 샘플"
                 subtitle="독립적인 음성 디자인 실험 결과"
                 record={lastDesignRecord}
               />
@@ -580,8 +701,7 @@ export default function App() {
         <section className="workspace workspace--stacked">
           <div className="panel-grid">
             <section className="panel">
-              <h2>VoiceDesign {"->"} clone prompt {"->"} 프리셋</h2>
-              <p>VoiceDesign 샘플을 선택해 Base에서 재사용 가능한 clone prompt를 만듭니다.</p>
+              <h2>Design Sample {"->"} Clone Prompt {"->"} Preset</h2>
               <label>
                 Base 모델
                 <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
@@ -593,7 +713,7 @@ export default function App() {
                 </select>
               </label>
               <label>
-                VoiceDesign 샘플
+                디자인 샘플
                 <select
                   value={selectedDesignSampleId}
                   onChange={(event) => setSelectedDesignSampleId(event.target.value)}
@@ -619,7 +739,6 @@ export default function App() {
 
             <section className="panel">
               <h2>사용자 음성 업로드 {"->"} clone prompt</h2>
-              <p>참조 음성과 참조 텍스트를 넣어 업로드 기반 고정 캐릭터 음성의 출발점을 만듭니다.</p>
               <label className="upload-field">
                 음성 파일 업로드
                 <input
@@ -686,7 +805,7 @@ export default function App() {
               </label>
               <div className="button-row">
                 <button className="primary-button" onClick={() => void handleCreatePreset("design")} type="button">
-                  VoiceDesign 기반 프리셋 저장
+                  디자인 샘플 기반 프리셋 저장
                 </button>
                 <button className="secondary-button" onClick={() => void handleCreatePreset("upload")} type="button">
                   업로드 기반 프리셋 저장
@@ -711,6 +830,7 @@ export default function App() {
                 새 대사
                 <textarea value={presetGenerateText} onChange={(event) => setPresetGenerateText(event.target.value)} />
               </label>
+              <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
               <button className="primary-button" onClick={handleGenerateFromPreset} type="button">
                 프리셋으로 생성
               </button>
@@ -732,8 +852,7 @@ export default function App() {
         <section className="workspace workspace--stacked">
           <div className="panel-grid">
             <section className="panel">
-              <h2>Fine-tuning Dataset Builder</h2>
-              <p>`audio`, `text`, `ref_audio` 구조의 raw JSONL을 만드는 단계입니다.</p>
+              <h2>Training Dataset Builder</h2>
               <label>
                 데이터셋 이름
                 <input
@@ -948,7 +1067,6 @@ export default function App() {
       <section className="history-section">
         <div className="history-section__header">
           <h2>최근 생성 이력</h2>
-          <p>CustomVoice, VoiceDesign, preset generation 결과가 모두 여기에 쌓입니다.</p>
         </div>
         <div className="audio-grid">
           {history.slice(0, 8).map((record) => (

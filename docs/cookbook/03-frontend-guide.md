@@ -62,6 +62,7 @@
 - 언어 입력
 - speaker 선택
 - 영어 instruction 입력
+- `Advanced Controls`에서 `seed`, sampling, subtalker, raw kwargs 조절
 - 생성
 
 ### VoiceDesign
@@ -69,6 +70,7 @@
 - 모델 선택
 - 한국어 대사 입력
 - 영어 설명문 입력
+- `Advanced Controls`에서 `seed`, sampling, subtalker, raw kwargs 조절
 - 생성
 
 ### Fixed Character
@@ -77,6 +79,7 @@
 - VoiceDesign 샘플에서 clone prompt 생성
 - 또는 업로드 음성에서 clone prompt 생성
 - 프리셋 저장
+- 프리셋 반복 합성 시 `Advanced Controls`로 `seed`와 generation kwargs 조절
 - 저장된 프리셋으로 반복 합성
 
 ### Fine-tuning
@@ -125,5 +128,6 @@ API 호출 래퍼는 [api.ts](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app
 - `Fixed Character`에서 선택한 Base 모델은 clone prompt 생성과 preset 저장에 함께 반영됩니다.
 - `Fine-tuning`에서는 tokenizer와 init model을 별도로 선택할 수 있습니다.
 - 상단 상태 배너에서 `runtime_mode`, `device`, `attention`을 먼저 확인한 뒤 샘플을 점검하는 흐름을 권장합니다.
+- 업스트림에 `negative prompt`는 별도 노출되어 있지 않으므로, 사용자는 주로 `seed`와 sampling 계열 파라미터로 결과를 더 세밀하게 조절하게 됩니다.
 
 다음 문서: [02-backend-guide.md](./02-backend-guide.md), [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)

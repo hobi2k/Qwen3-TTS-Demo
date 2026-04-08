@@ -67,6 +67,9 @@
 - `flash_attn` import가 가능할 때만 `flash_attention_2`를 사용합니다.
 - 그렇지 않으면 `sdpa`를 사용합니다.
 - Apple Silicon에서는 `mps + sdpa`가 정상적인 실모델 경로일 수 있습니다.
+- 생성 후 저장 직전에 아주 짧은 앞머리 저에너지 구간만 정리하는 `_postprocess_generated_wav(...)`가 적용됩니다.
+- 이 후처리는 첫 `35ms` 범위만 검사하고, trim이 실제로 일어났을 때만 짧은 fade-in을 적용합니다.
+- 적용 결과는 생성 메타데이터의 `postprocess.leading_trim_samples`, `postprocess.fade_in_samples`에 기록됩니다.
 
 ## 스키마 계층
 
@@ -100,6 +103,14 @@
   - `attention_implementation`
   - `qwen_tts_available`
   - `recommended_instruction_language`
+
+### 생성 결과 점검
+
+- 생성 오디오의 앞부분에 아주 짧은 웅얼거림이나 프리롤이 들리면, 먼저 생성 이력 JSON의 `meta.postprocess`를 확인합니다.
+- `leading_trim_samples`가 `0`보다 크면 시작부 저레벨 구간을 trim한 것입니다.
+- `fade_in_samples`는 trim 이후 첫 클릭음을 줄이기 위해 적용된 매우 짧은 페이드 길이입니다.
+- 업스트림에는 `negative prompt` 입력이 별도 API로 노출되어 있지 않습니다.
+- 대신 `seed`와 generation kwargs를 요청마다 전달할 수 있게 래핑했고, 이 값들은 `meta.seed`, `meta.generation_kwargs`에도 남습니다.
 
 ### 생성
 

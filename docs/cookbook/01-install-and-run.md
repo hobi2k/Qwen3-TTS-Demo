@@ -157,6 +157,8 @@ curl http://127.0.0.1:5173/api/health
 - Apple Silicon에서는 `device=mps`, `attention=sdpa`가 정상 경로일 수 있습니다.
 - CPU-only 환경에서는 `device=cpu`, `attention=sdpa` fallback이 정상입니다.
 - 파인튜닝은 업스트림 `Base` 단일 화자 워크플로우를 기준으로 합니다.
+- 생성 초반에 아주 짧은 저레벨 프리롤이 들리는 경우를 줄이기 위해, 백엔드는 생성 후 첫 `35ms` 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.
+- 적용 여부는 `data/generated/gen_*.json`의 `meta.postprocess` 또는 API 응답 메타데이터에서 확인할 수 있습니다.
 
 ## 9. 다음 문서
 

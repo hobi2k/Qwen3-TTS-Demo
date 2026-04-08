@@ -187,3 +187,8 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
 - `flash_attention_2`는 설치되어 있을 때만 사용하고, 없으면 `sdpa`로 자동 fallback 합니다.
 - Apple Silicon 환경에서는 `device=mps`, `attention=sdpa` 조합이 정상 동작 경로일 수 있습니다.
+- 일부 생성 결과에서 시작 직후 아주 짧은 저레벨 웅얼거림처럼 들리는 앞머리 구간이 있을 수 있어, 백엔드에서는 생성 후 첫 `35ms` 범위 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.
+- 이 보정이 실제로 적용됐는지는 생성 이력 JSON의 `meta.postprocess.leading_trim_samples`와 `meta.postprocess.fade_in_samples`에서 확인할 수 있습니다.
+- 업스트림에는 `negative prompt` 개념이 별도로 노출되어 있지 않습니다.
+- 대신 웹 UI의 `Advanced Controls`에서 `seed`, `do_sample`, `top_k`, `top_p`, `temperature`, `repetition_penalty`, `subtalker_*`, `max_new_tokens`, `non_streaming_mode`, `extra_generate_kwargs`를 직접 조절할 수 있습니다.
+- 같은 프롬프트에서도 `seed`를 고정하지 않으면 샘플링 차이로 한숨, 숨소리, 어택 차이가 생길 수 있습니다.
