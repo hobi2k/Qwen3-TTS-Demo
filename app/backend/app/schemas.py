@@ -43,6 +43,19 @@ class GenerationRequestBase(BaseModel):
 
     text: str = Field(..., min_length=1)
     language: str = "Auto"
+    seed: Optional[int] = None
+    non_streaming_mode: Optional[bool] = None
+    do_sample: Optional[bool] = None
+    top_k: Optional[int] = None
+    top_p: Optional[float] = None
+    temperature: Optional[float] = None
+    repetition_penalty: Optional[float] = None
+    subtalker_dosample: Optional[bool] = None
+    subtalker_top_k: Optional[int] = None
+    subtalker_top_p: Optional[float] = None
+    subtalker_temperature: Optional[float] = None
+    max_new_tokens: Optional[int] = None
+    extra_generate_kwargs: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CustomVoiceRequest(GenerationRequestBase):
@@ -158,6 +171,19 @@ class PresetGenerateRequest(BaseModel):
 
     text: str = Field(..., min_length=1)
     language: str = "Auto"
+    seed: Optional[int] = None
+    non_streaming_mode: Optional[bool] = None
+    do_sample: Optional[bool] = None
+    top_k: Optional[int] = None
+    top_p: Optional[float] = None
+    temperature: Optional[float] = None
+    repetition_penalty: Optional[float] = None
+    subtalker_dosample: Optional[bool] = None
+    subtalker_top_k: Optional[int] = None
+    subtalker_top_p: Optional[float] = None
+    subtalker_temperature: Optional[float] = None
+    max_new_tokens: Optional[int] = None
+    extra_generate_kwargs: Dict[str, Any] = Field(default_factory=dict)
 
 
 class DatasetSampleInput(BaseModel):

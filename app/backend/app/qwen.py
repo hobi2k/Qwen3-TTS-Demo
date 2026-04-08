@@ -10,6 +10,8 @@ import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+
 from .storage import Storage
 
 try:
@@ -79,8 +81,9 @@ class QwenDemoEngine:
             로드된 모델 객체 또는 시뮬레이션 시 `None`.
         """
 
-        if key in self._models:
-            return self._models[key]
+        cache_key = f"{key}:{model_id}"
+        if cache_key in self._models:
+            return self._models[cache_key]
 
         if not self._qwen_available or self.simulation_mode:
             return None
@@ -96,8 +99,24 @@ class QwenDemoEngine:
             dtype=dtype,
             attn_implementation=attn_implementation,
         )
-        self._models[key] = model
+        self._models[cache_key] = model
         return model
+
+    def _apply_seed(self, seed: Optional[int]) -> None:
+        """가능한 난수원을 같은 시드로 맞춘다."""
+
+        if seed is None:
+            return
+
+        random.seed(seed)
+        np.random.seed(seed % (2**32 - 1))
+
+        if self._torch is None:
+            return
+
+        self._torch.manual_seed(seed)
+        if bool(self._torch.cuda.is_available()):
+            self._torch.cuda.manual_seed_all(seed)
 
     def resolve_device(self) -> str:
         """실행 환경에 맞는 device 문자열을 계산한다."""
@@ -197,7 +216,62 @@ class QwenDemoEngine:
         # `soundfile`이 없을 때도 API 계약을 지키기 위해 대체 파일을 남긴다.
         self._fake_wave("fallback", destination, "fallback")
 
-    def generate_custom_voice(self, text: str, language: str, speaker: str, instruct: str, model_id: str) -> Tuple[Path, int, Dict[str, Any]]:
+    def _postprocess_generated_wav(self, wav: Any, sample_rate: int) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """생성 WAV의 아주 짧은 앞머리 저에너지 구간만 보수적으로 정리한다.
+
+        모델 출력 자체를 크게 바꾸지 않기 위해 아래 원칙만 적용한다.
+
+        - 앞부분 35ms 이내만 검사
+        - 10ms RMS 기준으로 충분히 작은 프리롤만 trim
+        - trim이 있었을 때만 4ms fade-in 적용
+        """
+
+        array = np.asarray(wav, dtype=np.float32)
+        if array.ndim == 0:
+            return array.reshape(1), {"leading_trim_samples": 0, "fade_in_samples": 0}
+
+        mono = array if array.ndim == 1 else array[:, 0]
+        if mono.size == 0:
+            return array, {"leading_trim_samples": 0, "fade_in_samples": 0}
+
+        window = max(1, int(sample_rate * 0.010))
+        max_trim = max(1, int(sample_rate * 0.035))
+        fade_len = max(1, int(sample_rate * 0.004))
+        rms_threshold = 0.002
+
+        squared = mono.astype(np.float32) ** 2
+        kernel = np.ones(window, dtype=np.float32) / float(window)
+        rms = np.sqrt(np.convolve(squared, kernel, mode="same"))
+
+        candidate = int(np.argmax(rms > rms_threshold)) if np.any(rms > rms_threshold) else 0
+        trim_samples = candidate if 0 < candidate <= max_trim else 0
+
+        processed = array[trim_samples:] if trim_samples > 0 else array
+
+        if trim_samples > 0 and processed.shape[0] > 0:
+            fade = np.linspace(0.0, 1.0, min(fade_len, processed.shape[0]), dtype=np.float32)
+            if processed.ndim == 1:
+                processed[: fade.shape[0]] *= fade
+            else:
+                processed[: fade.shape[0], ...] *= fade[:, None]
+            return processed, {
+                "leading_trim_samples": trim_samples,
+                "fade_in_samples": int(fade.shape[0]),
+            }
+
+        return processed, {"leading_trim_samples": 0, "fade_in_samples": 0}
+
+    def generate_custom_voice(
+        self,
+        text: str,
+        language: str,
+        speaker: str,
+        instruct: str,
+        model_id: str,
+        seed: Optional[int] = None,
+        non_streaming_mode: Optional[bool] = None,
+        **generate_kwargs: Any,
+    ) -> Tuple[Path, int, Dict[str, Any]]:
         """CustomVoice 모델 또는 시뮬레이션으로 음성을 생성한다.
 
         Args:
@@ -216,17 +290,37 @@ class QwenDemoEngine:
             sample_rate = self._fake_wave(text, output_path, f"custom:{speaker}:{instruct}")
             return output_path, sample_rate, {"simulation": True}
 
+        self._apply_seed(seed)
         model = self._get_model("custom_voice", model_id)
+        if non_streaming_mode is not None:
+            generate_kwargs["non_streaming_mode"] = non_streaming_mode
         wavs, sample_rate = model.generate_custom_voice(
             text=text,
             language=language,
             speaker=speaker,
             instruct=instruct,
+            **generate_kwargs,
         )
-        self._write_wav(wavs[0], sample_rate, output_path)
-        return output_path, sample_rate, {"simulation": False, "model_id": model_id}
+        processed, post = self._postprocess_generated_wav(wavs[0], sample_rate)
+        self._write_wav(processed, sample_rate, output_path)
+        return output_path, sample_rate, {
+            "simulation": False,
+            "model_id": model_id,
+            "seed": seed,
+            "generation_kwargs": generate_kwargs,
+            "postprocess": post,
+        }
 
-    def generate_voice_design(self, text: str, language: str, instruct: str, model_id: str) -> Tuple[Path, int, Dict[str, Any]]:
+    def generate_voice_design(
+        self,
+        text: str,
+        language: str,
+        instruct: str,
+        model_id: str,
+        seed: Optional[int] = None,
+        non_streaming_mode: Optional[bool] = None,
+        **generate_kwargs: Any,
+    ) -> Tuple[Path, int, Dict[str, Any]]:
         """VoiceDesign 모델 또는 시뮬레이션으로 음성을 생성한다.
 
         Args:
@@ -244,14 +338,25 @@ class QwenDemoEngine:
             sample_rate = self._fake_wave(text, output_path, f"design:{instruct}")
             return output_path, sample_rate, {"simulation": True}
 
+        self._apply_seed(seed)
         model = self._get_model("voice_design", model_id)
+        if non_streaming_mode is not None:
+            generate_kwargs["non_streaming_mode"] = non_streaming_mode
         wavs, sample_rate = model.generate_voice_design(
             text=text,
             language=language,
             instruct=instruct,
+            **generate_kwargs,
         )
-        self._write_wav(wavs[0], sample_rate, output_path)
-        return output_path, sample_rate, {"simulation": False, "model_id": model_id}
+        processed, post = self._postprocess_generated_wav(wavs[0], sample_rate)
+        self._write_wav(processed, sample_rate, output_path)
+        return output_path, sample_rate, {
+            "simulation": False,
+            "model_id": model_id,
+            "seed": seed,
+            "generation_kwargs": generate_kwargs,
+            "postprocess": post,
+        }
 
     def generate_voice_clone(
         self,
@@ -262,6 +367,9 @@ class QwenDemoEngine:
         ref_text: str = "",
         voice_clone_prompt_path: str = "",
         x_vector_only_mode: bool = False,
+        seed: Optional[int] = None,
+        non_streaming_mode: Optional[bool] = None,
+        **generate_kwargs: Any,
     ) -> Tuple[Path, int, Dict[str, Any]]:
         """Base 모델 clone 경로 또는 시뮬레이션으로 음성을 생성한다.
 
@@ -284,7 +392,10 @@ class QwenDemoEngine:
             sample_rate = self._fake_wave(text, output_path, f"clone:{seed_hint}:{x_vector_only_mode}")
             return output_path, sample_rate, {"simulation": True}
 
+        self._apply_seed(seed)
         model = self._get_model("base_clone", model_id)
+        if non_streaming_mode is not None:
+            generate_kwargs["non_streaming_mode"] = non_streaming_mode
 
         # clone prompt가 있으면 가장 재현성이 높은 경로를 우선 사용하고,
         # 없을 때만 참조 음성/텍스트 기반 즉석 프롬프트 생성을 수행한다.
@@ -295,6 +406,7 @@ class QwenDemoEngine:
                 text=text,
                 language=language,
                 voice_clone_prompt=prompt_payload,
+                **generate_kwargs,
             )
         else:
             wavs, sample_rate = model.generate_voice_clone(
@@ -303,7 +415,15 @@ class QwenDemoEngine:
                 ref_audio=ref_audio_path,
                 ref_text=ref_text,
                 x_vector_only_mode=x_vector_only_mode,
+                **generate_kwargs,
             )
 
-        self._write_wav(wavs[0], sample_rate, output_path)
-        return output_path, sample_rate, {"simulation": False, "model_id": model_id}
+        processed, post = self._postprocess_generated_wav(wavs[0], sample_rate)
+        self._write_wav(processed, sample_rate, output_path)
+        return output_path, sample_rate, {
+            "simulation": False,
+            "model_id": model_id,
+            "seed": seed,
+            "generation_kwargs": generate_kwargs,
+            "postprocess": post,
+        }

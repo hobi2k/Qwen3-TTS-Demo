@@ -310,6 +310,35 @@ def write_dataset_jsonl(dataset_path: Path, ref_audio_path: str, samples: List[A
     dataset_path.write_text("\n".join(jsonl_lines) + "\n", encoding="utf-8")
 
 
+def generation_options_from_payload(payload: Any) -> Dict[str, Any]:
+    """요청 객체에서 업스트림 generate 제어 옵션만 추출한다."""
+
+    options: Dict[str, Any] = {}
+    for key in [
+        "seed",
+        "non_streaming_mode",
+        "do_sample",
+        "top_k",
+        "top_p",
+        "temperature",
+        "repetition_penalty",
+        "subtalker_dosample",
+        "subtalker_top_k",
+        "subtalker_top_p",
+        "subtalker_temperature",
+        "max_new_tokens",
+    ]:
+        value = getattr(payload, key, None)
+        if value is not None:
+            options[key] = value
+
+    extra = getattr(payload, "extra_generate_kwargs", {}) or {}
+    if extra:
+        options.update(extra)
+
+    return options
+
+
 def run_upstream_command(command: List[str]) -> subprocess.CompletedProcess[str]:
     """업스트림 finetuning 스크립트를 실행하고 결과를 반환한다.
 
@@ -482,6 +511,7 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
         speaker=payload.speaker,
         instruct=payload.instruct,
         model_id=payload.model_id or default_model_id("custom_voice"),
+        **generation_options_from_payload(payload),
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -514,6 +544,7 @@ def generate_voice_design(payload: VoiceDesignRequest) -> GenerationResponse:
         language=payload.language,
         instruct=payload.instruct,
         model_id=payload.model_id or default_model_id("voice_design"),
+        **generation_options_from_payload(payload),
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -565,6 +596,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
         ref_text=ref_text,
         voice_clone_prompt_path=voice_clone_prompt_path,
         x_vector_only_mode=payload.x_vector_only_mode,
+        **generation_options_from_payload(payload),
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -698,6 +730,19 @@ def generate_from_preset(preset_id: str, payload: PresetGenerateRequest) -> Gene
         text=payload.text,
         language=payload.language or preset["language"],
         preset_id=preset_id,
+        seed=payload.seed,
+        non_streaming_mode=payload.non_streaming_mode,
+        do_sample=payload.do_sample,
+        top_k=payload.top_k,
+        top_p=payload.top_p,
+        temperature=payload.temperature,
+        repetition_penalty=payload.repetition_penalty,
+        subtalker_dosample=payload.subtalker_dosample,
+        subtalker_top_k=payload.subtalker_top_k,
+        subtalker_top_p=payload.subtalker_top_p,
+        subtalker_temperature=payload.subtalker_temperature,
+        max_new_tokens=payload.max_new_tokens,
+        extra_generate_kwargs=payload.extra_generate_kwargs,
     )
     return generate_voice_clone(request)
 
