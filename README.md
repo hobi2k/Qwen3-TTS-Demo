@@ -41,6 +41,9 @@ macOS / Linux:
 ```bash
 git clone <your-repo-url> Qwen3-TTS-Demo
 cd Qwen3-TTS-Demo
+python -m ensurepip --upgrade
+python -m pip install --upgrade pip setuptools wheel
+uv pip install hf_transfer
 ./scripts/setup_backend.sh
 ./scripts/download_models.sh
 cd app/frontend && npm install && cd ../..
@@ -70,6 +73,21 @@ npm run dev
 ```
 
 상세 절차와 실모델 실행 방법은 [docs/cookbook/01-install-and-run.md](docs/cookbook/01-install-and-run.md)에 정리되어 있습니다.
+
+## 가상환경과 다운로드 준비
+
+가상환경 안 `pip`가 없거나 깨진 경우에는 먼저 아래 명령을 실행합니다.
+
+```bash
+python -m ensurepip --upgrade
+python -m pip install --upgrade pip setuptools wheel
+```
+
+Hugging Face 다운로드 가속을 쓰려면 루트에서 아래 명령을 실행합니다.
+
+```bash
+uv pip install hf_transfer
+```
 
 ## 백엔드 시작 전에 꼭 해야 하는 것
 
