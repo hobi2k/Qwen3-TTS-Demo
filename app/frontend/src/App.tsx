@@ -68,21 +68,24 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const [customForm, setCustomForm] = useState({
+    model_id: "",
     text: "안녕하세요. 지금은 빠르게 음질을 확인하는 테스트예요.",
     language: "Korean",
     speaker: "Sohee",
-    instruct: "친절하고 또렷하게 말해줘.",
+    instruct: "Speak warmly, clearly, and gently.",
   });
   const [designForm, setDesignForm] = useState({
+    model_id: "",
     text: "환영해. 오늘부터 넌 내 세계에 들어온 거야.",
     language: "Korean",
     instruct:
-      "차분하고 서늘한 20대 여성 캐릭터. 발음은 매우 또렷하고, 감정은 절제되어 있지만 문장 끝에 미묘한 온기가 남는다.",
+      "Young Korean woman, calm and slightly cool. Very clear articulation, restrained emotion, but a faint warmth at the end of each sentence.",
   });
   const [lastCustomRecord, setLastCustomRecord] = useState<GenerationRecord | null>(null);
   const [lastDesignRecord, setLastDesignRecord] = useState<GenerationRecord | null>(null);
 
   const [selectedDesignSampleId, setSelectedDesignSampleId] = useState("");
+  const [selectedBaseModelId, setSelectedBaseModelId] = useState("");
   const [selectedClonePrompt, setSelectedClonePrompt] = useState<ClonePromptRecord | null>(null);
   const [presetForm, setPresetForm] = useState({
     name: "",
@@ -105,6 +108,8 @@ export default function App() {
   });
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [runForm, setRunForm] = useState({
+    init_model_path: "",
+    tokenizer_model_path: "",
     output_name: "demo-run",
     speaker_name: "speaker_demo",
     batch_size: 2,
@@ -151,7 +156,30 @@ export default function App() {
     }
   }
 
+  const customVoiceModels = models.filter((model) => model.category === "custom_voice");
+  const voiceDesignModels = models.filter((model) => model.category === "voice_design");
+  const baseModels = models.filter((model) => model.category === "base_clone");
+  const tokenizerModels = models.filter((model) => model.category === "tokenizer");
   const voiceDesignHistory = history.filter((item) => item.mode === "voice_design");
+
+  useEffect(() => {
+    if (customVoiceModels.length > 0 && !customForm.model_id) {
+      const preferred = customVoiceModels.find((model) => model.recommended) ?? customVoiceModels[0];
+      setCustomForm((prev) => ({ ...prev, model_id: preferred.model_id }));
+    }
+    if (voiceDesignModels.length > 0 && !designForm.model_id) {
+      const preferred = voiceDesignModels.find((model) => model.recommended) ?? voiceDesignModels[0];
+      setDesignForm((prev) => ({ ...prev, model_id: preferred.model_id }));
+    }
+    if (baseModels.length > 0 && !selectedBaseModelId) {
+      const preferred = baseModels.find((model) => model.recommended) ?? baseModels[0];
+      setSelectedBaseModelId(preferred.model_id);
+      setRunForm((prev) => ({ ...prev, init_model_path: prev.init_model_path || preferred.model_id }));
+    }
+    if (tokenizerModels.length > 0 && !runForm.tokenizer_model_path) {
+      setRunForm((prev) => ({ ...prev, tokenizer_model_path: tokenizerModels[0].model_id }));
+    }
+  }, [customVoiceModels, voiceDesignModels, baseModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, runForm.init_model_path, runForm.tokenizer_model_path]);
 
   async function handleCustomSubmit(event: FormEvent) {
     event.preventDefault();
@@ -180,7 +208,10 @@ export default function App() {
       return;
     }
     await runAction(async () => {
-      const result = await api.createCloneFromSample({ generation_id: selectedDesignSampleId });
+      const result = await api.createCloneFromSample({
+        generation_id: selectedDesignSampleId,
+        model_id: selectedBaseModelId,
+      });
       setSelectedClonePrompt(result);
       setPresetForm((prev) => ({ ...prev, name: prev.name || `design-${result.id}` }));
       setDatasetForm((prev) => ({
@@ -207,6 +238,7 @@ export default function App() {
     }
     await runAction(async () => {
       const result = await api.createCloneFromUpload({
+        model_id: selectedBaseModelId,
         reference_audio_path: uploadedRef.path,
         reference_text: uploadRefText,
       });
@@ -227,7 +259,7 @@ export default function App() {
         name: presetForm.name || `preset-${prompt.id}`,
         source_type: source === "design" ? "voice_design" : "uploaded_reference",
         language: presetForm.language,
-        base_model: "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        base_model: selectedBaseModelId,
         reference_text: prompt.reference_text,
         reference_audio_path: prompt.reference_audio_path,
         clone_prompt_path: prompt.prompt_path,
@@ -277,8 +309,8 @@ export default function App() {
     }
     await runAction(async () => {
       await api.prepareDataset(selectedDatasetId, {
-        tokenizer_model_path: "Qwen/Qwen3-TTS-Tokenizer-12Hz",
-        device: "cuda:0",
+        tokenizer_model_path: runForm.tokenizer_model_path,
+        device: health?.device ?? "cpu",
         simulate_only: health?.simulation_mode ?? true,
       });
       await refreshAll();
@@ -294,12 +326,13 @@ export default function App() {
     await runAction(async () => {
       await api.createFineTuneRun({
         dataset_id: selectedDatasetId,
-        init_model_path: "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        init_model_path: runForm.init_model_path,
         output_name: runForm.output_name,
         batch_size: Number(runForm.batch_size),
         lr: Number(runForm.lr),
         num_epochs: Number(runForm.num_epochs),
         speaker_name: runForm.speaker_name,
+        device: health?.device ?? "cpu",
         simulate_only: runForm.simulate_only,
       });
       await refreshAll();
@@ -339,11 +372,19 @@ export default function App() {
           </div>
           <div className="status-card">
             <strong>실행 모드</strong>
-            <span>{health?.simulation_mode ? "Simulation" : "Real qwen-tts"}</span>
+            <span>{health?.runtime_mode === "simulation" ? "Simulation" : "Real qwen-tts"}</span>
           </div>
           <div className="status-card">
             <strong>모델 연동</strong>
             <span>{health?.qwen_tts_available ? "qwen-tts import OK" : "미설치 또는 미연동"}</span>
+          </div>
+          <div className="status-card">
+            <strong>Device</strong>
+            <span>{health?.device ?? "unknown"}</span>
+          </div>
+          <div className="status-card">
+            <strong>Attention</strong>
+            <span>{health?.attention_implementation ?? "unknown"}</span>
           </div>
         </div>
       </header>
@@ -373,6 +414,7 @@ export default function App() {
           {models.map((model) => (
             <article className="model-card" key={model.key}>
               <h4>{model.label}</h4>
+              <span>{model.category}</span>
               <code>{model.model_id}</code>
               <p>{model.notes}</p>
             </article>
@@ -384,6 +426,10 @@ export default function App() {
         <section className="workspace">
           <form className="panel" onSubmit={handleCustomSubmit}>
             <h2>Quick CustomVoice Check</h2>
+            <p>
+              한국어 대사는 `language="Korean"`으로 유지하고, 스타일 instruction은 영어로 넣는 기본값으로
+              바꿨습니다. 문서상 의무는 아니지만 현재 데모에서는 이 조합을 우선 권장합니다.
+            </p>
             <label>
               텍스트
               <textarea
@@ -392,6 +438,19 @@ export default function App() {
               />
             </label>
             <div className="field-row">
+              <label>
+                모델
+                <select
+                  value={customForm.model_id}
+                  onChange={(event) => setCustomForm({ ...customForm, model_id: event.target.value })}
+                >
+                  {customVoiceModels.map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 언어
                 <input
@@ -447,6 +506,23 @@ export default function App() {
         <section className="workspace">
           <form className="panel" onSubmit={handleVoiceDesignSubmit}>
             <h2>VoiceDesign Studio</h2>
+            <p>
+              대사는 한국어로 넣되, 음성 디자인 설명문은 영어로 시작하도록 바꿨습니다. VoiceDesign은 자연어
+              설명을 받지만, 이 데모에서는 영어 설명문을 기본 가이드로 사용합니다.
+            </p>
+            <label>
+              모델
+              <select
+                value={designForm.model_id}
+                onChange={(event) => setDesignForm({ ...designForm, model_id: event.target.value })}
+              >
+                {voiceDesignModels.map((model) => (
+                  <option key={model.key} value={model.model_id}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               음성 설명문
               <textarea
@@ -507,6 +583,16 @@ export default function App() {
               <h2>VoiceDesign {"->"} clone prompt {"->"} 프리셋</h2>
               <p>VoiceDesign 샘플을 선택해 Base에서 재사용 가능한 clone prompt를 만듭니다.</p>
               <label>
+                Base 모델
+                <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
+                  {baseModels.map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 VoiceDesign 샘플
                 <select
                   value={selectedDesignSampleId}
@@ -548,6 +634,16 @@ export default function App() {
                 />
               </label>
               {uploadedRef ? <div className="info-block">{uploadedRef.path}</div> : null}
+              <label>
+                Base 모델
+                <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
+                  {baseModels.map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 참조 텍스트
                 <textarea value={uploadRefText} onChange={(event) => setUploadRefText(event.target.value)} />
@@ -736,11 +832,37 @@ export default function App() {
               </button>
               <div className="field-row">
                 <label>
+                  tokenizer
+                  <select
+                    value={runForm.tokenizer_model_path}
+                    onChange={(event) => setRunForm({ ...runForm, tokenizer_model_path: event.target.value })}
+                  >
+                    {tokenizerModels.map((model) => (
+                      <option key={model.key} value={model.model_id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   output_name
                   <input
                     value={runForm.output_name}
                     onChange={(event) => setRunForm({ ...runForm, output_name: event.target.value })}
                   />
+                </label>
+                <label>
+                  init_model
+                  <select
+                    value={runForm.init_model_path}
+                    onChange={(event) => setRunForm({ ...runForm, init_model_path: event.target.value })}
+                  >
+                    {baseModels.map((model) => (
+                      <option key={model.key} value={model.model_id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label>
                   speaker_name

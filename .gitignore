@@ -209,6 +209,7 @@ data/uploads/*
 data/clone-prompts/*.json
 data/clone-prompts/*.pkl
 data/presets/*.json
+data/models/
 data/datasets/*.jsonl
 data/datasets/*.json
 data/finetune-runs/*

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
 
 from .qwen import QwenDemoEngine
 from .schemas import (
@@ -40,9 +41,27 @@ APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
 UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS" / "finetuning"
+load_dotenv(BACKEND_DIR / ".env")
 
 storage = Storage(REPO_ROOT)
 engine = QwenDemoEngine(storage)
+
+
+def default_model_id(category: str) -> str:
+    defaults = {
+        "custom_voice": os.getenv("QWEN_DEMO_CUSTOM_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"),
+        "voice_design": os.getenv("QWEN_DEMO_DESIGN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
+        "base_clone": os.getenv("QWEN_DEMO_BASE_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        "tokenizer": os.getenv("QWEN_DEMO_TOKENIZER_MODEL", "Qwen/Qwen3-TTS-Tokenizer-12Hz"),
+    }
+    return defaults[category]
+
+
+def model_path_or_repo(dirname: str, repo_id: str) -> str:
+    local_path = REPO_ROOT / "data" / "models" / dirname
+    if local_path.exists():
+        return str(local_path)
+    return repo_id
 
 app = FastAPI(title="Qwen3-TTS Demo API")
 app.add_middleware(
@@ -186,6 +205,7 @@ def get_dataset_record(dataset_id: str) -> JsonDict:
 
 def create_clone_prompt_file(
     prompt_path: Path,
+    model_id: str,
     reference_audio_path: str,
     reference_text: str,
     x_vector_only_mode: bool,
@@ -209,7 +229,7 @@ def create_clone_prompt_file(
             "x_vector_only_mode": x_vector_only_mode,
         }
     else:
-        model = engine._get_model("base_clone", os.getenv("QWEN_DEMO_BASE_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"))
+        model = engine._get_model("base_clone", model_id)
         prompt_payload = model.create_voice_clone_prompt(
             ref_audio=str(REPO_ROOT / reference_audio_path),
             ref_text=reference_text,
@@ -222,6 +242,7 @@ def create_clone_prompt_file(
 
 def create_clone_prompt_record(
     source_type: str,
+    model_id: str,
     reference_audio_path: str,
     reference_text: str,
     x_vector_only_mode: bool,
@@ -244,6 +265,7 @@ def create_clone_prompt_record(
     prompt_path = storage.clone_prompts_dir / f"{prompt_id}.pkl"
     create_clone_prompt_file(
         prompt_path=prompt_path,
+        model_id=model_id,
         reference_audio_path=reference_audio_path,
         reference_text=reference_text,
         x_vector_only_mode=x_vector_only_mode,
@@ -252,6 +274,7 @@ def create_clone_prompt_record(
     record = {
         "id": prompt_id,
         "source_type": source_type,
+        "base_model": model_id,
         "prompt_path": storage.relpath(prompt_path),
         "reference_audio_path": reference_audio_path,
         "reference_text": reference_text,
@@ -319,7 +342,11 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         simulation_mode=engine.simulation_mode,
+        runtime_mode="simulation" if engine.simulation_mode else "real",
         qwen_tts_available=engine.qwen_tts_available,
+        device=engine.resolve_device(),
+        attention_implementation=engine.resolve_attention_implementation(),
+        recommended_instruction_language="English",
         data_dir=str(storage.data_dir),
     )
 
@@ -334,25 +361,55 @@ def list_models() -> List[ModelInfo]:
 
     return [
         ModelInfo(
-            key="custom_voice",
-            label="CustomVoice 1.7B",
-            model_id=os.getenv("QWEN_DEMO_CUSTOM_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
+            key="custom_voice_0_6b",
+            category="custom_voice",
+            label="CustomVoice 0.6B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-CustomVoice", default_model_id("custom_voice")),
             supports_instruction=True,
-            notes="빠른 음질 확인과 기본 화자 선택용",
+            notes="로컬 데모에서 가장 먼저 테스트할 현실적인 기본 모델",
+            recommended=True,
         ),
         ModelInfo(
-            key="voice_design",
+            key="custom_voice_1_7b",
+            category="custom_voice",
+            label="CustomVoice 1.7B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
+            supports_instruction=True,
+            notes="더 무거운 고품질 CustomVoice",
+        ),
+        ModelInfo(
+            key="voice_design_1_7b",
+            category="voice_design",
             label="VoiceDesign 1.7B",
-            model_id=os.getenv("QWEN_DEMO_DESIGN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-VoiceDesign", default_model_id("voice_design")),
             supports_instruction=True,
             notes="설명문 기반 새 목소리 설계용",
+            recommended=True,
         ),
         ModelInfo(
-            key="base_clone",
-            label="Base 1.7B",
-            model_id=os.getenv("QWEN_DEMO_BASE_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+            key="base_clone_0_6b",
+            category="base_clone",
+            label="Base 0.6B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-Base", default_model_id("base_clone")),
             supports_instruction=False,
-            notes="clone prompt 재사용 및 파인튜닝용",
+            notes="clone prompt 재사용과 CPU 환경 데모를 고려한 기본 모델",
+            recommended=True,
+        ),
+        ModelInfo(
+            key="base_clone_1_7b",
+            category="base_clone",
+            label="Base 1.7B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+            supports_instruction=False,
+            notes="고품질 Base clone과 파인튜닝용",
+        ),
+        ModelInfo(
+            key="tokenizer_12hz",
+            category="tokenizer",
+            label="Tokenizer 12Hz",
+            model_id=model_path_or_repo("Qwen3-TTS-Tokenizer-12Hz", default_model_id("tokenizer")),
+            supports_instruction=False,
+            notes="prepare_data와 tokenizer 처리용",
         ),
     ]
 
@@ -424,6 +481,7 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
         language=payload.language,
         speaker=payload.speaker,
         instruct=payload.instruct,
+        model_id=payload.model_id or default_model_id("custom_voice"),
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -455,6 +513,7 @@ def generate_voice_design(payload: VoiceDesignRequest) -> GenerationResponse:
         text=payload.text,
         language=payload.language,
         instruct=payload.instruct,
+        model_id=payload.model_id or default_model_id("voice_design"),
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -481,6 +540,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
         저장된 생성 이력 응답.
     """
 
+    model_id = payload.model_id or default_model_id("base_clone")
     ref_audio_path = payload.ref_audio_path or ""
     ref_text = payload.ref_text or ""
     voice_clone_prompt_path = payload.voice_clone_prompt_path or ""
@@ -492,6 +552,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
         ref_audio_path = preset["reference_audio_path"]
         ref_text = preset["reference_text"]
         voice_clone_prompt_path = preset["clone_prompt_path"]
+        model_id = preset["base_model"]
 
     if not voice_clone_prompt_path and not (ref_audio_path and ref_text):
         raise HTTPException(status_code=400, detail="Preset or clone prompt/reference inputs are required.")
@@ -499,6 +560,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
     audio_path, _, meta = engine.generate_voice_clone(
         text=payload.text,
         language=payload.language,
+        model_id=model_id,
         ref_audio_path=ref_audio_path,
         ref_text=ref_text,
         voice_clone_prompt_path=voice_clone_prompt_path,
@@ -537,6 +599,7 @@ def clone_prompt_from_generated_sample(payload: ClonePromptCreateFromSampleReque
 
     return create_clone_prompt_record(
         source_type="generated_voice_design",
+        model_id=payload.model_id or default_model_id("base_clone"),
         reference_audio_path=generation["output_audio_path"],
         reference_text=generation["input_text"],
         x_vector_only_mode=payload.x_vector_only_mode,
@@ -557,6 +620,7 @@ def clone_prompt_from_upload(payload: ClonePromptCreateFromUploadRequest) -> Clo
 
     return create_clone_prompt_record(
         source_type="uploaded_reference",
+        model_id=payload.model_id or default_model_id("base_clone"),
         reference_audio_path=payload.reference_audio_path,
         reference_text=payload.reference_text,
         x_vector_only_mode=payload.x_vector_only_mode,

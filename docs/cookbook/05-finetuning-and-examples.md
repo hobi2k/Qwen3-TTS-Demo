@@ -1,130 +1,97 @@
-# Fine Tuning and Examples
+# Fine-tuning and Examples
 
-이 문서는 업스트림 `Qwen3-TTS/` 저장소의 `examples/`와 `finetuning/`를 함께 읽는 가이드다. 개요는 [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)에서 먼저 보고, 여기서는 실제 파일 단위로 무엇을 하는지와 데모 앱이 어떻게 연결하는지를 정리한다.
+이 문서는 업스트림 `examples/`와 `finetuning/`을 현재 데모 구현과 연결해서 설명합니다.
 
-## 목적
+## examples와 연결되는 화면
 
-업스트림 예제와 파인튜닝 문서는 서로 다른 질문에 답한다.
+### `examples/test_model_12hz_custom_voice.py`
 
-- `examples/`는 “지금 모델이 어떻게 동작하는지”를 보여준다.
-- `finetuning/`는 “내 데이터로 `Base`를 어떻게 학습하는지”를 보여준다.
+데모의 `CustomVoice` 탭에 대응합니다.
 
-데모 앱은 이 둘을 다음처럼 재사용한다.
+- speaker 선택
+- language 전달
+- instruction 전달
+- 이제 웹에서 0.6B / 1.7B `CustomVoice`를 선택 가능
 
-- `examples/`의 CustomVoice, VoiceDesign, Base clone 흐름은 브라우저 샘플러와 고정 캐릭터 생성으로 이어진다.
-- `finetuning/`의 JSONL, `prepare_data.py`, `sft_12hz.py` 흐름은 데이터셋 빌더와 파인튜닝 실행 화면으로 이어진다.
+### `examples/test_model_12hz_voice_design.py`
 
-## `examples/` 구조
+데모의 `VoiceDesign` 탭에 대응합니다.
 
-```text
-examples/
-  test_model_12hz_custom_voice.py
-  test_model_12hz_voice_design.py
-  test_model_12hz_base.py
-  test_tokenizer_12hz.py
-```
+- 설명문 기반 음성 설계
+- 현재 웹에서는 `VoiceDesign 1.7B`를 선택 대상으로 노출
 
-### `test_model_12hz_custom_voice.py`
+### `examples/test_model_12hz_base.py`
 
-- `Qwen3TTSModel.from_pretrained("Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice")`를 로드한다.
-- `generate_custom_voice(...)`의 단일 입력과 배치 입력을 모두 보여준다.
-- `speaker`, `language`, `instruct` 조합을 통해 스타일 제어를 검증한다.
+데모의 `Fixed Character` 탭에 대응합니다.
 
-데모 앱에서는 이 흐름이 `CustomVoice` 탭에 해당한다.
+- `create_voice_clone_prompt`
+- `generate_voice_clone`
+- clone prompt 재사용
+- 0.6B / 1.7B `Base` 선택 가능
 
-### `test_model_12hz_voice_design.py`
+### `examples/test_tokenizer_12hz.py`
 
-- `Qwen3TTSModel.from_pretrained("Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign")`를 로드한다.
-- `generate_voice_design(...)`의 단일/배치 입력을 보여준다.
-- 자연어 `instruct`로 음색과 감정, 캐릭터성을 설계하는 방식을 검증한다.
+데모의 `Fine-tuning` 탭 전처리 단계와 연결됩니다.
 
-데모 앱에서는 이 흐름이 `VoiceDesign` 탭에 해당한다.
+- tokenizer 선택
+- `audio_codes` 준비
 
-### `test_model_12hz_base.py`
+## finetuning과 연결되는 화면
 
-- `Qwen3TTSModel.from_pretrained("Qwen/Qwen3-TTS-12Hz-1.7B-Base")`를 로드한다.
-- `create_voice_clone_prompt(...)`와 `generate_voice_clone(...)`를 함께 보여준다.
-- `x_vector_only_mode`를 켠 경우와 끈 경우를 모두 비교한다.
-- 단일 샘플과 배치 샘플을 모두 다룬다.
+### 업스트림 `finetuning/README.md`
 
-데모 앱에서는 이 흐름이 `Fixed Character` 탭의 핵심이다. 생성된 clone prompt를 프리셋으로 저장하고, 같은 캐릭터 음성을 반복 재사용하는 로직이 여기서 나온다.
+현재 지원 범위는 `Base` 단일 화자 fine-tuning입니다.
 
-### `test_tokenizer_12hz.py`
+데모에서도 이 전제를 그대로 따릅니다.
 
-- `Qwen3TTSTokenizer.from_pretrained("Qwen/Qwen3-TTS-Tokenizer-12Hz")`를 로드한다.
-- wav path, URL, dict, list[dict], numpy waveform 등 다양한 입력 형태를 encode/decode로 확인한다.
-- 12Hz 토크나이저가 `audio_codes`를 어떤 형태로 주고받는지 확인한다.
+### raw JSONL
 
-이 예제는 파인튜닝 전처리의 핵심 배경이다. 데모 앱의 `prepare_data.py` 실행 화면과 직접 연결된다.
+데모의 dataset builder는 아래 포맷으로 raw JSONL을 만듭니다.
 
-## `finetuning/` 구조
-
-```text
-finetuning/
-  README.md
-  dataset.py
-  prepare_data.py
-  sft_12hz.py
-```
-
-### `README.md`
-
-파인튜닝 문서는 다음 순서를 강하게 권장한다.
-
-1. raw JSONL 작성
-2. `prepare_data.py`로 `audio_codes` 추가
-3. `sft_12hz.py`로 학습
-4. 학습 체크포인트로 간단한 추론 테스트
-
-업스트림 문서 기준으로 현재 지원 범위는 `Base` 단일 화자 fine-tuning이다.
-
-### 입력 JSONL
-
-각 행은 아래 필드를 가진다.
-
-- `audio`: 타깃 학습 음성 경로
-- `text`: 해당 음성의 transcript
-- `ref_audio`: 참조 화자 음성 경로
-
-중요한 점은 `ref_audio`를 데이터셋 전체에서 동일하게 유지하는 것이 강하게 권장된다는 것이다. 데모 앱의 데이터셋 빌더도 이 규칙을 UI에서 안내하도록 설계돼 있다.
+- `audio`
+- `text`
+- `ref_audio`
 
 ### `prepare_data.py`
 
-- `input_jsonl`를 읽는다.
-- `Qwen/Qwen3-TTS-Tokenizer-12Hz`를 사용해 `audio_codes`를 만든다.
-- `output_jsonl`에 학습 가능한 형태를 저장한다.
+데모의 `prepareDataset` 단계와 연결됩니다.
 
-데모 앱에서는 이 단계를 `/api/datasets/{dataset_id}/prepare-codes`로 감싼다. 시뮬레이션 모드에서는 placeholder `audio_codes`를 넣어서 UX를 끊지 않도록 한다.
+- tokenizer 모델 선택 가능
+- 선택된 tokenizer로 `audio_codes` 포함 JSONL 생성
 
 ### `sft_12hz.py`
 
-- `init_model_path`를 시작점으로 학습을 수행한다.
-- `output_model_path`에 체크포인트를 쓴다.
-- `train_jsonl`, `batch_size`, `lr`, `num_epochs`, `speaker_name`을 사용한다.
+데모의 fine-tune run 단계와 연결됩니다.
 
-데모 앱에서는 이 실행을 `/api/finetune-runs`로 감싸며, 로그와 결과 디렉터리 경로를 저장해 UI에서 추적할 수 있게 만든다.
+- init model 선택 가능
+- 0.6B / 1.7B `Base` 중 원하는 모델을 시작점으로 설정 가능
 
-## 데모 앱 연결 맵
+## clone prompt와 fine-tuning의 차이
 
-- `examples/test_model_12hz_custom_voice.py` -> `app/frontend`의 `CustomVoice` 탭
-- `examples/test_model_12hz_voice_design.py` -> `app/frontend`의 `VoiceDesign` 탭
-- `examples/test_model_12hz_base.py` -> `app/frontend`의 `Fixed Character` 탭
-- `examples/test_tokenizer_12hz.py` -> `app/frontend`의 `Fine-tuning` 탭
-- `finetuning/README.md` -> `app/backend/app/main.py`의 데이터셋/전처리/실행 라우트
+문서상 계속 구분해야 하는 핵심 포인트입니다.
 
-백엔드는 업스트림 예제를 그대로 노출하지 않고, 아래처럼 더 작은 사용자 작업 단위로 바꾼다.
+### clone prompt / 프리셋
 
-- 생성 샘플 만들기
-- clone prompt 생성
-- 캐릭터 프리셋 저장
-- 데이터셋 생성
-- audio code 준비
-- 파인튜닝 실행
+- 추론 단계
+- 모델 재학습 없음
+- 저장된 참조 입력 재사용
 
-## 읽는 순서
+### fine-tuning
 
-1. [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)
-2. 이 문서
-3. [01-install-and-run.md](./01-install-and-run.md)
-4. [02-backend-guide.md](./02-backend-guide.md)
-5. [03-frontend-guide.md](./03-frontend-guide.md)
+- 학습 단계
+- 모델 가중치 변경
+- raw JSONL, prepared JSONL, checkpoint 필요
+
+즉, `고정 캐릭터 프리셋`은 "추론용 자산 저장", `fine-tuning`은 "모델 자체를 다시 학습"하는 흐름입니다.
+
+## 현재 구현 기준 메모
+
+- 웹에서는 Base 모델을 선택해서 clone prompt를 만들 수 있습니다.
+- 웹에서는 init model을 선택해서 fine-tuning run을 만들 수 있습니다.
+- 기본 다운로드는 전 모델 `all`입니다.
+- 가볍게만 테스트할 때는 `core` 프로필을 쓸 수 있습니다.
+
+다음 문서:
+
+- 업스트림 개요: [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)
+- 설치 및 실행: [01-install-and-run.md](./01-install-and-run.md)

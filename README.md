@@ -36,12 +36,30 @@ Qwen3-TTS-Demo/
 
 ## 빠른 시작
 
+macOS / Linux:
+
 ```bash
 git clone <your-repo-url> Qwen3-TTS-Demo
 cd Qwen3-TTS-Demo
-uv sync
+./scripts/setup_backend.sh
+./scripts/download_models.sh
 cd app/frontend && npm install && cd ../..
-cd app/backend && uv run --project ../.. uvicorn app.main:app --reload
+cd app/backend && source .venv311/bin/activate && uvicorn app.main:app --reload
+```
+
+Windows PowerShell:
+
+```powershell
+git clone <your-repo-url> Qwen3-TTS-Demo
+cd Qwen3-TTS-Demo
+.\scripts\setup_backend.ps1
+.\scripts\download_models.ps1
+cd app\frontend
+npm install
+cd ..\..
+cd app\backend
+.\.venv311\Scripts\Activate.ps1
+uvicorn app.main:app --reload
 ```
 
 다른 터미널에서:
@@ -52,6 +70,68 @@ npm run dev
 ```
 
 상세 절차와 실모델 실행 방법은 [docs/cookbook/01-install-and-run.md](docs/cookbook/01-install-and-run.md)에 정리되어 있습니다.
+
+## 백엔드 시작 전에 꼭 해야 하는 것
+
+백엔드는 바로 켜는 구조가 아니라 아래 순서를 먼저 밟는 걸 기준으로 합니다.
+
+1. `./scripts/setup_backend.sh`
+2. `./scripts/download_models.sh`
+3. `app/backend/.env` 확인
+4. 백엔드 실행
+
+Windows PowerShell 기준:
+
+1. `.\scripts\setup_backend.ps1`
+2. `.\scripts\download_models.ps1`
+3. `app/backend/.env` 확인
+4. 백엔드 실행
+
+### `setup_backend.sh`
+
+- Python 가상환경 생성
+- `fastapi`, `qwen-tts`, upstream editable install
+- `sox` 설치 여부 경고
+- 현재 머신의 device / attention 요약 출력
+- `app/backend/.env` 템플릿 생성
+
+### `setup_backend.ps1`
+
+- Windows PowerShell용 백엔드 부트스트랩
+- Python 가상환경 생성
+- `fastapi`, `qwen-tts`, upstream editable install
+- `sox` PATH 경고
+- 현재 머신의 device / attention 요약 출력
+- `app/backend/.env` 템플릿 생성
+
+### `download_models.sh`
+
+- Hugging Face에서 로컬 모델 디렉터리로 다운로드
+- 기본 프로필 `all`
+  - `Qwen3-TTS-Tokenizer-12Hz`
+  - `Qwen3-TTS-12Hz-0.6B-CustomVoice`
+  - `Qwen3-TTS-12Hz-1.7B-CustomVoice`
+  - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
+  - `Qwen3-TTS-12Hz-0.6B-Base`
+  - `Qwen3-TTS-12Hz-1.7B-Base`
+- 가벼운 빠른 준비만 원하면 `core`
+  - `Qwen3-TTS-Tokenizer-12Hz`
+  - `Qwen3-TTS-12Hz-0.6B-CustomVoice`
+  - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
+  - `Qwen3-TTS-12Hz-0.6B-Base`
+- 프런트엔드에서는 다운로드된 전체 모델 중에서 기능별로 선택 가능
+
+```bash
+./scripts/download_models.sh core
+```
+
+PowerShell:
+
+```powershell
+.\scripts\download_models.ps1 core
+```
+
+모델은 `data/models/` 아래에 저장되고, `.env`에서는 그 로컬 경로를 읽어 사용합니다.
 
 ## 기본 검증
 
@@ -66,6 +146,12 @@ curl http://127.0.0.1:8000/api/health
 ```bash
 curl http://127.0.0.1:5173/api/health
 ```
+
+권장 입력 원칙:
+
+- 대사 텍스트는 한국어로 넣어도 됩니다.
+- `CustomVoice` instruction과 `VoiceDesign` 설명문은 영어를 기본 권장으로 사용합니다.
+- `GET /api/health`에서 `runtime_mode=real`인지 먼저 확인한 뒤 실제 음성을 점검하는 흐름을 권장합니다.
 
 시뮬레이션 생성 확인:
 
@@ -99,3 +185,5 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - 시뮬레이션 모드에서는 실제 모델 대신 테스트용 오디오와 더미 학습 산출물을 만들어 전체 UX 흐름을 검증할 수 있습니다.
 - 실제 파인튜닝 실행은 `qwen-tts`, `torch`, GPU, tokenizer/model 다운로드 상태에 따라 추가 설정이 필요합니다.
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
+- `flash_attention_2`는 설치되어 있을 때만 사용하고, 없으면 `sdpa`로 자동 fallback 합니다.
+- Apple Silicon 환경에서는 `device=mps`, `attention=sdpa` 조합이 정상 동작 경로일 수 있습니다.

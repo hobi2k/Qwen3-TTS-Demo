@@ -33,12 +33,16 @@ class QwenDemoEngine:
         """
 
         self.storage = storage
-        self.simulation_mode = os.getenv("QWEN_DEMO_SIMULATION", "1").lower() not in {"0", "false", "no"}
         self._qwen_available = False
         self._torch: Optional[Any] = None
         self._Qwen3TTSModel: Optional[Any] = None
         self._models: Dict[str, Any] = {}
         self._bootstrap()
+        configured_simulation = os.getenv("QWEN_DEMO_SIMULATION")
+        if configured_simulation is None:
+            self.simulation_mode = not self._qwen_available
+        else:
+            self.simulation_mode = configured_simulation.lower() not in {"0", "false", "no"}
 
     @property
     def qwen_tts_available(self) -> bool:
@@ -83,20 +87,43 @@ class QwenDemoEngine:
 
         # 환경 변수가 명시되지 않았다면 flash-attn 설치 여부에 따라
         # 안전한 attention 구현을 자동 선택해 실서버가 기본 설정으로도 뜨게 한다.
-        if os.getenv("QWEN_DEMO_ATTN_IMPL"):
-            attn_implementation = os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_2")
-        else:
-            attn_implementation = "flash_attention_2" if importlib.util.find_spec("flash_attn") else "sdpa"
+        attn_implementation = self.resolve_attention_implementation()
 
         dtype = getattr(self._torch, "bfloat16", None)
         model = self._Qwen3TTSModel.from_pretrained(
             model_id,
-            device_map=os.getenv("QWEN_DEMO_DEVICE", "cuda:0"),
+            device_map=self.resolve_device(),
             dtype=dtype,
             attn_implementation=attn_implementation,
         )
         self._models[key] = model
         return model
+
+    def resolve_device(self) -> str:
+        """실행 환경에 맞는 device 문자열을 계산한다."""
+
+        configured = os.getenv("QWEN_DEMO_DEVICE")
+        if configured:
+            return configured
+
+        if self._torch is None:
+            return "cpu"
+
+        if bool(self._torch.cuda.is_available()):
+            return "cuda:0"
+
+        mps_backend = getattr(self._torch.backends, "mps", None)
+        if mps_backend is not None and bool(mps_backend.is_available()):
+            return "mps"
+
+        return "cpu"
+
+    def resolve_attention_implementation(self) -> str:
+        """환경에 맞는 attention 구현을 계산한다."""
+
+        if os.getenv("QWEN_DEMO_ATTN_IMPL"):
+            return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_2")
+        return "flash_attention_2" if importlib.util.find_spec("flash_attn") else "sdpa"
 
     def supported_speakers(self) -> List[Dict[str, str]]:
         """데모 UI에 노출할 기본 화자 목록을 반환한다.
@@ -170,7 +197,7 @@ class QwenDemoEngine:
         # `soundfile`이 없을 때도 API 계약을 지키기 위해 대체 파일을 남긴다.
         self._fake_wave("fallback", destination, "fallback")
 
-    def generate_custom_voice(self, text: str, language: str, speaker: str, instruct: str) -> Tuple[Path, int, Dict[str, Any]]:
+    def generate_custom_voice(self, text: str, language: str, speaker: str, instruct: str, model_id: str) -> Tuple[Path, int, Dict[str, Any]]:
         """CustomVoice 모델 또는 시뮬레이션으로 음성을 생성한다.
 
         Args:
@@ -189,7 +216,7 @@ class QwenDemoEngine:
             sample_rate = self._fake_wave(text, output_path, f"custom:{speaker}:{instruct}")
             return output_path, sample_rate, {"simulation": True}
 
-        model = self._get_model("custom_voice", os.getenv("QWEN_DEMO_CUSTOM_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"))
+        model = self._get_model("custom_voice", model_id)
         wavs, sample_rate = model.generate_custom_voice(
             text=text,
             language=language,
@@ -197,9 +224,9 @@ class QwenDemoEngine:
             instruct=instruct,
         )
         self._write_wav(wavs[0], sample_rate, output_path)
-        return output_path, sample_rate, {"simulation": False}
+        return output_path, sample_rate, {"simulation": False, "model_id": model_id}
 
-    def generate_voice_design(self, text: str, language: str, instruct: str) -> Tuple[Path, int, Dict[str, Any]]:
+    def generate_voice_design(self, text: str, language: str, instruct: str, model_id: str) -> Tuple[Path, int, Dict[str, Any]]:
         """VoiceDesign 모델 또는 시뮬레이션으로 음성을 생성한다.
 
         Args:
@@ -217,19 +244,20 @@ class QwenDemoEngine:
             sample_rate = self._fake_wave(text, output_path, f"design:{instruct}")
             return output_path, sample_rate, {"simulation": True}
 
-        model = self._get_model("voice_design", os.getenv("QWEN_DEMO_DESIGN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"))
+        model = self._get_model("voice_design", model_id)
         wavs, sample_rate = model.generate_voice_design(
             text=text,
             language=language,
             instruct=instruct,
         )
         self._write_wav(wavs[0], sample_rate, output_path)
-        return output_path, sample_rate, {"simulation": False}
+        return output_path, sample_rate, {"simulation": False, "model_id": model_id}
 
     def generate_voice_clone(
         self,
         text: str,
         language: str,
+        model_id: str,
         ref_audio_path: str = "",
         ref_text: str = "",
         voice_clone_prompt_path: str = "",
@@ -256,7 +284,7 @@ class QwenDemoEngine:
             sample_rate = self._fake_wave(text, output_path, f"clone:{seed_hint}:{x_vector_only_mode}")
             return output_path, sample_rate, {"simulation": True}
 
-        model = self._get_model("base_clone", os.getenv("QWEN_DEMO_BASE_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"))
+        model = self._get_model("base_clone", model_id)
 
         # clone prompt가 있으면 가장 재현성이 높은 경로를 우선 사용하고,
         # 없을 때만 참조 음성/텍스트 기반 즉석 프롬프트 생성을 수행한다.
@@ -278,4 +306,4 @@ class QwenDemoEngine:
             )
 
         self._write_wav(wavs[0], sample_rate, output_path)
-        return output_path, sample_rate, {"simulation": False}
+        return output_path, sample_rate, {"simulation": False, "model_id": model_id}

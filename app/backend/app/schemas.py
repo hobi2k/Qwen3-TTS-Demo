@@ -10,7 +10,11 @@ class HealthResponse(BaseModel):
 
     status: str
     simulation_mode: bool
+    runtime_mode: str
     qwen_tts_available: bool
+    device: str
+    attention_implementation: str
+    recommended_instruction_language: str
     data_dir: str
 
 
@@ -18,10 +22,12 @@ class ModelInfo(BaseModel):
     """프런트엔드에 노출할 모델 메타데이터 스키마다."""
 
     key: str
+    category: str
     label: str
     model_id: str
     supports_instruction: bool = False
     notes: str = ""
+    recommended: bool = False
 
 
 class AudioAsset(BaseModel):
@@ -42,6 +48,7 @@ class GenerationRequestBase(BaseModel):
 class CustomVoiceRequest(GenerationRequestBase):
     """기본 화자 기반 CustomVoice 합성 요청 스키마다."""
 
+    model_id: Optional[str] = None
     speaker: str = "Vivian"
     instruct: str = ""
 
@@ -49,12 +56,14 @@ class CustomVoiceRequest(GenerationRequestBase):
 class VoiceDesignRequest(GenerationRequestBase):
     """설명문 기반 VoiceDesign 합성 요청 스키마다."""
 
+    model_id: Optional[str] = None
     instruct: str = Field(..., min_length=1)
 
 
 class VoiceCloneRequest(GenerationRequestBase):
     """clone prompt 또는 참조 음성 기반 Base 합성 요청 스키마다."""
 
+    model_id: Optional[str] = None
     preset_id: Optional[str] = None
     ref_audio_path: Optional[str] = None
     ref_text: Optional[str] = None
@@ -90,12 +99,14 @@ class ClonePromptCreateFromSampleRequest(BaseModel):
     """생성 이력으로부터 clone prompt를 만드는 요청 스키마다."""
 
     generation_id: str
+    model_id: Optional[str] = None
     x_vector_only_mode: bool = False
 
 
 class ClonePromptCreateFromUploadRequest(BaseModel):
     """업로드한 참조 음성으로 clone prompt를 만드는 요청 스키마다."""
 
+    model_id: Optional[str] = None
     reference_audio_path: str
     reference_text: str
     x_vector_only_mode: bool = False

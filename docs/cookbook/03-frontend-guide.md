@@ -1,129 +1,129 @@
 # Frontend Guide
 
-문서 허브: [00-index](./00-index.md)
+이 문서는 현재 프런트엔드가 어떤 탭 구조와 모델 선택 흐름을 갖는지 설명합니다.
 
-이 문서는 `Qwen3-TTS-Demo` 프런트엔드의 화면 구조와 상태 흐름을 설명한다. 백엔드 구조는 [02-backend-guide](./02-backend-guide.md) 에서 먼저 확인하면 연결이 더 쉽다.
+## 역할 요약
 
-## 1. 역할 요약
+프런트엔드는 React + TypeScript + Vite 단일 페이지 앱입니다.
 
-프런트엔드는 React + TypeScript + Vite 로 만든 단일 페이지 앱이다. 역할은 다음과 같다.
+주요 역할:
 
-- 백엔드 API 를 호출해 생성, clone prompt, 프리셋, 데이터셋, 파인튜닝 흐름을 모두 조작한다.
-- 오디오를 즉시 재생해서 결과를 비교한다.
-- 탭 기반 UI 로 `CustomVoice`, `VoiceDesign`, `Fixed Character`, `Fine-tuning` 흐름을 분리한다.
-- 백엔드의 simulation/real 모드를 상태 배너로 보여준다.
+- 백엔드 API 호출
+- 생성 결과 재생
+- clone prompt / 프리셋 / 데이터셋 / 파인튜닝 작업 제어
+- 헬스 상태, device, attention 표시
+- 기능별 모델 선택 UI 제공
 
-## 2. 파일 구조
+## 핵심 파일
 
-- [app/frontend/src/main.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/main.tsx)
-- [app/frontend/src/App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
-- [app/frontend/src/styles.css](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/styles.css)
-- [app/frontend/src/lib/api.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts)
-- [app/frontend/src/lib/types.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/types.ts)
+- [main.tsx](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/main.tsx)
+- [App.tsx](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
+- [api.ts](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts)
+- [types.ts](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/lib/types.ts)
+- [styles.css](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/styles.css)
 
-## 3. 엔트리 포인트
+## 탭 구조
 
-[`main.tsx`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/main.tsx) 는 아주 얇다.
+현재 탭은 4개입니다.
 
-- `ReactDOM.createRoot()` 로 `App` 을 루트에 마운트한다.
-- `styles.css` 를 전역으로 로드한다.
-- 실제 화면 로직은 전부 `App.tsx` 로 이동한다.
+- `CustomVoice`
+- `VoiceDesign`
+- `Fixed Character`
+- `Fine-tuning`
 
-## 4. 화면 상태 구조
+## 상단 상태 배너
 
-[`App.tsx`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx) 는 하나의 컴포넌트 안에 주요 상태를 모은다.
+상단에서는 아래를 같이 보여줍니다.
 
-- `activeTab` 은 현재 탭을 관리한다.
-- `health`, `models`, `speakers`, `history`, `presets`, `datasets`, `runs` 는 백엔드에서 읽어온 캐시 상태다.
-- `message` 는 사용자에게 보여줄 피드백 배너다.
-- `loading` 은 버튼 중복 제출을 막는다.
-- `customForm`, `designForm`, `presetForm`, `datasetForm`, `runForm` 은 각 워크플로우의 입력 폼이다.
+- 백엔드 상태
+- 실행 모드 `simulation / real`
+- `qwen_tts` import 상태
+- `device`
+- `attention`
 
-`refreshAll()` 이 모든 목록을 한 번에 갱신하고, `runAction()` 이 try/catch/finally 로 공통 에러 처리와 로딩 상태를 묶는다.
+즉, 프런트에서 바로 “실제 모델인지, fallback인지”를 볼 수 있습니다.
 
-## 5. API 클라이언트와 타입
+## 모델 선택 구조
 
-[`app/frontend/src/lib/types.ts`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/types.ts) 는 백엔드 응답 구조를 프런트 타입으로 고정한다.
+`GET /api/models` 응답을 받아 `category`별로 분리해서 씁니다.
 
-- `HealthResponse`, `ModelInfo`, `SpeakerInfo` 는 초기 대시보드용이다.
-- `GenerationRecord`, `GenerationResponse` 는 오디오 생성 흐름용이다.
-- `ClonePromptRecord`, `CharacterPreset`, `FineTuneDataset`, `FineTuneRun` 은 저장형 엔티티다.
-- `CreateDatasetRequest`, `PrepareDatasetRequest`, `CreateFineTuneRunRequest` 는 폼 전송용 요청 타입이다.
+- `custom_voice` 모델 목록
+- `voice_design` 모델 목록
+- `base_clone` 모델 목록
+- `tokenizer` 모델 목록
 
-[`app/frontend/src/lib/api.ts`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts) 는 fetch 래퍼다.
+이 목록은 `recommended` 값도 포함하므로, 프런트는 처음 로드 시 기본 추천 모델을 자동으로 채웁니다.
 
-- `request<T>()` 가 공통 에러 메시지 추출을 담당한다.
-- `health()`, `models()`, `speakers()`, `history()`, `presets()`, `datasets()`, `runs()` 가 조회 API 를 감싼다.
-- `generateCustomVoice()`, `generateVoiceDesign()`, `generateFromPreset()` 가 생성 API 를 감싼다.
-- `uploadAudio()`, `createCloneFromSample()`, `createCloneFromUpload()`, `createPreset()`, `createDataset()`, `prepareDataset()`, `createFineTuneRun()` 이 쓰기 작업을 담당한다.
+## 탭별 동작
 
-## 6. 상태 흐름
+### CustomVoice
 
-앱은 시작하자마자 `useEffect()` 로 `refreshAll()` 을 호출한다.
+- 모델 선택
+- 언어 입력
+- speaker 선택
+- 영어 instruction 입력
+- 생성
 
-- `health` 로 서버 상태와 simulation/real 모드를 확인한다.
-- `models` 로 현재 사용할 모델 id 를 보여준다.
-- `speakers` 로 CustomVoice 셀렉트를 채운다.
-- `history` 로 최근 생성 기록을 보여준다.
-- `presets`, `datasets`, `runs` 로 저장 객체와 파인튜닝 상태를 보여준다.
+### VoiceDesign
 
-사용자 액션 뒤에는 대부분 `refreshAll()` 을 다시 호출해 서버의 저장 상태와 화면 상태를 맞춘다.
+- 모델 선택
+- 한국어 대사 입력
+- 영어 설명문 입력
+- 생성
 
-## 7. 탭 구조
+### Fixed Character
 
-[`App.tsx`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx) 의 `tabs` 배열이 화면 분기를 정한다.
+- `Base` 모델 선택
+- VoiceDesign 샘플에서 clone prompt 생성
+- 또는 업로드 음성에서 clone prompt 생성
+- 프리셋 저장
+- 저장된 프리셋으로 반복 합성
 
-- `CustomVoice` 탭은 빠른 음질 확인용이다.
-- `VoiceDesign` 탭은 새로운 캐릭터 음성을 탐색하는 용도다.
-- `Fixed Character` 탭은 clone prompt 와 프리셋을 다룬다.
-- `Fine-tuning` 탭은 raw JSONL 생성, audio code 준비, SFT 실행까지 묶는다.
+### Fine-tuning
 
-각 탭은 하나의 `workspace` 영역에서 입력 폼과 미리보기 패널을 나란히 배치한다.
+- dataset 생성
+- tokenizer 선택
+- `prepare_data.py` 실행
+- `init_model` 선택
+- `sft_12hz.py` 실행
 
-## 8. 주요 상호작용
+## 상태 초기화 흐름
 
-### 8.1 CustomVoice
+`App.tsx`에서는 시작 시 `refreshAll()`을 호출해 아래를 한 번에 불러옵니다.
 
-- 텍스트, 언어, speaker, instruction 을 입력한다.
-- `api.generateCustomVoice()` 를 호출한다.
-- 결과를 `lastCustomRecord` 에 저장하고 바로 재생한다.
+- `health`
+- `models`
+- `speakers`
+- `history`
+- `presets`
+- `datasets`
+- `runs`
 
-### 8.2 VoiceDesign
+모델 목록이 들어오면 카테고리별 추천 모델을 각 폼에 자동 주입합니다.
 
-- 설명문과 샘플 텍스트를 입력한다.
-- `api.generateVoiceDesign()` 로 생성한다.
-- `voiceDesignHistory` 에서 샘플을 다시 고를 수 있다.
+## 요청 흐름
 
-### 8.3 Fixed Character
+API 호출 래퍼는 [api.ts](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts)에서 관리합니다.
 
-- VoiceDesign 샘플이나 업로드 음성에서 clone prompt 를 만든다.
-- `api.createPreset()` 으로 캐릭터 프리셋을 저장한다.
-- `api.generateFromPreset()` 으로 같은 캐릭터를 반복 합성한다.
+주요 호출:
 
-### 8.4 Fine-tuning
+- `generateCustomVoice`
+- `generateVoiceDesign`
+- `createCloneFromSample`
+- `createCloneFromUpload`
+- `createPreset`
+- `generateFromPreset`
+- `createDataset`
+- `prepareDataset`
+- `createFineTuneRun`
 
-- 샘플 행을 추가하거나 VoiceDesign 기록에서 샘플을 끌어온다.
-- `api.createDataset()` 으로 raw JSONL 을 만든다.
-- `api.prepareDataset()` 으로 `audio_codes` 를 준비한다.
-- `api.createFineTuneRun()` 으로 학습 실행 기록을 남긴다.
+## 현재 구현 기준 메모
 
-## 9. 스타일과 레이아웃
+- 프런트는 “전 모델 다운로드 후 기능별 모델 선택”을 기준으로 설계되어 있습니다.
+- `VoiceDesign` 설명문과 `CustomVoice` instruction은 영어 기본값을 사용합니다.
+- 대사 텍스트는 한국어를 그대로 사용할 수 있습니다.
+- `Fixed Character`에서 선택한 Base 모델은 clone prompt 생성과 preset 저장에 함께 반영됩니다.
+- `Fine-tuning`에서는 tokenizer와 init model을 별도로 선택할 수 있습니다.
+- 상단 상태 배너에서 `runtime_mode`, `device`, `attention`을 먼저 확인한 뒤 샘플을 점검하는 흐름을 권장합니다.
 
-[`styles.css`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/styles.css) 는 화면의 톤과 배치를 관리한다.
-
-- `hero` 는 상단 요약 영역이다.
-- `tab-strip` 은 4개 탭 네비게이션이다.
-- `models-panel` 은 현재 모델 구성 요약이다.
-- `workspace` 와 `panel-grid` 는 카드형 입력 UI 를 만든다.
-- `audio-card` 는 생성 오디오를 재생하는 미리보기 카드다.
-
-색상은 따뜻한 배경과 청록/주황 계열 포인트를 써서 실험실 느낌과 창작 도구 느낌을 같이 가져간다.
-
-## 10. 실행 메모
-
-- 개발 서버는 Vite 로 시작한다.
-- API 는 기본적으로 `/api` 와 `/files` 를 백엔드로 프록시한다.
-- 백엔드가 simulation 모드여도 UI 구조는 그대로 유지된다.
-- 실제 모델 모드에서는 백엔드 health 배너가 `Real qwen-tts` 로 바뀐다.
-
-이어서 백엔드 구조를 다시 보려면 [02-backend-guide](./02-backend-guide.md) 로 돌아가면 된다.
+다음 문서: [02-backend-guide.md](./02-backend-guide.md), [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)

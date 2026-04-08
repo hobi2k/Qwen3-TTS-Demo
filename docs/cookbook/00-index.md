@@ -1,6 +1,6 @@
 # Cookbook Index
 
-`Qwen3-TTS-Demo`를 처음 클론한 뒤 설치, 실행, 코드 구조 파악, 업스트림 `Qwen3-TTS` 이해까지 한 번에 따라갈 수 있도록 정리한 문서 허브입니다.
+`Qwen3-TTS-Demo`를 처음 클론한 뒤 환경 준비, 모델 다운로드, 실행, 코드 구조 파악까지 한 번에 따라갈 수 있도록 정리한 문서 허브입니다.
 
 ## 추천 읽기 순서
 
@@ -12,21 +12,28 @@
 
 ## 문서 맵
 
-- 빠르게 띄우고 싶다면 [01-install-and-run.md](./01-install-and-run.md)부터 보면 됩니다.
-- API, 저장 구조, 모델 호출 래퍼를 이해하려면 [02-backend-guide.md](./02-backend-guide.md)를 보세요.
-- React 화면과 상태 흐름을 따라가려면 [03-frontend-guide.md](./03-frontend-guide.md)를 보세요.
-- 업스트림 `qwen_tts` 패키지 구조는 [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)에서 정리했습니다.
-- 예제 코드와 파인튜닝 워크플로우는 [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)에서 이어집니다.
+- 바로 띄우려면 [01-install-and-run.md](./01-install-and-run.md)부터 보면 됩니다.
+- 모델 로딩, clone prompt, 데이터셋, 파인튜닝 API는 [02-backend-guide.md](./02-backend-guide.md)에 정리했습니다.
+- 웹에서 모델 선택과 탭별 워크플로우는 [03-frontend-guide.md](./03-frontend-guide.md)에 정리했습니다.
+- 업스트림 `Qwen3-TTS` 구조는 [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)를 보면 됩니다.
+- 업스트림 examples와 fine-tuning 연결은 [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)를 보면 됩니다.
 
 ## 빠른 링크
 
 - 루트 소개: [README.md](../../README.md)
-- 구현 계획: [docs/plan.md](../plan.md)
-- 백엔드 진입점: [app/backend/app/main.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/main.py)
-- 프런트엔드 진입점: [app/frontend/src/App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
-- 업스트림 소개: [Qwen3-TTS/README.md](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/Qwen3-TTS/README.md)
+- 구현 계획: [plan.md](../plan.md)
+- 백엔드 진입점: [main.py](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/backend/app/main.py)
+- 프런트엔드 진입점: [App.tsx](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
+- 업스트림 소개: [README.md](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/Qwen3-TTS/README.md)
+
+## 현재 문서 기준 핵심 변경점
+
+- 백엔드는 바로 실행하는 구조가 아니라 `setup -> download -> start` 순서를 기준으로 문서화합니다.
+- macOS/Linux용 `.sh`와 Windows PowerShell용 `.ps1`를 모두 제공합니다.
+- 모델 다운로드 기본값은 `all`이며, 웹 UI에서 기능별로 모델을 선택할 수 있습니다.
+- `clone prompt / 프리셋`과 `fine-tuning`은 다른 기능군으로 구분합니다.
 
 ## 참고
 
-- `02-backend.md`, `03-frontend.md`, `04-qwen3-tts.md`는 기존 링크 호환을 위한 안내 페이지입니다.
+- [02-backend.md](./02-backend.md), [03-frontend.md](./03-frontend.md), [04-qwen3-tts.md](./04-qwen3-tts.md)는 기존 링크 호환용 안내 페이지입니다.
 - 실제 설명은 `*-guide.md`, `*-overview.md` 문서를 기준으로 유지합니다.
