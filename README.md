@@ -41,13 +41,10 @@ macOS / Linux:
 ```bash
 git clone <your-repo-url> Qwen3-TTS-Demo
 cd Qwen3-TTS-Demo
-python -m ensurepip --upgrade
-python -m pip install --upgrade pip setuptools wheel
-uv pip install hf_transfer
 ./scripts/setup_backend.sh
 ./scripts/download_models.sh
 cd app/frontend && npm install && cd ../..
-cd app/backend && source .venv311/bin/activate && uvicorn app.main:app --reload
+cd app/backend && source ../../.venv/bin/activate && uvicorn app.main:app --reload
 ```
 
 Windows PowerShell:
@@ -61,7 +58,7 @@ cd app\frontend
 npm install
 cd ..\..
 cd app\backend
-.\.venv311\Scripts\Activate.ps1
+..\..\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
 ```
 
@@ -76,14 +73,22 @@ npm run dev
 
 ## 가상환경과 다운로드 준비
 
-가상환경 안 `pip`가 없거나 깨진 경우에는 먼저 아래 명령을 실행합니다.
+가상환경 안 `pip`가 없거나 깨진 경우에는 먼저 아래 명령을 실행합니다. `setup_backend.sh`도 이 복구를 자동으로 시도합니다.
 
 ```bash
 python -m ensurepip --upgrade
 python -m pip install --upgrade pip setuptools wheel
 ```
 
-Hugging Face 다운로드 가속을 쓰려면 루트에서 아래 명령을 실행합니다.
+`setup_backend.sh`와 `setup_backend.ps1`는 현재 아래 작업까지 한 번에 수행합니다.
+
+- 루트 `.venv` 생성 또는 재사용
+- `python -m ensurepip --upgrade` 자동 복구
+- `uv sync`
+- `uv pip install hf_transfer certifi`
+- `app/backend/.env` 템플릿 생성
+
+Hugging Face 다운로드 가속을 수동으로 먼저 준비하고 싶다면 루트에서 아래 명령을 실행합니다.
 
 ```bash
 uv pip install hf_transfer
@@ -107,8 +112,10 @@ Windows PowerShell 기준:
 
 ### `setup_backend.sh`
 
-- Python 가상환경 생성
-- `fastapi`, `qwen-tts`, upstream editable install
+- 루트 `.venv` 가상환경 생성 또는 재사용
+- `pip`가 없으면 `ensurepip`로 자동 복구
+- `uv sync`로 Python 의존성 동기화
+- `hf_transfer`, `certifi` 추가 설치
 - `sox` 설치 여부 경고
 - 현재 머신의 device / attention 요약 출력
 - `app/backend/.env` 템플릿 생성
@@ -116,8 +123,10 @@ Windows PowerShell 기준:
 ### `setup_backend.ps1`
 
 - Windows PowerShell용 백엔드 부트스트랩
-- Python 가상환경 생성
-- `fastapi`, `qwen-tts`, upstream editable install
+- 루트 `.venv` 가상환경 생성 또는 재사용
+- `pip`가 없으면 `ensurepip`로 자동 복구
+- `uv sync`로 Python 의존성 동기화
+- `hf_transfer`, `certifi` 추가 설치
 - `sox` PATH 경고
 - 현재 머신의 device / attention 요약 출력
 - `app/backend/.env` 템플릿 생성
@@ -132,12 +141,15 @@ Windows PowerShell 기준:
   - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
   - `Qwen3-TTS-12Hz-0.6B-Base`
   - `Qwen3-TTS-12Hz-1.7B-Base`
+  - `whisper-large-v3`
 - 가벼운 빠른 준비만 원하면 `core`
   - `Qwen3-TTS-Tokenizer-12Hz`
   - `Qwen3-TTS-12Hz-0.6B-CustomVoice`
   - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
   - `Qwen3-TTS-12Hz-0.6B-Base`
+  - `whisper-large-v3`
 - 프런트엔드에서는 다운로드된 전체 모델 중에서 기능별로 선택 가능
+  - clone prompt용 참조 텍스트 자동 전사도 `data/models/whisper-large-v3`를 우선 사용
 
 ```bash
 ./scripts/download_models.sh core
@@ -150,6 +162,7 @@ PowerShell:
 ```
 
 모델은 `data/models/` 아래에 저장되고, `.env`에서는 그 로컬 경로를 읽어 사용합니다.
+스크립트는 루트 `.venv`를 사용합니다.
 
 ## 기본 검증
 
@@ -204,6 +217,7 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - 실제 파인튜닝 실행은 `qwen-tts`, `torch`, GPU, tokenizer/model 다운로드 상태에 따라 추가 설정이 필요합니다.
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
 - `flash_attention_2`는 설치되어 있을 때만 사용하고, 없으면 `sdpa`로 자동 fallback 합니다.
+- `setup_backend.sh`가 `uv sync` 단계에서 실패한다면, 대개 네트워크 또는 DNS 문제입니다.
 - Apple Silicon 환경에서는 `device=mps`, `attention=sdpa` 조합이 정상 동작 경로일 수 있습니다.
 - 일부 생성 결과에서 시작 직후 아주 짧은 저레벨 웅얼거림처럼 들리는 앞머리 구간이 있을 수 있어, 백엔드에서는 생성 후 첫 `35ms` 범위 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.
 - 이 보정이 실제로 적용됐는지는 생성 이력 JSON의 `meta.postprocess.leading_trim_samples`와 `meta.postprocess.fade_in_samples`에서 확인할 수 있습니다.

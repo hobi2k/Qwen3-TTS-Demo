@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/app/backend"
-VENV_DIR="${BACKEND_DIR}/.venv311"
+VENV_DIR="${ROOT_DIR}/.venv"
 MODELS_DIR="${ROOT_DIR}/data/models"
 PROFILE="${1:-all}"
 
@@ -39,6 +39,7 @@ profiles = {
         ("Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", "Qwen3-TTS-12Hz-0.6B-CustomVoice"),
         ("Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", "Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
         ("Qwen/Qwen3-TTS-12Hz-0.6B-Base", "Qwen3-TTS-12Hz-0.6B-Base"),
+        ("openai/whisper-large-v3", "whisper-large-v3"),
     ],
     "all": [
         ("Qwen/Qwen3-TTS-Tokenizer-12Hz", "Qwen3-TTS-Tokenizer-12Hz"),
@@ -47,6 +48,7 @@ profiles = {
         ("Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", "Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
         ("Qwen/Qwen3-TTS-12Hz-0.6B-Base", "Qwen3-TTS-12Hz-0.6B-Base"),
         ("Qwen/Qwen3-TTS-12Hz-1.7B-Base", "Qwen3-TTS-12Hz-1.7B-Base"),
+        ("openai/whisper-large-v3", "whisper-large-v3"),
     ],
 }
 
@@ -71,4 +73,4 @@ echo
 echo "Downloaded model profile: ${PROFILE}"
 echo "Models stored in: ${MODELS_DIR}"
 echo "Suggested next step:"
-echo "  cd ${BACKEND_DIR} && source .venv311/bin/activate && uvicorn app.main:app --reload"
+echo "  cd ${BACKEND_DIR} && source ../../.venv/bin/activate && uvicorn app.main:app --reload"

@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "app\backend"
-$VenvDir = Join-Path $BackendDir ".venv311"
+$VenvDir = Join-Path $RootDir ".venv"
 $ModelsDir = Join-Path $RootDir "data\models"
 
 if (-not (Test-Path $VenvDir)) {
@@ -45,6 +45,7 @@ profiles = {
         ('Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice', 'Qwen3-TTS-12Hz-0.6B-CustomVoice'),
         ('Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign', 'Qwen3-TTS-12Hz-1.7B-VoiceDesign'),
         ('Qwen/Qwen3-TTS-12Hz-0.6B-Base', 'Qwen3-TTS-12Hz-0.6B-Base'),
+        ('openai/whisper-large-v3', 'whisper-large-v3'),
     ],
     'all': [
         ('Qwen/Qwen3-TTS-Tokenizer-12Hz', 'Qwen3-TTS-Tokenizer-12Hz'),
@@ -53,6 +54,7 @@ profiles = {
         ('Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign', 'Qwen3-TTS-12Hz-1.7B-VoiceDesign'),
         ('Qwen/Qwen3-TTS-12Hz-0.6B-Base', 'Qwen3-TTS-12Hz-0.6B-Base'),
         ('Qwen/Qwen3-TTS-12Hz-1.7B-Base', 'Qwen3-TTS-12Hz-1.7B-Base'),
+        ('openai/whisper-large-v3', 'whisper-large-v3'),
     ],
 }
 
@@ -73,5 +75,4 @@ Write-Host ""
 Write-Host "Downloaded model profile: $Profile"
 Write-Host "Models stored in: $ModelsDir"
 Write-Host "Suggested next step:"
-Write-Host "  cd app\backend; .\.venv311\Scripts\Activate.ps1; uvicorn app.main:app --reload"
-
+Write-Host "  cd app\backend; ..\..\.venv\Scripts\Activate.ps1; uvicorn app.main:app --reload"

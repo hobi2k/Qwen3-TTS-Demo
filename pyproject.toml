@@ -5,12 +5,17 @@ description = "Local FastAPI demo application for Qwen3-TTS workflows."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "certifi>=2026.2.25",
   "fastapi>=0.116.0,<1.0.0",
+  "hf-transfer>=0.1.9",
+  "pip>=24.0",
   "pydantic>=2.11.0,<3.0.0",
   "python-multipart>=0.0.20,<1.0.0",
   "qwen-tts",
+  "setuptools>=81.0.0",
   "soundfile>=0.13.0,<1.0.0",
   "uvicorn[standard]>=0.35.0,<1.0.0",
+  "wheel>=0.46.0",
 ]
 
 [tool.uv]

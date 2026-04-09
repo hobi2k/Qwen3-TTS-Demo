@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 
 from .qwen import QwenDemoEngine
 from .schemas import (
+    AudioTranscriptionRequest,
+    AudioTranscriptionResponse,
     CharacterPreset,
     CharacterPresetCreateRequest,
     ClonePromptCreateFromSampleRequest,
@@ -49,12 +51,30 @@ engine = QwenDemoEngine(storage)
 
 def default_model_id(category: str) -> str:
     defaults = {
-        "custom_voice": os.getenv("QWEN_DEMO_CUSTOM_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"),
-        "voice_design": os.getenv("QWEN_DEMO_DESIGN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
-        "base_clone": os.getenv("QWEN_DEMO_BASE_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
-        "tokenizer": os.getenv("QWEN_DEMO_TOKENIZER_MODEL", "Qwen/Qwen3-TTS-Tokenizer-12Hz"),
+        "custom_voice": ("Qwen3-TTS-12Hz-0.6B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"),
+        "voice_design": ("Qwen3-TTS-12Hz-1.7B-VoiceDesign", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
+        "base_clone": ("Qwen3-TTS-12Hz-0.6B-Base", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        "tokenizer": ("Qwen3-TTS-Tokenizer-12Hz", "Qwen/Qwen3-TTS-Tokenizer-12Hz"),
     }
-    return defaults[category]
+    configured = {
+        "custom_voice": os.getenv("QWEN_DEMO_CUSTOM_MODEL"),
+        "voice_design": os.getenv("QWEN_DEMO_DESIGN_MODEL"),
+        "base_clone": os.getenv("QWEN_DEMO_BASE_MODEL"),
+        "tokenizer": os.getenv("QWEN_DEMO_TOKENIZER_MODEL"),
+    }
+    configured_value = (configured.get(category) or "").strip()
+
+    if configured_value:
+        configured_path = Path(configured_value)
+        # 다른 머신 절대경로가 남아 있어도 서버가 바로 깨지지 않도록,
+        # 실제로 존재하는 경로일 때만 그대로 사용한다.
+        if configured_path.exists():
+            return str(configured_path)
+        if not configured_path.is_absolute():
+            return configured_value
+
+    dirname, repo_id = defaults[category]
+    return model_path_or_repo(dirname, repo_id)
 
 
 def model_path_or_repo(dirname: str, repo_id: str) -> str:
@@ -297,17 +317,57 @@ def write_dataset_jsonl(dataset_path: Path, ref_audio_path: str, samples: List[A
 
     jsonl_lines = []
     for sample in samples:
+        audio_path = sample.audio_path if hasattr(sample, "audio_path") else sample["audio_path"]
+        text = sample.text if hasattr(sample, "text") else sample["text"]
         jsonl_lines.append(
             json.dumps(
                 {
-                    "audio": sample.audio_path,
-                    "text": sample.text,
+                    "audio": audio_path,
+                    "text": text,
                     "ref_audio": ref_audio_path,
                 },
                 ensure_ascii=False,
             )
         )
     dataset_path.write_text("\n".join(jsonl_lines) + "\n", encoding="utf-8")
+
+
+def transcribe_audio_or_raise(audio_path: str) -> AudioTranscriptionResponse:
+    """저장된 음성 파일을 전사하고 HTTP 오류로 정규화한다.
+
+    Args:
+        audio_path: 프로젝트 루트 기준 상대 경로 또는 절대 경로.
+
+    Returns:
+        Whisper 전사 결과 응답 모델.
+    """
+
+    try:
+        result = engine.transcribe_reference_audio(audio_path)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Automatic transcription failed: {error}") from error
+
+    return AudioTranscriptionResponse(audio_path=audio_path, **result)
+
+
+def resolve_reference_text(reference_audio_path: str, reference_text: Optional[str]) -> str:
+    """참조 텍스트를 정리하고 비어 있으면 Whisper 전사를 사용한다.
+
+    Args:
+        reference_audio_path: 참조 음성 파일 경로.
+        reference_text: 사용자가 직접 입력한 참조 문장.
+
+    Returns:
+        clone prompt 생성에 사용할 참조 텍스트.
+    """
+
+    normalized_audio_path = reference_audio_path.strip()
+    normalized = (reference_text or "").strip()
+    if normalized:
+        return normalized
+    return transcribe_audio_or_raise(normalized_audio_path).text
 
 
 def generation_options_from_payload(payload: Any) -> Dict[str, Any]:
@@ -454,6 +514,20 @@ def list_speakers() -> List[Dict[str, str]]:
     return engine.supported_speakers()
 
 
+@app.post("/api/transcriptions/reference-audio", response_model=AudioTranscriptionResponse)
+def transcribe_reference_audio(payload: AudioTranscriptionRequest) -> AudioTranscriptionResponse:
+    """저장된 참조 음성을 Whisper로 전사한다.
+
+    Args:
+        payload: 전사할 음성 경로 요청.
+
+    Returns:
+        전사 텍스트와 메타데이터.
+    """
+
+    return transcribe_audio_or_raise(payload.audio_path)
+
+
 @app.get("/api/history", response_model=List[GenerationRecord])
 def history() -> List[GenerationRecord]:
     """저장된 생성 이력을 최신순으로 반환한다.
@@ -585,6 +659,11 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
         voice_clone_prompt_path = preset["clone_prompt_path"]
         model_id = preset["base_model"]
 
+    if ref_audio_path and not ref_text and not voice_clone_prompt_path:
+        # 업로드 직후 바로 합성하는 경우도 자연스럽게 동작하도록
+        # 참조 텍스트가 비어 있으면 서버가 Whisper 전사를 보완한다.
+        ref_text = resolve_reference_text(ref_audio_path, ref_text)
+
     if not voice_clone_prompt_path and not (ref_audio_path and ref_text):
         raise HTTPException(status_code=400, detail="Preset or clone prompt/reference inputs are required.")
 
@@ -650,11 +729,13 @@ def clone_prompt_from_upload(payload: ClonePromptCreateFromUploadRequest) -> Clo
         저장된 clone prompt 레코드.
     """
 
+    reference_text = resolve_reference_text(payload.reference_audio_path, payload.reference_text)
+
     return create_clone_prompt_record(
         source_type="uploaded_reference",
         model_id=payload.model_id or default_model_id("base_clone"),
         reference_audio_path=payload.reference_audio_path,
-        reference_text=payload.reference_text,
+        reference_text=reference_text,
         x_vector_only_mode=payload.x_vector_only_mode,
     )
 
@@ -761,9 +842,27 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
     if not payload.samples:
         raise HTTPException(status_code=400, detail="At least one sample is required.")
 
+    normalized_samples = []
+    for sample in payload.samples:
+        if not sample.audio_path.strip():
+            continue
+
+        # 데이터셋 빌더는 음성만 먼저 모아두는 흐름이 많아서,
+        # 텍스트가 비어 있으면 각 샘플을 자동 전사해 raw JSONL을 완성한다.
+        transcript = resolve_reference_text(sample.audio_path, sample.text)
+        normalized_samples.append(
+            {
+                "audio_path": sample.audio_path.strip(),
+                "text": transcript,
+            }
+        )
+
+    if not normalized_samples:
+        raise HTTPException(status_code=400, detail="At least one valid sample with audio_path is required.")
+
     dataset_id = storage.new_id("dataset")
     raw_jsonl_path = storage.datasets_dir / f"{dataset_id}_raw.jsonl"
-    write_dataset_jsonl(raw_jsonl_path, payload.ref_audio_path, payload.samples)
+    write_dataset_jsonl(raw_jsonl_path, payload.ref_audio_path, normalized_samples)
 
     record = {
         "id": dataset_id,
@@ -773,7 +872,7 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         "prepared_jsonl_path": None,
         "ref_audio_path": payload.ref_audio_path,
         "speaker_name": payload.speaker_name,
-        "sample_count": len(payload.samples),
+        "sample_count": len(normalized_samples),
         "created_at": utc_now(),
     }
     storage.write_json(storage.datasets_dir / f"{dataset_id}.json", record)

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/app/backend"
 UPSTREAM_DIR="${ROOT_DIR}/Qwen3-TTS"
-VENV_DIR="${BACKEND_DIR}/.venv311"
+VENV_DIR="${ROOT_DIR}/.venv"
 
 if [[ -n "${QWEN_DEMO_PYTHON:-}" ]]; then
   PYTHON_BIN="${QWEN_DEMO_PYTHON}"
@@ -20,6 +20,13 @@ fi
 echo "Using Python: ${PYTHON_BIN}"
 echo "Repo root: ${ROOT_DIR}"
 
+export UV_CACHE_DIR="${UV_CACHE_DIR:-${ROOT_DIR}/.uv-cache}"
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required but not installed." >&2
+  exit 1
+fi
+
 if ! command -v sox >/dev/null 2>&1; then
   echo "Warning: sox is not installed."
   echo "On macOS run: brew install sox"
@@ -28,14 +35,17 @@ fi
 
 if [[ ! -d "${VENV_DIR}" ]]; then
   echo "Creating virtual environment at ${VENV_DIR}"
-  "${PYTHON_BIN}" -m venv "${VENV_DIR}"
+  uv venv --python "${PYTHON_BIN}" "${VENV_DIR}"
 fi
 
 source "${VENV_DIR}/bin/activate"
 
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -r "${BACKEND_DIR}/requirements.txt"
-python -m pip install -e "${UPSTREAM_DIR}"
+if ! python -m pip --version >/dev/null 2>&1; then
+  python -m ensurepip --upgrade
+fi
+
+uv sync
+uv pip install hf_transfer certifi
 
 if [[ ! -f "${BACKEND_DIR}/.env" ]]; then
   cp "${BACKEND_DIR}/.env.example" "${BACKEND_DIR}/.env"
@@ -62,5 +72,4 @@ echo "Next steps:"
 echo "  1. Edit ${BACKEND_DIR}/.env if needed"
 echo "  2. Run ./scripts/download_models.sh"
 echo "  3. Start backend with:"
-echo "     cd ${BACKEND_DIR} && source .venv311/bin/activate && uvicorn app.main:app --reload"
-
+echo "     cd ${BACKEND_DIR} && source ../../.venv/bin/activate && uvicorn app.main:app --reload"

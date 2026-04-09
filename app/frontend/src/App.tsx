@@ -15,6 +15,7 @@ import type {
 
 type TabKey = "custom" | "design" | "character" | "finetune";
 type GenerationModeKey = "custom" | "design" | "clone";
+type CharacterBuilderSource = "design" | "upload";
 type GenerationControlsForm = {
   seed: string;
   non_streaming_mode: boolean;
@@ -217,6 +218,59 @@ function AudioCard({
   );
 }
 
+function PromptSummaryCard({
+  title,
+  prompt,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  prompt: ClonePromptRecord | null;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  if (!prompt) {
+    return (
+      <div className="result-card result-card--empty">
+        <strong>{title}</strong>
+        <p>아직 clone prompt가 없습니다. 위 단계에서 먼저 prompt를 만드세요.</p>
+      </div>
+    );
+  }
+
+  return (
+    <article className="result-card">
+      <div className="result-card__header">
+        <div>
+          <span className="eyebrow eyebrow--soft">Clone Prompt</span>
+          <h3>{title}</h3>
+        </div>
+        {actionLabel && onAction ? (
+          <button className="secondary-button" onClick={onAction} type="button">
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+      <div className="result-card__grid">
+        <div>
+          <span className="meta-label">ID</span>
+          <strong>{prompt.id}</strong>
+        </div>
+        <div>
+          <span className="meta-label">Source</span>
+          <strong>{prompt.source_type}</strong>
+        </div>
+        <div>
+          <span className="meta-label">Base Model</span>
+          <strong>{prompt.base_model}</strong>
+        </div>
+      </div>
+      <div className="path-chip">{prompt.prompt_path}</div>
+      <p>{prompt.reference_text}</p>
+    </article>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("custom");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -250,6 +304,7 @@ export default function App() {
 
   const [selectedDesignSampleId, setSelectedDesignSampleId] = useState("");
   const [selectedBaseModelId, setSelectedBaseModelId] = useState("");
+  const [builderSource, setBuilderSource] = useState<CharacterBuilderSource>("upload");
   const [selectedClonePrompt, setSelectedClonePrompt] = useState<ClonePromptRecord | null>(null);
   const [presetForm, setPresetForm] = useState({
     name: "",
@@ -261,7 +316,8 @@ export default function App() {
   const [presetControls, setPresetControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
 
   const [uploadedRef, setUploadedRef] = useState<UploadResponse | null>(null);
-  const [uploadRefText, setUploadRefText] = useState("안녕하세요. 이 목소리를 기준으로 계속 말하게 해주세요.");
+  const [uploadRefText, setUploadRefText] = useState("");
+  const [uploadTranscriptMeta, setUploadTranscriptMeta] = useState<string>("");
   const [uploadedClonePrompt, setUploadedClonePrompt] = useState<ClonePromptRecord | null>(null);
 
   const [datasetSamples, setDatasetSamples] = useState([{ audio_path: "", text: "" }]);
@@ -346,6 +402,25 @@ export default function App() {
     }
   }, [customVoiceModels, voiceDesignModels, baseModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, runForm.init_model_path, runForm.tokenizer_model_path]);
 
+  const activeClonePrompt = builderSource === "design" ? selectedClonePrompt : uploadedClonePrompt;
+  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
+
+  function updateDatasetSample(index: number, patch: { audio_path?: string; text?: string }) {
+    setDatasetSamples((prev) =>
+      prev.map((sample, sampleIndex) => (sampleIndex === index ? { ...sample, ...patch } : sample)),
+    );
+  }
+
+  async function transcribeUploadedReference(audioPath: string) {
+    const result = await api.transcribeAudio(audioPath);
+    setUploadRefText(result.text);
+    setUploadTranscriptMeta(
+      result.simulation
+        ? "자동 전사 placeholder가 채워졌습니다. 실제 문장으로 꼭 수정하세요."
+        : `Whisper 전사 완료${result.language ? ` · ${result.language}` : ""}`,
+    );
+  }
+
   async function handleCustomSubmit(event: FormEvent) {
     event.preventDefault();
     await runAction(async () => {
@@ -383,6 +458,7 @@ export default function App() {
         generation_id: selectedDesignSampleId,
         model_id: selectedBaseModelId,
       });
+      setBuilderSource("design");
       setSelectedClonePrompt(result);
       setPresetForm((prev) => ({ ...prev, name: prev.name || `design-${result.id}` }));
       setDatasetForm((prev) => ({
@@ -395,10 +471,27 @@ export default function App() {
 
   async function handleUploadReference(file: File) {
     await runAction(async () => {
+      setUploadRefText("");
+      setUploadTranscriptMeta("Whisper 전사를 준비하고 있습니다.");
       const result = await api.uploadAudio(file);
       setUploadedRef(result);
+      setBuilderSource("upload");
+      setUploadedClonePrompt(null);
       setDatasetForm((prev) => ({ ...prev, ref_audio_path: result.path }));
-      setMessage("참조 음성을 업로드했습니다.");
+      await transcribeUploadedReference(result.path);
+      setMessage("참조 음성을 업로드하고 자동 전사했습니다.");
+    });
+  }
+
+  async function handleTranscribeUploadText() {
+    if (!uploadedRef) {
+      setMessage("먼저 참조 음성을 업로드해주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      await transcribeUploadedReference(uploadedRef.path);
+      setMessage("참조 음성을 다시 전사했습니다.");
     });
   }
 
@@ -411,7 +504,7 @@ export default function App() {
       const result = await api.createCloneFromUpload({
         model_id: selectedBaseModelId,
         reference_audio_path: uploadedRef.path,
-        reference_text: uploadRefText,
+        reference_text: uploadRefText.trim() || undefined,
       });
       setUploadedClonePrompt(result);
       setPresetForm((prev) => ({ ...prev, name: prev.name || `upload-${result.id}` }));
@@ -430,7 +523,7 @@ export default function App() {
         name: presetForm.name || `preset-${prompt.id}`,
         source_type: source === "design" ? "voice_design" : "uploaded_reference",
         language: presetForm.language,
-        base_model: selectedBaseModelId,
+        base_model: prompt.base_model,
         reference_text: prompt.reference_text,
         reference_audio_path: prompt.reference_audio_path,
         clone_prompt_path: prompt.prompt_path,
@@ -449,7 +542,7 @@ export default function App() {
     await runAction(async () => {
       await api.generateFromPreset(selectedPresetId, {
         text: presetGenerateText,
-        language: "Auto",
+        language: selectedPreset?.language ?? "",
         ...serializeGenerationControls(presetControls),
       });
       await refreshAll();
@@ -458,9 +551,9 @@ export default function App() {
   }
 
   async function handleCreateDataset() {
-    const validSamples = datasetSamples.filter((sample) => sample.audio_path && sample.text);
+    const validSamples = datasetSamples.filter((sample) => sample.audio_path.trim());
     if (!datasetForm.ref_audio_path || validSamples.length === 0) {
-      setMessage("ref_audio와 최소 1개 이상의 샘플을 채워주세요.");
+      setMessage("ref_audio와 최소 1개 이상의 음성 샘플을 채워주세요.");
       return;
     }
     await runAction(async () => {
@@ -471,6 +564,39 @@ export default function App() {
       setSelectedDatasetId(dataset.id);
       await refreshAll();
       setMessage("파인튜닝용 raw JSONL 데이터셋을 만들었습니다.");
+    });
+  }
+
+  async function handleTranscribeDatasetSample(index: number) {
+    const sample = datasetSamples[index];
+    if (!sample?.audio_path.trim()) {
+      setMessage("먼저 전사할 샘플 오디오 경로를 채워주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await api.transcribeAudio(sample.audio_path.trim());
+      updateDatasetSample(index, { text: result.text });
+      setMessage(`샘플 ${index + 1}번 텍스트를 자동 전사했습니다.`);
+    });
+  }
+
+  async function handleTranscribeAllDatasetSamples() {
+    const targets = datasetSamples
+      .map((sample, index) => ({ sample, index }))
+      .filter(({ sample }) => sample.audio_path.trim() && !sample.text?.trim());
+
+    if (targets.length === 0) {
+      setMessage("자동 전사할 빈 텍스트 샘플이 없습니다.");
+      return;
+    }
+
+    await runAction(async () => {
+      const results = await Promise.all(targets.map(({ sample }) => api.transcribeAudio(sample.audio_path.trim())));
+      results.forEach((result, resultIndex) => {
+        updateDatasetSample(targets[resultIndex].index, { text: result.text });
+      });
+      setMessage(`빈 텍스트 ${results.length}개를 자동 전사했습니다.`);
     });
   }
 
@@ -699,120 +825,166 @@ export default function App() {
 
       {activeTab === "character" ? (
         <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <section className="panel">
-              <h2>Design Sample {"->"} Clone Prompt {"->"} Preset</h2>
-              <label>
-                Base 모델
-                <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
-                  {baseModels.map((model) => (
-                    <option key={model.key} value={model.model_id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                디자인 샘플
-                <select
-                  value={selectedDesignSampleId}
-                  onChange={(event) => setSelectedDesignSampleId(event.target.value)}
-                >
-                  <option value="">선택하세요</option>
-                  {voiceDesignHistory.map((record) => (
-                    <option key={record.id} value={record.id}>
-                      {record.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="secondary-button" onClick={handleCreateCloneFromDesign} type="button">
-                clone prompt 생성
-              </button>
-              {selectedClonePrompt ? (
-                <div className="info-block">
-                  <strong>{selectedClonePrompt.id}</strong>
-                  <span>{selectedClonePrompt.prompt_path}</span>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="panel">
-              <h2>사용자 음성 업로드 {"->"} clone prompt</h2>
-              <label className="upload-field">
-                음성 파일 업로드
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleUploadReference(file);
-                    }
-                  }}
-                />
-              </label>
-              {uploadedRef ? <div className="info-block">{uploadedRef.path}</div> : null}
-              <label>
-                Base 모델
-                <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
-                  {baseModels.map((model) => (
-                    <option key={model.key} value={model.model_id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                참조 텍스트
-                <textarea value={uploadRefText} onChange={(event) => setUploadRefText(event.target.value)} />
-              </label>
-              <button className="secondary-button" onClick={handleCreateCloneFromUpload} type="button">
-                업로드 음성으로 clone prompt 생성
-              </button>
-              {uploadedClonePrompt ? (
-                <div className="info-block">
-                  <strong>{uploadedClonePrompt.id}</strong>
-                  <span>{uploadedClonePrompt.prompt_path}</span>
-                </div>
-              ) : null}
-            </section>
-          </div>
-
-          <div className="panel-grid">
-            <section className="panel">
-              <h2>캐릭터 프리셋 저장</h2>
-              <label>
-                프리셋 이름
-                <input
-                  value={presetForm.name}
-                  onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
-                />
-              </label>
-              <label>
-                기본 언어
-                <input
-                  value={presetForm.language}
-                  onChange={(event) => setPresetForm({ ...presetForm, language: event.target.value })}
-                />
-              </label>
-              <label>
-                메모
-                <textarea
-                  value={presetForm.notes}
-                  onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
-                />
-              </label>
-              <div className="button-row">
-                <button className="primary-button" onClick={() => void handleCreatePreset("design")} type="button">
-                  디자인 샘플 기반 프리셋 저장
-                </button>
-                <button className="secondary-button" onClick={() => void handleCreatePreset("upload")} type="button">
-                  업로드 기반 프리셋 저장
-                </button>
+          <section className="panel builder-panel">
+            <div className="builder-header">
+              <div>
+                <span className="eyebrow eyebrow--soft">Character Builder</span>
+                <h2>참조 소스 {"->"} clone prompt {"->"} preset 저장</h2>
+                <p>업로드 음성은 자동으로 Whisper 전사를 채우고, 필요하면 직접 수정한 뒤 prompt를 만들 수 있습니다.</p>
               </div>
-            </section>
+              <label>
+                Base 모델
+                <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
+                  {baseModels.map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
+            <div className="source-toggle">
+              <button
+                className={builderSource === "upload" ? "tab is-active" : "tab"}
+                onClick={() => setBuilderSource("upload")}
+                type="button"
+              >
+                <span>참조 음성 파일</span>
+              </button>
+              <button
+                className={builderSource === "design" ? "tab is-active" : "tab"}
+                onClick={() => setBuilderSource("design")}
+                type="button"
+              >
+                <span>Voice Design 결과</span>
+              </button>
+            </div>
+
+            <div className="builder-grid">
+              <section className="step-card">
+                <span className="step-card__index">1</span>
+                <h3>참조 소스 선택</h3>
+                {builderSource === "upload" ? (
+                  <>
+                    <label className="upload-field">
+                      음성 파일 불러오기
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) {
+                            void handleUploadReference(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    {uploadedRef ? (
+                      <div className="source-summary">
+                        <span className="meta-label">업로드 경로</span>
+                        <div className="path-chip">{uploadedRef.path}</div>
+                      </div>
+                    ) : null}
+                    <label>
+                      참조 텍스트
+                      <textarea
+                        placeholder="비워두면 서버가 Whisper로 자동 전사합니다."
+                        value={uploadRefText}
+                        onChange={(event) => setUploadRefText(event.target.value)}
+                      />
+                    </label>
+                    {uploadTranscriptMeta ? <p className="field-hint">{uploadTranscriptMeta}</p> : null}
+                    <div className="button-row">
+                      <button className="secondary-button" onClick={handleTranscribeUploadText} type="button">
+                        Whisper로 다시 전사
+                      </button>
+                      <button className="primary-button" onClick={handleCreateCloneFromUpload} type="button">
+                        업로드 음성으로 clone prompt 만들기
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      Voice Design 샘플 선택
+                      <select
+                        value={selectedDesignSampleId}
+                        onChange={(event) => setSelectedDesignSampleId(event.target.value)}
+                      >
+                        <option value="">선택하세요</option>
+                        {voiceDesignHistory.map((record) => (
+                          <option key={record.id} value={record.id}>
+                            {record.id} · {record.input_text.slice(0, 24)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="history-list compact-list">
+                      {voiceDesignHistory.slice(0, 4).map((record) => (
+                        <button
+                          key={record.id}
+                          className={record.id === selectedDesignSampleId ? "history-item is-selected" : "history-item"}
+                          onClick={() => setSelectedDesignSampleId(record.id)}
+                          type="button"
+                        >
+                          <strong>{record.id}</strong>
+                          <span>{record.input_text.slice(0, 80)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button className="primary-button" onClick={handleCreateCloneFromDesign} type="button">
+                      디자인 샘플에서 clone prompt 만들기
+                    </button>
+                  </>
+                )}
+              </section>
+
+              <section className="step-card">
+                <span className="step-card__index">2</span>
+                <PromptSummaryCard
+                  title={builderSource === "upload" ? "업로드 참조 prompt" : "디자인 샘플 prompt"}
+                  prompt={activeClonePrompt}
+                />
+              </section>
+
+              <section className="step-card">
+                <span className="step-card__index">3</span>
+                <h3>프리셋 저장</h3>
+                <label>
+                  프리셋 이름
+                  <input
+                    value={presetForm.name}
+                    onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
+                  />
+                </label>
+                <label>
+                  기본 언어
+                  <input
+                    value={presetForm.language}
+                    onChange={(event) => setPresetForm({ ...presetForm, language: event.target.value })}
+                  />
+                </label>
+                <label>
+                  메모
+                  <textarea
+                    value={presetForm.notes}
+                    onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  disabled={!activeClonePrompt}
+                  onClick={() => void handleCreatePreset(builderSource)}
+                  type="button"
+                >
+                  현재 prompt로 preset 저장
+                </button>
+              </section>
+            </div>
+          </section>
+
+          <div className="panel-grid">
             <section className="panel">
               <h2>저장된 프리셋으로 반복 합성</h2>
               <label>
@@ -826,6 +998,13 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              {selectedPreset ? (
+                <div className="source-summary">
+                  <span className="meta-label">선택된 preset</span>
+                  <div className="path-chip">{selectedPreset.clone_prompt_path}</div>
+                  <p>{selectedPreset.reference_text}</p>
+                </div>
+              ) : null}
               <label>
                 새 대사
                 <textarea value={presetGenerateText} onChange={(event) => setPresetGenerateText(event.target.value)} />
@@ -834,12 +1013,21 @@ export default function App() {
               <button className="primary-button" onClick={handleGenerateFromPreset} type="button">
                 프리셋으로 생성
               </button>
+            </section>
+
+            <section className="panel">
+              <h2>Preset Library</h2>
               <div className="preset-list">
                 {presets.map((preset) => (
-                  <article className="preset-card" key={preset.id}>
+                  <article
+                    className={preset.id === selectedPresetId ? "preset-card preset-card--selected" : "preset-card"}
+                    key={preset.id}
+                    onClick={() => setSelectedPresetId(preset.id)}
+                  >
                     <strong>{preset.name}</strong>
                     <span>{preset.source_type}</span>
                     <p>{preset.reference_text}</p>
+                    <div className="path-chip">{preset.clone_prompt_path}</div>
                   </article>
                 ))}
               </div>
@@ -853,6 +1041,7 @@ export default function App() {
           <div className="panel-grid">
             <section className="panel">
               <h2>Training Dataset Builder</h2>
+              <p>샘플 텍스트를 비워두면 생성 시점에 Whisper로 자동 전사합니다. 급하면 음성만 먼저 모아도 됩니다.</p>
               <label>
                 데이터셋 이름
                 <input
@@ -892,27 +1081,25 @@ export default function App() {
                     <input
                       placeholder="audio path"
                       value={sample.audio_path}
-                      onChange={(event) => {
-                        const next = [...datasetSamples];
-                        next[index].audio_path = event.target.value;
-                        setDatasetSamples(next);
-                      }}
+                      onChange={(event) => updateDatasetSample(index, { audio_path: event.target.value })}
                     />
-                    <input
-                      placeholder="text"
-                      value={sample.text}
-                      onChange={(event) => {
-                        const next = [...datasetSamples];
-                        next[index].text = event.target.value;
-                        setDatasetSamples(next);
-                      }}
+                    <textarea
+                      placeholder="text (비워두면 Whisper 자동 전사)"
+                      value={sample.text ?? ""}
+                      onChange={(event) => updateDatasetSample(index, { text: event.target.value })}
                     />
+                    <button className="secondary-button" onClick={() => void handleTranscribeDatasetSample(index)} type="button">
+                      이 행 전사
+                    </button>
                   </div>
                 ))}
               </div>
               <div className="button-row">
                 <button className="secondary-button" onClick={addSampleRow} type="button">
                   샘플 행 추가
+                </button>
+                <button className="secondary-button" onClick={handleTranscribeAllDatasetSamples} type="button">
+                  빈 텍스트 일괄 전사
                 </button>
                 <button className="primary-button" onClick={handleCreateDataset} type="button">
                   raw JSONL 만들기

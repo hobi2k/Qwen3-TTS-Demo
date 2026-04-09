@@ -1,6 +1,6 @@
 # Installation and Run Guide
 
-이 문서는 현재 저장소 기준의 실제 실행 순서를 정리합니다. 예전처럼 `uv sync` 후 바로 백엔드를 띄우는 흐름이 아니라, 먼저 백엔드 환경을 만들고 모델을 다운로드한 뒤 실행하는 순서로 맞춰져 있습니다.
+이 문서는 현재 저장소 기준의 실제 실행 순서를 정리합니다. 현재 기준은 루트 `.venv`와 `uv` 기반 환경을 먼저 정리하고, 그 위에서 모델 다운로드와 백엔드/프런트 실행을 이어가는 방식입니다.
 
 ## 요구 사항
 
@@ -33,10 +33,20 @@ cd Qwen3-TTS-Demo
 
 이 단계에서 하는 일:
 
-- Python 가상환경 생성
-- `fastapi`, `qwen-tts`, 업스트림 editable install
+- 루트 `.venv` 가상환경 생성 또는 재사용
+- `pip`가 없으면 `python -m ensurepip --upgrade` 자동 수행
+- `uv sync`
+- `uv pip install hf_transfer certifi`
 - `app/backend/.env` 생성
 - 현재 머신의 `device` / `attention` 요약 출력
+
+직접 복구가 필요할 때는 아래 명령을 사용할 수 있습니다.
+
+```bash
+python -m ensurepip --upgrade
+python -m pip install --upgrade pip setuptools wheel
+uv pip install hf_transfer certifi
+```
 
 ## 3. 모델 다운로드
 
@@ -62,6 +72,7 @@ cd Qwen3-TTS-Demo
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
 - `Qwen3-TTS-12Hz-0.6B-Base`
 - `Qwen3-TTS-12Hz-1.7B-Base`
+- `whisper-large-v3`
 
 가볍게만 준비하려면 `core`를 쓸 수 있습니다.
 
@@ -74,10 +85,11 @@ cd Qwen3-TTS-Demo
 ```
 
 모델은 `data/models/` 아래에 저장됩니다.
+참조 음성 자동 전사도 기본적으로 `data/models/whisper-large-v3`를 사용합니다.
 
 ## 4. `.env` 확인
 
-기본 템플릿은 [app/backend/.env.example](/Users/ahnhs2k/Desktop/personal/Qwen3-TTS-Demo/app/backend/.env.example)입니다.
+기본 템플릿은 [app/backend/.env.example](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/.env.example)입니다.
 
 중요한 변수:
 
@@ -97,7 +109,7 @@ cd Qwen3-TTS-Demo
 
 ```bash
 cd app/backend
-source .venv311/bin/activate
+source ../../.venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
@@ -105,7 +117,7 @@ uvicorn app.main:app --reload
 
 ```powershell
 cd app\backend
-.\.venv311\Scripts\Activate.ps1
+..\..\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
 ```
 
@@ -156,6 +168,7 @@ curl http://127.0.0.1:5173/api/health
 - `flash_attention_2`는 설치되어 있을 때만 사용하고, 아니면 `sdpa`로 fallback 합니다.
 - Apple Silicon에서는 `device=mps`, `attention=sdpa`가 정상 경로일 수 있습니다.
 - CPU-only 환경에서는 `device=cpu`, `attention=sdpa` fallback이 정상입니다.
+- `setup_backend` 실행 중 `onnxruntime` 등에서 재시도 후 실패하면, 대체로 코드 문제가 아니라 네트워크/DNS 문제입니다.
 - 파인튜닝은 업스트림 `Base` 단일 화자 워크플로우를 기준으로 합니다.
 - 생성 초반에 아주 짧은 저레벨 프리롤이 들리는 경우를 줄이기 위해, 백엔드는 생성 후 첫 `35ms` 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.
 - 적용 여부는 `data/generated/gen_*.json`의 `meta.postprocess` 또는 API 응답 메타데이터에서 확인할 수 있습니다.

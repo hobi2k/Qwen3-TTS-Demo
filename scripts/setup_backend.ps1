@@ -6,8 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "app\backend"
-$UpstreamDir = Join-Path $RootDir "Qwen3-TTS"
-$VenvDir = Join-Path $BackendDir ".venv311"
+$VenvDir = Join-Path $RootDir ".venv"
 
 function Resolve-Python {
     param([string]$Requested)
@@ -38,6 +37,17 @@ $PythonCmd = Resolve-Python -Requested $Python
 Write-Host "Using Python: $PythonCmd"
 Write-Host "Repo root: $RootDir"
 
+if (-not $env:UV_CACHE_DIR) {
+    $env:UV_CACHE_DIR = Join-Path $RootDir ".uv-cache"
+}
+
+try {
+    & uv --version | Out-Null
+}
+catch {
+    throw "uv is required but was not found in PATH."
+}
+
 try {
     & sox --version | Out-Null
 }
@@ -48,19 +58,25 @@ catch {
 if (-not (Test-Path $VenvDir)) {
     Write-Host "Creating virtual environment at $VenvDir"
     if ($PythonCmd -eq "py -3.11") {
-        & py -3.11 -m venv $VenvDir
+        & uv venv --python "3.11" $VenvDir
     }
     else {
-        & $PythonCmd -m venv $VenvDir
+        & uv venv --python $PythonCmd $VenvDir
     }
 }
 
 $ActivatePath = Join-Path $VenvDir "Scripts\Activate.ps1"
 . $ActivatePath
 
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -r (Join-Path $BackendDir "requirements.txt")
-python -m pip install -e $UpstreamDir
+try {
+    python -m pip --version | Out-Null
+}
+catch {
+    python -m ensurepip --upgrade
+}
+
+uv sync
+uv pip install hf_transfer certifi
 
 $EnvExample = Join-Path $BackendDir ".env.example"
 $EnvPath = Join-Path $BackendDir ".env"
@@ -77,5 +93,4 @@ Write-Host "Next steps:"
 Write-Host "  1. Edit $EnvPath if needed"
 Write-Host "  2. Run .\scripts\download_models.ps1"
 Write-Host "  3. Start backend with:"
-Write-Host "     cd app\backend; .\.venv311\Scripts\Activate.ps1; uvicorn app.main:app --reload"
-
+Write-Host "     cd app\backend; ..\..\.venv\Scripts\Activate.ps1; uvicorn app.main:app --reload"

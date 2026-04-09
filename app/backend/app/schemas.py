@@ -121,7 +121,7 @@ class ClonePromptCreateFromUploadRequest(BaseModel):
 
     model_id: Optional[str] = None
     reference_audio_path: str
-    reference_text: str
+    reference_text: Optional[str] = None
     x_vector_only_mode: bool = False
 
 
@@ -130,6 +130,7 @@ class ClonePromptRecord(BaseModel):
 
     id: str
     source_type: str
+    base_model: str
     prompt_path: str
     reference_audio_path: str
     reference_text: str
@@ -190,7 +191,23 @@ class DatasetSampleInput(BaseModel):
     """파인튜닝 데이터셋 구성에 사용할 샘플 입력 스키마다."""
 
     audio_path: str
+    text: Optional[str] = None
+
+
+class AudioTranscriptionRequest(BaseModel):
+    """저장된 음성 파일을 Whisper로 전사하는 요청 스키마다."""
+
+    audio_path: str
+
+
+class AudioTranscriptionResponse(BaseModel):
+    """Whisper 전사 결과를 담는 응답 스키마다."""
+
+    audio_path: str
     text: str
+    language: Optional[str] = None
+    simulation: bool = False
+    model_id: Optional[str] = None
 
 
 class FineTuneDatasetCreateRequest(BaseModel):

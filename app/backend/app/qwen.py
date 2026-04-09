@@ -5,6 +5,7 @@ import math
 import os
 import pickle
 import random
+import re
 import struct
 import wave
 from pathlib import Path
@@ -38,6 +39,7 @@ class QwenDemoEngine:
         self._qwen_available = False
         self._torch: Optional[Any] = None
         self._Qwen3TTSModel: Optional[Any] = None
+        self._transcription_pipeline: Optional[Any] = None
         self._models: Dict[str, Any] = {}
         self._bootstrap()
         configured_simulation = os.getenv("QWEN_DEMO_SIMULATION")
@@ -144,6 +146,66 @@ class QwenDemoEngine:
             return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_2")
         return "flash_attention_2" if importlib.util.find_spec("flash_attn") else "sdpa"
 
+    def resolve_transcription_model_id(self) -> str:
+        """Whisper 전사에 사용할 모델 식별자를 계산한다."""
+
+        configured = os.getenv("QWEN_DEMO_TRANSCRIBE_MODEL")
+        if configured:
+            return configured
+
+        local_path = self.storage.repo_root / "data" / "models" / "whisper-large-v3"
+        if local_path.exists():
+            return str(local_path)
+
+        return "openai/whisper-large-v3"
+
+    def _transcription_fallback_text(self, audio_path: str) -> str:
+        """전사 모델을 쓸 수 없을 때 파일명 기반 안내 텍스트를 만든다."""
+
+        stem = Path(audio_path).stem
+        normalized = re.sub(r"[_\\-]+", " ", stem).strip()
+        if normalized:
+            return f"[auto-transcript placeholder] {normalized}"
+        return "[auto-transcript placeholder]"
+
+    def _get_transcription_pipeline(self) -> Any:
+        """Whisper ASR 파이프라인을 캐시에서 재사용하거나 새로 준비한다.
+
+        Returns:
+            로드된 transformers ASR 파이프라인.
+        """
+
+        if self._transcription_pipeline is not None:
+            return self._transcription_pipeline
+
+        from transformers import pipeline  # type: ignore
+
+        model_id = self.resolve_transcription_model_id()
+        device: int | str = -1
+        dtype = None
+
+        if self._torch is not None:
+            if bool(self._torch.cuda.is_available()):
+                device = 0
+                dtype = getattr(self._torch, "float16", None)
+            else:
+                mps_backend = getattr(self._torch.backends, "mps", None)
+                if mps_backend is not None and bool(mps_backend.is_available()):
+                    device = "mps"
+                    dtype = getattr(self._torch, "float16", None)
+
+        self._transcription_pipeline = pipeline(
+            task="automatic-speech-recognition",
+            model=model_id,
+            device=device,
+            dtype=dtype,
+        )
+        if hasattr(self._transcription_pipeline, "model") and hasattr(self._transcription_pipeline.model, "generation_config"):
+            generation_config = self._transcription_pipeline.model.generation_config
+            if hasattr(generation_config, "forced_decoder_ids"):
+                generation_config.forced_decoder_ids = None
+        return self._transcription_pipeline
+
     def supported_speakers(self) -> List[Dict[str, str]]:
         """데모 UI에 노출할 기본 화자 목록을 반환한다.
 
@@ -162,6 +224,47 @@ class QwenDemoEngine:
             {"speaker": "Ono_Anna", "nativeLanguage": "Japanese", "description": "Playful Japanese female voice with a light, nimble timbre."},
             {"speaker": "Sohee", "nativeLanguage": "Korean", "description": "Warm Korean female voice with rich emotion."},
         ]
+
+    def transcribe_reference_audio(self, audio_path: str) -> Dict[str, Any]:
+        """저장된 음성 파일을 Whisper로 전사한다.
+
+        Args:
+            audio_path: 프로젝트 루트 기준 상대 경로 또는 절대 경로.
+
+        Returns:
+            전사 텍스트와 전사 메타데이터.
+        """
+
+        absolute_path = Path(audio_path)
+        if not absolute_path.is_absolute():
+            absolute_path = self.storage.repo_root / audio_path
+
+        if not absolute_path.exists():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+        if self.simulation_mode:
+            return {
+                "text": self._transcription_fallback_text(audio_path),
+                "language": None,
+                "simulation": True,
+                "model_id": None,
+            }
+
+        pipeline_runner = self._get_transcription_pipeline()
+        result = pipeline_runner(
+            str(absolute_path),
+            generate_kwargs={"task": "transcribe"},
+        )
+        text = str(result.get("text", "")).strip()
+        if not text:
+            raise RuntimeError("Whisper did not return any transcript.")
+
+        return {
+            "text": text,
+            "language": result.get("language"),
+            "simulation": False,
+            "model_id": self.resolve_transcription_model_id(),
+        }
 
     def _fake_wave(self, text: str, destination: Path, variant: str) -> int:
         """입력 텍스트를 기반으로 결정적인 테스트용 WAV 파일을 생성한다.
