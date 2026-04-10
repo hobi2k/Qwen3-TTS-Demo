@@ -55,6 +55,14 @@ catch {
     Write-Warning "sox is not installed. On Windows, install it with winget/choco/scoop and add it to PATH."
 }
 
+try {
+    & ffmpeg -version | Out-Null
+}
+catch {
+    Write-Warning "ffmpeg is not installed. Whisper transcription can fail without ffmpeg in PATH."
+    Write-Warning "On Windows, install ffmpeg with winget/choco/scoop and add it to PATH."
+}
+
 if (-not (Test-Path $VenvDir)) {
     Write-Host "Creating virtual environment at $VenvDir"
     if ($PythonCmd -eq "py -3.11") {

@@ -87,6 +87,7 @@ python -m pip install --upgrade pip setuptools wheel
 - `uv sync`
 - `uv pip install hf_transfer certifi`
 - `app/backend/.env` 템플릿 생성
+- 시스템 의존성 점검: `ffmpeg`, `sox`
 
 Hugging Face 다운로드 가속을 수동으로 먼저 준비하고 싶다면 루트에서 아래 명령을 실행합니다.
 
@@ -116,6 +117,7 @@ Windows PowerShell 기준:
 - `pip`가 없으면 `ensurepip`로 자동 복구
 - `uv sync`로 Python 의존성 동기화
 - `hf_transfer`, `certifi` 추가 설치
+- `ffmpeg` 설치 여부 경고
 - `sox` 설치 여부 경고
 - 현재 머신의 device / attention 요약 출력
 - `app/backend/.env` 템플릿 생성
@@ -127,6 +129,7 @@ Windows PowerShell 기준:
 - `pip`가 없으면 `ensurepip`로 자동 복구
 - `uv sync`로 Python 의존성 동기화
 - `hf_transfer`, `certifi` 추가 설치
+- `ffmpeg` PATH 경고
 - `sox` PATH 경고
 - 현재 머신의 device / attention 요약 출력
 - `app/backend/.env` 템플릿 생성
@@ -215,6 +218,7 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - 현재 파인튜닝 흐름은 upstream `Qwen3-TTS/finetuning/README.md` 기준의 `Base` 단일 화자 워크플로우에 맞춰져 있습니다.
 - 시뮬레이션 모드에서는 실제 모델 대신 테스트용 오디오와 더미 학습 산출물을 만들어 전체 UX 흐름을 검증할 수 있습니다.
 - 실제 파인튜닝 실행은 `qwen-tts`, `torch`, GPU, tokenizer/model 다운로드 상태에 따라 추가 설정이 필요합니다.
+- `ffmpeg`는 Python `requirements.txt`에 넣는 항목이 아니라 시스템 바이너리입니다. Whisper 전사를 쓰려면 PATH에 설치되어 있어야 합니다.
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
 - `flash_attention_2`는 설치되어 있을 때만 사용하고, 없으면 `sdpa`로 자동 fallback 합니다.
 - `setup_backend.sh`가 `uv sync` 단계에서 실패한다면, 대개 네트워크 또는 DNS 문제입니다.

@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from .qwen import QwenDemoEngine
 from .schemas import (
+    AudioAsset,
     AudioTranscriptionRequest,
     AudioTranscriptionResponse,
     CharacterPreset,
@@ -399,6 +400,67 @@ def generation_options_from_payload(payload: Any) -> Dict[str, Any]:
     return options
 
 
+def list_server_audio_assets() -> List[AudioAsset]:
+    """서버 내부에 저장된 오디오 파일 목록을 최신순으로 반환한다."""
+
+    assets: List[AudioAsset] = []
+    generation_records = storage.list_json_records(storage.generated_dir)
+    seen_paths = set()
+
+    for record in generation_records:
+        rel_path = record.get("output_audio_path")
+        if not rel_path:
+            continue
+        seen_paths.add(rel_path)
+        assets.append(
+            AudioAsset(
+                id=record.get("id", basename_for_asset(rel_path)),
+                path=rel_path,
+                url=audio_url_for(rel_path),
+                filename=basename_for_asset(rel_path),
+                source="generated",
+                created_at=record.get("created_at"),
+                text_preview=(record.get("input_text") or "")[:120] or None,
+            )
+        )
+
+    for path in sorted(storage.uploads_dir.glob("*")):
+        if not path.is_file():
+            continue
+        rel_path = storage.relpath(path)
+        if rel_path in seen_paths:
+            continue
+        assets.append(
+            AudioAsset(
+                id=path.stem,
+                path=rel_path,
+                url=audio_url_for(rel_path),
+                filename=path.name,
+                source="uploaded",
+                created_at=utc_now_from_stat(path),
+                text_preview=None,
+            )
+        )
+
+    assets.sort(key=lambda item: item.created_at or "", reverse=True)
+    return assets
+
+
+def basename_for_asset(value: str) -> str:
+    normalized = value.replace(os.sep, "/")
+    return normalized.split("/")[-1]
+
+
+def utc_now_from_stat(path: Path) -> str:
+    return utc_now_from_timestamp(path.stat().st_mtime)
+
+
+def utc_now_from_timestamp(timestamp: float) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+
+
 def run_upstream_command(command: List[str]) -> subprocess.CompletedProcess[str]:
     """업스트림 finetuning 스크립트를 실행하고 결과를 반환한다.
 
@@ -538,6 +600,13 @@ def history() -> List[GenerationRecord]:
 
     records = storage.list_json_records(storage.generated_dir)
     return [GenerationRecord(**record) for record in records]
+
+
+@app.get("/api/audio-assets", response_model=List[AudioAsset])
+def audio_assets() -> List[AudioAsset]:
+    """서버에 저장된 오디오 파일 목록을 반환한다."""
+
+    return list_server_audio_assets()
 
 
 @app.post("/api/uploads/reference-audio")

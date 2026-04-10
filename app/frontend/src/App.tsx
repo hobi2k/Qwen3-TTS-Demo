@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { api } from "./lib/api";
 import type {
+  AudioAsset,
   CharacterPreset,
   ClonePromptRecord,
   FineTuneDataset,
@@ -16,6 +17,7 @@ import type {
 type TabKey = "custom" | "design" | "character" | "finetune";
 type GenerationModeKey = "custom" | "design" | "clone";
 type CharacterBuilderSource = "design" | "upload";
+type DatasetAudioSourceMode = "upload" | "existing";
 type GenerationControlsForm = {
   seed: string;
   non_streaming_mode: boolean;
@@ -41,6 +43,34 @@ const tabs: { key: TabKey; label: string; description: string }[] = [
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString("ko-KR");
+}
+
+function basenameFromPath(value: string): string {
+  if (!value) return "";
+  const normalized = value.replace(/\\/g, "/");
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] || value;
+}
+
+function getAudioDownloadName(record: GenerationRecord): string {
+  const sourceName = basenameFromPath(record.output_audio_path || record.output_audio_url);
+  const hasExtension = /\.[a-z0-9]+$/i.test(sourceName);
+  return hasExtension ? sourceName : `${record.id}.wav`;
+}
+
+function getDatasetSourceLabel(value: string): string {
+  if (value === "voice_design_batch") return "Voice Design 샘플 묶음";
+  if (value === "uploaded_audio_batch") return "직접 업로드한 음성 묶음";
+  return value;
+}
+
+function fileUrlFromPath(value: string): string {
+  if (!value) return "";
+  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
+    return value;
+  }
+  const normalized = value.replace(/\\/g, "/");
+  return normalized.startsWith("data/") ? `/files/${normalized.slice(5)}` : `/files/${normalized}`;
 }
 
 function createGenerationControls(mode: GenerationModeKey): GenerationControlsForm {
@@ -205,7 +235,12 @@ function AudioCard({
           <h4>{title}</h4>
           {subtitle ? <p>{subtitle}</p> : null}
         </div>
-        <span>{formatDate(record.created_at)}</span>
+        <div className="audio-card__actions">
+          <span>{formatDate(record.created_at)}</span>
+          <a className="secondary-button button-link" href={record.output_audio_url} download={getAudioDownloadName(record)}>
+            다운로드
+          </a>
+        </div>
       </div>
       <p className="audio-card__text">{record.input_text}</p>
       <audio controls src={record.output_audio_url} className="audio-card__player" />
@@ -215,6 +250,45 @@ function AudioCard({
         {record.speaker ? <span>{record.speaker}</span> : null}
       </div>
     </article>
+  );
+}
+
+function ServerAudioPicker({
+  assets,
+  selectedPath,
+  onSelect,
+}: {
+  assets: AudioAsset[];
+  selectedPath: string;
+  onSelect: (asset: AudioAsset) => void;
+}) {
+  if (assets.length === 0) {
+    return (
+      <div className="result-card result-card--empty">
+        <strong>서버 오디오가 없습니다</strong>
+        <p>먼저 음성을 생성하거나 업로드한 뒤 여기서 선택할 수 있습니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="audio-asset-list">
+      {assets.map((asset) => (
+        <article className={asset.path === selectedPath ? "audio-asset-card is-selected" : "audio-asset-card"} key={asset.id}>
+          <div className="audio-asset-card__header">
+            <div>
+              <strong>{asset.filename}</strong>
+              <span>{asset.source === "generated" ? "생성된 음성" : "업로드된 음성"}</span>
+            </div>
+            <button className="secondary-button" onClick={() => onSelect(asset)} type="button">
+              선택
+            </button>
+          </div>
+          <audio controls className="audio-card__player" src={asset.url} />
+          {asset.text_preview ? <p className="audio-asset-card__preview">{asset.text_preview}</p> : null}
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -276,6 +350,7 @@ export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [speakers, setSpeakers] = useState<SpeakerInfo[]>([]);
+  const [audioAssets, setAudioAssets] = useState<AudioAsset[]>([]);
   const [history, setHistory] = useState<GenerationRecord[]>([]);
   const [presets, setPresets] = useState<CharacterPreset[]>([]);
   const [datasets, setDatasets] = useState<FineTuneDataset[]>([]);
@@ -320,13 +395,17 @@ export default function App() {
   const [uploadTranscriptMeta, setUploadTranscriptMeta] = useState<string>("");
   const [uploadedClonePrompt, setUploadedClonePrompt] = useState<ClonePromptRecord | null>(null);
 
-  const [datasetSamples, setDatasetSamples] = useState([{ audio_path: "", text: "" }]);
+  const [datasetRefMode, setDatasetRefMode] = useState<DatasetAudioSourceMode>("upload");
+  const [datasetSamples, setDatasetSamples] = useState([
+    { audio_path: "", text: "", original_filename: "", source_mode: "upload" as DatasetAudioSourceMode },
+  ]);
   const [datasetForm, setDatasetForm] = useState({
     name: "voice-design-dataset",
     source_type: "voice_design_batch",
     speaker_name: "speaker_demo",
     ref_audio_path: "",
   });
+  const [datasetRefUpload, setDatasetRefUpload] = useState<UploadResponse | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [runForm, setRunForm] = useState({
     init_model_path: "",
@@ -340,11 +419,12 @@ export default function App() {
   });
 
   async function refreshAll() {
-    const [healthData, modelData, speakerData, historyData, presetData, datasetData, runData] =
+    const [healthData, modelData, speakerData, audioAssetData, historyData, presetData, datasetData, runData] =
       await Promise.all([
         api.health(),
         api.models(),
         api.speakers(),
+        api.audioAssets(),
         api.history(),
         api.presets(),
         api.datasets(),
@@ -353,6 +433,7 @@ export default function App() {
     setHealth(healthData);
     setModels(modelData);
     setSpeakers(speakerData);
+    setAudioAssets(audioAssetData);
     setHistory(historyData);
     setPresets(presetData);
     setDatasets(datasetData);
@@ -404,8 +485,19 @@ export default function App() {
 
   const activeClonePrompt = builderSource === "design" ? selectedClonePrompt : uploadedClonePrompt;
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
+  const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
+  const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
+  const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
 
-  function updateDatasetSample(index: number, patch: { audio_path?: string; text?: string }) {
+  function updateDatasetSample(
+    index: number,
+    patch: {
+      audio_path?: string;
+      text?: string;
+      original_filename?: string;
+      source_mode?: DatasetAudioSourceMode;
+    },
+  ) {
     setDatasetSamples((prev) =>
       prev.map((sample, sampleIndex) => (sampleIndex === index ? { ...sample, ...patch } : sample)),
     );
@@ -551,15 +643,33 @@ export default function App() {
   }
 
   async function handleCreateDataset() {
-    const validSamples = datasetSamples.filter((sample) => sample.audio_path.trim());
+    const validSamples = datasetSamples
+      .map((sample) => ({ audio_path: sample.audio_path.trim(), text: (sample.text ?? "").trim() }))
+      .filter((sample) => sample.audio_path);
     if (!datasetForm.ref_audio_path || validSamples.length === 0) {
       setMessage("ref_audio와 최소 1개 이상의 음성 샘플을 채워주세요.");
       return;
     }
     await runAction(async () => {
+      const normalizedSamples = [...validSamples];
+      const blankTargets = normalizedSamples
+        .map((sample, index) => ({ sample, index }))
+        .filter(({ sample }) => !sample.text);
+
+      if (blankTargets.length > 0) {
+        const transcripts = await Promise.all(
+          blankTargets.map(({ sample }) => api.transcribeAudio(sample.audio_path)),
+        );
+        transcripts.forEach((result, resultIndex) => {
+          const targetIndex = blankTargets[resultIndex].index;
+          normalizedSamples[targetIndex].text = result.text;
+          updateDatasetSample(targetIndex, { text: result.text });
+        });
+      }
+
       const dataset = await api.createDataset({
         ...datasetForm,
-        samples: validSamples,
+        samples: normalizedSamples,
       });
       setSelectedDatasetId(dataset.id);
       await refreshAll();
@@ -639,7 +749,37 @@ export default function App() {
   }
 
   function addSampleRow() {
-    setDatasetSamples((prev) => [...prev, { audio_path: "", text: "" }]);
+    setDatasetSamples((prev) => [
+      ...prev,
+      { audio_path: "", text: "", original_filename: "", source_mode: "upload" as DatasetAudioSourceMode },
+    ]);
+  }
+
+  function removeSampleRow(index: number) {
+    setDatasetSamples((prev) => {
+      if (prev.length === 1) {
+        return [{ audio_path: "", text: "", original_filename: "", source_mode: "upload" as DatasetAudioSourceMode }];
+      }
+      return prev.filter((_, sampleIndex) => sampleIndex !== index);
+    });
+  }
+
+  async function handleDatasetRefUpload(file: File) {
+    await runAction(async () => {
+      const result = await api.uploadAudio(file);
+      setDatasetForm((prev) => ({ ...prev, ref_audio_path: result.path }));
+      setDatasetRefUpload(result);
+      setDatasetRefMode("upload");
+      setMessage("ref_audio 파일을 업로드했습니다.");
+    });
+  }
+
+  async function handleDatasetSampleUpload(index: number, file: File) {
+    await runAction(async () => {
+      const result = await api.uploadAudio(file);
+      updateDatasetSample(index, { audio_path: result.path, original_filename: result.filename });
+      setMessage(`샘플 ${index + 1} 오디오를 업로드했습니다.`);
+    });
   }
 
   function addHistorySample(record: GenerationRecord) {
@@ -648,8 +788,26 @@ export default function App() {
       {
         audio_path: record.output_audio_path,
         text: record.input_text,
+        original_filename: basenameFromPath(record.output_audio_path),
+        source_mode: "existing" as DatasetAudioSourceMode,
       },
     ]);
+  }
+
+  function handleSelectDatasetRefAsset(asset: AudioAsset) {
+    setDatasetForm((prev) => ({ ...prev, ref_audio_path: asset.path }));
+    setDatasetRefUpload(null);
+    setDatasetRefMode("existing");
+    setMessage(`기준 음성으로 ${asset.filename}을(를) 선택했습니다.`);
+  }
+
+  function handleSelectDatasetSampleAsset(index: number, asset: AudioAsset) {
+    updateDatasetSample(index, {
+      audio_path: asset.path,
+      original_filename: asset.filename,
+      source_mode: "existing",
+    });
+    setMessage(`샘플 ${index + 1}에 ${asset.filename}을(를) 넣었습니다.`);
   }
 
   return (
@@ -799,19 +957,26 @@ export default function App() {
 
           <aside className="panel">
             <h3>디자인 샘플 기록</h3>
-            <div className="history-list">
-              {voiceDesignHistory.slice(0, 6).map((record) => (
-                <button
-                  key={record.id}
-                  className={record.id === selectedDesignSampleId ? "history-item is-selected" : "history-item"}
-                  onClick={() => setSelectedDesignSampleId(record.id)}
-                  type="button"
-                >
-                  <strong>{record.id}</strong>
-                  <span>{record.input_text.slice(0, 60)}</span>
-                </button>
-              ))}
-            </div>
+              <div className="history-list">
+                {voiceDesignHistory.slice(0, 6).map((record) => (
+                  <article
+                    key={record.id}
+                    className={record.id === selectedDesignSampleId ? "history-item is-selected" : "history-item"}
+                  >
+                    <button className="history-item__button" onClick={() => setSelectedDesignSampleId(record.id)} type="button">
+                      <strong>{record.id}</strong>
+                      <span>{record.input_text.slice(0, 60)}</span>
+                    </button>
+                    <a
+                      className="history-item__download"
+                      href={record.output_audio_url}
+                      download={getAudioDownloadName(record)}
+                    >
+                      다운로드
+                    </a>
+                  </article>
+                ))}
+              </div>
             {lastDesignRecord ? (
               <AudioCard
                 title="방금 생성한 디자인 샘플"
@@ -922,15 +1087,26 @@ export default function App() {
                     </label>
                     <div className="history-list compact-list">
                       {voiceDesignHistory.slice(0, 4).map((record) => (
-                        <button
+                        <article
                           key={record.id}
                           className={record.id === selectedDesignSampleId ? "history-item is-selected" : "history-item"}
-                          onClick={() => setSelectedDesignSampleId(record.id)}
-                          type="button"
                         >
-                          <strong>{record.id}</strong>
-                          <span>{record.input_text.slice(0, 80)}</span>
-                        </button>
+                          <button
+                            className="history-item__button"
+                            onClick={() => setSelectedDesignSampleId(record.id)}
+                            type="button"
+                          >
+                            <strong>{record.id}</strong>
+                            <span>{record.input_text.slice(0, 80)}</span>
+                          </button>
+                          <a
+                            className="history-item__download"
+                            href={record.output_audio_url}
+                            download={getAudioDownloadName(record)}
+                          >
+                            다운로드
+                          </a>
+                        </article>
                       ))}
                     </div>
                     <button className="primary-button" onClick={handleCreateCloneFromDesign} type="button">
@@ -1038,197 +1214,434 @@ export default function App() {
 
       {activeTab === "finetune" ? (
         <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <section className="panel">
-              <h2>Training Dataset Builder</h2>
-              <p>샘플 텍스트를 비워두면 생성 시점에 Whisper로 자동 전사합니다. 급하면 음성만 먼저 모아도 됩니다.</p>
-              <label>
-                데이터셋 이름
-                <input
-                  value={datasetForm.name}
-                  onChange={(event) => setDatasetForm({ ...datasetForm, name: event.target.value })}
-                />
-              </label>
+          <section className="panel finetune-flow">
+            <div className="finetune-header">
+              <div>
+                <span className="eyebrow eyebrow--soft">Training Lab</span>
+                <h2>데이터셋 만들기부터 학습 실행까지 한 흐름으로 정리</h2>
+                <p>기준 음성을 정하고, 샘플을 채운 뒤, 데이터셋 생성과 학습 준비를 순서대로 진행하세요.</p>
+              </div>
+              <div className="finetune-steps">
+                <span className="finetune-step-chip">1. 기준 음성</span>
+                <span className="finetune-step-chip">2. 샘플 편집</span>
+                <span className="finetune-step-chip">3. 데이터셋 생성</span>
+                <span className="finetune-step-chip">4. 학습 실행</span>
+              </div>
+            </div>
+
+            <section className="finetune-stage">
+              <div className="finetune-stage__header">
+                <div>
+                  <span className="step-card__index">1</span>
+                  <h3>기준 음성 선택</h3>
+                </div>
+                <p>업로드를 기본으로 두고, 이미 있는 서버 파일을 쓸 때만 경로를 입력하세요.</p>
+              </div>
               <div className="field-row">
                 <label>
-                  sourceType
-                  <select
-                    value={datasetForm.source_type}
-                    onChange={(event) => setDatasetForm({ ...datasetForm, source_type: event.target.value })}
-                  >
-                    <option value="voice_design_batch">voice_design_batch</option>
-                    <option value="uploaded_audio_batch">uploaded_audio_batch</option>
-                  </select>
+                  데이터셋 이름
+                  <input
+                    value={datasetForm.name}
+                    onChange={(event) => setDatasetForm({ ...datasetForm, name: event.target.value })}
+                  />
                 </label>
                 <label>
-                  speakerName
+                  화자 이름
                   <input
                     value={datasetForm.speaker_name}
                     onChange={(event) => setDatasetForm({ ...datasetForm, speaker_name: event.target.value })}
                   />
                 </label>
               </div>
-              <label>
-                ref_audio_path
-                <input
-                  value={datasetForm.ref_audio_path}
-                  onChange={(event) => setDatasetForm({ ...datasetForm, ref_audio_path: event.target.value })}
+
+              <div className="segmented-toggle">
+                <button
+                  className={datasetRefMode === "upload" ? "tab is-active" : "tab"}
+                  onClick={() => setDatasetRefMode("upload")}
+                  type="button"
+                >
+                  <span>새 파일 업로드</span>
+                </button>
+                <button
+                  className={datasetRefMode === "existing" ? "tab is-active" : "tab"}
+                  onClick={() => setDatasetRefMode("existing")}
+                  type="button"
+                >
+                  <span>기존 파일 경로 사용</span>
+                </button>
+              </div>
+
+              {datasetRefMode === "upload" ? (
+                <label className="upload-field">
+                  기준 음성 파일 업로드
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void handleDatasetRefUpload(file);
+                      }
+                    }}
+                  />
+                </label>
+              ) : (
+                <ServerAudioPicker
+                  assets={generatedAudioAssets}
+                  selectedPath={datasetForm.ref_audio_path}
+                  onSelect={handleSelectDatasetRefAsset}
                 />
-              </label>
+              )}
+
+              {datasetForm.ref_audio_path ? (
+                <article className="selected-audio-card">
+                  <span className="meta-label">현재 선택된 기준 음성</span>
+                  <strong>{datasetRefUpload?.filename || basenameFromPath(datasetForm.ref_audio_path)}</strong>
+                  <p>{datasetRefUpload ? "업로드한 원본 파일이 기준 음성으로 선택되었습니다." : "기존 서버 파일을 기준 음성으로 사용합니다."}</p>
+                  <audio controls className="audio-card__player" src={fileUrlFromPath(datasetForm.ref_audio_path)} />
+                  <details className="advanced-inline">
+                    <summary>저장 경로 보기</summary>
+                    <div className="path-chip">{datasetForm.ref_audio_path}</div>
+                  </details>
+                </article>
+              ) : null}
+
+              <details className="advanced-inline">
+                <summary>고급 분류 설정</summary>
+                <label>
+                  데이터 출처
+                  <select
+                    value={datasetForm.source_type}
+                    onChange={(event) => setDatasetForm({ ...datasetForm, source_type: event.target.value })}
+                  >
+                    <option value="voice_design_batch">Voice Design 샘플 묶음</option>
+                    <option value="uploaded_audio_batch">직접 업로드한 음성 묶음</option>
+                  </select>
+                </label>
+              </details>
+            </section>
+
+            <section className="finetune-stage">
+              <div className="finetune-stage__header">
+                <div>
+                  <span className="step-card__index">2</span>
+                  <h3>학습 샘플 편집</h3>
+                </div>
+                <p>샘플마다 오디오와 텍스트를 한 묶음으로 보고, 필요한 경우만 자동 전사를 사용하세요.</p>
+              </div>
+
               <div className="sample-builder">
                 {datasetSamples.map((sample, index) => (
-                  <div className="sample-row" key={`sample-${index}`}>
-                    <input
-                      placeholder="audio path"
-                      value={sample.audio_path}
-                      onChange={(event) => updateDatasetSample(index, { audio_path: event.target.value })}
-                    />
-                    <textarea
-                      placeholder="text (비워두면 Whisper 자동 전사)"
-                      value={sample.text ?? ""}
-                      onChange={(event) => updateDatasetSample(index, { text: event.target.value })}
-                    />
-                    <button className="secondary-button" onClick={() => void handleTranscribeDatasetSample(index)} type="button">
-                      이 행 전사
-                    </button>
-                  </div>
+                  <article className="sample-card" key={`sample-${index}`}>
+                    <div className="sample-card__header">
+                      <div>
+                        <strong>샘플 {index + 1}</strong>
+                        <span>
+                          {!sample.audio_path
+                            ? "오디오 필요"
+                            : sample.text?.trim()
+                              ? "텍스트 있음"
+                              : "전사 가능"}
+                        </span>
+                      </div>
+                      <div className="sample-card__actions">
+                        <button
+                          className="secondary-button"
+                          disabled={!sample.audio_path.trim()}
+                          onClick={() => void handleTranscribeDatasetSample(index)}
+                          type="button"
+                        >
+                          {sample.text?.trim() ? "다시 전사" : "이 샘플 전사"}
+                        </button>
+                        <button className="ghost-button" onClick={() => removeSampleRow(index)} type="button">
+                          삭제
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="segmented-toggle segmented-toggle--compact">
+                      <button
+                        className={sample.source_mode === "upload" ? "tab is-active" : "tab"}
+                        onClick={() => updateDatasetSample(index, { source_mode: "upload" })}
+                        type="button"
+                      >
+                        <span>새 파일 업로드</span>
+                      </button>
+                      <button
+                        className={sample.source_mode === "existing" ? "tab is-active" : "tab"}
+                        onClick={() => updateDatasetSample(index, { source_mode: "existing" })}
+                        type="button"
+                      >
+                        <span>기존 파일 경로 사용</span>
+                      </button>
+                    </div>
+
+                    {sample.source_mode === "upload" ? (
+                      <label className="upload-field">
+                        샘플 오디오 업로드
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              void handleDatasetSampleUpload(index, file);
+                            }
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <ServerAudioPicker
+                        assets={generatedAudioAssets}
+                        selectedPath={sample.audio_path}
+                        onSelect={(asset) => handleSelectDatasetSampleAsset(index, asset)}
+                      />
+                    )}
+
+                    {sample.audio_path ? (
+                      <article className="selected-audio-card selected-audio-card--sample">
+                        <span className="meta-label">현재 선택된 샘플 오디오</span>
+                        <strong>{sample.original_filename || basenameFromPath(sample.audio_path)}</strong>
+                        <audio controls className="audio-card__player" src={fileUrlFromPath(sample.audio_path)} />
+                        <details className="advanced-inline">
+                          <summary>저장 경로 보기</summary>
+                          <div className="path-chip">{sample.audio_path}</div>
+                        </details>
+                      </article>
+                    ) : null}
+
+                    <label>
+                      샘플 텍스트
+                      <textarea
+                        placeholder="비워두면 데이터셋 생성 시 Whisper 자동 전사"
+                        value={sample.text ?? ""}
+                        onChange={(event) => updateDatasetSample(index, { text: event.target.value })}
+                      />
+                    </label>
+                  </article>
                 ))}
               </div>
+
               <div className="button-row">
                 <button className="secondary-button" onClick={addSampleRow} type="button">
-                  샘플 행 추가
+                  샘플 추가
                 </button>
                 <button className="secondary-button" onClick={handleTranscribeAllDatasetSamples} type="button">
-                  빈 텍스트 일괄 전사
-                </button>
-                <button className="primary-button" onClick={handleCreateDataset} type="button">
-                  raw JSONL 만들기
+                  빈 텍스트만 자동 전사
                 </button>
               </div>
-              <div className="history-list">
-                {voiceDesignHistory.slice(0, 4).map((record) => (
-                  <button
-                    className="history-item"
-                    key={record.id}
-                    onClick={() => addHistorySample(record)}
-                    type="button"
-                  >
-                    <strong>{record.id}</strong>
-                    <span>이 샘플을 데이터셋에 추가</span>
-                  </button>
-                ))}
+
+              <div className="sample-suggestions">
+                <h4>최근 디자인 샘플 바로 가져오기</h4>
+                <div className="history-list">
+                  {voiceDesignHistory.slice(0, 4).map((record) => (
+                    <article className="history-item" key={record.id}>
+                      <button className="history-item__button" onClick={() => addHistorySample(record)} type="button">
+                        <strong>{record.id}</strong>
+                        <span>{record.input_text.slice(0, 42)}</span>
+                      </button>
+                      <a
+                        className="history-item__download"
+                        href={record.output_audio_url}
+                        download={getAudioDownloadName(record)}
+                      >
+                        다운로드
+                      </a>
+                    </article>
+                  ))}
+                </div>
               </div>
             </section>
 
-            <section className="panel">
-              <h2>prepare_data.py / sft_12hz.py 실행</h2>
-              <label>
-                데이터셋 선택
-                <select value={selectedDatasetId} onChange={(event) => setSelectedDatasetId(event.target.value)}>
-                  <option value="">선택하세요</option>
-                  {datasets.map((dataset) => (
-                    <option key={dataset.id} value={dataset.id}>
-                      {dataset.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="secondary-button" onClick={handlePrepareDataset} type="button">
-                prepare_data 실행
-              </button>
-              <div className="field-row">
-                <label>
-                  tokenizer
-                  <select
-                    value={runForm.tokenizer_model_path}
-                    onChange={(event) => setRunForm({ ...runForm, tokenizer_model_path: event.target.value })}
-                  >
-                    {tokenizerModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  output_name
-                  <input
-                    value={runForm.output_name}
-                    onChange={(event) => setRunForm({ ...runForm, output_name: event.target.value })}
-                  />
-                </label>
-                <label>
-                  init_model
-                  <select
-                    value={runForm.init_model_path}
-                    onChange={(event) => setRunForm({ ...runForm, init_model_path: event.target.value })}
-                  >
-                    {baseModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  speaker_name
-                  <input
-                    value={runForm.speaker_name}
-                    onChange={(event) => setRunForm({ ...runForm, speaker_name: event.target.value })}
-                  />
-                </label>
+            <section className="finetune-stage">
+              <div className="finetune-stage__header">
+                <div>
+                  <span className="step-card__index">3</span>
+                  <h3>데이터셋 생성</h3>
+                </div>
+                <p>샘플이 준비되면 데이터셋을 만들고 결과 파일 경로를 바로 확인하세요.</p>
               </div>
-              <div className="field-row">
-                <label>
-                  batch_size
-                  <input
-                    type="number"
-                    value={runForm.batch_size}
-                    onChange={(event) => setRunForm({ ...runForm, batch_size: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  num_epochs
-                  <input
-                    type="number"
-                    value={runForm.num_epochs}
-                    onChange={(event) => setRunForm({ ...runForm, num_epochs: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  lr
-                  <input
-                    type="number"
-                    step="0.000001"
-                    value={runForm.lr}
-                    onChange={(event) => setRunForm({ ...runForm, lr: Number(event.target.value) })}
-                  />
-                </label>
-              </div>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={runForm.simulate_only}
-                  onChange={(event) => setRunForm({ ...runForm, simulate_only: event.target.checked })}
-                />
-                시뮬레이션 모드로 실행
-              </label>
-              <button className="primary-button" onClick={handleCreateRun} type="button">
-                sft_12hz 실행
+              <button className="primary-button" onClick={handleCreateDataset} type="button">
+                데이터셋 만들기
               </button>
+              {selectedDataset ? (
+                <article className="dataset-summary-card">
+                  <strong>{selectedDataset.name}</strong>
+                  <span>
+                    {selectedDataset.sample_count}개 샘플 · {getDatasetSourceLabel(selectedDataset.source_type)}
+                  </span>
+                  <div>
+                    <span className="meta-label">Raw JSONL</span>
+                    <div className="path-chip">{selectedDataset.raw_jsonl_path}</div>
+                  </div>
+                  {selectedDataset.prepared_jsonl_path ? (
+                    <div>
+                      <span className="meta-label">Prepared JSONL</span>
+                      <div className="path-chip">{selectedDataset.prepared_jsonl_path}</div>
+                    </div>
+                  ) : null}
+                </article>
+              ) : null}
             </section>
-          </div>
+
+            <section className="finetune-stage">
+              <div className="finetune-stage__header">
+                <div>
+                  <span className="step-card__index">4</span>
+                  <h3>학습 준비와 실행</h3>
+                </div>
+                <p>데이터셋을 고르고, 준비 단계를 먼저 실행한 뒤, 학습 설정을 확인하고 시작하세요.</p>
+              </div>
+              {selectedDataset ? (
+                <article className="selected-audio-card">
+                  <span className="meta-label">현재 작업 데이터셋</span>
+                  <strong>{selectedDataset.name}</strong>
+                  <p>
+                    {selectedDataset.sample_count}개 샘플 · {getDatasetSourceLabel(selectedDataset.source_type)}
+                  </p>
+                </article>
+              ) : (
+                <article className="status-card">
+                  <strong>작업 데이터셋이 아직 없습니다</strong>
+                  <p>3단계에서 데이터셋을 만들거나, 아래에서 기존 데이터셋을 골라주세요.</p>
+                </article>
+              )}
+              {!selectedDataset ? (
+                <details className="advanced-inline">
+                  <summary>기존 데이터셋 선택</summary>
+                  <label>
+                    사용할 데이터셋
+                    <select value={selectedDatasetId} onChange={(event) => setSelectedDatasetId(event.target.value)}>
+                      <option value="">선택하세요</option>
+                      {datasets.map((dataset) => (
+                        <option key={dataset.id} value={dataset.id}>
+                          {dataset.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </details>
+              ) : null}
+              {selectedDataset ? (
+                <article className={datasetReadyForTraining ? "status-card status-card--ready" : "status-card"}>
+                  <strong>{datasetReadyForTraining ? "학습 준비 완료" : "학습 준비 필요"}</strong>
+                  <p>
+                    {datasetReadyForTraining
+                      ? "prepare 단계가 끝나서 바로 학습을 시작할 수 있습니다."
+                      : "먼저 학습 준비 실행을 눌러 prepared JSONL을 만들어야 합니다."}
+                  </p>
+                </article>
+              ) : null}
+              <div className="button-row">
+                <button className="secondary-button" onClick={handlePrepareDataset} type="button">
+                  학습 준비 실행
+                </button>
+                <button className="primary-button" disabled={!datasetReadyForTraining} onClick={handleCreateRun} type="button">
+                  학습 시작
+                </button>
+              </div>
+              <details className="advanced-inline">
+                <summary>학습 설정 열기</summary>
+                <div className="field-row">
+                  <label>
+                    토크나이저
+                    <select
+                      value={runForm.tokenizer_model_path}
+                      onChange={(event) => setRunForm({ ...runForm, tokenizer_model_path: event.target.value })}
+                    >
+                      {tokenizerModels.map((model) => (
+                        <option key={model.key} value={model.model_id}>
+                          {model.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    출력 이름
+                    <input
+                      value={runForm.output_name}
+                      onChange={(event) => setRunForm({ ...runForm, output_name: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    초기 모델
+                    <select
+                      value={runForm.init_model_path}
+                      onChange={(event) => setRunForm({ ...runForm, init_model_path: event.target.value })}
+                    >
+                      {baseModels.map((model) => (
+                        <option key={model.key} value={model.model_id}>
+                          {model.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    학습용 화자 이름
+                    <input
+                      value={runForm.speaker_name}
+                      onChange={(event) => setRunForm({ ...runForm, speaker_name: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    배치 크기
+                    <input
+                      type="number"
+                      value={runForm.batch_size}
+                      onChange={(event) => setRunForm({ ...runForm, batch_size: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    epoch
+                    <input
+                      type="number"
+                      value={runForm.num_epochs}
+                      onChange={(event) => setRunForm({ ...runForm, num_epochs: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    학습률
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={runForm.lr}
+                      onChange={(event) => setRunForm({ ...runForm, lr: Number(event.target.value) })}
+                    />
+                  </label>
+                </div>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={runForm.simulate_only}
+                    onChange={(event) => setRunForm({ ...runForm, simulate_only: event.target.checked })}
+                  />
+                  시뮬레이션 모드로 먼저 확인
+                </label>
+              </details>
+            </section>
+          </section>
 
           <div className="panel-grid">
             <section className="panel">
               <h3>데이터셋 목록</h3>
               <div className="dataset-list">
                 {datasets.map((dataset) => (
-                  <article className="dataset-card" key={dataset.id}>
+                  <article
+                    className={dataset.id === selectedDatasetId ? "dataset-card preset-card--selected" : "dataset-card"}
+                    key={dataset.id}
+                  >
                     <strong>{dataset.name}</strong>
-                    <span>{dataset.sample_count} samples</span>
-                    <code>{dataset.raw_jsonl_path}</code>
-                    {dataset.prepared_jsonl_path ? <code>{dataset.prepared_jsonl_path}</code> : null}
+                    <span>{dataset.sample_count}개 샘플</span>
+                    <span>{dataset.prepared_jsonl_path ? "준비 완료" : "준비 전"}</span>
+                    <div className="button-row">
+                      <button className="secondary-button" onClick={() => setSelectedDatasetId(dataset.id)} type="button">
+                        이 데이터셋 사용
+                      </button>
+                    </div>
+                    <div className="path-chip">{dataset.raw_jsonl_path}</div>
+                    {dataset.prepared_jsonl_path ? <div className="path-chip">{dataset.prepared_jsonl_path}</div> : null}
                   </article>
                 ))}
               </div>

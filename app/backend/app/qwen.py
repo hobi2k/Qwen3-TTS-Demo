@@ -251,8 +251,23 @@ class QwenDemoEngine:
             }
 
         pipeline_runner = self._get_transcription_pipeline()
+        pipeline_input: Any = str(absolute_path)
+
+        if sf is not None:
+            try:
+                audio_array, sample_rate = sf.read(str(absolute_path), dtype="float32")
+                if isinstance(audio_array, np.ndarray) and audio_array.ndim > 1:
+                    audio_array = audio_array.mean(axis=1)
+                pipeline_input = {
+                    "raw": np.asarray(audio_array, dtype=np.float32),
+                    "sampling_rate": int(sample_rate),
+                }
+            except Exception:
+                # `soundfile`로 읽기 실패하면 기존 filename 경로 방식을 마지막으로 시도한다.
+                pipeline_input = str(absolute_path)
+
         result = pipeline_runner(
-            str(absolute_path),
+            pipeline_input,
             generate_kwargs={"task": "transcribe"},
         )
         text = str(result.get("text", "")).strip()

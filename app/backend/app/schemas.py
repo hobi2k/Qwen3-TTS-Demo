@@ -36,6 +36,10 @@ class AudioAsset(BaseModel):
     id: str
     path: str
     url: str
+    filename: str
+    source: str
+    created_at: Optional[str] = None
+    text_preview: Optional[str] = None
 
 
 class GenerationRequestBase(BaseModel):

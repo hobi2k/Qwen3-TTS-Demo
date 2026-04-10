@@ -33,6 +33,13 @@ if ! command -v sox >/dev/null 2>&1; then
   echo "On Ubuntu run: sudo apt-get install sox"
 fi
 
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "Warning: ffmpeg is not installed."
+  echo "Whisper transcription can fail without ffmpeg in PATH."
+  echo "On macOS run: brew install ffmpeg"
+  echo "On Ubuntu run: sudo apt-get install ffmpeg"
+fi
+
 if [[ ! -d "${VENV_DIR}" ]]; then
   echo "Creating virtual environment at ${VENV_DIR}"
   uv venv --python "${PYTHON_BIN}" "${VENV_DIR}"
