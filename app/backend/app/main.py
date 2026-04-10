@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from .qwen import QwenDemoEngine
 from .schemas import (
     AudioAsset,
+    BootstrapResponse,
     AudioTranscriptionRequest,
     AudioTranscriptionResponse,
     CharacterPreset,
@@ -320,17 +321,48 @@ def write_dataset_jsonl(dataset_path: Path, ref_audio_path: str, samples: List[A
     for sample in samples:
         audio_path = sample.audio_path if hasattr(sample, "audio_path") else sample["audio_path"]
         text = sample.text if hasattr(sample, "text") else sample["text"]
+        normalized_audio_path = resolve_repo_audio_path(audio_path)
+        normalized_ref_audio_path = resolve_repo_audio_path(ref_audio_path)
         jsonl_lines.append(
             json.dumps(
                 {
-                    "audio": audio_path,
+                    "audio": normalized_audio_path,
                     "text": text,
-                    "ref_audio": ref_audio_path,
+                    "ref_audio": normalized_ref_audio_path,
                 },
                 ensure_ascii=False,
             )
         )
     dataset_path.write_text("\n".join(jsonl_lines) + "\n", encoding="utf-8")
+
+
+def resolve_repo_audio_path(audio_path: str) -> str:
+    """프로젝트 내부 상대 오디오 경로를 절대 경로로 정규화한다."""
+
+    candidate = Path(audio_path.strip())
+    if candidate.is_absolute():
+        return str(candidate)
+    return str((REPO_ROOT / candidate).resolve())
+
+
+def normalize_dataset_jsonl_paths(dataset_path: Path) -> None:
+    """기존 JSONL 안의 audio/ref_audio 경로를 절대 경로로 다시 쓴다."""
+
+    if not dataset_path.exists():
+        return
+
+    normalized_lines = []
+    for raw_line in dataset_path.read_text(encoding="utf-8").splitlines():
+        if not raw_line.strip():
+            continue
+        line = json.loads(raw_line)
+        if "audio" in line:
+            line["audio"] = resolve_repo_audio_path(line["audio"])
+        if "ref_audio" in line:
+            line["ref_audio"] = resolve_repo_audio_path(line["ref_audio"])
+        normalized_lines.append(json.dumps(line, ensure_ascii=False))
+
+    dataset_path.write_text("\n".join(normalized_lines) + "\n", encoding="utf-8")
 
 
 def transcribe_audio_or_raise(audio_path: str) -> AudioTranscriptionResponse:
@@ -421,6 +453,7 @@ def list_server_audio_assets() -> List[AudioAsset]:
                 source="generated",
                 created_at=record.get("created_at"),
                 text_preview=(record.get("input_text") or "")[:120] or None,
+                transcript_text=(record.get("input_text") or None),
             )
         )
 
@@ -439,11 +472,32 @@ def list_server_audio_assets() -> List[AudioAsset]:
                 source="uploaded",
                 created_at=utc_now_from_stat(path),
                 text_preview=None,
+                transcript_text=None,
             )
         )
 
     assets.sort(key=lambda item: item.created_at or "", reverse=True)
     return assets
+
+
+def list_generation_records() -> List[GenerationRecord]:
+    records = storage.list_json_records(storage.generated_dir)
+    return [GenerationRecord(**record) for record in records]
+
+
+def list_preset_records() -> List[CharacterPreset]:
+    records = storage.list_json_records(storage.presets_dir)
+    return [CharacterPreset(**record) for record in records]
+
+
+def list_dataset_records() -> List[FineTuneDataset]:
+    records = storage.list_json_records(storage.datasets_dir)
+    return [FineTuneDataset(**record) for record in records]
+
+
+def list_finetune_run_records() -> List[FineTuneRun]:
+    records = storage.list_json_records(storage.finetune_runs_dir)
+    return [FineTuneRun(**record) for record in records]
 
 
 def basename_for_asset(value: str) -> str:
@@ -499,6 +553,22 @@ def health() -> HealthResponse:
         attention_implementation=engine.resolve_attention_implementation(),
         recommended_instruction_language="English",
         data_dir=str(storage.data_dir),
+    )
+
+
+@app.get("/api/bootstrap", response_model=BootstrapResponse)
+def bootstrap() -> BootstrapResponse:
+    """초기 화면 렌더에 필요한 공통 데이터를 한 번에 반환한다."""
+
+    return BootstrapResponse(
+        health=health(),
+        models=list_models(),
+        speakers=list_speakers(),
+        audio_assets=list_server_audio_assets(),
+        history=list_generation_records(),
+        presets=list_preset_records(),
+        datasets=list_dataset_records(),
+        finetune_runs=list_finetune_run_records(),
     )
 
 
@@ -598,8 +668,7 @@ def history() -> List[GenerationRecord]:
         생성 이력 모델 목록.
     """
 
-    records = storage.list_json_records(storage.generated_dir)
-    return [GenerationRecord(**record) for record in records]
+    return list_generation_records()
 
 
 @app.get("/api/audio-assets", response_model=List[AudioAsset])
@@ -817,8 +886,7 @@ def list_presets() -> List[CharacterPreset]:
         최신순 프리셋 목록.
     """
 
-    records = storage.list_json_records(storage.presets_dir)
-    return [CharacterPreset(**record) for record in records]
+    return list_preset_records()
 
 
 @app.post("/api/presets", response_model=CharacterPreset)
@@ -956,8 +1024,7 @@ def list_datasets() -> List[FineTuneDataset]:
         최신순 데이터셋 목록.
     """
 
-    records = storage.list_json_records(storage.datasets_dir)
-    return [FineTuneDataset(**record) for record in records]
+    return list_dataset_records()
 
 
 @app.get("/api/datasets/{dataset_id}", response_model=FineTuneDataset)
@@ -989,6 +1056,7 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
     dataset = get_dataset_record(dataset_id)
     raw_jsonl_path = REPO_ROOT / dataset["raw_jsonl_path"]
     prepared_jsonl_path = storage.datasets_dir / f"{dataset_id}_with_codes.jsonl"
+    normalize_dataset_jsonl_paths(raw_jsonl_path)
 
     simulate = payload.simulate_only or engine.simulation_mode
     if not simulate:
@@ -1040,6 +1108,7 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
     prepared_jsonl_path = dataset.get("prepared_jsonl_path")
     if not prepared_jsonl_path:
         raise HTTPException(status_code=400, detail="Dataset must be prepared before starting fine-tuning.")
+    normalize_dataset_jsonl_paths(REPO_ROOT / prepared_jsonl_path)
 
     run_id = storage.new_id("run")
     run_dir = storage.finetune_runs_dir / run_id
@@ -1110,8 +1179,7 @@ def list_finetune_runs() -> List[FineTuneRun]:
         최신순 파인튜닝 실행 목록.
     """
 
-    records = storage.list_json_records(storage.finetune_runs_dir)
-    return [FineTuneRun(**record) for record in records]
+    return list_finetune_run_records()
 
 
 @app.get("/api/finetune-runs/{run_id}", response_model=FineTuneRun)

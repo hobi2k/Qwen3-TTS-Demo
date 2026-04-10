@@ -40,6 +40,7 @@ class AudioAsset(BaseModel):
     source: str
     created_at: Optional[str] = None
     text_preview: Optional[str] = None
+    transcript_text: Optional[str] = None
 
 
 class GenerationRequestBase(BaseModel):
@@ -212,6 +213,19 @@ class AudioTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     simulation: bool = False
     model_id: Optional[str] = None
+
+
+class BootstrapResponse(BaseModel):
+    """프런트엔드 초기 렌더에 필요한 공통 데이터 묶음."""
+
+    health: HealthResponse
+    models: List[ModelInfo]
+    speakers: List[Dict[str, str]]
+    audio_assets: List[AudioAsset]
+    history: List[GenerationRecord]
+    presets: List[CharacterPreset]
+    datasets: List["FineTuneDataset"]
+    finetune_runs: List["FineTuneRun"]
 
 
 class FineTuneDatasetCreateRequest(BaseModel):

@@ -64,9 +64,9 @@
 
 추가 메모:
 
-- `flash_attn` import가 가능할 때만 `flash_attention_2`를 사용합니다.
-- 그렇지 않으면 `sdpa`를 사용합니다.
-- Apple Silicon에서는 `mps + sdpa`가 정상적인 실모델 경로일 수 있습니다.
+- macOS / Apple Silicon에서는 `sdpa`를 기본으로 사용합니다.
+- Windows 또는 Ubuntu에서 CUDA가 감지되면 `flash-attn` 설치를 우선 시도하고, 가능할 때 `flash_attention_2`를 사용합니다.
+- `flash_attn`이 없거나 CPU-only 환경이면 `sdpa`를 사용합니다.
 - 생성 후 저장 직전에 아주 짧은 앞머리 저에너지 구간만 정리하는 `_postprocess_generated_wav(...)`가 적용됩니다.
 - 이 후처리는 첫 `35ms` 범위만 검사하고, trim이 실제로 일어났을 때만 짧은 fade-in을 적용합니다.
 - 적용 결과는 생성 메타데이터의 `postprocess.leading_trim_samples`, `postprocess.fade_in_samples`에 기록됩니다.

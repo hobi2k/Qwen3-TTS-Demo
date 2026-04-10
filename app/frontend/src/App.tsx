@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { api } from "./lib/api";
 import type {
@@ -357,6 +357,8 @@ export default function App() {
   const [runs, setRuns] = useState<FineTuneRun[]>([]);
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const bootstrapLoadedRef = useRef(false);
+  const actionQueueRef = useRef(Promise.resolve());
 
   const [customForm, setCustomForm] = useState({
     model_id: "",
@@ -419,43 +421,43 @@ export default function App() {
   });
 
   async function refreshAll() {
-    const [healthData, modelData, speakerData, audioAssetData, historyData, presetData, datasetData, runData] =
-      await Promise.all([
-        api.health(),
-        api.models(),
-        api.speakers(),
-        api.audioAssets(),
-        api.history(),
-        api.presets(),
-        api.datasets(),
-        api.runs(),
-      ]);
-    setHealth(healthData);
-    setModels(modelData);
-    setSpeakers(speakerData);
-    setAudioAssets(audioAssetData);
-    setHistory(historyData);
-    setPresets(presetData);
-    setDatasets(datasetData);
-    setRuns(runData);
+    const data = await api.bootstrap();
+    setHealth(data.health);
+    setModels(data.models);
+    setSpeakers(data.speakers);
+    setAudioAssets(data.audio_assets);
+    setHistory(data.history);
+    setPresets(data.presets);
+    setDatasets(data.datasets);
+    setRuns(data.finetune_runs);
   }
 
   useEffect(() => {
+    if (bootstrapLoadedRef.current) {
+      return;
+    }
+    bootstrapLoadedRef.current = true;
     refreshAll().catch((error: Error) => {
       setMessage(error.message);
     });
   }, []);
 
   async function runAction(action: () => Promise<void>) {
-    try {
-      setLoading(true);
-      setMessage("");
-      await action();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
+    const run = async () => {
+      try {
+        setLoading(true);
+        setMessage("");
+        await action();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const queued = actionQueueRef.current.then(run);
+    actionQueueRef.current = queued.catch(() => undefined);
+    await queued;
   }
 
   const customVoiceModels = models.filter((model) => model.category === "custom_voice");
@@ -488,6 +490,9 @@ export default function App() {
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
+  const generatedAssetTextByPath = new Map(
+    generatedAudioAssets.map((asset) => [asset.path, (asset.transcript_text || "").trim()]),
+  );
 
   function updateDatasetSample(
     index: number,
@@ -642,7 +647,7 @@ export default function App() {
     });
   }
 
-  async function handleCreateDataset() {
+  async function handleCreateDataset(options?: { prepareAfterCreate?: boolean }) {
     const validSamples = datasetSamples
       .map((sample) => ({ audio_path: sample.audio_path.trim(), text: (sample.text ?? "").trim() }))
       .filter((sample) => sample.audio_path);
@@ -656,12 +661,22 @@ export default function App() {
         .map((sample, index) => ({ sample, index }))
         .filter(({ sample }) => !sample.text);
 
-      if (blankTargets.length > 0) {
+      const whisperTargets = blankTargets.filter(({ sample, index }) => {
+        const cachedText = generatedAssetTextByPath.get(sample.audio_path)?.trim();
+        if (cachedText) {
+          normalizedSamples[index].text = cachedText;
+          updateDatasetSample(index, { text: cachedText });
+          return false;
+        }
+        return true;
+      });
+
+      if (whisperTargets.length > 0) {
         const transcripts = await Promise.all(
-          blankTargets.map(({ sample }) => api.transcribeAudio(sample.audio_path)),
+          whisperTargets.map(({ sample }) => api.transcribeAudio(sample.audio_path)),
         );
         transcripts.forEach((result, resultIndex) => {
-          const targetIndex = blankTargets[resultIndex].index;
+          const targetIndex = whisperTargets[resultIndex].index;
           normalizedSamples[targetIndex].text = result.text;
           updateDatasetSample(targetIndex, { text: result.text });
         });
@@ -671,9 +686,17 @@ export default function App() {
         ...datasetForm,
         samples: normalizedSamples,
       });
-      setSelectedDatasetId(dataset.id);
+      let finalDataset = dataset;
+      if (options?.prepareAfterCreate) {
+        finalDataset = await api.prepareDataset(dataset.id, {
+          tokenizer_model_path: runForm.tokenizer_model_path,
+          device: health?.device ?? "cpu",
+          simulate_only: runForm.simulate_only,
+        });
+      }
+      setSelectedDatasetId(finalDataset.id);
       await refreshAll();
-      setMessage("파인튜닝용 raw JSONL 데이터셋을 만들었습니다.");
+      setMessage(options?.prepareAfterCreate ? "데이터셋 생성과 학습용 준비를 함께 완료했습니다." : "파인튜닝용 raw JSONL 데이터셋을 만들었습니다.");
     });
   }
 
@@ -806,6 +829,7 @@ export default function App() {
       audio_path: asset.path,
       original_filename: asset.filename,
       source_mode: "existing",
+      text: asset.transcript_text?.trim() || undefined,
     });
     setMessage(`샘플 ${index + 1}에 ${asset.filename}을(를) 넣었습니다.`);
   }
@@ -1459,11 +1483,16 @@ export default function App() {
                   <span className="step-card__index">3</span>
                   <h3>데이터셋 생성</h3>
                 </div>
-                <p>샘플이 준비되면 데이터셋을 만들고 결과 파일 경로를 바로 확인하세요.</p>
+                <p>샘플이 준비되면 데이터셋을 만들고, 원하면 같은 단계에서 바로 학습용으로 준비까지 이어가세요.</p>
               </div>
-              <button className="primary-button" onClick={handleCreateDataset} type="button">
-                데이터셋 만들기
-              </button>
+              <div className="button-row">
+                <button className="secondary-button" onClick={() => void handleCreateDataset()} type="button">
+                  raw 데이터셋만 만들기
+                </button>
+                <button className="primary-button" onClick={() => void handleCreateDataset({ prepareAfterCreate: true })} type="button">
+                  데이터셋 만들고 학습용 준비까지
+                </button>
+              </div>
               {selectedDataset ? (
                 <article className="dataset-summary-card">
                   <strong>{selectedDataset.name}</strong>
@@ -1473,11 +1502,25 @@ export default function App() {
                   <div>
                     <span className="meta-label">Raw JSONL</span>
                     <div className="path-chip">{selectedDataset.raw_jsonl_path}</div>
+                    <a
+                      className="secondary-button button-link"
+                      href={fileUrlFromPath(selectedDataset.raw_jsonl_path)}
+                      download={basenameFromPath(selectedDataset.raw_jsonl_path)}
+                    >
+                      raw JSONL 다운로드
+                    </a>
                   </div>
                   {selectedDataset.prepared_jsonl_path ? (
                     <div>
                       <span className="meta-label">Prepared JSONL</span>
                       <div className="path-chip">{selectedDataset.prepared_jsonl_path}</div>
+                      <a
+                        className="secondary-button button-link"
+                        href={fileUrlFromPath(selectedDataset.prepared_jsonl_path)}
+                        download={basenameFromPath(selectedDataset.prepared_jsonl_path)}
+                      >
+                        prepared JSONL 다운로드
+                      </a>
                     </div>
                   ) : null}
                 </article>
@@ -1488,9 +1531,9 @@ export default function App() {
               <div className="finetune-stage__header">
                 <div>
                   <span className="step-card__index">4</span>
-                  <h3>학습 준비와 실행</h3>
+                  <h3>학습 실행</h3>
                 </div>
-                <p>데이터셋을 고르고, 준비 단계를 먼저 실행한 뒤, 학습 설정을 확인하고 시작하세요.</p>
+                <p>준비가 끝난 데이터셋을 선택해 학습 설정을 확인하고 시작하세요.</p>
               </div>
               {selectedDataset ? (
                 <article className="selected-audio-card">
@@ -1527,19 +1570,24 @@ export default function App() {
                   <strong>{datasetReadyForTraining ? "학습 준비 완료" : "학습 준비 필요"}</strong>
                   <p>
                     {datasetReadyForTraining
-                      ? "prepare 단계가 끝나서 바로 학습을 시작할 수 있습니다."
-                      : "먼저 학습 준비 실행을 눌러 prepared JSONL을 만들어야 합니다."}
+                      ? "학습용 파일이 준비되어 바로 학습을 시작할 수 있습니다."
+                      : "3단계에서 `데이터셋 만들고 학습용 준비까지`를 누르거나, 아래 보조 액션으로 기존 데이터셋을 준비해야 합니다."}
                   </p>
                 </article>
               ) : null}
               <div className="button-row">
-                <button className="secondary-button" onClick={handlePrepareDataset} type="button">
-                  학습 준비 실행
-                </button>
                 <button className="primary-button" disabled={!datasetReadyForTraining} onClick={handleCreateRun} type="button">
                   학습 시작
                 </button>
               </div>
+              {!datasetReadyForTraining && selectedDataset ? (
+                <details className="advanced-inline">
+                  <summary>기존 데이터셋을 학습용으로 준비</summary>
+                  <button className="secondary-button" onClick={handlePrepareDataset} type="button">
+                    선택한 데이터셋 준비 실행
+                  </button>
+                </details>
+              ) : null}
               <details className="advanced-inline">
                 <summary>학습 설정 열기</summary>
                 <div className="field-row">
@@ -1639,6 +1687,22 @@ export default function App() {
                       <button className="secondary-button" onClick={() => setSelectedDatasetId(dataset.id)} type="button">
                         이 데이터셋 사용
                       </button>
+                      <a
+                        className="secondary-button button-link"
+                        href={fileUrlFromPath(dataset.raw_jsonl_path)}
+                        download={basenameFromPath(dataset.raw_jsonl_path)}
+                      >
+                        raw 다운로드
+                      </a>
+                      {dataset.prepared_jsonl_path ? (
+                        <a
+                          className="secondary-button button-link"
+                          href={fileUrlFromPath(dataset.prepared_jsonl_path)}
+                          download={basenameFromPath(dataset.prepared_jsonl_path)}
+                        >
+                          prepared 다운로드
+                        </a>
+                      ) : null}
                     </div>
                     <div className="path-chip">{dataset.raw_jsonl_path}</div>
                     {dataset.prepared_jsonl_path ? <div className="path-chip">{dataset.prepared_jsonl_path}</div> : null}

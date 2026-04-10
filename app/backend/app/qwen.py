@@ -7,6 +7,7 @@ import pickle
 import random
 import re
 import struct
+import sys
 import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -144,7 +145,14 @@ class QwenDemoEngine:
 
         if os.getenv("QWEN_DEMO_ATTN_IMPL"):
             return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_2")
-        return "flash_attention_2" if importlib.util.find_spec("flash_attn") else "sdpa"
+
+        device = self.resolve_device()
+        if sys.platform == "darwin" or device in {"cpu", "mps"}:
+            return "sdpa"
+
+        if device.startswith("cuda") and importlib.util.find_spec("flash_attn"):
+            return "flash_attention_2"
+        return "sdpa"
 
     def resolve_transcription_model_id(self) -> str:
         """Whisper 전사에 사용할 모델 식별자를 계산한다."""

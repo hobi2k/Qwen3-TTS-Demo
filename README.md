@@ -88,6 +88,9 @@ python -m pip install --upgrade pip setuptools wheel
 - `uv pip install hf_transfer certifi`
 - `app/backend/.env` 템플릿 생성
 - 시스템 의존성 점검: `ffmpeg`, `sox`
+- 플랫폼별 attention 기본값 정리
+  - macOS: `sdpa`
+  - Windows / Ubuntu + CUDA: `flash-attn` 설치 시도 후 `flash_attention_2`
 
 Hugging Face 다운로드 가속을 수동으로 먼저 준비하고 싶다면 루트에서 아래 명령을 실행합니다.
 
@@ -119,6 +122,8 @@ Windows PowerShell 기준:
 - `hf_transfer`, `certifi` 추가 설치
 - `ffmpeg` 설치 여부 경고
 - `sox` 설치 여부 경고
+- macOS면 `sdpa` 기본값 사용
+- Ubuntu + CUDA 환경이면 `flash-attn` 설치 시도
 - 현재 머신의 device / attention 요약 출력
 - `app/backend/.env` 템플릿 생성
 
@@ -220,7 +225,9 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - 실제 파인튜닝 실행은 `qwen-tts`, `torch`, GPU, tokenizer/model 다운로드 상태에 따라 추가 설정이 필요합니다.
 - `ffmpeg`는 Python `requirements.txt`에 넣는 항목이 아니라 시스템 바이너리입니다. Whisper 전사를 쓰려면 PATH에 설치되어 있어야 합니다.
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
-- `flash_attention_2`는 설치되어 있을 때만 사용하고, 없으면 `sdpa`로 자동 fallback 합니다.
+- macOS / Apple Silicon에서는 `sdpa` fallback이 기본 경로입니다.
+- Windows 또는 Ubuntu에서 CUDA가 감지되면 `flash-attn` 설치를 우선 시도하고, 가능할 때 `flash_attention_2`를 사용합니다.
+- `flash_attn`이 없거나 CPU-only 환경이면 `sdpa`로 자동 fallback 합니다.
 - `setup_backend.sh`가 `uv sync` 단계에서 실패한다면, 대개 네트워크 또는 DNS 문제입니다.
 - Apple Silicon 환경에서는 `device=mps`, `attention=sdpa` 조합이 정상 동작 경로일 수 있습니다.
 - 일부 생성 결과에서 시작 직후 아주 짧은 저레벨 웅얼거림처럼 들리는 앞머리 구간이 있을 수 있어, 백엔드에서는 생성 후 첫 `35ms` 범위 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.

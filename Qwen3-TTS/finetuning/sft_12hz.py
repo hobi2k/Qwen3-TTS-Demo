@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import importlib.util
 import json
 import os
 import shutil
+import sys
 
 import torch
 from accelerate import Accelerator
@@ -28,6 +30,19 @@ from torch.utils.data import DataLoader
 from transformers import AutoConfig
 
 target_speaker_embedding = None
+
+
+def resolve_attn_implementation():
+    configured = os.getenv("QWEN_DEMO_ATTN_IMPL")
+    if configured:
+        return configured
+    if sys.platform == "darwin":
+        return "sdpa"
+    if torch.cuda.is_available() and importlib.util.find_spec("flash_attn"):
+        return "flash_attention_2"
+    return "sdpa"
+
+
 def train():
     global target_speaker_embedding
 
@@ -48,7 +63,7 @@ def train():
     qwen3tts = Qwen3TTSModel.from_pretrained(
         MODEL_PATH,
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
+        attn_implementation=resolve_attn_implementation(),
     )
     config = AutoConfig.from_pretrained(MODEL_PATH)
 

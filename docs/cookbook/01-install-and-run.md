@@ -165,8 +165,9 @@ curl http://127.0.0.1:5173/api/health
 
 - 시뮬레이션은 `qwen_tts`가 없을 때 fallback 용도입니다.
 - 실모델 모드에서는 기능별 모델 선택이 웹에서 가능합니다.
-- `flash_attention_2`는 설치되어 있을 때만 사용하고, 아니면 `sdpa`로 fallback 합니다.
-- Apple Silicon에서는 `device=mps`, `attention=sdpa`가 정상 경로일 수 있습니다.
+- macOS / Apple Silicon에서는 `sdpa` fallback이 기본 경로입니다.
+- Windows 또는 Ubuntu에서 CUDA가 감지되면 `flash-attn` 설치를 우선 시도하고, 가능할 때 `flash_attention_2`를 사용합니다.
+- `flash_attn`이 없거나 CPU-only 환경이면 `sdpa`로 fallback 합니다.
 - CPU-only 환경에서는 `device=cpu`, `attention=sdpa` fallback이 정상입니다.
 - `setup_backend` 실행 중 `onnxruntime` 등에서 재시도 후 실패하면, 대체로 코드 문제가 아니라 네트워크/DNS 문제입니다.
 - 파인튜닝은 업스트림 `Base` 단일 화자 워크플로우를 기준으로 합니다.

@@ -54,6 +54,19 @@ fi
 uv sync
 uv pip install hf_transfer certifi
 
+OS_NAME="$(uname -s)"
+if [[ "${OS_NAME}" == "Darwin" ]]; then
+  export QWEN_DEMO_ATTN_IMPL="${QWEN_DEMO_ATTN_IMPL:-sdpa}"
+  echo "macOS detected: defaulting attention to sdpa."
+elif command -v nvidia-smi >/dev/null 2>&1; then
+  if ! python -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('flash_attn') else 1)" >/dev/null 2>&1; then
+    echo "CUDA environment detected: attempting to install flash-attn."
+    if ! uv pip install flash-attn; then
+      echo "Warning: flash-attn installation failed. Falling back to sdpa."
+    fi
+  fi
+fi
+
 if [[ ! -f "${BACKEND_DIR}/.env" ]]; then
   cp "${BACKEND_DIR}/.env.example" "${BACKEND_DIR}/.env"
   echo "Created ${BACKEND_DIR}/.env from template."
@@ -61,6 +74,7 @@ fi
 
 python - <<'PY'
 import importlib.util
+import platform
 import torch
 
 device = "cpu"
@@ -69,7 +83,9 @@ if torch.cuda.is_available():
 elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
     device = "mps"
 
-attn = "flash_attention_2" if importlib.util.find_spec("flash_attn") else "sdpa"
+attn = "sdpa"
+if platform.system() != "Darwin" and device.startswith("cuda") and importlib.util.find_spec("flash_attn"):
+    attn = "flash_attention_2"
 print(f"Runtime summary: device={device}, attention={attn}, torch={torch.__version__}")
 PY
 
