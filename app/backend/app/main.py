@@ -365,6 +365,84 @@ def normalize_dataset_jsonl_paths(dataset_path: Path) -> None:
     dataset_path.write_text("\n".join(normalized_lines) + "\n", encoding="utf-8")
 
 
+def dataset_audio_codes_are_2d(dataset_path: Path) -> bool:
+    """prepared JSONL의 audio_codes가 학습이 기대하는 2차원 형식인지 확인한다."""
+
+    if not dataset_path.exists():
+        return False
+
+    for raw_line in dataset_path.read_text(encoding="utf-8").splitlines():
+        if not raw_line.strip():
+            continue
+        row = json.loads(raw_line)
+        audio_codes = row.get("audio_codes")
+        if not isinstance(audio_codes, list) or not audio_codes:
+            return False
+        first_frame = audio_codes[0]
+        if not isinstance(first_frame, list) or not first_frame:
+            return False
+        return True
+    return False
+
+
+def run_prepare_data(
+    *,
+    raw_jsonl_path: Path,
+    prepared_jsonl_path: Path,
+    tokenizer_model_path: str,
+    device: str,
+) -> None:
+    """실제 prepare_data.py를 실행해 audio_codes 포함 JSONL을 만든다."""
+
+    result = run_upstream_command(
+        [
+            "python3",
+            "prepare_data.py",
+            "--device",
+            device,
+            "--tokenizer_model_path",
+            tokenizer_model_path,
+            "--input_jsonl",
+            str(raw_jsonl_path),
+            "--output_jsonl",
+            str(prepared_jsonl_path),
+        ]
+    )
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr or result.stdout or "prepare_data.py failed")
+
+
+def ensure_real_prepared_dataset(dataset: JsonDict, device: str) -> JsonDict:
+    """실학습 전 prepared JSONL이 유효한 실제 결과인지 확인하고 필요하면 다시 만든다."""
+
+    raw_jsonl_path = REPO_ROOT / dataset["raw_jsonl_path"]
+    prepared_rel_path = dataset.get("prepared_jsonl_path")
+    if not prepared_rel_path:
+        raise HTTPException(status_code=400, detail="Dataset must be prepared before starting fine-tuning.")
+
+    prepared_jsonl_path = REPO_ROOT / prepared_rel_path
+    normalize_dataset_jsonl_paths(raw_jsonl_path)
+    normalize_dataset_jsonl_paths(prepared_jsonl_path)
+
+    prepared_with_simulation = bool(dataset.get("prepared_with_simulation"))
+    prepared_valid = dataset_audio_codes_are_2d(prepared_jsonl_path)
+    if prepared_with_simulation or not prepared_valid:
+        tokenizer_model_path = dataset.get("prepared_tokenizer_model_path") or default_model_id("tokenizer")
+        run_prepare_data(
+            raw_jsonl_path=raw_jsonl_path,
+            prepared_jsonl_path=prepared_jsonl_path,
+            tokenizer_model_path=tokenizer_model_path,
+            device=device,
+        )
+        dataset["prepared_jsonl_path"] = storage.relpath(prepared_jsonl_path)
+        dataset["prepared_with_simulation"] = False
+        dataset["prepared_tokenizer_model_path"] = tokenizer_model_path
+        dataset["prepared_device"] = device
+        storage.write_json(storage.datasets_dir / f"{dataset['id']}.json", dataset)
+
+    return dataset
+
+
 def transcribe_audio_or_raise(audio_path: str) -> AudioTranscriptionResponse:
     """저장된 음성 파일을 전사하고 HTTP 오류로 정규화한다.
 
@@ -1007,6 +1085,9 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         "source_type": payload.source_type,
         "raw_jsonl_path": storage.relpath(raw_jsonl_path),
         "prepared_jsonl_path": None,
+        "prepared_with_simulation": None,
+        "prepared_tokenizer_model_path": None,
+        "prepared_device": None,
         "ref_audio_path": payload.ref_audio_path,
         "speaker_name": payload.speaker_name,
         "sample_count": len(normalized_samples),
@@ -1060,22 +1141,12 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
 
     simulate = payload.simulate_only or engine.simulation_mode
     if not simulate:
-        result = run_upstream_command(
-            [
-                "python3",
-                "prepare_data.py",
-                "--device",
-                payload.device,
-                "--tokenizer_model_path",
-                payload.tokenizer_model_path,
-                "--input_jsonl",
-                str(raw_jsonl_path),
-                "--output_jsonl",
-                str(prepared_jsonl_path),
-            ]
+        run_prepare_data(
+            raw_jsonl_path=raw_jsonl_path,
+            prepared_jsonl_path=prepared_jsonl_path,
+            tokenizer_model_path=payload.tokenizer_model_path,
+            device=payload.device,
         )
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=result.stderr or result.stdout or "prepare_data.py failed")
     else:
         lines = []
         for line in raw_jsonl_path.read_text(encoding="utf-8").splitlines():
@@ -1084,11 +1155,14 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
             row = json.loads(line)
             # 시뮬레이션 모드에서도 후속 단계가 같은 키를 기대하므로
             # 최소한의 placeholder audio code 배열을 채워 넣는다.
-            row["audio_codes"] = [101, 202, 303, 404]
+            row["audio_codes"] = [[101] * 16, [202] * 16, [303] * 16, [404] * 16]
             lines.append(json.dumps(row, ensure_ascii=False))
         prepared_jsonl_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     dataset["prepared_jsonl_path"] = storage.relpath(prepared_jsonl_path)
+    dataset["prepared_with_simulation"] = simulate
+    dataset["prepared_tokenizer_model_path"] = payload.tokenizer_model_path
+    dataset["prepared_device"] = payload.device
     storage.write_json(storage.datasets_dir / f"{dataset_id}.json", dataset)
     return FineTuneDataset(**dataset)
 
@@ -1108,7 +1182,6 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
     prepared_jsonl_path = dataset.get("prepared_jsonl_path")
     if not prepared_jsonl_path:
         raise HTTPException(status_code=400, detail="Dataset must be prepared before starting fine-tuning.")
-    normalize_dataset_jsonl_paths(REPO_ROOT / prepared_jsonl_path)
 
     run_id = storage.new_id("run")
     run_dir = storage.finetune_runs_dir / run_id
@@ -1120,6 +1193,8 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
     command: List[str] = []
 
     if not simulate:
+        dataset = ensure_real_prepared_dataset(dataset, payload.device)
+        prepared_jsonl_path = dataset["prepared_jsonl_path"]
         command = [
             "python3",
             "sft_12hz.py",

@@ -246,6 +246,9 @@ class FineTuneDataset(BaseModel):
     source_type: str
     raw_jsonl_path: str
     prepared_jsonl_path: Optional[str] = None
+    prepared_with_simulation: Optional[bool] = None
+    prepared_tokenizer_model_path: Optional[str] = None
+    prepared_device: Optional[str] = None
     ref_audio_path: str
     speaker_name: str
     sample_count: int

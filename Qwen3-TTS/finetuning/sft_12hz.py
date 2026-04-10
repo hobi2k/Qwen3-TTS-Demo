@@ -43,6 +43,26 @@ def resolve_attn_implementation():
     return "sdpa"
 
 
+def resolve_training_runtime():
+    if torch.cuda.is_available():
+        return {
+            "mixed_precision": "fp16",
+            "dtype": torch.float16,
+            "device_map": "cuda:0",
+        }
+    if sys.platform == "darwin" and torch.backends.mps.is_available():
+        return {
+            "mixed_precision": "no",
+            "dtype": torch.float32,
+            "device_map": "mps",
+        }
+    return {
+        "mixed_precision": "no",
+        "dtype": torch.float32,
+        "device_map": "cpu",
+    }
+
+
 def train():
     global target_speaker_embedding
 
@@ -56,13 +76,19 @@ def train():
     parser.add_argument("--speaker_name", type=str, default="speaker_test")
     args = parser.parse_args()
 
-    accelerator = Accelerator(gradient_accumulation_steps=4, mixed_precision="bf16", log_with="tensorboard")
+    runtime = resolve_training_runtime()
+    accelerator = Accelerator(
+        gradient_accumulation_steps=4,
+        mixed_precision=runtime["mixed_precision"],
+        log_with="tensorboard",
+    )
 
     MODEL_PATH = args.init_model_path
 
     qwen3tts = Qwen3TTSModel.from_pretrained(
         MODEL_PATH,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=runtime["dtype"],
+        device_map=runtime["device_map"],
         attn_implementation=resolve_attn_implementation(),
     )
     config = AutoConfig.from_pretrained(MODEL_PATH)
@@ -101,7 +127,9 @@ def train():
                 input_text_ids = input_ids[:, :, 0]
                 input_codec_ids = input_ids[:, :, 1]
 
-                input_text_embedding = model.talker.model.text_embedding(input_text_ids) * text_embedding_mask
+                input_text_embedding = model.talker.text_projection(
+                    model.talker.model.text_embedding(input_text_ids)
+                ) * text_embedding_mask
                 input_codec_embedding = model.talker.model.codec_embedding(input_codec_ids) * codec_embedding_mask
                 input_codec_embedding[:, 6, :] = speaker_embedding
 

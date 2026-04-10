@@ -417,7 +417,7 @@ export default function App() {
     batch_size: 2,
     lr: 0.00002,
     num_epochs: 3,
-    simulate_only: true,
+    simulate_only: false,
   });
 
   async function refreshAll() {
@@ -484,6 +484,18 @@ export default function App() {
       setRunForm((prev) => ({ ...prev, tokenizer_model_path: tokenizerModels[0].model_id }));
     }
   }, [customVoiceModels, voiceDesignModels, baseModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, runForm.init_model_path, runForm.tokenizer_model_path]);
+
+  useEffect(() => {
+    if (!health) {
+      return;
+    }
+    setRunForm((prev) => {
+      if (health.simulation_mode && !prev.simulate_only) {
+        return { ...prev, simulate_only: true };
+      }
+      return prev;
+    });
+  }, [health]);
 
   const activeClonePrompt = builderSource === "design" ? selectedClonePrompt : uploadedClonePrompt;
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
@@ -742,10 +754,10 @@ export default function App() {
       await api.prepareDataset(selectedDatasetId, {
         tokenizer_model_path: runForm.tokenizer_model_path,
         device: health?.device ?? "cpu",
-        simulate_only: health?.simulation_mode ?? true,
+        simulate_only: runForm.simulate_only,
       });
       await refreshAll();
-      setMessage("audio_codes 포함 JSONL을 준비했습니다.");
+      setMessage(runForm.simulate_only ? "시뮬레이션용 prepared JSONL을 만들었습니다." : "실학습용 prepared JSONL을 만들었습니다.");
     });
   }
 
@@ -767,7 +779,7 @@ export default function App() {
         simulate_only: runForm.simulate_only,
       });
       await refreshAll();
-      setMessage("파인튜닝 실행 기록을 만들었습니다.");
+      setMessage(runForm.simulate_only ? "시뮬레이션 학습 실행 기록을 만들었습니다." : "실제 파인튜닝 실행을 시작했습니다.");
     });
   }
 
