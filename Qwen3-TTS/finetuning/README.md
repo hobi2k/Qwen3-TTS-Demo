@@ -119,3 +119,42 @@ python sft_12hz.py \
   --num_epochs ${EPOCHS} \
   --speaker_name ${SPEAKER_NAME}
 ```
+
+## CustomVoice Fine-Tuning Entry
+
+If you want a dedicated entrypoint for "start from a CustomVoice checkpoint and
+append a new speaker while keeping CustomVoice-style export", use:
+
+```bash
+python sft_custom_voice_12hz.py \
+  --init_model_path Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+  --speaker_encoder_model_path Qwen/Qwen3-TTS-12Hz-1.7B-Base \
+  --output_model_path output_custom_voice \
+  --train_jsonl train_with_codes.jsonl \
+  --batch_size 2 \
+  --lr 2e-5 \
+  --num_epochs 3 \
+  --speaker_name speaker_test
+```
+
+Notes:
+- `sft_custom_voice_12hz.py` is a separate entrypoint for the CustomVoice path.
+- Current implementation still uses a speaker encoder copied from a Base
+  checkpoint, because bundled CustomVoice checkpoints do not expose their own
+  `speaker_encoder` module.
+
+## Experimental Clone + Instruct Inference
+
+For the experimental path "clone prompt timbre + CustomVoice instruct", see:
+
+```bash
+python ../examples/test_model_12hz_custom_clone_instruct.py \
+  --base_model_path Qwen/Qwen3-TTS-12Hz-1.7B-Base \
+  --custom_model_path Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+  --ref_audio ./data/ref.wav \
+  --ref_text "reference transcript" \
+  --text "target speech text" \
+  --instruct "Speak more breathy and emotionally heightened." \
+  --language japanese \
+  --output_wav hybrid_clone_instruct.wav
+```

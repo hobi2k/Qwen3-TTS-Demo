@@ -553,3 +553,112 @@ class QwenDemoEngine:
             "generation_kwargs": generate_kwargs,
             "postprocess": post,
         }
+
+    def generate_hybrid_clone_instruct(
+        self,
+        text: str,
+        language: str,
+        instruct: str,
+        base_model_id: str,
+        custom_model_id: str,
+        ref_audio_path: str,
+        ref_text: str = "",
+        x_vector_only_mode: bool = False,
+        seed: Optional[int] = None,
+        non_streaming_mode: Optional[bool] = None,
+        **generate_kwargs: Any,
+    ) -> Tuple[Path, int, Dict[str, Any]]:
+        """Base clone prompt와 CustomVoice instruct를 함께 써서 음성을 생성한다.
+
+        Args:
+            text: 합성할 본문 텍스트.
+            language: 합성 언어 설정.
+            instruct: 스타일 제어용 추가 지시문.
+            base_model_id: clone prompt를 만들 Base 모델 경로.
+            custom_model_id: instruct 합성에 사용할 CustomVoice 모델 경로.
+            ref_audio_path: 참조 음성 파일 경로.
+            ref_text: 참조 음성의 원문 텍스트.
+            x_vector_only_mode: x-vector 전용 clone 모드 사용 여부.
+
+        Returns:
+            생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
+        """
+
+        output_path = self.storage.generated_dir / f"{self.storage.new_id('audio')}.wav"
+
+        if self.simulation_mode or not self._qwen_available:
+            seed_hint = f"{base_model_id}:{custom_model_id}:{ref_audio_path}:{instruct}"
+            sample_rate = self._fake_wave(text, output_path, f"hybrid:{seed_hint}")
+            return output_path, sample_rate, {"simulation": True}
+
+        self._apply_seed(seed)
+        base_model = self._get_model("base_clone", base_model_id)
+        custom_model = self._get_model("custom_voice", custom_model_id)
+
+        prompt_items = base_model.create_voice_clone_prompt(
+            ref_audio=str(self.storage.repo_root / ref_audio_path),
+            ref_text=ref_text or None,
+            x_vector_only_mode=x_vector_only_mode,
+        )
+        voice_clone_prompt = base_model._prompt_items_to_voice_clone_prompt(prompt_items)
+        ref_ids = []
+        for item in prompt_items:
+            if item.ref_text:
+                ref_ids.append(custom_model._tokenize_texts([custom_model._build_ref_text(item.ref_text)])[0])
+            else:
+                ref_ids.append(None)
+
+        input_ids = custom_model._tokenize_texts([custom_model._build_assistant_text(text)])
+        instruct_ids = []
+        if instruct.strip():
+            instruct_ids.append(custom_model._tokenize_texts([custom_model._build_instruct_text(instruct)])[0])
+        else:
+            instruct_ids.append(None)
+
+        if non_streaming_mode is not None:
+            generate_kwargs["non_streaming_mode"] = non_streaming_mode
+
+        talker_codes_list, _ = custom_model.model.generate(
+            input_ids=input_ids,
+            instruct_ids=instruct_ids,
+            ref_ids=ref_ids,
+            voice_clone_prompt=voice_clone_prompt,
+            languages=[language],
+            speakers=[None],
+            non_streaming_mode=generate_kwargs.pop("non_streaming_mode", False),
+            **custom_model._merge_generate_kwargs(**generate_kwargs),
+        )
+
+        codes_for_decode = []
+        ref_code_list = voice_clone_prompt.get("ref_code", None)
+        for index, codes in enumerate(talker_codes_list):
+            if ref_code_list is not None and ref_code_list[index] is not None:
+                codes_for_decode.append(self._torch.cat([ref_code_list[index].to(codes.device), codes], dim=0))
+            else:
+                codes_for_decode.append(codes)
+
+        wavs_all, sample_rate = custom_model.model.speech_tokenizer.decode(
+            [{"audio_codes": codes} for codes in codes_for_decode]
+        )
+
+        wavs_out = []
+        for index, wav in enumerate(wavs_all):
+            if ref_code_list is not None and ref_code_list[index] is not None:
+                ref_len = int(ref_code_list[index].shape[0])
+                total_len = int(codes_for_decode[index].shape[0])
+                cut = int(ref_len / max(total_len, 1) * wav.shape[0])
+                wavs_out.append(wav[cut:])
+            else:
+                wavs_out.append(wav)
+
+        processed, post = self._postprocess_generated_wav(wavs_out[0], sample_rate)
+        self._write_wav(processed, sample_rate, output_path)
+        return output_path, sample_rate, {
+            "simulation": False,
+            "base_model_id": base_model_id,
+            "custom_model_id": custom_model_id,
+            "seed": seed,
+            "generation_kwargs": generate_kwargs,
+            "postprocess": post,
+            "path_kind": "hybrid_clone_instruct",
+        }

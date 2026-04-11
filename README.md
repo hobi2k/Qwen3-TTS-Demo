@@ -9,6 +9,8 @@ React + TypeScript 프런트엔드와 Python/FastAPI 백엔드로 만든 `Qwen3-
 - `VoiceDesign -> Base clone prompt -> 고정 캐릭터 프리셋`
 - 사용자 업로드 음성 -> `Base clone prompt -> 고정 캐릭터 프리셋`
 - `Base` 단일 화자 파인튜닝용 데이터셋 빌더
+- `CustomVoice` 전용 파인튜닝 실행 경로
+- `Base clone prompt + CustomVoice instruct` 실험 경로
 - `prepare_data.py`, `sft_12hz.py` 실행 진입점
 
 ## 문서 허브
@@ -209,6 +211,8 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - `POST /api/generate/custom-voice`
 - `POST /api/generate/voice-design`
 - `POST /api/generate/voice-clone`
+- `POST /api/generate/model`
+- `POST /api/generate/hybrid-clone-instruct`
 - `POST /api/clone-prompts/from-generated-sample`
 - `POST /api/clone-prompts/from-upload`
 - `GET /api/presets`
@@ -217,6 +221,50 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
 - `POST /api/datasets`
 - `POST /api/datasets/:id/prepare-codes`
 - `POST /api/finetune-runs`
+
+## 고급 경로
+
+### 1. Base Fine-Tune
+
+- 업스트림 기본 경로
+- 실행 스크립트: `Qwen3-TTS/finetuning/sft_12hz.py`
+- WEB UI:
+  `Training Lab -> 학습 모드 = Base Fine-Tune`
+- 결과 체크포인트는 현재 WEB UI `Inference Lab`에서 직접 선택해 추론할 수 있습니다.
+
+### 2. CustomVoice Fine-Tune
+
+- 별도 경로로 분리된 `CustomVoice` 전용 엔트리
+- 실행 스크립트:
+  `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py`
+- 핵심 차이:
+  `CustomVoice` 체크포인트는 speaker encoder가 없어서, `Base` 체크포인트의 speaker encoder를 보조로 받아 새 화자를 추가합니다.
+- WEB UI:
+  `Training Lab -> 학습 모드 = CustomVoice Fine-Tune`
+  여기서 `speaker_encoder_model_path`도 함께 선택합니다.
+
+### 3. Clone Prompt + Instruct Hybrid
+
+- 목표:
+  `Base`의 clone prompt 음색과 `CustomVoice`의 instruct 제어를 한 번에 실험
+- 별도 스크립트:
+  `Qwen3-TTS/examples/test_model_12hz_custom_clone_instruct.py`
+- WEB UI:
+  `Inference Lab -> Clone Prompt + Instruct Hybrid`
+- 입력:
+  `Base 모델`, `CustomVoice 모델`, `ref_audio_path`, `ref_text`, `instruct`, `대사`, 고급 생성 파라미터
+
+### 4. WEB UI에서 확인되는 것
+
+- `Inference Lab`
+  - stock 모델과 local fine-tuned 체크포인트 선택 추론
+  - `instruct`, `대사`, `language`, `seed`, `top_k`, `top_p`, `temperature`, `repetition_penalty`, `subtalker_*`, `max_new_tokens`, `extra_generate_kwargs`
+  - `Base` 계열이면 `ref_audio_path`, `ref_text`, `voice_clone_prompt_path`, `x_vector_only_mode`
+  - 별도 `Clone Prompt + Instruct Hybrid` 카드 제공
+- `Training Lab`
+  - `Base Fine-Tune`
+  - `CustomVoice Fine-Tune`
+  - 실행 스크립트가 UI에서 명시적으로 보임
 
 ## 주의 사항
 

@@ -28,6 +28,10 @@ class ModelInfo(BaseModel):
     supports_instruction: bool = False
     notes: str = ""
     recommended: bool = False
+    inference_mode: Optional[str] = None
+    source: str = "stock"
+    available_speakers: List[str] = Field(default_factory=list)
+    default_speaker: Optional[str] = None
 
 
 class AudioAsset(BaseModel):
@@ -86,6 +90,29 @@ class VoiceCloneRequest(GenerationRequestBase):
     ref_audio_path: Optional[str] = None
     ref_text: Optional[str] = None
     voice_clone_prompt_path: Optional[str] = None
+    x_vector_only_mode: bool = False
+
+
+class UniversalInferenceRequest(GenerationRequestBase):
+    """모델 선택형 통합 추론 요청 스키마다."""
+
+    model_id: str = Field(..., min_length=1)
+    speaker: Optional[str] = None
+    instruct: str = ""
+    ref_audio_path: Optional[str] = None
+    ref_text: Optional[str] = None
+    voice_clone_prompt_path: Optional[str] = None
+    x_vector_only_mode: bool = False
+
+
+class HybridCloneInstructRequest(GenerationRequestBase):
+    """Base clone prompt와 CustomVoice instruct를 함께 쓰는 실험용 요청."""
+
+    base_model_id: str = Field(..., min_length=1)
+    custom_model_id: str = Field(..., min_length=1)
+    instruct: str = ""
+    ref_audio_path: str = Field(..., min_length=1)
+    ref_text: Optional[str] = None
     x_vector_only_mode: bool = False
 
 
@@ -267,7 +294,9 @@ class FineTuneRunCreateRequest(BaseModel):
     """파인튜닝 실행 요청 스키마다."""
 
     dataset_id: str
+    training_mode: str = "base"
     init_model_path: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    speaker_encoder_model_path: Optional[str] = None
     output_name: str = "demo-run"
     batch_size: int = 2
     lr: float = 2e-5
@@ -282,7 +311,9 @@ class FineTuneRun(BaseModel):
 
     id: str
     dataset_id: str
+    training_mode: str = "base"
     init_model_path: str
+    speaker_encoder_model_path: Optional[str] = None
     output_model_path: str
     batch_size: int
     lr: float

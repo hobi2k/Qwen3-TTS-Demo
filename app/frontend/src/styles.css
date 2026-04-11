@@ -103,7 +103,7 @@ select:focus {
 
 .tab-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
   margin: 18px 0 22px;
 }
@@ -202,6 +202,21 @@ select:focus {
 .builder-panel {
   display: grid;
   gap: 18px;
+}
+
+.inference-panel,
+.inference-side,
+.inference-clone-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.inference-clone-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inference-clone-grid__wide {
+  grid-column: 1 / -1;
 }
 
 .builder-header {

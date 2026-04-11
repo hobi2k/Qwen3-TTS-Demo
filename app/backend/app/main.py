@@ -31,9 +31,11 @@ from .schemas import (
     GenerationRecord,
     GenerationResponse,
     HealthResponse,
+    HybridCloneInstructRequest,
     ModelInfo,
     PrepareDatasetRequest,
     PresetGenerateRequest,
+    UniversalInferenceRequest,
     VoiceCloneRequest,
     VoiceDesignRequest,
 )
@@ -84,6 +86,170 @@ def model_path_or_repo(dirname: str, repo_id: str) -> str:
     if local_path.exists():
         return str(local_path)
     return repo_id
+
+
+def stock_speaker_names() -> List[str]:
+    """기본 제공 CustomVoice 화자 이름 목록을 반환한다."""
+
+    return [speaker["speaker"] for speaker in engine.supported_speakers()]
+
+
+def scan_finetuned_model_infos() -> List[ModelInfo]:
+    """로컬 fine-tuning 산출물 중 추론 가능한 체크포인트를 찾아 모델 목록으로 변환한다."""
+
+    infos: List[ModelInfo] = []
+    run_root = storage.finetune_runs_dir
+    if not run_root.exists():
+        return infos
+
+    for checkpoint_dir in sorted(run_root.glob("*/checkpoint-epoch-*")):
+        config_path = checkpoint_dir / "config.json"
+        weights_path = checkpoint_dir / "model.safetensors"
+        if not config_path.exists() or not weights_path.exists():
+            continue
+
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        tts_model_type = str(config.get("tts_model_type") or "").strip().lower()
+        talker_config = config.get("talker_config", {}) or {}
+        speaker_map = talker_config.get("spk_id", {}) or {}
+        speaker_names = [str(name) for name in speaker_map.keys()]
+        stock_names = {name.lower() for name in stock_speaker_names()}
+        custom_names = [name for name in speaker_names if name.lower() not in stock_names]
+        default_speaker = (custom_names[-1] if custom_names else (speaker_names[-1] if speaker_names else None))
+
+        if tts_model_type == "custom_voice":
+            category = "custom_voice_finetuned"
+            inference_mode = "custom_voice"
+            supports_instruction = True
+        elif tts_model_type == "base":
+            category = "base_clone_finetuned"
+            inference_mode = "voice_clone"
+            supports_instruction = False
+        elif tts_model_type == "voice_design":
+            category = "voice_design_finetuned"
+            inference_mode = "voice_design"
+            supports_instruction = True
+        else:
+            continue
+
+        run_name = checkpoint_dir.parent.name
+        checkpoint_name = checkpoint_dir.name
+        label = f"FT {run_name} / {checkpoint_name}"
+        notes = f"Local fine-tuned checkpoint discovered at {storage.relpath(checkpoint_dir)}"
+        if custom_names:
+            notes = f"{notes} · new speaker: {', '.join(custom_names)}"
+
+        infos.append(
+            ModelInfo(
+                key=f"ft_{run_name}_{checkpoint_name}".replace("/", "_").replace(".", "_"),
+                category=category,
+                label=label,
+                model_id=str(checkpoint_dir),
+                supports_instruction=supports_instruction,
+                notes=notes,
+                recommended=False,
+                inference_mode=inference_mode,
+                source="finetuned",
+                available_speakers=speaker_names,
+                default_speaker=default_speaker,
+            )
+        )
+
+    infos.sort(key=lambda item: item.model_id, reverse=True)
+    return infos
+
+
+def build_model_catalog() -> List[ModelInfo]:
+    """프런트엔드가 사용할 전체 모델 카탈로그를 구성한다."""
+
+    catalog = [
+        ModelInfo(
+            key="custom_voice_0_6b",
+            category="custom_voice",
+            label="CustomVoice 0.6B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-CustomVoice", default_model_id("custom_voice")),
+            supports_instruction=True,
+            notes="로컬 데모에서 가장 먼저 테스트할 현실적인 기본 모델",
+            recommended=True,
+            inference_mode="custom_voice",
+            source="stock",
+            available_speakers=stock_speaker_names(),
+            default_speaker="Sohee",
+        ),
+        ModelInfo(
+            key="custom_voice_1_7b",
+            category="custom_voice",
+            label="CustomVoice 1.7B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
+            supports_instruction=True,
+            notes="더 무거운 고품질 CustomVoice",
+            inference_mode="custom_voice",
+            source="stock",
+            available_speakers=stock_speaker_names(),
+            default_speaker="Sohee",
+        ),
+        ModelInfo(
+            key="voice_design_1_7b",
+            category="voice_design",
+            label="VoiceDesign 1.7B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-VoiceDesign", default_model_id("voice_design")),
+            supports_instruction=True,
+            notes="설명문 기반 새 목소리 설계용",
+            recommended=True,
+            inference_mode="voice_design",
+            source="stock",
+        ),
+        ModelInfo(
+            key="base_clone_0_6b",
+            category="base_clone",
+            label="Base 0.6B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-Base", default_model_id("base_clone")),
+            supports_instruction=False,
+            notes="clone prompt 재사용과 CPU 환경 데모를 고려한 기본 모델",
+            recommended=True,
+            inference_mode="voice_clone",
+            source="stock",
+        ),
+        ModelInfo(
+            key="base_clone_1_7b",
+            category="base_clone",
+            label="Base 1.7B",
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+            supports_instruction=False,
+            notes="고품질 Base clone과 파인튜닝용",
+            inference_mode="voice_clone",
+            source="stock",
+        ),
+        ModelInfo(
+            key="tokenizer_12hz",
+            category="tokenizer",
+            label="Tokenizer 12Hz",
+            model_id=model_path_or_repo("Qwen3-TTS-Tokenizer-12Hz", default_model_id("tokenizer")),
+            supports_instruction=False,
+            notes="prepare_data와 tokenizer 처리용",
+            source="stock",
+        ),
+    ]
+    return catalog + scan_finetuned_model_infos()
+
+
+def model_catalog_by_id() -> Dict[str, ModelInfo]:
+    """현재 모델 카탈로그를 model_id 기준으로 빠르게 조회할 수 있게 만든다."""
+
+    return {item.model_id: item for item in build_model_catalog()}
+
+
+def resolve_finetune_entrypoint(training_mode: str) -> str:
+    """파인튜닝 모드에 맞는 업스트림 스크립트 파일명을 반환한다."""
+
+    normalized = (training_mode or "base").strip().lower()
+    if normalized == "custom_voice":
+        return "sft_custom_voice_12hz.py"
+    return "sft_12hz.py"
 
 app = FastAPI(title="Qwen3-TTS Demo API")
 app.add_middleware(
@@ -658,59 +824,7 @@ def list_models() -> List[ModelInfo]:
         지원 모델 메타데이터 목록.
     """
 
-    return [
-        ModelInfo(
-            key="custom_voice_0_6b",
-            category="custom_voice",
-            label="CustomVoice 0.6B",
-            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-CustomVoice", default_model_id("custom_voice")),
-            supports_instruction=True,
-            notes="로컬 데모에서 가장 먼저 테스트할 현실적인 기본 모델",
-            recommended=True,
-        ),
-        ModelInfo(
-            key="custom_voice_1_7b",
-            category="custom_voice",
-            label="CustomVoice 1.7B",
-            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
-            supports_instruction=True,
-            notes="더 무거운 고품질 CustomVoice",
-        ),
-        ModelInfo(
-            key="voice_design_1_7b",
-            category="voice_design",
-            label="VoiceDesign 1.7B",
-            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-VoiceDesign", default_model_id("voice_design")),
-            supports_instruction=True,
-            notes="설명문 기반 새 목소리 설계용",
-            recommended=True,
-        ),
-        ModelInfo(
-            key="base_clone_0_6b",
-            category="base_clone",
-            label="Base 0.6B",
-            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-Base", default_model_id("base_clone")),
-            supports_instruction=False,
-            notes="clone prompt 재사용과 CPU 환경 데모를 고려한 기본 모델",
-            recommended=True,
-        ),
-        ModelInfo(
-            key="base_clone_1_7b",
-            category="base_clone",
-            label="Base 1.7B",
-            model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
-            supports_instruction=False,
-            notes="고품질 Base clone과 파인튜닝용",
-        ),
-        ModelInfo(
-            key="tokenizer_12hz",
-            category="tokenizer",
-            label="Tokenizer 12Hz",
-            model_id=model_path_or_repo("Qwen3-TTS-Tokenizer-12Hz", default_model_id("tokenizer")),
-            supports_instruction=False,
-            notes="prepare_data와 tokenizer 처리용",
-        ),
-    ]
+    return build_model_catalog()
 
 
 @app.get("/api/speakers")
@@ -902,6 +1016,108 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
         audio_path=audio_path,
         preset_id=payload.preset_id or "",
         source_ref_audio_path=ref_audio_path,
+        source_ref_text=ref_text,
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.post("/api/generate/model", response_model=GenerationResponse)
+def generate_with_selected_model(payload: UniversalInferenceRequest) -> GenerationResponse:
+    """선택한 모델 메타데이터에 맞춰 적절한 추론 경로로 분기한다.
+
+    Args:
+        payload: 모델 선택형 통합 추론 요청.
+
+    Returns:
+        저장된 생성 이력 응답.
+    """
+
+    model_info = model_catalog_by_id().get(payload.model_id)
+    if not model_info:
+        raise HTTPException(status_code=404, detail="Selected model was not found in the model catalog.")
+
+    inference_mode = model_info.inference_mode or model_info.category
+    if inference_mode == "custom_voice":
+        speaker = (payload.speaker or model_info.default_speaker or "").strip()
+        if not speaker:
+            raise HTTPException(status_code=400, detail="speaker is required for CustomVoice inference.")
+        return generate_custom_voice(
+            CustomVoiceRequest(
+                model_id=payload.model_id,
+                text=payload.text,
+                language=payload.language,
+                speaker=speaker,
+                instruct=payload.instruct,
+                **generation_options_from_payload(payload),
+            )
+        )
+
+    if inference_mode == "voice_design":
+        instruct = payload.instruct.strip()
+        if not instruct:
+            raise HTTPException(status_code=400, detail="instruct is required for VoiceDesign inference.")
+        return generate_voice_design(
+            VoiceDesignRequest(
+                model_id=payload.model_id,
+                text=payload.text,
+                language=payload.language,
+                instruct=instruct,
+                **generation_options_from_payload(payload),
+            )
+        )
+
+    if inference_mode == "voice_clone":
+        ref_audio_path = (payload.ref_audio_path or "").strip()
+        ref_text = (payload.ref_text or "").strip()
+        voice_clone_prompt_path = (payload.voice_clone_prompt_path or "").strip()
+        if ref_audio_path and not ref_text and not voice_clone_prompt_path:
+            ref_text = resolve_reference_text(ref_audio_path, ref_text)
+        return generate_voice_clone(
+            VoiceCloneRequest(
+                model_id=payload.model_id,
+                text=payload.text,
+                language=payload.language,
+                ref_audio_path=ref_audio_path or None,
+                ref_text=ref_text or None,
+                voice_clone_prompt_path=voice_clone_prompt_path or None,
+                x_vector_only_mode=payload.x_vector_only_mode,
+                **generation_options_from_payload(payload),
+            )
+        )
+
+    raise HTTPException(status_code=400, detail=f"Unsupported inference mode: {inference_mode}")
+
+
+@app.post("/api/generate/hybrid-clone-instruct", response_model=GenerationResponse)
+def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> GenerationResponse:
+    """Base clone prompt와 CustomVoice instruct를 결합한 실험용 추론을 실행한다."""
+
+    ref_text = (payload.ref_text or "").strip()
+    if payload.ref_audio_path and not ref_text and not payload.x_vector_only_mode:
+        ref_text = resolve_reference_text(payload.ref_audio_path, ref_text)
+
+    audio_path, _, meta = engine.generate_hybrid_clone_instruct(
+        text=payload.text,
+        language=payload.language,
+        instruct=payload.instruct,
+        base_model_id=payload.base_model_id,
+        custom_model_id=payload.custom_model_id,
+        ref_audio_path=payload.ref_audio_path,
+        ref_text=ref_text,
+        x_vector_only_mode=payload.x_vector_only_mode,
+        **generation_options_from_payload(payload),
+    )
+    record_id = storage.new_id("gen")
+    record = build_generation_record(
+        record_id=record_id,
+        mode="hybrid_clone_instruct",
+        text=payload.text,
+        language=payload.language,
+        audio_path=audio_path,
+        instruction=payload.instruct,
+        source_ref_audio_path=payload.ref_audio_path,
         source_ref_text=ref_text,
         meta=meta,
     )
@@ -1191,13 +1407,14 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
 
     simulate = payload.simulate_only or engine.simulation_mode
     command: List[str] = []
+    entrypoint = resolve_finetune_entrypoint(payload.training_mode)
 
     if not simulate:
         dataset = ensure_real_prepared_dataset(dataset, payload.device)
         prepared_jsonl_path = dataset["prepared_jsonl_path"]
         command = [
             "python3",
-            "sft_12hz.py",
+            entrypoint,
             "--init_model_path",
             payload.init_model_path,
             "--output_model_path",
@@ -1213,6 +1430,8 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
             "--speaker_name",
             payload.speaker_name,
         ]
+        if payload.training_mode == "custom_voice" and payload.speaker_encoder_model_path:
+            command.extend(["--speaker_encoder_model_path", payload.speaker_encoder_model_path])
         result = run_upstream_command(command)
         log_path.write_text((result.stdout or "") + "\n" + (result.stderr or ""), encoding="utf-8")
         status = "completed" if result.returncode == 0 else "failed"
@@ -1230,7 +1449,9 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
     record = {
         "id": run_id,
         "dataset_id": payload.dataset_id,
+        "training_mode": payload.training_mode,
         "init_model_path": payload.init_model_path,
+        "speaker_encoder_model_path": payload.speaker_encoder_model_path,
         "output_model_path": storage.relpath(output_model_path),
         "batch_size": payload.batch_size,
         "lr": payload.lr,

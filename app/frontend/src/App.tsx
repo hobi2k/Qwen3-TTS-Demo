@@ -14,10 +14,11 @@ import type {
   UploadResponse,
 } from "./lib/types";
 
-type TabKey = "custom" | "design" | "character" | "finetune";
+type TabKey = "custom" | "design" | "character" | "inference" | "finetune";
 type GenerationModeKey = "custom" | "design" | "clone";
 type CharacterBuilderSource = "design" | "upload";
 type DatasetAudioSourceMode = "upload" | "existing";
+type FineTuneMode = "base" | "custom_voice";
 type GenerationControlsForm = {
   seed: string;
   non_streaming_mode: boolean;
@@ -38,6 +39,7 @@ const tabs: { key: TabKey; label: string; description: string }[] = [
   { key: "custom", label: "Quick Check", description: "" },
   { key: "design", label: "Design Lab", description: "" },
   { key: "character", label: "Character Builder", description: "" },
+  { key: "inference", label: "Inference Lab", description: "" },
   { key: "finetune", label: "Training Lab", description: "" },
 ];
 
@@ -378,6 +380,19 @@ export default function App() {
   const [lastDesignRecord, setLastDesignRecord] = useState<GenerationRecord | null>(null);
   const [customControls, setCustomControls] = useState<GenerationControlsForm>(createGenerationControls("custom"));
   const [designControls, setDesignControls] = useState<GenerationControlsForm>(createGenerationControls("design"));
+  const [inferenceForm, setInferenceForm] = useState({
+    model_id: "",
+    text: "今日は本当に納得できないよ。",
+    language: "japanese",
+    speaker: "",
+    instruct: "自然で落ち着いた口調で読んでください。",
+    ref_audio_path: "",
+    ref_text: "",
+    voice_clone_prompt_path: "",
+    x_vector_only_mode: false,
+  });
+  const [inferenceControls, setInferenceControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
+  const [lastInferenceRecord, setLastInferenceRecord] = useState<GenerationRecord | null>(null);
 
   const [selectedDesignSampleId, setSelectedDesignSampleId] = useState("");
   const [selectedBaseModelId, setSelectedBaseModelId] = useState("");
@@ -410,7 +425,9 @@ export default function App() {
   const [datasetRefUpload, setDatasetRefUpload] = useState<UploadResponse | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [runForm, setRunForm] = useState({
+    training_mode: "base" as FineTuneMode,
     init_model_path: "",
+    speaker_encoder_model_path: "",
     tokenizer_model_path: "",
     output_name: "demo-run",
     speaker_name: "speaker_demo",
@@ -419,6 +436,18 @@ export default function App() {
     num_epochs: 3,
     simulate_only: false,
   });
+  const [hybridForm, setHybridForm] = useState({
+    base_model_id: "",
+    custom_model_id: "",
+    text: "今日は本当に納得できないよ。",
+    language: "japanese",
+    instruct: "Speak with heightened emotion, slightly breathy delivery, and a feminine manner.",
+    ref_audio_path: "",
+    ref_text: "",
+    x_vector_only_mode: false,
+  });
+  const [hybridControls, setHybridControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
+  const [lastHybridRecord, setLastHybridRecord] = useState<GenerationRecord | null>(null);
 
   async function refreshAll() {
     const data = await api.bootstrap();
@@ -461,10 +490,14 @@ export default function App() {
   }
 
   const customVoiceModels = models.filter((model) => model.category === "custom_voice");
+  const customVoiceCapableModels = models.filter((model) => model.inference_mode === "custom_voice");
   const voiceDesignModels = models.filter((model) => model.category === "voice_design");
   const baseModels = models.filter((model) => model.category === "base_clone");
   const tokenizerModels = models.filter((model) => model.category === "tokenizer");
+  const inferenceModels = models.filter((model) => model.inference_mode);
   const voiceDesignHistory = history.filter((item) => item.mode === "voice_design");
+  const selectedInferenceModel = inferenceModels.find((model) => model.model_id === inferenceForm.model_id) ?? null;
+  const selectedInferenceMode = selectedInferenceModel?.inference_mode ?? null;
 
   useEffect(() => {
     if (customVoiceModels.length > 0 && !customForm.model_id) {
@@ -478,12 +511,82 @@ export default function App() {
     if (baseModels.length > 0 && !selectedBaseModelId) {
       const preferred = baseModels.find((model) => model.recommended) ?? baseModels[0];
       setSelectedBaseModelId(preferred.model_id);
-      setRunForm((prev) => ({ ...prev, init_model_path: prev.init_model_path || preferred.model_id }));
+      setRunForm((prev) => ({
+        ...prev,
+        init_model_path: prev.init_model_path || preferred.model_id,
+        speaker_encoder_model_path: prev.speaker_encoder_model_path || preferred.model_id,
+      }));
+      setHybridForm((prev) => ({ ...prev, base_model_id: prev.base_model_id || preferred.model_id }));
+    }
+    if (customVoiceCapableModels.length > 0 && !hybridForm.custom_model_id) {
+      const preferred = customVoiceCapableModels.find((model) => model.recommended) ?? customVoiceCapableModels[0];
+      setHybridForm((prev) => ({ ...prev, custom_model_id: preferred.model_id }));
+    }
+    if (inferenceModels.length > 0 && !inferenceForm.model_id) {
+      const preferred =
+        inferenceModels.find((model) => model.source === "finetuned") ??
+        inferenceModels.find((model) => model.recommended) ??
+        inferenceModels[0];
+      setInferenceForm((prev) => ({
+        ...prev,
+        model_id: preferred.model_id,
+        speaker: preferred.default_speaker || prev.speaker,
+      }));
     }
     if (tokenizerModels.length > 0 && !runForm.tokenizer_model_path) {
       setRunForm((prev) => ({ ...prev, tokenizer_model_path: tokenizerModels[0].model_id }));
     }
-  }, [customVoiceModels, voiceDesignModels, baseModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, runForm.init_model_path, runForm.tokenizer_model_path]);
+  }, [customVoiceModels, customVoiceCapableModels, voiceDesignModels, baseModels, inferenceModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path]);
+
+  useEffect(() => {
+    if (!selectedInferenceModel) {
+      return;
+    }
+
+    setInferenceForm((prev) => {
+      const next = { ...prev };
+      if (prev.model_id !== selectedInferenceModel.model_id) {
+        next.model_id = selectedInferenceModel.model_id;
+      }
+      if (selectedInferenceMode === "custom_voice") {
+        next.speaker = selectedInferenceModel.default_speaker || prev.speaker || "";
+      } else {
+        next.speaker = "";
+      }
+      if (selectedInferenceMode !== "voice_clone") {
+        next.ref_audio_path = "";
+        next.ref_text = "";
+        next.voice_clone_prompt_path = "";
+        next.x_vector_only_mode = false;
+      }
+      if (!selectedInferenceModel.supports_instruction && prev.instruct) {
+        next.instruct = prev.instruct;
+      }
+      return next;
+    });
+  }, [selectedInferenceModel, selectedInferenceMode]);
+
+  useEffect(() => {
+    setRunForm((prev) => {
+      if (prev.training_mode === "custom_voice") {
+        const preferredCustom =
+          customVoiceCapableModels.find((model) => model.source === "stock") ??
+          customVoiceCapableModels[0];
+        const preferredBase = baseModels.find((model) => model.recommended) ?? baseModels[0];
+        return {
+          ...prev,
+          init_model_path: preferredCustom?.model_id || prev.init_model_path,
+          speaker_encoder_model_path: preferredBase?.model_id || prev.speaker_encoder_model_path,
+        };
+      }
+
+      const preferredBase = baseModels.find((model) => model.recommended) ?? baseModels[0];
+      return {
+        ...prev,
+        init_model_path: preferredBase?.model_id || prev.init_model_path,
+      };
+    });
+  }, [runForm.training_mode, customVoiceCapableModels, baseModels]);
 
   useEffect(() => {
     if (!health) {
@@ -769,7 +872,9 @@ export default function App() {
     await runAction(async () => {
       await api.createFineTuneRun({
         dataset_id: selectedDatasetId,
+        training_mode: runForm.training_mode,
         init_model_path: runForm.init_model_path,
+        speaker_encoder_model_path: runForm.speaker_encoder_model_path || undefined,
         output_name: runForm.output_name,
         batch_size: Number(runForm.batch_size),
         lr: Number(runForm.lr),
@@ -844,6 +949,75 @@ export default function App() {
       text: asset.transcript_text?.trim() || undefined,
     });
     setMessage(`샘플 ${index + 1}에 ${asset.filename}을(를) 넣었습니다.`);
+  }
+
+  async function handleModelInferenceSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedInferenceModel) {
+      setMessage("먼저 추론할 모델을 선택해주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await api.generateWithModel({
+        model_id: inferenceForm.model_id,
+        text: inferenceForm.text,
+        language: inferenceForm.language,
+        speaker: inferenceForm.speaker || undefined,
+        instruct: inferenceForm.instruct,
+        ref_audio_path: inferenceForm.ref_audio_path || undefined,
+        ref_text: inferenceForm.ref_text || undefined,
+        voice_clone_prompt_path: inferenceForm.voice_clone_prompt_path || undefined,
+        x_vector_only_mode: inferenceForm.x_vector_only_mode,
+        ...serializeGenerationControls(inferenceControls),
+      });
+      setLastInferenceRecord(result.record);
+      await refreshAll();
+      setMessage(`${selectedInferenceModel.label} 추론을 완료했습니다.`);
+    });
+  }
+
+  async function handleHybridInferenceSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!hybridForm.base_model_id || !hybridForm.custom_model_id || !hybridForm.ref_audio_path.trim()) {
+      setMessage("hybrid 추론에는 Base 모델, CustomVoice 모델, 참조 음성이 모두 필요합니다.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await api.generateHybridCloneInstruct({
+        ...serializeGenerationControls(hybridControls),
+        base_model_id: hybridForm.base_model_id,
+        custom_model_id: hybridForm.custom_model_id,
+        text: hybridForm.text,
+        language: hybridForm.language,
+        instruct: hybridForm.instruct,
+        ref_audio_path: hybridForm.ref_audio_path,
+        ref_text: hybridForm.ref_text || undefined,
+        x_vector_only_mode: hybridForm.x_vector_only_mode,
+      });
+      setLastHybridRecord(result.record);
+      await refreshAll();
+      setMessage("clone prompt + instruct hybrid 추론을 완료했습니다.");
+    });
+  }
+
+  function handleSelectInferenceAsset(asset: AudioAsset) {
+    setInferenceForm((prev) => ({
+      ...prev,
+      ref_audio_path: asset.path,
+      ref_text: asset.transcript_text?.trim() || prev.ref_text,
+    }));
+    setMessage(`추론 참조 음성으로 ${asset.filename}을(를) 선택했습니다.`);
+  }
+
+  function handleSelectHybridAsset(asset: AudioAsset) {
+    setHybridForm((prev) => ({
+      ...prev,
+      ref_audio_path: asset.path,
+      ref_text: asset.transcript_text?.trim() || prev.ref_text,
+    }));
+    setMessage(`hybrid 참조 음성으로 ${asset.filename}을(를) 선택했습니다.`);
   }
 
   return (
@@ -1248,6 +1422,266 @@ export default function App() {
         </section>
       ) : null}
 
+      {activeTab === "inference" ? (
+        <section className="workspace workspace--stacked">
+          <div className="panel-grid">
+          <form className="panel inference-panel" onSubmit={handleModelInferenceSubmit}>
+            <div className="result-card__header">
+              <div>
+                <span className="eyebrow eyebrow--soft">Inference Lab</span>
+                <h2>모델 선택형 추론</h2>
+                <p>Stock Base, Stock CustomVoice, 그리고 로컬 fine-tuned 체크포인트까지 한 화면에서 바로 테스트합니다.</p>
+              </div>
+            </div>
+
+            <div className="field-row">
+              <label>
+                모델
+                <select
+                  value={inferenceForm.model_id}
+                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}
+                >
+                  <option value="">선택하세요</option>
+                  {inferenceModels.map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                언어
+                <input
+                  value={inferenceForm.language}
+                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, language: event.target.value }))}
+                />
+              </label>
+            </div>
+
+            {selectedInferenceModel ? (
+              <article className="status-card status-card--ready">
+                <strong>{selectedInferenceModel.label}</strong>
+                <p>{selectedInferenceModel.notes}</p>
+                <div className="audio-card__meta">
+                  <span>{selectedInferenceModel.source}</span>
+                  <span>{selectedInferenceModel.category}</span>
+                  <span>{selectedInferenceModel.inference_mode}</span>
+                </div>
+              </article>
+            ) : null}
+
+            <label>
+              대사
+              <textarea
+                value={inferenceForm.text}
+                onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))}
+              />
+            </label>
+
+            {selectedInferenceMode === "custom_voice" ? (
+              <label>
+                speaker
+                {selectedInferenceModel?.available_speakers?.length ? (
+                  <select
+                    value={inferenceForm.speaker}
+                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}
+                  >
+                    {selectedInferenceModel.available_speakers.map((speaker) => (
+                      <option key={speaker} value={speaker}>
+                        {speaker}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={inferenceForm.speaker}
+                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}
+                  />
+                )}
+              </label>
+            ) : null}
+
+            <label>
+              instruct
+              <textarea
+                disabled={selectedInferenceModel ? !selectedInferenceModel.supports_instruction : false}
+                placeholder={
+                  selectedInferenceModel && !selectedInferenceModel.supports_instruction
+                    ? "이 모델 경로에서는 instruct가 사용되지 않습니다."
+                    : "스타일 지시문을 입력하세요."
+                }
+                value={inferenceForm.instruct}
+                onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
+              />
+            </label>
+
+            {selectedInferenceMode === "voice_clone" ? (
+              <div className="inference-clone-grid">
+                <label>
+                  ref_audio_path
+                  <input
+                    value={inferenceForm.ref_audio_path}
+                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  voice_clone_prompt_path
+                  <input
+                    value={inferenceForm.voice_clone_prompt_path}
+                    onChange={(event) =>
+                      setInferenceForm((prev) => ({ ...prev, voice_clone_prompt_path: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="inference-clone-grid__wide">
+                  ref_text
+                  <textarea
+                    value={inferenceForm.ref_text}
+                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))}
+                  />
+                </label>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={inferenceForm.x_vector_only_mode}
+                    onChange={(event) =>
+                      setInferenceForm((prev) => ({ ...prev, x_vector_only_mode: event.target.checked }))
+                    }
+                  />
+                  x_vector_only_mode
+                </label>
+              </div>
+            ) : null}
+
+            <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
+            <button className="primary-button" disabled={loading || !selectedInferenceModel} type="submit">
+              선택한 모델로 추론
+            </button>
+          </form>
+
+          <aside className="panel inference-side">
+            <h3>참조 음성 빠른 선택</h3>
+            <p className="field-hint">Base 계열 모델일 때 아래 파일을 선택하면 `ref_audio_path`와 `ref_text`를 바로 채웁니다.</p>
+            <ServerAudioPicker
+              assets={generatedAudioAssets}
+              selectedPath={inferenceForm.ref_audio_path}
+              onSelect={handleSelectInferenceAsset}
+            />
+            {lastInferenceRecord ? (
+              <AudioCard title="방금 생성한 추론 결과" subtitle={lastInferenceRecord.mode} record={lastInferenceRecord} />
+            ) : null}
+          </aside>
+          </div>
+
+          <div className="panel-grid">
+            <form className="panel inference-panel" onSubmit={handleHybridInferenceSubmit}>
+              <div className="result-card__header">
+                <div>
+                  <span className="eyebrow eyebrow--soft">Experimental</span>
+                  <h2>Clone Prompt + Instruct Hybrid</h2>
+                  <p>Base 모델의 clone prompt와 CustomVoice 모델의 instruct를 함께 써보는 실험 경로입니다.</p>
+                </div>
+              </div>
+
+              <div className="field-row">
+                <label>
+                  Base 모델
+                  <select
+                    value={hybridForm.base_model_id}
+                    onChange={(event) => setHybridForm((prev) => ({ ...prev, base_model_id: event.target.value }))}
+                  >
+                    <option value="">선택하세요</option>
+                    {baseModels.map((model) => (
+                      <option key={model.key} value={model.model_id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  CustomVoice 모델
+                  <select
+                    value={hybridForm.custom_model_id}
+                    onChange={(event) => setHybridForm((prev) => ({ ...prev, custom_model_id: event.target.value }))}
+                  >
+                    <option value="">선택하세요</option>
+                    {customVoiceCapableModels.map((model) => (
+                      <option key={model.key} value={model.model_id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label>
+                대사
+                <textarea
+                  value={hybridForm.text}
+                  onChange={(event) => setHybridForm((prev) => ({ ...prev, text: event.target.value }))}
+                />
+              </label>
+              <label>
+                instruct
+                <textarea
+                  value={hybridForm.instruct}
+                  onChange={(event) => setHybridForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                />
+              </label>
+              <div className="field-row">
+                <label>
+                  언어
+                  <input
+                    value={hybridForm.language}
+                    onChange={(event) => setHybridForm((prev) => ({ ...prev, language: event.target.value }))}
+                  />
+                </label>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={hybridForm.x_vector_only_mode}
+                    onChange={(event) => setHybridForm((prev) => ({ ...prev, x_vector_only_mode: event.target.checked }))}
+                  />
+                  x_vector_only_mode
+                </label>
+              </div>
+              <label>
+                ref_audio_path
+                <input
+                  value={hybridForm.ref_audio_path}
+                  onChange={(event) => setHybridForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))}
+                />
+              </label>
+              <label>
+                ref_text
+                <textarea
+                  value={hybridForm.ref_text}
+                  onChange={(event) => setHybridForm((prev) => ({ ...prev, ref_text: event.target.value }))}
+                />
+              </label>
+
+              <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
+              <button className="primary-button" disabled={loading} type="submit">
+                hybrid 추론 실행
+              </button>
+            </form>
+
+            <aside className="panel inference-side">
+              <h3>Hybrid 참조 음성 선택</h3>
+              <p className="field-hint">생성/업로드 음성을 골라 `ref_audio_path`와 `ref_text`를 빠르게 채울 수 있습니다.</p>
+              <ServerAudioPicker
+                assets={generatedAudioAssets}
+                selectedPath={hybridForm.ref_audio_path}
+                onSelect={handleSelectHybridAsset}
+              />
+              {lastHybridRecord ? (
+                <AudioCard title="방금 생성한 hybrid 결과" subtitle={lastHybridRecord.mode} record={lastHybridRecord} />
+              ) : null}
+            </aside>
+          </div>
+        </section>
+      ) : null}
+
       {activeTab === "finetune" ? (
         <section className="workspace workspace--stacked">
           <section className="panel finetune-flow">
@@ -1604,6 +2038,18 @@ export default function App() {
                 <summary>학습 설정 열기</summary>
                 <div className="field-row">
                   <label>
+                    학습 모드
+                    <select
+                      value={runForm.training_mode}
+                      onChange={(event) =>
+                        setRunForm({ ...runForm, training_mode: event.target.value as FineTuneMode })
+                      }
+                    >
+                      <option value="base">Base Fine-Tune</option>
+                      <option value="custom_voice">CustomVoice Fine-Tune</option>
+                    </select>
+                  </label>
+                  <label>
                     토크나이저
                     <select
                       value={runForm.tokenizer_model_path}
@@ -1629,7 +2075,7 @@ export default function App() {
                       value={runForm.init_model_path}
                       onChange={(event) => setRunForm({ ...runForm, init_model_path: event.target.value })}
                     >
-                      {baseModels.map((model) => (
+                      {(runForm.training_mode === "custom_voice" ? customVoiceCapableModels : baseModels).map((model) => (
                         <option key={model.key} value={model.model_id}>
                           {model.label}
                         </option>
@@ -1644,6 +2090,34 @@ export default function App() {
                     />
                   </label>
                 </div>
+                {runForm.training_mode === "custom_voice" ? (
+                  <div className="field-row">
+                    <label>
+                      speaker_encoder_model_path
+                      <select
+                        value={runForm.speaker_encoder_model_path}
+                        onChange={(event) => setRunForm({ ...runForm, speaker_encoder_model_path: event.target.value })}
+                      >
+                        {baseModels.map((model) => (
+                          <option key={model.key} value={model.model_id}>
+                            {model.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      실행 스크립트
+                      <input value="sft_custom_voice_12hz.py" readOnly />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="field-row">
+                    <label>
+                      실행 스크립트
+                      <input value="sft_12hz.py" readOnly />
+                    </label>
+                  </div>
+                )}
                 <div className="field-row">
                   <label>
                     배치 크기
@@ -1730,7 +2204,9 @@ export default function App() {
                   <article className="dataset-card" key={run.id}>
                     <strong>{run.id}</strong>
                     <span>{run.status}</span>
+                    <span>{run.training_mode}</span>
                     <code>{run.output_model_path}</code>
+                    {run.speaker_encoder_model_path ? <code>{run.speaker_encoder_model_path}</code> : null}
                     {run.log_path ? <code>{run.log_path}</code> : null}
                   </article>
                 ))}
