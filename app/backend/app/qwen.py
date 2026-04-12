@@ -144,17 +144,15 @@ class QwenDemoEngine:
         """환경에 맞는 attention 구현을 계산한다."""
 
         if os.getenv("QWEN_DEMO_ATTN_IMPL"):
-            return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_3")
+            return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_2")
 
         device = self.resolve_device()
         if sys.platform == "darwin" or device in {"cpu", "mps"}:
             return "sdpa"
 
-        # Linux + CUDA 서버에서는 FlashAttention 3 wheel을 우선 사용한다.
-        # RTX 5080 + torch cu130 조합에서 flash_attn_3가 실제로 설치되면
-        # Transformers가 `flash_attention_3` 구현을 선택할 수 있다.
-        if device.startswith("cuda") and importlib.util.find_spec("flash_attn_3"):
-            return "flash_attention_3"
+        # Linux + CUDA 환경에서는 검증이 끝난 FlashAttention 2 wheel을 우선 사용한다.
+        # 이 저장소는 WSL/Linux + torch cu130 조합에서 flash_attn v2 GPU smoke test를
+        # 직접 통과한 상태를 기준선으로 삼는다.
         if device.startswith("cuda") and importlib.util.find_spec("flash_attn"):
             return "flash_attention_2"
         return "sdpa"

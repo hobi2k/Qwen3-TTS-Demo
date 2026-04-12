@@ -48,6 +48,7 @@ APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
 UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS" / "finetuning"
+DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
 load_dotenv(BACKEND_DIR / ".env")
 
 storage = Storage(REPO_ROOT)
@@ -249,8 +250,8 @@ def resolve_finetune_entrypoint(training_mode: str) -> str:
 
     normalized = (training_mode or "base").strip().lower()
     if normalized == "custom_voice":
-        return "sft_custom_voice_12hz.py"
-    return "sft_12hz.py"
+        return "finetuning/sft_custom_voice_12hz.py"
+    return "finetuning/sft_12hz.py"
 
 app = FastAPI(title="Qwen3-TTS Demo API")
 app.add_middleware(
@@ -591,10 +592,14 @@ def run_prepare_data(
 ) -> None:
     """실제 prepare_data.py를 실행해 audio_codes 포함 JSONL을 만든다."""
 
-    result = run_upstream_command(
+    prepare_script = DEMO_SCRIPTS_DIR / "qwen3_tts_prepare_data.py"
+    if not prepare_script.exists():
+        raise HTTPException(status_code=400, detail="Demo-side prepare_data wrapper is missing.")
+
+    result = subprocess.run(
         [
             "python3",
-            "prepare_data.py",
+            str(prepare_script),
             "--device",
             device,
             "--tokenizer_model_path",
@@ -603,7 +608,12 @@ def run_prepare_data(
             str(raw_jsonl_path),
             "--output_jsonl",
             str(prepared_jsonl_path),
-        ]
+            "--batch_infer_num",
+            "4",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=result.stderr or result.stdout or "prepare_data.py failed")

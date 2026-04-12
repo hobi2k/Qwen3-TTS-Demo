@@ -12,6 +12,9 @@
 6. [학습 파이프라인 변경 상세](./06-training-pipeline-changes.md)
 7. [추론 파이프라인 변경 상세](./07-inference-pipeline-changes.md)
 8. [FlashAttention 설치 가이드](./08-flash-attn-install.md)
+9. [Speech Quality Validation Workflow](./09-quality-validation-workflow.md)
+10. [Quality Validation Plan](./10-quality-validation-plan.md)
+11. [Pristine Upstream Fine-Tune Wrappers](./11-pristine-upstream-finetune.md)
 
 ## 문서 맵
 
@@ -22,7 +25,9 @@
 - 업스트림 examples와 fine-tuning 연결은 [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)를 보면 됩니다.
 - 학습 파이프라인이 어떻게 확장되었는지는 [06-training-pipeline-changes.md](./06-training-pipeline-changes.md)를 보면 됩니다.
 - 추론 파이프라인이 어떻게 확장되었는지는 [07-inference-pipeline-changes.md](./07-inference-pipeline-changes.md)를 보면 됩니다.
-- Linux + CUDA에서 FlashAttention 3를 설치하는 절차는 [08-flash-attn-install.md](./08-flash-attn-install.md)를 보면 됩니다.
+- Linux + CUDA에서 FlashAttention 2를 설치하는 절차는 [08-flash-attn-install.md](./08-flash-attn-install.md)를 보면 됩니다.
+- 깨끗한 upstream 기준으로 Base/CustomVoice fine-tuning을 돌리는 demo-side wrapper
+  명령은 [11-pristine-upstream-finetune.md](./11-pristine-upstream-finetune.md)를 보면 됩니다.
 
 ## 빠른 링크
 
@@ -38,6 +43,8 @@
 - macOS/Linux용 `.sh`와 Windows PowerShell용 `.ps1`를 모두 제공합니다.
 - 모델 다운로드 기본값은 `all`이며, 웹 UI에서 기능별로 모델을 선택할 수 있습니다.
 - `clone prompt / 프리셋`과 `fine-tuning`은 다른 기능군으로 구분합니다.
+- 학습 결과의 음성 품질 검증 방법은 [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)를 보면 됩니다.
+- 검증 순서와 현재 막힌 점은 [10-quality-validation-plan.md](./10-quality-validation-plan.md)를 보면 됩니다.
 
 ## 참고
 

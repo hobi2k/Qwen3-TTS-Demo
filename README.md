@@ -12,6 +12,7 @@ React + TypeScript 프런트엔드와 Python/FastAPI 백엔드로 만든 `Qwen3-
 - `CustomVoice` 전용 파인튜닝 실행 경로
 - `Base clone prompt + CustomVoice instruct` 실험 경로
 - `prepare_data.py`, `sft_12hz.py` 실행 진입점
+- 학습 결과 음성 품질 검증 워크플로우
 
 ## 문서 허브
 
@@ -24,6 +25,8 @@ React + TypeScript 프런트엔드와 Python/FastAPI 백엔드로 만든 `Qwen3-
 - 학습 파이프라인 변경 상세: [docs/cookbook/06-training-pipeline-changes.md](docs/cookbook/06-training-pipeline-changes.md)
 - 추론 파이프라인 변경 상세: [docs/cookbook/07-inference-pipeline-changes.md](docs/cookbook/07-inference-pipeline-changes.md)
 - FlashAttention 설치 가이드: [docs/cookbook/08-flash-attn-install.md](docs/cookbook/08-flash-attn-install.md)
+- Speech Quality Validation Workflow: [docs/cookbook/09-quality-validation-workflow.md](docs/cookbook/09-quality-validation-workflow.md)
+- Quality Validation Plan: [docs/cookbook/10-quality-validation-plan.md](docs/cookbook/10-quality-validation-plan.md)
 
 ## 구조
 
@@ -119,30 +122,32 @@ python -m pip install --upgrade pip setuptools wheel
 - 시스템 의존성 점검: `ffmpeg`, `sox`
 - 플랫폼별 attention 기본값 정리
   - macOS: `sdpa`
-  - Linux + CUDA: `flash_attn_3`가 설치되어 있으면 `flash_attention_3`
-  - 그 외 CUDA 환경: `flash_attention_2` 또는 `sdpa`
+  - Linux + CUDA: `flash_attn`이 설치되어 있으면 `flash_attention_2`
+  - 그 외 CUDA 환경: `sdpa`
 
-## FlashAttention 3
+## FlashAttention 2
 
 이 프로젝트는 Linux + CUDA 서버에서 `sdpa`보다 `FlashAttention` 사용을 우선합니다.
-현재 `torch 2.11.0 + cu130` 환경에서는 소스 빌드보다, 아래 third-party prebuilt wheel 인덱스를 사용한
-`flash_attn_3` 설치가 가장 재현 가능했습니다.
+현재 `torch 2.11.0 + cu130` 환경에서는 소스 빌드보다, 아래 Linux prebuilt wheel을 사용한
+`flash_attn` v2 설치가 가장 재현 가능했고 실제 GPU smoke test까지 통과했습니다.
 
 출처:
 
-- Flash-Attention 3 Wheels Repository: https://windreamer.github.io/flash-attention3-wheels/
+- FlashAttention v2 Linux prebuilt wheels:
+  `https://github.com/mjun0812/flash-attention-prebuild-wheels/releases`
 
 우리 환경에서 사용한 설치 명령:
 
 ```bash
-uv pip install --no-cache-dir flash_attn_3 --find-links https://windreamer.github.io/flash-attention3-wheels/cu130_torch2110
+uv pip install --no-cache-dir "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 ```
 
 설치 후 검증:
 
 ```bash
-uv pip show flash-attn-3
-python -c "import importlib.util; print(importlib.util.find_spec('flash_attn_3') is not None)"
+uv pip show flash-attn
+python -c "import importlib.util; print(importlib.util.find_spec('flash_attn') is not None)"
+python -c "import torch; from flash_attn.flash_attn_interface import flash_attn_func; q=torch.randn(1,16,8,64,device='cuda',dtype=torch.bfloat16); k=torch.randn(1,16,8,64,device='cuda',dtype=torch.bfloat16); v=torch.randn(1,16,8,64,device='cuda',dtype=torch.bfloat16); out=flash_attn_func(q,k,v,0.0,softmax_scale=None,causal=False); print(tuple(out.shape), out.dtype, out.device)"
 python -c "from qwen_tts import Qwen3TTSModel; print('import ok')"
 ```
 
@@ -255,6 +260,25 @@ curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
   -H 'Content-Type: application/json' \
   -d '{"text":"시뮬레이션 검증 문장입니다.","language":"Korean","speaker":"Sohee","instruct":"또렷하게"}'
 ```
+
+## 품질 검증
+
+학습된 Base FT, CustomVoice FT, clone prompt 재사용, hybrid clone+instruct 경로를 한 번에 확인하려면 아래 스크립트를 사용합니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+source .venv/bin/activate
+python scripts/validate_speech_quality.py \
+  --api-base http://127.0.0.1:8000 \
+  --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
+  --probe-text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
+  --suite all
+```
+
+결과는 `data/generated/quality-validation/<timestamp>/` 아래에 저장됩니다.
+자세한 해석은 [docs/cookbook/09-quality-validation-workflow.md](docs/cookbook/09-quality-validation-workflow.md)를 보세요.
+
+검증 우선순위와 현재 막힌 점은 [docs/cookbook/10-quality-validation-plan.md](docs/cookbook/10-quality-validation-plan.md)에 따로 정리했습니다.
 
 ## 주요 API
 

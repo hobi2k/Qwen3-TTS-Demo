@@ -8,6 +8,7 @@ compare whether a fine-tuned checkpoint still reacts to instruct changes.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -51,11 +52,12 @@ def load_qwen_model(model_path: str):
     sys.path.insert(0, str(repo_root / "Qwen3-TTS"))
     from qwen_tts import Qwen3TTSModel
 
+    attn_implementation = "flash_attention_2" if torch.cuda.is_available() and importlib.util.find_spec("flash_attn") else "sdpa"
     return Qwen3TTSModel.from_pretrained(
         model_path,
         dtype=torch.bfloat16,
         device_map="cuda:0",
-        attn_implementation="sdpa",
+        attn_implementation=attn_implementation,
     )
 
 

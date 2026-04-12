@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "app\backend"
 $VenvDir = Join-Path $RootDir ".venv"
+$FlashAttnWheelUrl = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 function Resolve-Python {
     param([string]$Requested)
@@ -111,9 +112,9 @@ elseif ($HasCuda) {
     }
 
     if (-not $HasFlashAttn) {
-        Write-Host "CUDA environment detected: attempting to install flash-attn."
+        Write-Host "CUDA environment detected: attempting to install the validated flash-attn v2 wheel."
         try {
-            uv pip install flash-attn
+            uv pip install --no-cache-dir $FlashAttnWheelUrl
         }
         catch {
             Write-Warning "flash-attn installation failed. Falling back to sdpa."

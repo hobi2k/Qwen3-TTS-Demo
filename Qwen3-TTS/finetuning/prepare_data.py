@@ -19,20 +19,7 @@ import json
 
 from qwen_tts import Qwen3TTSTokenizer
 
-DEFAULT_BATCH_INFER_NUM = 32
-
-
-def validate_12hz_code_shape(code, tokenizer_model_path: str) -> None:
-    if code.dim() != 2:
-        raise ValueError(
-            f"Expected 12Hz audio_codes to be 2D (T, num_quantizers), got shape={tuple(code.shape)} "
-            f"from tokenizer_model_path={tokenizer_model_path!r}."
-        )
-    if code.shape[1] != 16:
-        raise ValueError(
-            f"Expected 12Hz audio_codes second dimension to be 16, got shape={tuple(code.shape)} "
-            f"from tokenizer_model_path={tokenizer_model_path!r}."
-        )
+BATCH_INFER_NUM = 32
 
 def main():
     parser = argparse.ArgumentParser()
@@ -40,25 +27,12 @@ def main():
     parser.add_argument("--tokenizer_model_path", type=str, default="Qwen/Qwen3-TTS-Tokenizer-12Hz")
     parser.add_argument("--input_jsonl", type=str, required=True)
     parser.add_argument("--output_jsonl", type=str, required=True)
-    parser.add_argument(
-        "--batch_infer_num",
-        type=int,
-        default=DEFAULT_BATCH_INFER_NUM,
-        help="How many audio files to tokenize per batch. Lower this when VRAM is limited.",
-    )
     args = parser.parse_args()
 
     tokenizer_12hz = Qwen3TTSTokenizer.from_pretrained(
         args.tokenizer_model_path,
         device_map=args.device,
     )
-    model_type = getattr(getattr(tokenizer_12hz, "model", None), "config", None)
-    model_type = getattr(model_type, "model_type", None)
-    if model_type != "qwen3_tts_tokenizer_12hz":
-        raise ValueError(
-            f"prepare_data.py requires the 12Hz tokenizer, got model_type={model_type!r} "
-            f"from tokenizer_model_path={args.tokenizer_model_path!r}."
-        )
 
     total_lines = open(args.input_jsonl).readlines()
     total_lines = [json.loads(line.strip()) for line in total_lines]
@@ -71,10 +45,9 @@ def main():
         batch_lines.append(line)
         batch_audios.append(line['audio'])
 
-        if len(batch_lines) >= args.batch_infer_num:
+        if len(batch_lines) >= BATCH_INFER_NUM:
             enc_res = tokenizer_12hz.encode(batch_audios)
             for code, line in zip(enc_res.audio_codes, batch_lines):
-                validate_12hz_code_shape(code, args.tokenizer_model_path)
                 line['audio_codes'] = code.cpu().tolist()
                 final_lines.append(line)
             batch_lines.clear()
@@ -83,7 +56,6 @@ def main():
     if len(batch_audios) > 0:
         enc_res = tokenizer_12hz.encode(batch_audios)
         for code, line in zip(enc_res.audio_codes, batch_lines):
-            validate_12hz_code_shape(code, args.tokenizer_model_path)
             line['audio_codes'] = code.cpu().tolist()
             final_lines.append(line)
         batch_lines.clear()

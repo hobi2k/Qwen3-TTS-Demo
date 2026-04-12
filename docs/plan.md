@@ -15,6 +15,17 @@
 7. 생성한 `voice_clone_prompt`를 저장하고 재사용해서 같은 캐릭터가 계속 같은 목소리로 말하게 하기
 8. 브라우저에서 결과를 재생하고 비교하고 내려받을 수 있게 하기
 
+## 현재 우선 TODO
+
+- 루트 [TODO.md](../TODO.md)에 정리한 것처럼, `CustomVoice Fine-Tune` 결과를
+  self-contained checkpoint로 바꾸는 작업이 남아 있다.
+- 현재는 `CustomVoice` 학습 시 `Base`의 `speaker_encoder`를 보조로 빌려 쓰는 구조이며,
+  최종 목표는 fine-tuned `CustomVoice` 결과물 자체가 `speaker_encoder`를 포함해
+  독립적으로 추가 fine-tuning 가능한 상태가 되는 것이다.
+- FlashAttention 경로는 WSL/Linux 기준 `flash-attn` v2로 정리했다.
+  현재 주력 경로는 `flash_attention_2`이며, `sdpa`는 macOS나 FlashAttention을
+  실제로 쓸 수 없는 환경에서만 fallback으로 본다.
+
 ## 기준 자료와 입력 자원
 
 - 데모 앱 저장소: `Qwen3-TTS-Demo`

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/app/backend"
 UPSTREAM_DIR="${ROOT_DIR}/Qwen3-TTS"
 VENV_DIR="${ROOT_DIR}/.venv"
+FLASH_ATTN_WHEEL_URL="https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 if [[ -n "${QWEN_DEMO_PYTHON:-}" ]]; then
   PYTHON_BIN="${QWEN_DEMO_PYTHON}"
@@ -60,8 +61,8 @@ if [[ "${OS_NAME}" == "Darwin" ]]; then
   echo "macOS detected: defaulting attention to sdpa."
 elif command -v nvidia-smi >/dev/null 2>&1; then
   if ! python -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('flash_attn') else 1)" >/dev/null 2>&1; then
-    echo "CUDA environment detected: attempting to install flash-attn."
-    if ! uv pip install flash-attn; then
+    echo "CUDA environment detected: attempting to install the validated flash-attn v2 wheel."
+    if ! uv pip install --no-cache-dir "${FLASH_ATTN_WHEEL_URL}"; then
       echo "Warning: flash-attn installation failed. Falling back to sdpa."
     fi
   fi

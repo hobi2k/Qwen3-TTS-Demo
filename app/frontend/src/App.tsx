@@ -42,6 +42,15 @@ const tabs: { key: TabKey; label: string; description: string }[] = [
   { key: "finetune", label: "Training Lab", description: "" },
 ];
 
+const LANGUAGE_OPTIONS = [
+  { value: "Auto", label: "자동 감지" },
+  { value: "Korean", label: "한국어" },
+  { value: "English", label: "영어" },
+  { value: "Japanese", label: "일본어" },
+  { value: "Chinese", label: "중국어" },
+  { value: "Cantonese", label: "광동어" },
+] as const;
+
 function createEmptyDatasetSample() {
   return { audio_path: "", text: "", original_filename: "" };
 }
@@ -89,6 +98,39 @@ function getDatasetSourceLabel(value: string): string {
   if (value === "voice_design_batch") return "Voice Design 샘플 묶음";
   if (value === "uploaded_audio_batch") return "직접 업로드한 음성 묶음";
   return value;
+}
+
+function normalizeLanguageValue(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "auto") return "Auto";
+  if (normalized === "korean" || normalized === "ko" || normalized === "한국어") return "Korean";
+  if (normalized === "english" || normalized === "en" || normalized === "영어") return "English";
+  if (normalized === "japanese" || normalized === "ja" || normalized === "일본어") return "Japanese";
+  if (normalized === "chinese" || normalized === "zh" || normalized === "중국어") return "Chinese";
+  if (normalized === "cantonese" || normalized === "yue" || normalized === "광동어") return "Cantonese";
+  return value;
+}
+
+function LanguageSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const normalizedValue = normalizeLanguageValue(value);
+  const hasKnownValue = LANGUAGE_OPTIONS.some((option) => option.value === normalizedValue);
+
+  return (
+    <select value={normalizedValue} onChange={(event) => onChange(event.target.value)}>
+      {!hasKnownValue && normalizedValue ? <option value={normalizedValue}>{normalizedValue}</option> : null}
+      {LANGUAGE_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function fileUrlFromPath(value: string): string {
@@ -408,7 +450,7 @@ export default function App() {
   const [inferenceForm, setInferenceForm] = useState({
     model_id: "",
     text: "今日は本当に納得できないよ。",
-    language: "japanese",
+    language: "Japanese",
     speaker: "",
     instruct: "自然で落ち着いた口調で読んでください。",
     ref_audio_path: "",
@@ -464,7 +506,7 @@ export default function App() {
     base_model_id: "",
     custom_model_id: "",
     text: "今日は本当に納得できないよ。",
-    language: "japanese",
+    language: "Japanese",
     instruct: "Speak with heightened emotion, slightly breathy delivery, and a feminine manner.",
     ref_audio_path: "",
     ref_text: "",
@@ -1156,9 +1198,9 @@ export default function App() {
               </label>
               <label>
                 언어
-                <input
+                <LanguageSelect
                   value={customForm.language}
-                  onChange={(event) => setCustomForm({ ...customForm, language: event.target.value })}
+                  onChange={(language) => setCustomForm({ ...customForm, language })}
                 />
               </label>
               <label>
@@ -1239,9 +1281,9 @@ export default function App() {
             </label>
             <label>
               언어
-              <input
+              <LanguageSelect
                 value={designForm.language}
-                onChange={(event) => setDesignForm({ ...designForm, language: event.target.value })}
+                onChange={(language) => setDesignForm({ ...designForm, language })}
               />
             </label>
             <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
@@ -1431,9 +1473,9 @@ export default function App() {
                 </label>
                 <label>
                   기본 언어
-                  <input
+                  <LanguageSelect
                     value={presetForm.language}
-                    onChange={(event) => setPresetForm({ ...presetForm, language: event.target.value })}
+                    onChange={(language) => setPresetForm({ ...presetForm, language })}
                   />
                 </label>
                 <label>
@@ -1536,9 +1578,9 @@ export default function App() {
               </label>
               <label>
                 언어
-                <input
+                <LanguageSelect
                   value={inferenceForm.language}
-                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, language: event.target.value }))}
+                  onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))}
                 />
               </label>
             </div>
@@ -1716,9 +1758,9 @@ export default function App() {
               <div className="field-row">
                 <label>
                   언어
-                  <input
+                  <LanguageSelect
                     value={hybridForm.language}
-                    onChange={(event) => setHybridForm((prev) => ({ ...prev, language: event.target.value }))}
+                    onChange={(language) => setHybridForm((prev) => ({ ...prev, language }))}
                   />
                 </label>
                 <label className="checkbox-row">
