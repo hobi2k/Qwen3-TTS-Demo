@@ -1,0 +1,47 @@
+[
+  {
+    "label": "stock_customvoice",
+    "model_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "speaker": "Ono_Anna",
+    "prompt": "neutral",
+    "instruct": "自然で落ち着いた口調で読んでください。",
+    "text": "今日は本当に納得できないよ。",
+    "language": "japanese",
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/instruct-eval/stock_customvoice_neutral.wav",
+    "transcript": "今日は本当に納得できないよ",
+    "duration_sec": 5.04,
+    "rms": 0.022104348987340927,
+    "spectral_centroid": 2040.2492392221004,
+    "zcr": 0.07484506856540084
+  },
+  {
+    "label": "stock_customvoice",
+    "model_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "speaker": "Ono_Anna",
+    "prompt": "angry",
+    "instruct": "かなり怒っていて、語尾を強く、早口気味に読んでください。",
+    "text": "今日は本当に納得できないよ。",
+    "language": "japanese",
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/instruct-eval/stock_customvoice_angry.wav",
+    "transcript": "今日は本当に納得できないよ",
+    "duration_sec": 2.48,
+    "rms": 0.05016268044710159,
+    "spectral_centroid": 2285.4074741108925,
+    "zcr": 0.0832164797008547
+  },
+  {
+    "label": "stock_customvoice",
+    "model_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "speaker": "Ono_Anna",
+    "prompt": "gentle",
+    "instruct": "とても優しく、落ち着いて、相手を慰めるように読んでください。",
+    "text": "今日は本当に納得できないよ。",
+    "language": "japanese",
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/instruct-eval/stock_customvoice_gentle.wav",
+    "transcript": "今日は本当に納得できないよ",
+    "duration_sec": 4.48,
+    "rms": 0.04162062332034111,
+    "spectral_centroid": 2324.745306309475,
+    "zcr": 0.07409610115521327
+  }
+]

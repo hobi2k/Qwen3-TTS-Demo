@@ -142,6 +142,25 @@
 
 `prepare-codes`는 tokenizer 경로를 받고, fine-tune run은 `init_model_path`를 받습니다.
 
+현재 표준 dataset 저장 구조는 아래와 같습니다.
+
+```text
+data/datasets/<dataset_id>/
+  audio/          # dataset 전용 복사본 음성 자산
+  raw.jsonl
+  train_raw.jsonl
+  eval_raw.jsonl
+  prepared.jsonl
+  manifest.json
+  dataset.json    # UI와 API가 읽는 canonical metadata
+```
+
+중요한 규칙:
+
+- dataset 자산은 다른 폴더와 섞지 않습니다.
+- dataset 생성 시 외부 경로를 그대로 저장하지 않고 dataset 폴더 안으로 복사합니다.
+- API는 `data/datasets/<dataset_id>/dataset.json`을 canonical record로 취급합니다.
+
 ## 부트스트랩 스크립트
 
 ### macOS / Linux

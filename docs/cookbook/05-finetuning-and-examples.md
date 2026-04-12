@@ -60,6 +60,19 @@
 - `text`
 - `ref_audio`
 
+이 raw JSONL도 dataset 폴더 안에 저장하는 것을 표준으로 사용합니다.
+
+```text
+data/datasets/<dataset_id>/
+  audio/
+  raw.jsonl
+  prepared.jsonl
+  manifest.json
+  dataset.json
+```
+
+즉 학습에 쓰이는 오디오 파일과 JSONL이 서로 다른 상위 디렉터리에 흩어지지 않도록 정리합니다.
+
 ### `prepare_data.py`
 
 데모의 `prepareDataset` 단계와 연결됩니다.

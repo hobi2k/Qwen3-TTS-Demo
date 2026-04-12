@@ -21,6 +21,9 @@ React + TypeScript 프런트엔드와 Python/FastAPI 백엔드로 만든 `Qwen3-
 - 프런트엔드 구조: [docs/cookbook/03-frontend-guide.md](docs/cookbook/03-frontend-guide.md)
 - 업스트림 개요: [docs/cookbook/04-qwen3-tts-overview.md](docs/cookbook/04-qwen3-tts-overview.md)
 - examples와 파인튜닝: [docs/cookbook/05-finetuning-and-examples.md](docs/cookbook/05-finetuning-and-examples.md)
+- 학습 파이프라인 변경 상세: [docs/cookbook/06-training-pipeline-changes.md](docs/cookbook/06-training-pipeline-changes.md)
+- 추론 파이프라인 변경 상세: [docs/cookbook/07-inference-pipeline-changes.md](docs/cookbook/07-inference-pipeline-changes.md)
+- FlashAttention 설치 가이드: [docs/cookbook/08-flash-attn-install.md](docs/cookbook/08-flash-attn-install.md)
 
 ## 구조
 
@@ -35,6 +38,30 @@ Qwen3-TTS-Demo/
     plan.md
     cookbook/          # 설치, 실행, 코드 구조 설명서
 ```
+
+## 데이터셋 레이아웃 원칙
+
+이 프로젝트에서 데이터셋은 반드시 `data/datasets/<dataset_id>/` 단일 폴더 안에 모아 둡니다.
+오디오 자산, raw/prepared JSONL, manifest, UI용 dataset record가 한곳에 있어야 유지보수와 삭제, 백업, 재학습이 쉬워집니다.
+
+예시:
+
+```text
+data/datasets/mai_ko_full/
+  audio/
+    00000.wav
+    00001.wav
+    ...
+  raw.jsonl
+  train_raw.jsonl
+  eval_raw.jsonl
+  prepared.jsonl
+  manifest.json
+  dataset.json
+```
+
+`Training Lab`에서 새 데이터셋을 만들 때도 외부 파일 경로를 그대로 참조하지 않고,
+선택한 음성 파일을 이 폴더 안 `audio/`로 복사한 뒤 JSONL을 생성하는 것을 표준으로 삼습니다.
 
 ## 빠른 시작
 
@@ -92,7 +119,34 @@ python -m pip install --upgrade pip setuptools wheel
 - 시스템 의존성 점검: `ffmpeg`, `sox`
 - 플랫폼별 attention 기본값 정리
   - macOS: `sdpa`
-  - Windows / Ubuntu + CUDA: `flash-attn` 설치 시도 후 `flash_attention_2`
+  - Linux + CUDA: `flash_attn_3`가 설치되어 있으면 `flash_attention_3`
+  - 그 외 CUDA 환경: `flash_attention_2` 또는 `sdpa`
+
+## FlashAttention 3
+
+이 프로젝트는 Linux + CUDA 서버에서 `sdpa`보다 `FlashAttention` 사용을 우선합니다.
+현재 `torch 2.11.0 + cu130` 환경에서는 소스 빌드보다, 아래 third-party prebuilt wheel 인덱스를 사용한
+`flash_attn_3` 설치가 가장 재현 가능했습니다.
+
+출처:
+
+- Flash-Attention 3 Wheels Repository: https://windreamer.github.io/flash-attention3-wheels/
+
+우리 환경에서 사용한 설치 명령:
+
+```bash
+uv pip install --no-cache-dir flash_attn_3 --find-links https://windreamer.github.io/flash-attention3-wheels/cu130_torch2110
+```
+
+설치 후 검증:
+
+```bash
+uv pip show flash-attn-3
+python -c "import importlib.util; print(importlib.util.find_spec('flash_attn_3') is not None)"
+python -c "from qwen_tts import Qwen3TTSModel; print('import ok')"
+```
+
+상세 절차와 주의사항은 [docs/cookbook/08-flash-attn-install.md](docs/cookbook/08-flash-attn-install.md)에 정리되어 있습니다.
 
 Hugging Face 다운로드 가속을 수동으로 먼저 준비하고 싶다면 루트에서 아래 명령을 실행합니다.
 

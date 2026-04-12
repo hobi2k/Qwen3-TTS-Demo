@@ -1,0 +1,29 @@
+[
+  {
+    "label": "ft_subset64",
+    "prompt": "neutral",
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/instruct-eval/ft_subset64_neutral.wav",
+    "duration_sec": 655.28,
+    "rms": 0.12439130991697311,
+    "spectral_centroid": 1203.800923721134,
+    "zcr": 0.05918850349053456
+  },
+  {
+    "label": "ft_subset64",
+    "prompt": "angry",
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/instruct-eval/ft_subset64_angry.wav",
+    "duration_sec": 655.28,
+    "rms": 0.11298259347677231,
+    "spectral_centroid": 985.4359193126635,
+    "zcr": 0.05073139975420777
+  },
+  {
+    "label": "ft_subset64",
+    "prompt": "gentle",
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/instruct-eval/ft_subset64_gentle.wav",
+    "duration_sec": 655.28,
+    "rms": 0.12750159204006195,
+    "spectral_centroid": 1055.5164418843099,
+    "zcr": 0.055376422130864016
+  }
+]

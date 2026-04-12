@@ -101,6 +101,8 @@ def resolve_attention_implementation() -> str:
         Attention implementation name.
     """
 
+    if torch.cuda.is_available() and importlib.util.find_spec("flash_attn_3"):
+        return "flash_attention_3"
     if torch.cuda.is_available() and importlib.util.find_spec("flash_attn"):
         return "flash_attention_2"
     return "sdpa"

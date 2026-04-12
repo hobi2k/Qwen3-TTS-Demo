@@ -32,22 +32,54 @@ MaybeList = Union[Any, List[Any]]
 
 class TTSDataset(Dataset):
     def __init__(self, data_list, processor, config:Qwen3TTSConfig, lag_num = -1):
+        """Initialize the fine-tuning dataset and hot-path caches.
+
+        Args:
+            data_list: Parsed JSONL rows used for training.
+            processor: Qwen3-TTS processor for text tokenization.
+            config: Model configuration object.
+            lag_num: Reserved upstream argument for codec lag handling.
+        """
+
         self.data_list = data_list
         self.processor = processor
         self.lag_num = lag_num
         self.config = config
+        self._audio_cache: dict[str, Tuple[np.ndarray, int]] = {}
+        self._ref_mel_cache: dict[str, torch.Tensor] = {}
 
     def __len__(self):
         return len(self.data_list)
     
     def _load_audio_to_np(self, x: str) -> Tuple[np.ndarray, int]:
+        """Load one audio file and normalize it to the training frontend format.
+
+        Args:
+            x: Audio file path.
+
+        Returns:
+            Mono float32 waveform and sample rate.
+        """
+
+        cached = self._audio_cache.get(x)
+        if cached is not None:
+            return cached
         
         audio, sr = librosa.load(x, sr=None, mono=True)
 
         if audio.ndim > 1:
             audio = np.mean(audio, axis=-1)
 
-        return audio.astype(np.float32), int(sr)
+        # Fine-tuning data often comes from mixed recording pipelines.
+        # Normalize reference audio to the 24 kHz mel frontend expected by Qwen3-TTS
+        # instead of crashing on otherwise valid source material.
+        if int(sr) != 24000:
+            audio = librosa.resample(audio.astype(np.float32), orig_sr=int(sr), target_sr=24000)
+            sr = 24000
+
+        normalized = (audio.astype(np.float32), int(sr))
+        self._audio_cache[x] = normalized
+        return normalized
 
     def _normalize_audio_inputs(self, audios: Union[AudioLike, List[AudioLike]]) -> List[Tuple[np.ndarray, int]]:
         """
@@ -102,7 +134,16 @@ class TTSDataset(Dataset):
     
     @torch.inference_mode()
     def extract_mels(self, audio, sr):
-        assert sr == 24000, "Only support 24kHz audio"
+        """Convert normalized audio to the reference mel representation.
+
+        Args:
+            audio: Mono waveform.
+            sr: Sample rate, expected to be 24 kHz after normalization.
+
+        Returns:
+            Mel tensor shaped for the speaker encoder.
+        """
+
         mels = mel_spectrogram(
             torch.from_numpy(audio).unsqueeze(0), 
             n_fft=1024, 
@@ -118,6 +159,15 @@ class TTSDataset(Dataset):
 
 
     def __getitem__(self, idx):
+        """Build one training sample.
+
+        Args:
+            idx: Dataset row index.
+
+        Returns:
+            Tokenized text ids, codec ids, and cached reference mel features.
+        """
+
         item = self.data_list[idx]
 
         audio_path  = item["audio"]
@@ -131,11 +181,14 @@ class TTSDataset(Dataset):
 
         audio_codes = torch.tensor(audio_codes, dtype=torch.long)
 
-        ref_audio_list = self._ensure_list(ref_audio_path)
-        normalized = self._normalize_audio_inputs(ref_audio_list)
-        wav,sr = normalized[0]
-
-        ref_mel = self.extract_mels(audio=wav, sr=sr)
+        ref_audio_key = ref_audio_path[0] if isinstance(ref_audio_path, list) else ref_audio_path
+        ref_mel = self._ref_mel_cache.get(ref_audio_key)
+        if ref_mel is None:
+            ref_audio_list = self._ensure_list(ref_audio_path)
+            normalized = self._normalize_audio_inputs(ref_audio_list)
+            wav, sr = normalized[0]
+            ref_mel = self.extract_mels(audio=wav, sr=sr)
+            self._ref_mel_cache[ref_audio_key] = ref_mel
 
         return {
             "text_ids": text_ids[:,:-5],    # 1 , t

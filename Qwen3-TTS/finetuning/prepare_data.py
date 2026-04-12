@@ -19,7 +19,7 @@ import json
 
 from qwen_tts import Qwen3TTSTokenizer
 
-BATCH_INFER_NUM = 32
+DEFAULT_BATCH_INFER_NUM = 32
 
 
 def validate_12hz_code_shape(code, tokenizer_model_path: str) -> None:
@@ -40,6 +40,12 @@ def main():
     parser.add_argument("--tokenizer_model_path", type=str, default="Qwen/Qwen3-TTS-Tokenizer-12Hz")
     parser.add_argument("--input_jsonl", type=str, required=True)
     parser.add_argument("--output_jsonl", type=str, required=True)
+    parser.add_argument(
+        "--batch_infer_num",
+        type=int,
+        default=DEFAULT_BATCH_INFER_NUM,
+        help="How many audio files to tokenize per batch. Lower this when VRAM is limited.",
+    )
     args = parser.parse_args()
 
     tokenizer_12hz = Qwen3TTSTokenizer.from_pretrained(
@@ -65,7 +71,7 @@ def main():
         batch_lines.append(line)
         batch_audios.append(line['audio'])
 
-        if len(batch_lines) >= BATCH_INFER_NUM:
+        if len(batch_lines) >= args.batch_infer_num:
             enc_res = tokenizer_12hz.encode(batch_audios)
             for code, line in zip(enc_res.audio_codes, batch_lines):
                 validate_12hz_code_shape(code, args.tokenizer_model_path)

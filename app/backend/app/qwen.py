@@ -144,12 +144,17 @@ class QwenDemoEngine:
         """환경에 맞는 attention 구현을 계산한다."""
 
         if os.getenv("QWEN_DEMO_ATTN_IMPL"):
-            return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_2")
+            return os.getenv("QWEN_DEMO_ATTN_IMPL", "flash_attention_3")
 
         device = self.resolve_device()
         if sys.platform == "darwin" or device in {"cpu", "mps"}:
             return "sdpa"
 
+        # Linux + CUDA 서버에서는 FlashAttention 3 wheel을 우선 사용한다.
+        # RTX 5080 + torch cu130 조합에서 flash_attn_3가 실제로 설치되면
+        # Transformers가 `flash_attention_3` 구현을 선택할 수 있다.
+        if device.startswith("cuda") and importlib.util.find_spec("flash_attn_3"):
+            return "flash_attention_3"
         if device.startswith("cuda") and importlib.util.find_spec("flash_attn"):
             return "flash_attention_2"
         return "sdpa"
@@ -342,6 +347,82 @@ class QwenDemoEngine:
         # `soundfile`이 없을 때도 API 계약을 지키기 위해 대체 파일을 남긴다.
         self._fake_wave("fallback", destination, "fallback")
 
+    def _wave_metrics(self, wav: Any, sample_rate: int) -> Dict[str, float]:
+        """Waveform의 길이와 에너지 지표를 계산한다.
+
+        Args:
+            wav: 생성된 waveform 배열.
+            sample_rate: waveform의 샘플링 레이트.
+
+        Returns:
+            duration, rms, peak를 포함한 간단한 지표.
+        """
+
+        array = np.asarray(wav, dtype=np.float32)
+        if array.ndim > 1:
+            array = array.mean(axis=1)
+        if array.size == 0 or sample_rate <= 0:
+            return {"duration_sec": 0.0, "rms": 0.0, "peak": 0.0}
+
+        return {
+            "duration_sec": float(array.shape[0] / sample_rate),
+            "rms": float(np.sqrt(np.mean(np.square(array), dtype=np.float32))),
+            "peak": float(np.max(np.abs(array))),
+        }
+
+    def _finalize_generated_wav(self, wav: Any, sample_rate: int) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """후처리와 무음 방지를 함께 적용해 저장용 waveform을 확정한다.
+
+        모델 출력이 너무 짧거나 거의 무음이면 에러로 간주한다. 또한
+        후처리 결과가 원본보다 지나치게 약해지면 원본을 보존한다.
+
+        Args:
+            wav: 모델이 반환한 원본 waveform.
+            sample_rate: waveform 샘플링 레이트.
+
+        Returns:
+            저장할 waveform과 후처리/검증 메타데이터.
+        """
+
+        raw = np.asarray(wav, dtype=np.float32)
+        processed, post = self._postprocess_generated_wav(raw, sample_rate)
+
+        raw_metrics = self._wave_metrics(raw, sample_rate)
+        processed_metrics = self._wave_metrics(processed, sample_rate)
+
+        # trim/fade 후 에너지가 비정상적으로 크게 줄어들면 원본을 보존한다.
+        if raw_metrics["rms"] > 0.0 and processed_metrics["rms"] < raw_metrics["rms"] * 0.1:
+            processed = raw
+            processed_metrics = raw_metrics
+            post = {
+                "leading_trim_samples": 0,
+                "fade_in_samples": 0,
+                "reverted_to_raw": True,
+            }
+        else:
+            post["reverted_to_raw"] = False
+
+        min_duration_sec = float(os.getenv("QWEN_DEMO_MIN_AUDIO_DURATION_SEC", "0.25"))
+        min_rms = float(os.getenv("QWEN_DEMO_MIN_AUDIO_RMS", "0.003"))
+        min_peak = float(os.getenv("QWEN_DEMO_MIN_AUDIO_PEAK", "0.02"))
+        invalid = (
+            processed_metrics["duration_sec"] < min_duration_sec
+            or processed_metrics["rms"] < min_rms
+            or processed_metrics["peak"] < min_peak
+        )
+        if invalid:
+            raise RuntimeError(
+                "Generated audio was too short or near-silent "
+                f"(duration={processed_metrics['duration_sec']:.3f}s, "
+                f"rms={processed_metrics['rms']:.6f}, peak={processed_metrics['peak']:.6f})."
+            )
+
+        return processed, {
+            "postprocess": post,
+            "audio_metrics": processed_metrics,
+            "raw_audio_metrics": raw_metrics,
+        }
+
     def _postprocess_generated_wav(self, wav: Any, sample_rate: int) -> Tuple[np.ndarray, Dict[str, Any]]:
         """생성 WAV의 아주 짧은 앞머리 저에너지 구간만 보수적으로 정리한다.
 
@@ -427,14 +508,14 @@ class QwenDemoEngine:
             instruct=instruct,
             **generate_kwargs,
         )
-        processed, post = self._postprocess_generated_wav(wavs[0], sample_rate)
+        processed, finalize = self._finalize_generated_wav(wavs[0], sample_rate)
         self._write_wav(processed, sample_rate, output_path)
         return output_path, sample_rate, {
             "simulation": False,
             "model_id": model_id,
             "seed": seed,
             "generation_kwargs": generate_kwargs,
-            "postprocess": post,
+            **finalize,
         }
 
     def generate_voice_design(
@@ -474,14 +555,14 @@ class QwenDemoEngine:
             instruct=instruct,
             **generate_kwargs,
         )
-        processed, post = self._postprocess_generated_wav(wavs[0], sample_rate)
+        processed, finalize = self._finalize_generated_wav(wavs[0], sample_rate)
         self._write_wav(processed, sample_rate, output_path)
         return output_path, sample_rate, {
             "simulation": False,
             "model_id": model_id,
             "seed": seed,
             "generation_kwargs": generate_kwargs,
-            "postprocess": post,
+            **finalize,
         }
 
     def generate_voice_clone(
@@ -544,14 +625,14 @@ class QwenDemoEngine:
                 **generate_kwargs,
             )
 
-        processed, post = self._postprocess_generated_wav(wavs[0], sample_rate)
+        processed, finalize = self._finalize_generated_wav(wavs[0], sample_rate)
         self._write_wav(processed, sample_rate, output_path)
         return output_path, sample_rate, {
             "simulation": False,
             "model_id": model_id,
             "seed": seed,
             "generation_kwargs": generate_kwargs,
-            "postprocess": post,
+            **finalize,
         }
 
     def generate_hybrid_clone_instruct(
@@ -651,7 +732,7 @@ class QwenDemoEngine:
             else:
                 wavs_out.append(wav)
 
-        processed, post = self._postprocess_generated_wav(wavs_out[0], sample_rate)
+        processed, finalize = self._finalize_generated_wav(wavs_out[0], sample_rate)
         self._write_wav(processed, sample_rate, output_path)
         return output_path, sample_rate, {
             "simulation": False,
@@ -659,6 +740,6 @@ class QwenDemoEngine:
             "custom_model_id": custom_model_id,
             "seed": seed,
             "generation_kwargs": generate_kwargs,
-            "postprocess": post,
+            **finalize,
             "path_kind": "hybrid_clone_instruct",
         }

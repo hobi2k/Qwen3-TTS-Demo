@@ -210,8 +210,10 @@ data/clone-prompts/*.json
 data/clone-prompts/*.pkl
 data/presets/*.json
 data/models/
-data/datasets/*.jsonl
-data/datasets/*.json
+data/datasets/**
+!data/datasets/.gitkeep
+data/source-datasets/**
+!data/source-datasets/.gitkeep
 data/finetune-runs/*
 !data/finetune-runs/.gitkeep
 

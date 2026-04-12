@@ -15,6 +15,7 @@
 # limitations under the License.
 import os
 import math
+import importlib.util
 import torch
 import operator
 
@@ -32,7 +33,21 @@ except ImportError:
     try:
         from flash_attn.flash_attn_interface import flash_attn_unpadded_func as flash_attn_varlen_func
     except ImportError:
-        print("\n********\nWarning: flash-attn is not installed. Will only run the manual PyTorch version. Please install flash-attn for faster inference.\n********\n ")
+        if importlib.util.find_spec("flash_attn_3"):
+            print(
+                "\n********\n"
+                "Warning: flash_attn_3 is installed, but this tokenizer encoder expects the "
+                "`flash_attn` v2 Python interface. The tokenizer submodule will use the manual "
+                "PyTorch path, while the main Qwen model can still use `flash_attention_3`.\n"
+                "********\n "
+            )
+        else:
+            print(
+                "\n********\n"
+                "Warning: flash-attn is not installed. Will only run the manual PyTorch version. "
+                "Please install flash-attn for faster inference.\n"
+                "********\n "
+            )
         flash_attn_varlen_func = None
 
 

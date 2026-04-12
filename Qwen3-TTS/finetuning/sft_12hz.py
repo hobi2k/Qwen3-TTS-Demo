@@ -39,6 +39,8 @@ def resolve_attn_implementation():
         return configured
     if sys.platform == "darwin":
         return "sdpa"
+    if torch.cuda.is_available() and importlib.util.find_spec("flash_attn_3"):
+        return "flash_attention_3"
     if torch.cuda.is_available() and importlib.util.find_spec("flash_attn"):
         return "flash_attention_2"
     return "sdpa"
@@ -47,7 +49,14 @@ def resolve_attn_implementation():
 def resolve_training_runtime():
     """Resolve dtype and mixed-precision settings for the current runtime."""
 
+    requested_precision = (os.getenv("QWEN_DEMO_TRAIN_PRECISION") or "").strip().lower()
     if torch.cuda.is_available():
+        if requested_precision in {"fp32", "float32", "no"}:
+            return {
+                "mixed_precision": "no",
+                "dtype": torch.float32,
+                "device_map": "cuda:0",
+            }
         return {
             "mixed_precision": "bf16",
             "dtype": torch.bfloat16,
@@ -199,7 +208,16 @@ def train_with_args(args):
     dataset = TTSDataset(train_data, qwen3tts.processor, config)
     train_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn)
 
-    optimizer = AdamW(qwen3tts.model.parameters(), lr=args.lr, weight_decay=0.01)
+    # WSL + recent CUDA drivers can be flaky with AdamW foreach kernels during
+    # long TTS fine-tuning jobs. Use the conservative path so full runs finish
+    # reliably instead of crashing after the first optimizer step.
+    optimizer = AdamW(
+        qwen3tts.model.parameters(),
+        lr=args.lr,
+        weight_decay=0.01,
+        foreach=False,
+        fused=False,
+    )
 
     model, optimizer, train_dataloader = accelerator.prepare(
         qwen3tts.model, optimizer, train_dataloader

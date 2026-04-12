@@ -17,7 +17,6 @@ import type {
 type TabKey = "custom" | "design" | "character" | "inference" | "finetune";
 type GenerationModeKey = "custom" | "design" | "clone";
 type CharacterBuilderSource = "design" | "upload";
-type DatasetAudioSourceMode = "upload" | "existing";
 type FineTuneMode = "base" | "custom_voice";
 type GenerationControlsForm = {
   seed: string;
@@ -42,6 +41,32 @@ const tabs: { key: TabKey; label: string; description: string }[] = [
   { key: "inference", label: "Inference Lab", description: "" },
   { key: "finetune", label: "Training Lab", description: "" },
 ];
+
+function createEmptyDatasetSample() {
+  return { audio_path: "", text: "", original_filename: "" };
+}
+
+function normalizeDatasetPath(value: string): string {
+  return value.trim().replace(/\\/g, "/");
+}
+
+function parseDatasetSampleBulkInput(value: string): Array<{ audio_path: string; text?: string; original_filename: string }> {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [rawPath, ...rest] = line.split("|");
+      const audioPath = normalizeDatasetPath(rawPath || "");
+      const text = rest.join("|").trim();
+      return {
+        audio_path: audioPath,
+        text: text || "",
+        original_filename: basenameFromPath(audioPath),
+      };
+    })
+    .filter((sample) => sample.audio_path);
+}
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString("ko-KR");
@@ -412,17 +437,16 @@ export default function App() {
   const [uploadTranscriptMeta, setUploadTranscriptMeta] = useState<string>("");
   const [uploadedClonePrompt, setUploadedClonePrompt] = useState<ClonePromptRecord | null>(null);
 
-  const [datasetRefMode, setDatasetRefMode] = useState<DatasetAudioSourceMode>("upload");
-  const [datasetSamples, setDatasetSamples] = useState([
-    { audio_path: "", text: "", original_filename: "", source_mode: "upload" as DatasetAudioSourceMode },
-  ]);
+  const [datasetSamples, setDatasetSamples] = useState([createEmptyDatasetSample()]);
+  const [datasetBulkInput, setDatasetBulkInput] = useState("");
+  const [selectedDatasetAssetPaths, setSelectedDatasetAssetPaths] = useState<string[]>([]);
+  const [selectedHistorySampleIds, setSelectedHistorySampleIds] = useState<string[]>([]);
   const [datasetForm, setDatasetForm] = useState({
     name: "voice-design-dataset",
     source_type: "voice_design_batch",
     speaker_name: "speaker_demo",
     ref_audio_path: "",
   });
-  const [datasetRefUpload, setDatasetRefUpload] = useState<UploadResponse | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [runForm, setRunForm] = useState({
     training_mode: "base" as FineTuneMode,
@@ -605,8 +629,9 @@ export default function App() {
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
-  const generatedAssetTextByPath = new Map(
-    generatedAudioAssets.map((asset) => [asset.path, (asset.transcript_text || "").trim()]),
+  const selectableDatasetAssets = audioAssets.filter((asset) => asset.source === "generated" || asset.source === "upload");
+  const assetTextByPath = new Map(
+    audioAssets.map((asset) => [asset.path, (asset.transcript_text || "").trim()]),
   );
 
   function updateDatasetSample(
@@ -615,12 +640,50 @@ export default function App() {
       audio_path?: string;
       text?: string;
       original_filename?: string;
-      source_mode?: DatasetAudioSourceMode;
     },
   ) {
     setDatasetSamples((prev) =>
       prev.map((sample, sampleIndex) => (sampleIndex === index ? { ...sample, ...patch } : sample)),
     );
+  }
+
+  function mergeDatasetSamples(nextSamples: Array<{ audio_path: string; text?: string; original_filename?: string }>) {
+    setDatasetSamples((prev) => {
+      const merged = [...prev];
+      const existingIndexByPath = new Map(
+        merged
+          .map((sample, index) => [normalizeDatasetPath(sample.audio_path), index] as const)
+          .filter(([path]) => path),
+      );
+
+      nextSamples.forEach((sample) => {
+        const normalizedPath = normalizeDatasetPath(sample.audio_path);
+        if (!normalizedPath) {
+          return;
+        }
+
+        const existingIndex = existingIndexByPath.get(normalizedPath);
+        if (existingIndex !== undefined) {
+          const current = merged[existingIndex];
+          merged[existingIndex] = {
+            ...current,
+            audio_path: normalizedPath,
+            original_filename: sample.original_filename || current.original_filename || basenameFromPath(normalizedPath),
+            text: sample.text?.trim() || current.text || "",
+          };
+          return;
+        }
+
+        merged.push({
+          audio_path: normalizedPath,
+          text: sample.text?.trim() || "",
+          original_filename: sample.original_filename || basenameFromPath(normalizedPath),
+        });
+        existingIndexByPath.set(normalizedPath, merged.length - 1);
+      });
+
+      return merged.length > 0 ? merged : [createEmptyDatasetSample()];
+    });
   }
 
   async function transcribeUploadedReference(audioPath: string) {
@@ -777,7 +840,7 @@ export default function App() {
         .filter(({ sample }) => !sample.text);
 
       const whisperTargets = blankTargets.filter(({ sample, index }) => {
-        const cachedText = generatedAssetTextByPath.get(sample.audio_path)?.trim();
+        const cachedText = assetTextByPath.get(sample.audio_path)?.trim();
         if (cachedText) {
           normalizedSamples[index].text = cachedText;
           updateDatasetSample(index, { text: cachedText });
@@ -889,66 +952,88 @@ export default function App() {
   }
 
   function addSampleRow() {
-    setDatasetSamples((prev) => [
-      ...prev,
-      { audio_path: "", text: "", original_filename: "", source_mode: "upload" as DatasetAudioSourceMode },
-    ]);
+    setDatasetSamples((prev) => [...prev, createEmptyDatasetSample()]);
   }
 
   function removeSampleRow(index: number) {
     setDatasetSamples((prev) => {
       if (prev.length === 1) {
-        return [{ audio_path: "", text: "", original_filename: "", source_mode: "upload" as DatasetAudioSourceMode }];
+        return [createEmptyDatasetSample()];
       }
       return prev.filter((_, sampleIndex) => sampleIndex !== index);
     });
   }
 
-  async function handleDatasetRefUpload(file: File) {
-    await runAction(async () => {
-      const result = await api.uploadAudio(file);
-      setDatasetForm((prev) => ({ ...prev, ref_audio_path: result.path }));
-      setDatasetRefUpload(result);
-      setDatasetRefMode("upload");
-      setMessage("ref_audio 파일을 업로드했습니다.");
-    });
-  }
-
-  async function handleDatasetSampleUpload(index: number, file: File) {
-    await runAction(async () => {
-      const result = await api.uploadAudio(file);
-      updateDatasetSample(index, { audio_path: result.path, original_filename: result.filename });
-      setMessage(`샘플 ${index + 1} 오디오를 업로드했습니다.`);
-    });
-  }
-
   function addHistorySample(record: GenerationRecord) {
-    setDatasetSamples((prev) => [
-      ...prev,
+    mergeDatasetSamples([
       {
         audio_path: record.output_audio_path,
         text: record.input_text,
         original_filename: basenameFromPath(record.output_audio_path),
-        source_mode: "existing" as DatasetAudioSourceMode,
       },
     ]);
   }
 
   function handleSelectDatasetRefAsset(asset: AudioAsset) {
     setDatasetForm((prev) => ({ ...prev, ref_audio_path: asset.path }));
-    setDatasetRefUpload(null);
-    setDatasetRefMode("existing");
     setMessage(`기준 음성으로 ${asset.filename}을(를) 선택했습니다.`);
   }
 
-  function handleSelectDatasetSampleAsset(index: number, asset: AudioAsset) {
-    updateDatasetSample(index, {
-      audio_path: asset.path,
-      original_filename: asset.filename,
-      source_mode: "existing",
-      text: asset.transcript_text?.trim() || undefined,
-    });
-    setMessage(`샘플 ${index + 1}에 ${asset.filename}을(를) 넣었습니다.`);
+  function toggleDatasetAssetSelection(path: string) {
+    setSelectedDatasetAssetPaths((prev) =>
+      prev.includes(path) ? prev.filter((item) => item !== path) : [...prev, path],
+    );
+  }
+
+  function toggleHistorySampleSelection(id: string) {
+    setSelectedHistorySampleIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  }
+
+  function applyBulkDatasetPaths() {
+    const parsed = parseDatasetSampleBulkInput(datasetBulkInput);
+    if (parsed.length === 0) {
+      setMessage("붙여넣은 경로가 없습니다. 한 줄에 하나씩 넣어주세요.");
+      return;
+    }
+    mergeDatasetSamples(parsed);
+    setDatasetBulkInput("");
+    setMessage(`${parsed.length}개 경로를 샘플 목록에 반영했습니다.`);
+  }
+
+  function applySelectedDatasetAssets() {
+    const selectedAssets = selectableDatasetAssets.filter((asset) => selectedDatasetAssetPaths.includes(asset.path));
+    if (selectedAssets.length === 0) {
+      setMessage("샘플로 추가할 서버 오디오를 먼저 체크해주세요.");
+      return;
+    }
+    mergeDatasetSamples(
+      selectedAssets.map((asset) => ({
+        audio_path: asset.path,
+        text: asset.transcript_text?.trim() || "",
+        original_filename: asset.filename,
+      })),
+    );
+    setSelectedDatasetAssetPaths([]);
+    setMessage(`${selectedAssets.length}개 서버 오디오를 샘플 목록에 추가했습니다.`);
+  }
+
+  function applySelectedHistorySamples() {
+    const selectedRecords = voiceDesignHistory.filter((record) => selectedHistorySampleIds.includes(record.id));
+    if (selectedRecords.length === 0) {
+      setMessage("가져올 생성 이력을 먼저 체크해주세요.");
+      return;
+    }
+    mergeDatasetSamples(
+      selectedRecords.map((record) => ({
+        audio_path: record.output_audio_path,
+        text: record.input_text,
+        original_filename: basenameFromPath(record.output_audio_path),
+      })),
+    );
+    setSelectedHistorySampleIds([]);
+    setMessage(`${selectedRecords.length}개 생성 이력을 샘플 목록에 추가했습니다.`);
   }
 
   async function handleModelInferenceSubmit(event: FormEvent) {
@@ -1703,9 +1788,9 @@ export default function App() {
               <div className="finetune-stage__header">
                 <div>
                   <span className="step-card__index">1</span>
-                  <h3>기준 음성 선택</h3>
+                  <h3>기준 음성 경로 입력</h3>
                 </div>
-                <p>업로드를 기본으로 두고, 이미 있는 서버 파일을 쓸 때만 경로를 입력하세요.</p>
+                <p>Training Lab은 파일 업로드 대신 경로 입력을 기본으로 사용합니다. 기준 음성 하나를 먼저 정하고, 나머지 샘플이 그 화자를 따라가게 만드세요.</p>
               </div>
               <div className="field-row">
                 <label>
@@ -1723,51 +1808,49 @@ export default function App() {
                   />
                 </label>
               </div>
-
-              <div className="segmented-toggle">
-                <button
-                  className={datasetRefMode === "upload" ? "tab is-active" : "tab"}
-                  onClick={() => setDatasetRefMode("upload")}
-                  type="button"
-                >
-                  <span>새 파일 업로드</span>
-                </button>
-                <button
-                  className={datasetRefMode === "existing" ? "tab is-active" : "tab"}
-                  onClick={() => setDatasetRefMode("existing")}
-                  type="button"
-                >
-                  <span>기존 파일 경로 사용</span>
-                </button>
-              </div>
-
-              {datasetRefMode === "upload" ? (
-                <label className="upload-field">
-                  기준 음성 파일 업로드
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) {
-                        void handleDatasetRefUpload(file);
-                      }
-                    }}
-                  />
-                </label>
-              ) : (
-                <ServerAudioPicker
-                  assets={generatedAudioAssets}
-                  selectedPath={datasetForm.ref_audio_path}
-                  onSelect={handleSelectDatasetRefAsset}
+              <article className="status-card">
+                <strong>권장 폴더 구조</strong>
+                <p>`/dataset-root/ref/ref.wav`를 기준 음성으로 두고, 샘플은 `/dataset-root/wavs/0001.wav`, `/dataset-root/wavs/0002.wav`처럼 모아두는 구성을 권장합니다.</p>
+                <p>텍스트 파일을 같이 정리할 때는 `/dataset-root/text/0001.txt`, `/dataset-root/text/0002.txt`처럼 같은 파일명을 맞춰 두면 검수하기 쉽습니다. WEB UI가 로컬 폴더를 직접 읽지는 않으므로, 아래에 절대 경로나 프로젝트 기준 경로를 입력해주세요.</p>
+              </article>
+              <label>
+                ref_audio_path
+                <input
+                  placeholder="예: D:/my_tts_dataset/mai/ref/ref.wav 또는 data/uploads/ref.wav"
+                  value={datasetForm.ref_audio_path}
+                  onChange={(event) =>
+                    setDatasetForm({ ...datasetForm, ref_audio_path: normalizeDatasetPath(event.target.value) })
+                  }
                 />
-              )}
+              </label>
+              <details className="advanced-inline">
+                <summary>서버에 있는 오디오에서 기준 음성 고르기</summary>
+                <div className="selection-checklist">
+                  {selectableDatasetAssets.map((asset) => (
+                    <label
+                      className={asset.path === datasetForm.ref_audio_path ? "selection-checklist__item is-selected" : "selection-checklist__item"}
+                      key={`dataset-ref-${asset.id}`}
+                    >
+                      <input
+                        checked={asset.path === datasetForm.ref_audio_path}
+                        name="dataset-ref-audio"
+                        onChange={() => handleSelectDatasetRefAsset(asset)}
+                        type="radio"
+                      />
+                      <div>
+                        <strong>{asset.filename}</strong>
+                        <span>{asset.path}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </details>
 
               {datasetForm.ref_audio_path ? (
                 <article className="selected-audio-card">
                   <span className="meta-label">현재 선택된 기준 음성</span>
-                  <strong>{datasetRefUpload?.filename || basenameFromPath(datasetForm.ref_audio_path)}</strong>
-                  <p>{datasetRefUpload ? "업로드한 원본 파일이 기준 음성으로 선택되었습니다." : "기존 서버 파일을 기준 음성으로 사용합니다."}</p>
+                  <strong>{basenameFromPath(datasetForm.ref_audio_path)}</strong>
+                  <p>이 경로의 오디오가 전체 데이터셋의 대표 화자로 사용됩니다.</p>
                   <audio controls className="audio-card__player" src={fileUrlFromPath(datasetForm.ref_audio_path)} />
                   <details className="advanced-inline">
                     <summary>저장 경로 보기</summary>
@@ -1795,10 +1878,84 @@ export default function App() {
               <div className="finetune-stage__header">
                 <div>
                   <span className="step-card__index">2</span>
-                  <h3>학습 샘플 편집</h3>
+                  <h3>학습 샘플 경로 정리</h3>
                 </div>
-                <p>샘플마다 오디오와 텍스트를 한 묶음으로 보고, 필요한 경우만 자동 전사를 사용하세요.</p>
+                <p>샘플은 경로로 입력합니다. 경로 여러 개를 붙여넣거나, 서버에 있는 음성을 체크해서 한 번에 목록으로 가져오세요.</p>
               </div>
+              <article className="status-card">
+                <strong>경로 입력 형식</strong>
+                <p>한 줄에 하나씩 적고, 필요하면 `|` 뒤에 텍스트를 같이 붙이세요. 텍스트를 비우면 데이터셋 생성 시 Whisper 자동 전사를 시도합니다.</p>
+                <p>예시: `D:/my_tts_dataset/mai/wavs/0001.wav | 안녕하세요. 반갑습니다.`</p>
+                <p>예시: `D:/my_tts_dataset/mai/wavs/0002.wav`</p>
+              </article>
+              <label>
+                샘플 경로 일괄 입력
+                <textarea
+                  className="bulk-path-textarea"
+                  placeholder={"D:/my_tts_dataset/mai/wavs/0001.wav | 첫 번째 문장\nD:/my_tts_dataset/mai/wavs/0002.wav"}
+                  value={datasetBulkInput}
+                  onChange={(event) => setDatasetBulkInput(event.target.value)}
+                />
+              </label>
+              <div className="button-row">
+                <button className="secondary-button" onClick={applyBulkDatasetPaths} type="button">
+                  경로 목록 반영
+                </button>
+              </div>
+              <details className="advanced-inline">
+                <summary>서버 오디오를 체크해서 한 번에 가져오기</summary>
+                <div className="selection-checklist">
+                  {selectableDatasetAssets.map((asset) => (
+                    <label
+                      className={selectedDatasetAssetPaths.includes(asset.path) ? "selection-checklist__item is-selected" : "selection-checklist__item"}
+                      key={`dataset-asset-${asset.id}`}
+                    >
+                      <input
+                        checked={selectedDatasetAssetPaths.includes(asset.path)}
+                        onChange={() => toggleDatasetAssetSelection(asset.path)}
+                        type="checkbox"
+                      />
+                      <div>
+                        <strong>{asset.filename}</strong>
+                        <span>{asset.path}</span>
+                        {asset.transcript_text ? <small>{asset.transcript_text}</small> : null}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="button-row">
+                  <button className="secondary-button" onClick={applySelectedDatasetAssets} type="button">
+                    체크한 오디오를 샘플 목록에 추가
+                  </button>
+                </div>
+              </details>
+              <details className="advanced-inline">
+                <summary>최근 생성 이력을 체크해서 한 번에 가져오기</summary>
+                <div className="selection-checklist">
+                  {voiceDesignHistory.slice(0, 12).map((record) => (
+                    <label
+                      className={selectedHistorySampleIds.includes(record.id) ? "selection-checklist__item is-selected" : "selection-checklist__item"}
+                      key={`dataset-history-${record.id}`}
+                    >
+                      <input
+                        checked={selectedHistorySampleIds.includes(record.id)}
+                        onChange={() => toggleHistorySampleSelection(record.id)}
+                        type="checkbox"
+                      />
+                      <div>
+                        <strong>{record.id}</strong>
+                        <span>{record.output_audio_path}</span>
+                        <small>{record.input_text}</small>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="button-row">
+                  <button className="secondary-button" onClick={applySelectedHistorySamples} type="button">
+                    체크한 생성 이력을 샘플 목록에 추가
+                  </button>
+                </div>
+              </details>
 
               <div className="sample-builder">
                 {datasetSamples.map((sample, index) => (
@@ -1828,45 +1985,19 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-
-                    <div className="segmented-toggle segmented-toggle--compact">
-                      <button
-                        className={sample.source_mode === "upload" ? "tab is-active" : "tab"}
-                        onClick={() => updateDatasetSample(index, { source_mode: "upload" })}
-                        type="button"
-                      >
-                        <span>새 파일 업로드</span>
-                      </button>
-                      <button
-                        className={sample.source_mode === "existing" ? "tab is-active" : "tab"}
-                        onClick={() => updateDatasetSample(index, { source_mode: "existing" })}
-                        type="button"
-                      >
-                        <span>기존 파일 경로 사용</span>
-                      </button>
-                    </div>
-
-                    {sample.source_mode === "upload" ? (
-                      <label className="upload-field">
-                        샘플 오디오 업로드
-                        <input
-                          type="file"
-                          accept="audio/*"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              void handleDatasetSampleUpload(index, file);
-                            }
-                          }}
-                        />
-                      </label>
-                    ) : (
-                      <ServerAudioPicker
-                        assets={generatedAudioAssets}
-                        selectedPath={sample.audio_path}
-                        onSelect={(asset) => handleSelectDatasetSampleAsset(index, asset)}
+                    <label>
+                      샘플 오디오 경로
+                      <input
+                        placeholder="예: D:/my_tts_dataset/mai/wavs/0001.wav"
+                        value={sample.audio_path}
+                        onChange={(event) =>
+                          updateDatasetSample(index, {
+                            audio_path: normalizeDatasetPath(event.target.value),
+                            original_filename: basenameFromPath(event.target.value),
+                          })
+                        }
                       />
-                    )}
+                    </label>
 
                     {sample.audio_path ? (
                       <article className="selected-audio-card selected-audio-card--sample">
@@ -1894,7 +2025,7 @@ export default function App() {
 
               <div className="button-row">
                 <button className="secondary-button" onClick={addSampleRow} type="button">
-                  샘플 추가
+                  빈 샘플 행 추가
                 </button>
                 <button className="secondary-button" onClick={handleTranscribeAllDatasetSamples} type="button">
                   빈 텍스트만 자동 전사

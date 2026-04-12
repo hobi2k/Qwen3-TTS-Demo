@@ -136,6 +136,54 @@ class Storage:
 
         return directory / f"{record_id}.json"
 
+    def dataset_dir(self, dataset_id: str) -> Path:
+        """데이터셋 전용 루트 디렉터리를 반환한다.
+
+        Args:
+            dataset_id: 데이터셋 식별자.
+
+        Returns:
+            `data/datasets/<dataset_id>` 경로.
+        """
+
+        return self.datasets_dir / dataset_id
+
+    def dataset_record_path(self, dataset_id: str) -> Path:
+        """데이터셋 메타데이터 파일 경로를 반환한다.
+
+        Args:
+            dataset_id: 데이터셋 식별자.
+
+        Returns:
+            데이터셋 폴더 내부의 `dataset.json` 경로.
+        """
+
+        return self.dataset_dir(dataset_id) / "dataset.json"
+
+    def dataset_manifest_path(self, dataset_id: str) -> Path:
+        """데이터셋 보조 manifest 파일 경로를 반환한다.
+
+        Args:
+            dataset_id: 데이터셋 식별자.
+
+        Returns:
+            데이터셋 폴더 내부의 `manifest.json` 경로.
+        """
+
+        return self.dataset_dir(dataset_id) / "manifest.json"
+
+    def list_dataset_record_paths(self) -> List[Path]:
+        """데이터셋 레코드 파일 경로를 모두 반환한다.
+
+        Returns:
+            새 구조의 `data/datasets/*/dataset.json`과 기존 최상위 `*.json`
+            레거시 레코드를 합친 경로 목록.
+        """
+
+        nested_paths = sorted(self.datasets_dir.glob("*/dataset.json"), reverse=True)
+        legacy_paths = sorted(self.datasets_dir.glob("*.json"), reverse=True)
+        return nested_paths + legacy_paths
+
     def get_record(self, directory: Path, record_id: str) -> Optional[Dict[str, Any]]:
         """레코드가 있으면 읽고 없으면 `None`을 반환한다.
 

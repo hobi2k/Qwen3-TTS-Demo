@@ -3,6 +3,7 @@
 import json
 import os
 import pickle
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -385,7 +386,11 @@ def get_dataset_record(dataset_id: str) -> JsonDict:
         조회된 데이터셋 데이터.
     """
 
-    payload = storage.get_record(storage.datasets_dir, dataset_id)
+    record_path = storage.dataset_record_path(dataset_id)
+    if record_path.exists():
+        payload = storage.read_json(record_path)
+    else:
+        payload = storage.get_record(storage.datasets_dir, dataset_id)
     if not payload:
         raise HTTPException(status_code=404, detail="Dataset not found.")
     return payload
@@ -511,6 +516,32 @@ def resolve_repo_audio_path(audio_path: str) -> str:
     return str((REPO_ROOT / candidate).resolve())
 
 
+def copy_audio_into_dataset(dataset_dir: Path, source_audio_path: str, filename: str) -> str:
+    """Copy one audio asset into a dataset-local audio directory.
+
+    Args:
+        dataset_dir: Canonical dataset root under `data/datasets/<dataset_id>`.
+        source_audio_path: Source audio path, absolute or repo-relative.
+        filename: Target file name inside `audio/`.
+
+    Returns:
+        Project-relative path to the copied dataset-local audio asset.
+    """
+
+    source = Path(resolve_repo_audio_path(source_audio_path))
+    if not source.exists():
+        raise HTTPException(status_code=400, detail=f"Audio file not found: {source_audio_path}")
+
+    audio_dir = dataset_dir / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    target = audio_dir / filename
+
+    if source.resolve() != target.resolve():
+        shutil.copy2(source, target)
+
+    return storage.relpath(target)
+
+
 def normalize_dataset_jsonl_paths(dataset_path: Path) -> None:
     """기존 JSONL 안의 audio/ref_audio 경로를 절대 경로로 다시 쓴다."""
 
@@ -604,7 +635,7 @@ def ensure_real_prepared_dataset(dataset: JsonDict, device: str) -> JsonDict:
         dataset["prepared_with_simulation"] = False
         dataset["prepared_tokenizer_model_path"] = tokenizer_model_path
         dataset["prepared_device"] = device
-        storage.write_json(storage.datasets_dir / f"{dataset['id']}.json", dataset)
+        storage.write_json(storage.dataset_record_path(dataset["id"]), dataset)
 
     return dataset
 
@@ -627,6 +658,24 @@ def transcribe_audio_or_raise(audio_path: str) -> AudioTranscriptionResponse:
         raise HTTPException(status_code=500, detail=f"Automatic transcription failed: {error}") from error
 
     return AudioTranscriptionResponse(audio_path=audio_path, **result)
+
+
+def run_generation_or_http(generator: Any) -> Any:
+    """Normalize engine generation failures into HTTP errors.
+
+    Args:
+        generator: Zero-argument callable that executes one generation path.
+
+    Returns:
+        Raw generator result on success.
+    """
+
+    try:
+        return generator()
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {error}") from error
 
 
 def resolve_reference_text(reference_audio_path: str, reference_text: Optional[str]) -> str:
@@ -734,9 +783,83 @@ def list_preset_records() -> List[CharacterPreset]:
     return [CharacterPreset(**record) for record in records]
 
 
+def normalize_legacy_dataset_record(record: Dict[str, Any], fallback_name: str) -> Optional[Dict[str, Any]]:
+    """Normalize legacy dataset manifests into the current dataset schema.
+
+    Args:
+        record: Raw JSON payload loaded from disk.
+        fallback_name: Filename stem used when the legacy payload has no explicit id.
+
+    Returns:
+        A dictionary compatible with `FineTuneDataset`, or `None` when the
+        payload cannot be safely represented as a dataset list item.
+    """
+
+    if record.get("id") and record.get("name") and record.get("raw_jsonl_path"):
+        normalized = dict(record)
+        if "ref_audio_path" not in normalized and record.get("ref_audio"):
+            normalized["ref_audio_path"] = record["ref_audio"]
+        return normalized
+
+    # Older manifests stored only train/eval JSONL paths plus aggregate counts.
+    # We keep them visible in the UI by projecting them into the current card
+    # shape rather than crashing bootstrap on startup.
+    train_jsonl = record.get("train_jsonl")
+    ref_audio = record.get("ref_audio")
+    train_count = record.get("train_count")
+    if not train_jsonl or not ref_audio or train_count is None:
+        return None
+
+    manifest_id = fallback_name.replace("_manifest", "")
+    return {
+        "id": manifest_id,
+        "name": manifest_id,
+        "source_type": "legacy_manifest",
+        "raw_jsonl_path": storage.relpath(train_jsonl) if os.path.isabs(train_jsonl) else train_jsonl,
+        "prepared_jsonl_path": None,
+        "prepared_with_simulation": None,
+        "prepared_tokenizer_model_path": None,
+        "prepared_device": None,
+        "ref_audio_path": ref_audio,
+        "speaker_name": manifest_id,
+        "sample_count": int(train_count),
+        "created_at": utc_now_from_timestamp((storage.datasets_dir / f"{fallback_name}.json").stat().st_mtime)
+        if (storage.datasets_dir / f"{fallback_name}.json").exists()
+        else utc_now(),
+    }
+
+
 def list_dataset_records() -> List[FineTuneDataset]:
-    records = storage.list_json_records(storage.datasets_dir)
-    return [FineTuneDataset(**record) for record in records]
+    by_id: Dict[str, FineTuneDataset] = {}
+    for path in storage.list_dataset_record_paths():
+        try:
+            record = storage.read_json(path)
+        except Exception:
+            continue
+
+        normalized = normalize_legacy_dataset_record(record, path.stem)
+        if not normalized:
+            continue
+
+        try:
+            dataset = FineTuneDataset(**normalized)
+        except Exception:
+            continue
+
+        existing = by_id.get(dataset.id)
+        if existing is None:
+            by_id[dataset.id] = dataset
+            continue
+
+        existing_is_legacy = existing.source_type == "legacy_manifest"
+        current_is_legacy = dataset.source_type == "legacy_manifest"
+        if existing_is_legacy and not current_is_legacy:
+            by_id[dataset.id] = dataset
+        elif existing_is_legacy == current_is_legacy and (dataset.created_at or "") > (existing.created_at or ""):
+            by_id[dataset.id] = dataset
+
+    datasets = sorted(by_id.values(), key=lambda item: item.created_at or "", reverse=True)
+    return datasets
 
 
 def list_finetune_run_records() -> List[FineTuneRun]:
@@ -909,13 +1032,15 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
         저장된 생성 이력 응답.
     """
 
-    audio_path, _, meta = engine.generate_custom_voice(
-        text=payload.text,
-        language=payload.language,
-        speaker=payload.speaker,
-        instruct=payload.instruct,
-        model_id=payload.model_id or default_model_id("custom_voice"),
-        **generation_options_from_payload(payload),
+    audio_path, _, meta = run_generation_or_http(
+        lambda: engine.generate_custom_voice(
+            text=payload.text,
+            language=payload.language,
+            speaker=payload.speaker,
+            instruct=payload.instruct,
+            model_id=payload.model_id or default_model_id("custom_voice"),
+            **generation_options_from_payload(payload),
+        )
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -943,12 +1068,14 @@ def generate_voice_design(payload: VoiceDesignRequest) -> GenerationResponse:
         저장된 생성 이력 응답.
     """
 
-    audio_path, _, meta = engine.generate_voice_design(
-        text=payload.text,
-        language=payload.language,
-        instruct=payload.instruct,
-        model_id=payload.model_id or default_model_id("voice_design"),
-        **generation_options_from_payload(payload),
+    audio_path, _, meta = run_generation_or_http(
+        lambda: engine.generate_voice_design(
+            text=payload.text,
+            language=payload.language,
+            instruct=payload.instruct,
+            model_id=payload.model_id or default_model_id("voice_design"),
+            **generation_options_from_payload(payload),
+        )
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -997,15 +1124,17 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
     if not voice_clone_prompt_path and not (ref_audio_path and ref_text):
         raise HTTPException(status_code=400, detail="Preset or clone prompt/reference inputs are required.")
 
-    audio_path, _, meta = engine.generate_voice_clone(
-        text=payload.text,
-        language=payload.language,
-        model_id=model_id,
-        ref_audio_path=ref_audio_path,
-        ref_text=ref_text,
-        voice_clone_prompt_path=voice_clone_prompt_path,
-        x_vector_only_mode=payload.x_vector_only_mode,
-        **generation_options_from_payload(payload),
+    audio_path, _, meta = run_generation_or_http(
+        lambda: engine.generate_voice_clone(
+            text=payload.text,
+            language=payload.language,
+            model_id=model_id,
+            ref_audio_path=ref_audio_path,
+            ref_text=ref_text,
+            voice_clone_prompt_path=voice_clone_prompt_path,
+            x_vector_only_mode=payload.x_vector_only_mode,
+            **generation_options_from_payload(payload),
+        )
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -1098,16 +1227,18 @@ def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> Gener
     if payload.ref_audio_path and not ref_text and not payload.x_vector_only_mode:
         ref_text = resolve_reference_text(payload.ref_audio_path, ref_text)
 
-    audio_path, _, meta = engine.generate_hybrid_clone_instruct(
-        text=payload.text,
-        language=payload.language,
-        instruct=payload.instruct,
-        base_model_id=payload.base_model_id,
-        custom_model_id=payload.custom_model_id,
-        ref_audio_path=payload.ref_audio_path,
-        ref_text=ref_text,
-        x_vector_only_mode=payload.x_vector_only_mode,
-        **generation_options_from_payload(payload),
+    audio_path, _, meta = run_generation_or_http(
+        lambda: engine.generate_hybrid_clone_instruct(
+            text=payload.text,
+            language=payload.language,
+            instruct=payload.instruct,
+            base_model_id=payload.base_model_id,
+            custom_model_id=payload.custom_model_id,
+            ref_audio_path=payload.ref_audio_path,
+            ref_text=ref_text,
+            x_vector_only_mode=payload.x_vector_only_mode,
+            **generation_options_from_payload(payload),
+        )
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -1292,8 +1423,21 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         raise HTTPException(status_code=400, detail="At least one valid sample with audio_path is required.")
 
     dataset_id = storage.new_id("dataset")
-    raw_jsonl_path = storage.datasets_dir / f"{dataset_id}_raw.jsonl"
-    write_dataset_jsonl(raw_jsonl_path, payload.ref_audio_path, normalized_samples)
+    dataset_dir = storage.dataset_dir(dataset_id)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    raw_jsonl_path = dataset_dir / "raw.jsonl"
+    ref_suffix = Path(payload.ref_audio_path.strip()).suffix or ".wav"
+    copied_ref_audio_path = copy_audio_into_dataset(dataset_dir, payload.ref_audio_path, f"ref{ref_suffix}")
+
+    dataset_local_samples = []
+    for index, sample in enumerate(normalized_samples):
+        sample_suffix = Path(sample["audio_path"]).suffix or ".wav"
+        copied_audio_path = copied_ref_audio_path
+        if resolve_repo_audio_path(sample["audio_path"]) != resolve_repo_audio_path(payload.ref_audio_path):
+            copied_audio_path = copy_audio_into_dataset(dataset_dir, sample["audio_path"], f"{index:05d}{sample_suffix}")
+        dataset_local_samples.append({"audio_path": copied_audio_path, "text": sample["text"]})
+
+    write_dataset_jsonl(raw_jsonl_path, copied_ref_audio_path, dataset_local_samples)
 
     record = {
         "id": dataset_id,
@@ -1304,12 +1448,12 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         "prepared_with_simulation": None,
         "prepared_tokenizer_model_path": None,
         "prepared_device": None,
-        "ref_audio_path": payload.ref_audio_path,
+        "ref_audio_path": copied_ref_audio_path,
         "speaker_name": payload.speaker_name,
         "sample_count": len(normalized_samples),
         "created_at": utc_now(),
     }
-    storage.write_json(storage.datasets_dir / f"{dataset_id}.json", record)
+    storage.write_json(storage.dataset_record_path(dataset_id), record)
     return FineTuneDataset(**record)
 
 
@@ -1352,7 +1496,9 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
 
     dataset = get_dataset_record(dataset_id)
     raw_jsonl_path = REPO_ROOT / dataset["raw_jsonl_path"]
-    prepared_jsonl_path = storage.datasets_dir / f"{dataset_id}_with_codes.jsonl"
+    dataset_dir = storage.dataset_dir(dataset_id)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    prepared_jsonl_path = dataset_dir / "prepared.jsonl"
     normalize_dataset_jsonl_paths(raw_jsonl_path)
 
     simulate = payload.simulate_only or engine.simulation_mode
@@ -1379,7 +1525,7 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
     dataset["prepared_with_simulation"] = simulate
     dataset["prepared_tokenizer_model_path"] = payload.tokenizer_model_path
     dataset["prepared_device"] = payload.device
-    storage.write_json(storage.datasets_dir / f"{dataset_id}.json", dataset)
+    storage.write_json(storage.dataset_record_path(dataset_id), dataset)
     return FineTuneDataset(**dataset)
 
 

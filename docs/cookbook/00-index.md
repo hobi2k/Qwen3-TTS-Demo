@@ -9,6 +9,9 @@
 3. [프런트엔드 구조 가이드](./03-frontend-guide.md)
 4. [Qwen3-TTS 업스트림 개요](./04-qwen3-tts-overview.md)
 5. [Fine-tuning 및 examples 가이드](./05-finetuning-and-examples.md)
+6. [학습 파이프라인 변경 상세](./06-training-pipeline-changes.md)
+7. [추론 파이프라인 변경 상세](./07-inference-pipeline-changes.md)
+8. [FlashAttention 설치 가이드](./08-flash-attn-install.md)
 
 ## 문서 맵
 
@@ -17,6 +20,9 @@
 - 웹에서 모델 선택과 탭별 워크플로우는 [03-frontend-guide.md](./03-frontend-guide.md)에 정리했습니다.
 - 업스트림 `Qwen3-TTS` 구조는 [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)를 보면 됩니다.
 - 업스트림 examples와 fine-tuning 연결은 [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)를 보면 됩니다.
+- 학습 파이프라인이 어떻게 확장되었는지는 [06-training-pipeline-changes.md](./06-training-pipeline-changes.md)를 보면 됩니다.
+- 추론 파이프라인이 어떻게 확장되었는지는 [07-inference-pipeline-changes.md](./07-inference-pipeline-changes.md)를 보면 됩니다.
+- Linux + CUDA에서 FlashAttention 3를 설치하는 절차는 [08-flash-attn-install.md](./08-flash-attn-install.md)를 보면 됩니다.
 
 ## 빠른 링크
 

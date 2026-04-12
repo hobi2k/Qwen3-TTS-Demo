@@ -637,6 +637,54 @@ label {
   gap: 14px;
 }
 
+.bulk-path-textarea {
+  min-height: 136px;
+  font-family: "JetBrains Mono", "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+.selection-checklist {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.selection-checklist__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(69, 49, 20, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.selection-checklist__item.is-selected {
+  border-color: rgba(40, 91, 76, 0.32);
+  background: rgba(223, 238, 230, 0.7);
+}
+
+.selection-checklist__item input {
+  width: auto;
+  margin-top: 0.2rem;
+}
+
+.selection-checklist__item strong,
+.selection-checklist__item span,
+.selection-checklist__item small {
+  display: block;
+}
+
+.selection-checklist__item span,
+.selection-checklist__item small {
+  color: rgba(39, 29, 23, 0.72);
+}
+
+.selection-checklist__item small {
+  margin-top: 0.25rem;
+}
+
 .sample-card textarea {
   min-height: 88px;
 }
