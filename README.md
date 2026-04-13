@@ -272,7 +272,8 @@ python scripts/validate_speech_quality.py \
   --api-base http://127.0.0.1:8000 \
   --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
   --probe-text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
-  --suite all
+  --suite all \
+  --prompt-set aggressive
 ```
 
 결과는 `data/generated/quality-validation/<timestamp>/` 아래에 저장됩니다.
@@ -328,17 +329,20 @@ python scripts/validate_speech_quality.py \
 - 별도 스크립트:
   `Qwen3-TTS/examples/test_model_12hz_custom_clone_instruct.py`
 - WEB UI:
-  `Inference Lab -> Clone Prompt + Instruct Hybrid`
+  `Inference Lab -> Style Preset + Instruct Hybrid`
 - 입력:
-  `Base 모델`, `CustomVoice 모델`, `ref_audio_path`, `ref_text`, `instruct`, `대사`, 고급 생성 파라미터
+  저장된 `스타일 프리셋`을 먼저 고르고, 필요하면 `Base 모델`, `ref_audio_path`, `ref_text`를 고급 입력으로 덮어쓴 뒤 `CustomVoice 모델`, `instruct`, `대사`, 고급 생성 파라미터를 조절합니다.
 
 ### 4. WEB UI에서 확인되는 것
 
 - `Inference Lab`
   - stock 모델과 local fine-tuned 체크포인트 선택 추론
+  - 기본 선택지는 `git clone` 직후에도 바로 동작하도록 stock 모델 기준으로 유지
+  - fine-tuned 체크포인트는 기본값이 아니라 추가 선택지로 노출
   - `instruct`, `대사`, `language`, `seed`, `top_k`, `top_p`, `temperature`, `repetition_penalty`, `subtalker_*`, `max_new_tokens`, `extra_generate_kwargs`
   - `Base` 계열이면 `ref_audio_path`, `ref_text`, `voice_clone_prompt_path`, `x_vector_only_mode`
-  - 별도 `Clone Prompt + Instruct Hybrid` 카드 제공
+  - 별도 `Style Preset + Instruct Hybrid` 카드 제공
+  - hybrid 기본값은 `Base 1.7B` + stock `CustomVoice 1.7B`, 저장된 프리셋이 있으면 그 프리셋을 먼저 불러오고 없으면 수동 입력으로 진행
 - `Training Lab`
   - `Base Fine-Tune`
   - `CustomVoice Fine-Tune`

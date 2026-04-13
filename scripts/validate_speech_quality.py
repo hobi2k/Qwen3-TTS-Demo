@@ -48,6 +48,11 @@ PROMPT_SETS: Dict[str, List[tuple[str, str]]] = {
         ("gentle", "아주 부드럽고 따뜻하게, 위로하듯 읽어주세요."),
         ("breathy", "숨결이 느껴지는 breathy한 질감으로, 차분하게 읽어주세요."),
     ],
+    "aggressive": [
+        ("furious", "폭발 직전의 분노로, 날카롭고 거칠게, 문장 끝을 강하게 끊어 읽어주세요."),
+        ("shaken", "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요."),
+        ("cold", "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요."),
+    ],
 }
 
 
@@ -108,7 +113,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prompt-set",
         choices=list(PROMPT_SETS.keys()),
-        default="extended",
+        default="aggressive",
         help="Instruction prompt bundle for CustomVoice and hybrid checks.",
     )
     parser.add_argument(
@@ -831,6 +836,7 @@ def write_report(
     lines.append(f"- reference_audio: `{reference['audio_path']}`")
     lines.append(f"- reference_text: `{reference['text']}`")
     lines.append(f"- probe_text: `{reference['probe_text']}`")
+    lines.append(f"- prompt_set: `{reference['prompt_set']}`")
     lines.append(f"- transcript_similarity_threshold: `{reference['similarity_threshold']}`")
     lines.append("")
 

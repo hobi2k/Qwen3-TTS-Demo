@@ -1,0 +1,8 @@
+{
+  "audio_path": "data/datasets/mai_ko_full/audio/00000.wav",
+  "text": "그래서 말인데, 올해는 유괴도 인단도 함께 즐길 수 있게 미카 집재를 제대로 열어보려고.",
+  "probe_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+  "language": "Korean",
+  "prompt_set": "aggressive",
+  "api_base": "http://127.0.0.1:8000"
+}

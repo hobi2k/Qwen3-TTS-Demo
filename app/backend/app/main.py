@@ -144,6 +144,10 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
         notes = f"Local fine-tuned checkpoint discovered at {storage.relpath(checkpoint_dir)}"
         if custom_names:
             notes = f"{notes} · new speaker: {', '.join(custom_names)}"
+        recommended = (
+            checkpoint_name == "checkpoint-epoch-2"
+            and run_name in {"mai_ko_base17b_full", "mai_ko_customvoice17b_full"}
+        )
 
         infos.append(
             ModelInfo(
@@ -153,7 +157,7 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
                 model_id=str(checkpoint_dir),
                 supports_instruction=supports_instruction,
                 notes=notes,
-                recommended=False,
+                recommended=recommended,
                 inference_mode=inference_mode,
                 source="finetuned",
                 available_speakers=speaker_names,

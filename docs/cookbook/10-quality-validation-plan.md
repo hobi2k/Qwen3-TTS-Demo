@@ -63,6 +63,9 @@ python scripts/validate_speech_quality.py \
 - stock `CustomVoice`가 `neutral`, `angry`, `gentle`, `breathy` instruct 차이를 반영하는지 확인
 - 내용 보존이 완전히 무너지지 않는지 확인
 
+현재 validator의 기본 pack은 `aggressive`이며, 여기서는 `furious`, `shaken`, `cold` 3개 프롬프트를 사용합니다.
+이 조합은 감정 분리를 더 크게 벌려서, 청취만으로 instruct 반응 차이를 보기 쉽게 만든 것입니다.
+
 권장 명령:
 
 ```bash
@@ -101,6 +104,8 @@ python scripts/validate_speech_quality.py \
 
 - `CustomVoice FT`가 instruct 입력에 따라 `neutral`, `angry`, `gentle`, `breathy`를 구분하는지 확인
 - 화자 음색과 instruct 제어가 함께 유지되는지 확인
+
+실제 청취 평가는 `furious`, `shaken`, `cold` 3개가 서로 다른 정서로 들리는지 중심으로 봅니다.
 
 필요 조건:
 

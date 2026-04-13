@@ -614,10 +614,15 @@ class QwenDemoEngine:
                 **generate_kwargs,
             )
         else:
+            resolved_ref_audio = ref_audio_path
+            if ref_audio_path:
+                ref_audio_candidate = Path(ref_audio_path)
+                if not ref_audio_candidate.is_absolute():
+                    resolved_ref_audio = str((self.storage.repo_root / ref_audio_candidate).resolve())
             wavs, sample_rate = model.generate_voice_clone(
                 text=text,
                 language=language,
-                ref_audio=ref_audio_path,
+                ref_audio=resolved_ref_audio,
                 ref_text=ref_text,
                 x_vector_only_mode=x_vector_only_mode,
                 **generate_kwargs,

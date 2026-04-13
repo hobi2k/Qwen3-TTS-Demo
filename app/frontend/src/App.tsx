@@ -449,10 +449,10 @@ export default function App() {
   const [designControls, setDesignControls] = useState<GenerationControlsForm>(createGenerationControls("design"));
   const [inferenceForm, setInferenceForm] = useState({
     model_id: "",
-    text: "今日は本当に納得できないよ。",
-    language: "Japanese",
+    text: "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+    language: "Korean",
     speaker: "",
-    instruct: "自然で落ち着いた口調で読んでください。",
+    instruct: "지친 감정을 누르면서도 또렷하게 말해 주세요.",
     ref_audio_path: "",
     ref_text: "",
     voice_clone_prompt_path: "",
@@ -472,6 +472,7 @@ export default function App() {
   });
   const [presetGenerateText, setPresetGenerateText] = useState("이 캐릭터는 앞으로도 같은 목소리로 말해야 해.");
   const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [selectedHybridPresetId, setSelectedHybridPresetId] = useState("");
   const [presetControls, setPresetControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
 
   const [uploadedRef, setUploadedRef] = useState<UploadResponse | null>(null);
@@ -505,9 +506,9 @@ export default function App() {
   const [hybridForm, setHybridForm] = useState({
     base_model_id: "",
     custom_model_id: "",
-    text: "今日は本当に納得できないよ。",
-    language: "Japanese",
-    instruct: "Speak with heightened emotion, slightly breathy delivery, and a feminine manner.",
+    text: "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+    language: "Korean",
+    instruct: "숨이 가쁘고 떨리는 상태로, 감정을 간신히 붙잡고 있는 듯 말해 주세요.",
     ref_audio_path: "",
     ref_text: "",
     x_vector_only_mode: false,
@@ -562,20 +563,39 @@ export default function App() {
   const tokenizerModels = models.filter((model) => model.category === "tokenizer");
   const inferenceModels = models.filter((model) => model.inference_mode);
   const voiceDesignHistory = history.filter((item) => item.mode === "voice_design");
+  const preferredStockBaseModel =
+    baseModels.find((model) => model.label.includes("1.7B")) ??
+    baseModels.find((model) => model.recommended) ??
+    baseModels[0];
+  const preferredStockCustomVoiceModel =
+    customVoiceModels.find((model) => model.label.includes("1.7B")) ??
+    customVoiceModels.find((model) => model.recommended) ??
+    customVoiceModels[0];
+  const preferredHybridCustomModel =
+    customVoiceCapableModels.find((model) => model.source === "stock" && model.label.includes("1.7B")) ??
+    customVoiceCapableModels.find((model) => model.source === "stock" && model.recommended) ??
+    customVoiceCapableModels.find((model) => model.source === "stock") ??
+    customVoiceCapableModels.find((model) => model.recommended) ??
+    customVoiceCapableModels[0];
+  const preferredInferenceModel =
+    inferenceModels.find((model) => model.source === "stock" && model.category === "custom_voice" && model.label.includes("1.7B")) ??
+    inferenceModels.find((model) => model.source === "stock" && model.recommended) ??
+    inferenceModels.find((model) => model.source === "stock") ??
+    inferenceModels.find((model) => model.recommended) ??
+    inferenceModels[0];
   const selectedInferenceModel = inferenceModels.find((model) => model.model_id === inferenceForm.model_id) ?? null;
   const selectedInferenceMode = selectedInferenceModel?.inference_mode ?? null;
 
   useEffect(() => {
     if (customVoiceModels.length > 0 && !customForm.model_id) {
-      const preferred = customVoiceModels.find((model) => model.recommended) ?? customVoiceModels[0];
-      setCustomForm((prev) => ({ ...prev, model_id: preferred.model_id }));
+      setCustomForm((prev) => ({ ...prev, model_id: preferredStockCustomVoiceModel?.model_id ?? prev.model_id }));
     }
     if (voiceDesignModels.length > 0 && !designForm.model_id) {
       const preferred = voiceDesignModels.find((model) => model.recommended) ?? voiceDesignModels[0];
       setDesignForm((prev) => ({ ...prev, model_id: preferred.model_id }));
     }
     if (baseModels.length > 0 && !selectedBaseModelId) {
-      const preferred = baseModels.find((model) => model.recommended) ?? baseModels[0];
+      const preferred = preferredStockBaseModel;
       setSelectedBaseModelId(preferred.model_id);
       setRunForm((prev) => ({
         ...prev,
@@ -585,14 +605,11 @@ export default function App() {
       setHybridForm((prev) => ({ ...prev, base_model_id: prev.base_model_id || preferred.model_id }));
     }
     if (customVoiceCapableModels.length > 0 && !hybridForm.custom_model_id) {
-      const preferred = customVoiceCapableModels.find((model) => model.recommended) ?? customVoiceCapableModels[0];
+      const preferred = preferredHybridCustomModel;
       setHybridForm((prev) => ({ ...prev, custom_model_id: preferred.model_id }));
     }
     if (inferenceModels.length > 0 && !inferenceForm.model_id) {
-      const preferred =
-        inferenceModels.find((model) => model.source === "finetuned") ??
-        inferenceModels.find((model) => model.recommended) ??
-        inferenceModels[0];
+      const preferred = preferredInferenceModel;
       setInferenceForm((prev) => ({
         ...prev,
         model_id: preferred.model_id,
@@ -602,7 +619,7 @@ export default function App() {
     if (tokenizerModels.length > 0 && !runForm.tokenizer_model_path) {
       setRunForm((prev) => ({ ...prev, tokenizer_model_path: tokenizerModels[0].model_id }));
     }
-  }, [customVoiceModels, customVoiceCapableModels, voiceDesignModels, baseModels, inferenceModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path]);
+  }, [customVoiceModels, customVoiceCapableModels, voiceDesignModels, baseModels, inferenceModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel]);
 
   useEffect(() => {
     if (!selectedInferenceModel) {
@@ -635,10 +652,8 @@ export default function App() {
   useEffect(() => {
     setRunForm((prev) => {
       if (prev.training_mode === "custom_voice") {
-        const preferredCustom =
-          customVoiceCapableModels.find((model) => model.source === "stock") ??
-          customVoiceCapableModels[0];
-        const preferredBase = baseModels.find((model) => model.recommended) ?? baseModels[0];
+        const preferredCustom = preferredStockCustomVoiceModel;
+        const preferredBase = preferredStockBaseModel;
         return {
           ...prev,
           init_model_path: preferredCustom?.model_id || prev.init_model_path,
@@ -646,13 +661,13 @@ export default function App() {
         };
       }
 
-      const preferredBase = baseModels.find((model) => model.recommended) ?? baseModels[0];
+      const preferredBase = preferredStockBaseModel;
       return {
         ...prev,
         init_model_path: preferredBase?.model_id || prev.init_model_path,
       };
     });
-  }, [runForm.training_mode, customVoiceCapableModels, baseModels]);
+  }, [runForm.training_mode, preferredStockCustomVoiceModel, preferredStockBaseModel]);
 
   useEffect(() => {
     if (!health) {
@@ -668,6 +683,7 @@ export default function App() {
 
   const activeClonePrompt = builderSource === "design" ? selectedClonePrompt : uploadedClonePrompt;
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
+  const selectedHybridPreset = presets.find((preset) => preset.id === selectedHybridPresetId) ?? null;
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
@@ -850,6 +866,26 @@ export default function App() {
       setMessage("캐릭터 프리셋을 저장했습니다.");
     });
   }
+
+  useEffect(() => {
+    if (presets.length > 0 && !selectedHybridPresetId) {
+      setSelectedHybridPresetId(presets[0].id);
+    }
+  }, [presets, selectedHybridPresetId]);
+
+  useEffect(() => {
+    if (!selectedHybridPreset) {
+      return;
+    }
+
+    setHybridForm((prev) => ({
+      ...prev,
+      base_model_id: selectedHybridPreset.base_model || prev.base_model_id || preferredStockBaseModel?.model_id || "",
+      language: selectedHybridPreset.language || prev.language,
+      ref_audio_path: selectedHybridPreset.reference_audio_path,
+      ref_text: selectedHybridPreset.reference_text,
+    }));
+  }, [selectedHybridPreset, preferredStockBaseModel]);
 
   async function handleGenerateFromPreset() {
     if (!selectedPresetId) {
@@ -1705,10 +1741,33 @@ export default function App() {
               <div className="result-card__header">
                 <div>
                   <span className="eyebrow eyebrow--soft">Experimental</span>
-                  <h2>Clone Prompt + Instruct Hybrid</h2>
-                  <p>Base 모델의 clone prompt와 CustomVoice 모델의 instruct를 함께 써보는 실험 경로입니다.</p>
+                  <h2>Style Preset + Instruct Hybrid</h2>
+                  <p>저장된 스타일 프리셋을 다시 불러온 뒤, 그 위에 CustomVoice instruct를 덧입혀 감정 차이를 테스트합니다.</p>
                 </div>
               </div>
+
+              <label>
+                스타일 프리셋
+                <select value={selectedHybridPresetId} onChange={(event) => setSelectedHybridPresetId(event.target.value)}>
+                  <option value="">선택하세요</option>
+                  {presets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {selectedHybridPreset ? (
+                <div className="source-summary">
+                  <span className="meta-label">현재 스타일 소스</span>
+                  <div className="path-chip">{selectedHybridPreset.clone_prompt_path}</div>
+                  <p>{selectedHybridPreset.reference_text}</p>
+                </div>
+              ) : (
+                <p className="field-hint">
+                  프리셋이 없으면 아래 고급 입력으로 직접 참조 음성과 Base 모델을 지정할 수 있습니다.
+                </p>
+              )}
 
               <div className="field-row">
                 <label>
@@ -1772,6 +1831,9 @@ export default function App() {
                   x_vector_only_mode
                 </label>
               </div>
+              <p className="field-hint">
+                프리셋을 고르면 `ref_audio_path`와 `ref_text`가 자동으로 채워집니다. 필요하면 아래에서 덮어쓸 수 있습니다.
+              </p>
               <label>
                 ref_audio_path
                 <input
@@ -1794,8 +1856,8 @@ export default function App() {
             </form>
 
             <aside className="panel inference-side">
-              <h3>Hybrid 참조 음성 선택</h3>
-              <p className="field-hint">생성/업로드 음성을 골라 `ref_audio_path`와 `ref_text`를 빠르게 채울 수 있습니다.</p>
+              <h3>Hybrid 스타일 자산 확인</h3>
+              <p className="field-hint">프리셋이 없을 때만 아래에서 참조 음성을 직접 골라 스타일 소스를 채우세요.</p>
               <ServerAudioPicker
                 assets={generatedAudioAssets}
                 selectedPath={hybridForm.ref_audio_path}

@@ -1,0 +1,365 @@
+{
+  "created_at": "20260413-035937",
+  "health": {
+    "status": "ok",
+    "simulation_mode": false,
+    "runtime_mode": "real",
+    "qwen_tts_available": true,
+    "device": "cuda:0",
+    "attention_implementation": "flash_attention_2",
+    "recommended_instruction_language": "English",
+    "data_dir": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data"
+  },
+  "reference": {
+    "audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/datasets/mai_ko_full/audio/00000.wav",
+    "text": "그래서 말인데, 올해는 유괴도 인단도 함께 즐길 수 있게 미카 집재를 제대로 열어보려고.",
+    "probe_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+    "similarity_threshold": 0.6,
+    "prompt_set": "aggressive"
+  },
+  "results": [
+    {
+      "suite": "customvoice",
+      "variant": "stock-furious",
+      "model_label": "CustomVoice 1.7B",
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "source": "stock",
+      "inference_mode": "custom_voice",
+      "prompt_name": "furious",
+      "instruction": "폭발 직전의 분노로, 날카롭고 거칠게, 문장 끝을 강하게 끊어 읽어주세요.",
+      "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "reference_audio": null,
+      "reference_text": null,
+      "output_audio_path": "data/generated/audio_998f3b2b78f3.wav",
+      "copied_audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/quality-validation/20260413-035743/customvoice/stock-furious/audio_998f3b2b78f3.wav",
+      "transcript": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "transcript_similarity": 1.0,
+      "duration_sec": 3.36,
+      "rms": 0.08810218423604965,
+      "spectral_centroid": 2481.3535073781977,
+      "zcr": 0.11978960640822785,
+      "content_ok": true,
+      "record": {
+        "id": "gen_190fe4fbcc6a",
+        "mode": "custom_voice",
+        "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+        "language": "Korean",
+        "speaker": "Sohee",
+        "instruction": "폭발 직전의 분노로, 날카롭고 거칠게, 문장 끝을 강하게 끊어 읽어주세요.",
+        "preset_id": null,
+        "output_audio_path": "data/generated/audio_998f3b2b78f3.wav",
+        "output_audio_url": "/files/generated/audio_998f3b2b78f3.wav",
+        "source_ref_audio_path": null,
+        "source_ref_text": null,
+        "created_at": "2026-04-13T03:58:19.275095+00:00",
+        "meta": {
+          "simulation": false,
+          "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+          "seed": 7,
+          "generation_kwargs": {},
+          "postprocess": {
+            "leading_trim_samples": 0,
+            "fade_in_samples": 0,
+            "reverted_to_raw": false
+          },
+          "audio_metrics": {
+            "duration_sec": 3.36,
+            "rms": 0.08810218423604965,
+            "peak": 0.51171875
+          },
+          "raw_audio_metrics": {
+            "duration_sec": 3.36,
+            "rms": 0.08810218423604965,
+            "peak": 0.51171875
+          }
+        }
+      }
+    },
+    {
+      "suite": "customvoice",
+      "variant": "stock-shaken",
+      "model_label": "CustomVoice 1.7B",
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "source": "stock",
+      "inference_mode": "custom_voice",
+      "prompt_name": "shaken",
+      "instruction": "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요.",
+      "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "reference_audio": null,
+      "reference_text": null,
+      "output_audio_path": "data/generated/audio_4520108ceb3a.wav",
+      "copied_audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/quality-validation/20260413-035743/customvoice/stock-shaken/audio_4520108ceb3a.wav",
+      "transcript": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "transcript_similarity": 1.0,
+      "duration_sec": 3.44,
+      "rms": 0.08120346814393997,
+      "spectral_centroid": 2696.2925926919143,
+      "zcr": 0.11223536361882716,
+      "content_ok": true,
+      "record": {
+        "id": "gen_789790726a50",
+        "mode": "custom_voice",
+        "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+        "language": "Korean",
+        "speaker": "Sohee",
+        "instruction": "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요.",
+        "preset_id": null,
+        "output_audio_path": "data/generated/audio_4520108ceb3a.wav",
+        "output_audio_url": "/files/generated/audio_4520108ceb3a.wav",
+        "source_ref_audio_path": null,
+        "source_ref_text": null,
+        "created_at": "2026-04-13T03:58:36.228498+00:00",
+        "meta": {
+          "simulation": false,
+          "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+          "seed": 7,
+          "generation_kwargs": {},
+          "postprocess": {
+            "leading_trim_samples": 0,
+            "fade_in_samples": 0,
+            "reverted_to_raw": false
+          },
+          "audio_metrics": {
+            "duration_sec": 3.44,
+            "rms": 0.08120346814393997,
+            "peak": 0.53125
+          },
+          "raw_audio_metrics": {
+            "duration_sec": 3.44,
+            "rms": 0.08120346814393997,
+            "peak": 0.53125
+          }
+        }
+      }
+    },
+    {
+      "suite": "customvoice",
+      "variant": "stock-cold",
+      "model_label": "CustomVoice 1.7B",
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "source": "stock",
+      "inference_mode": "custom_voice",
+      "prompt_name": "cold",
+      "instruction": "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+      "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "reference_audio": null,
+      "reference_text": null,
+      "output_audio_path": "data/generated/audio_688357c20279.wav",
+      "copied_audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/quality-validation/20260413-035743/customvoice/stock-cold/audio_688357c20279.wav",
+      "transcript": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "transcript_similarity": 1.0,
+      "duration_sec": 4.16,
+      "rms": 0.08665302395820618,
+      "spectral_centroid": 2708.9625151163923,
+      "zcr": 0.12145746970663265,
+      "content_ok": true,
+      "record": {
+        "id": "gen_d7b20679fe15",
+        "mode": "custom_voice",
+        "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+        "language": "Korean",
+        "speaker": "Sohee",
+        "instruction": "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+        "preset_id": null,
+        "output_audio_path": "data/generated/audio_688357c20279.wav",
+        "output_audio_url": "/files/generated/audio_688357c20279.wav",
+        "source_ref_audio_path": null,
+        "source_ref_text": null,
+        "created_at": "2026-04-13T03:58:53.131248+00:00",
+        "meta": {
+          "simulation": false,
+          "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+          "seed": 7,
+          "generation_kwargs": {},
+          "postprocess": {
+            "leading_trim_samples": 0,
+            "fade_in_samples": 0,
+            "reverted_to_raw": false
+          },
+          "audio_metrics": {
+            "duration_sec": 4.16,
+            "rms": 0.08665302395820618,
+            "peak": 0.52734375
+          },
+          "raw_audio_metrics": {
+            "duration_sec": 4.16,
+            "rms": 0.08665302395820618,
+            "peak": 0.52734375
+          }
+        }
+      }
+    },
+    {
+      "suite": "customvoice",
+      "variant": "ft-furious",
+      "model_label": "FT mai_ko_customvoice17b_full / checkpoint-epoch-2",
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+      "source": "finetuned",
+      "inference_mode": "custom_voice",
+      "prompt_name": "furious",
+      "instruction": "폭발 직전의 분노로, 날카롭고 거칠게, 문장 끝을 강하게 끊어 읽어주세요.",
+      "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "reference_audio": null,
+      "reference_text": null,
+      "output_audio_path": "data/generated/audio_2d49f7b0e4e7.wav",
+      "copied_audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/quality-validation/20260413-035743/customvoice/ft-furious/audio_2d49f7b0e4e7.wav",
+      "transcript": "오늘은 정말 힘들었어, 언제쯤 끝날까?",
+      "transcript_similarity": 1.0,
+      "duration_sec": 3.12,
+      "rms": 0.17630943655967712,
+      "spectral_centroid": 3108.638058772333,
+      "zcr": 0.15659877232142858,
+      "content_ok": true,
+      "record": {
+        "id": "gen_1553684f4398",
+        "mode": "custom_voice",
+        "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+        "language": "Korean",
+        "speaker": "mai",
+        "instruction": "폭발 직전의 분노로, 날카롭고 거칠게, 문장 끝을 강하게 끊어 읽어주세요.",
+        "preset_id": null,
+        "output_audio_path": "data/generated/audio_2d49f7b0e4e7.wav",
+        "output_audio_url": "/files/generated/audio_2d49f7b0e4e7.wav",
+        "source_ref_audio_path": null,
+        "source_ref_text": null,
+        "created_at": "2026-04-13T03:59:05.230807+00:00",
+        "meta": {
+          "simulation": false,
+          "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+          "seed": 7,
+          "generation_kwargs": {},
+          "postprocess": {
+            "leading_trim_samples": 0,
+            "fade_in_samples": 0,
+            "reverted_to_raw": false
+          },
+          "audio_metrics": {
+            "duration_sec": 3.12,
+            "rms": 0.17630943655967712,
+            "peak": 0.7890625
+          },
+          "raw_audio_metrics": {
+            "duration_sec": 3.12,
+            "rms": 0.17630943655967712,
+            "peak": 0.7890625
+          }
+        }
+      }
+    },
+    {
+      "suite": "customvoice",
+      "variant": "ft-shaken",
+      "model_label": "FT mai_ko_customvoice17b_full / checkpoint-epoch-2",
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+      "source": "finetuned",
+      "inference_mode": "custom_voice",
+      "prompt_name": "shaken",
+      "instruction": "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요.",
+      "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "reference_audio": null,
+      "reference_text": null,
+      "output_audio_path": "data/generated/audio_7d5814d10d9d.wav",
+      "copied_audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/quality-validation/20260413-035743/customvoice/ft-shaken/audio_7d5814d10d9d.wav",
+      "transcript": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "transcript_similarity": 1.0,
+      "duration_sec": 3.68,
+      "rms": 0.14853279292583466,
+      "spectral_centroid": 3272.149109110841,
+      "zcr": 0.18265387915462428,
+      "content_ok": true,
+      "record": {
+        "id": "gen_f72bbb2c0004",
+        "mode": "custom_voice",
+        "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+        "language": "Korean",
+        "speaker": "mai",
+        "instruction": "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요.",
+        "preset_id": null,
+        "output_audio_path": "data/generated/audio_7d5814d10d9d.wav",
+        "output_audio_url": "/files/generated/audio_7d5814d10d9d.wav",
+        "source_ref_audio_path": null,
+        "source_ref_text": null,
+        "created_at": "2026-04-13T03:59:18.387143+00:00",
+        "meta": {
+          "simulation": false,
+          "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+          "seed": 7,
+          "generation_kwargs": {},
+          "postprocess": {
+            "leading_trim_samples": 0,
+            "fade_in_samples": 0,
+            "reverted_to_raw": false
+          },
+          "audio_metrics": {
+            "duration_sec": 3.68,
+            "rms": 0.14853279292583466,
+            "peak": 0.6953125
+          },
+          "raw_audio_metrics": {
+            "duration_sec": 3.68,
+            "rms": 0.14853279292583466,
+            "peak": 0.6953125
+          }
+        }
+      }
+    },
+    {
+      "suite": "customvoice",
+      "variant": "ft-cold",
+      "model_label": "FT mai_ko_customvoice17b_full / checkpoint-epoch-2",
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+      "source": "finetuned",
+      "inference_mode": "custom_voice",
+      "prompt_name": "cold",
+      "instruction": "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+      "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "reference_audio": null,
+      "reference_text": null,
+      "output_audio_path": "data/generated/audio_59c1382fa111.wav",
+      "copied_audio_path": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/generated/quality-validation/20260413-035743/customvoice/ft-cold/audio_59c1382fa111.wav",
+      "transcript": "오늘은 정말 힘들었어, 언제쯤 끝날까?",
+      "transcript_similarity": 1.0,
+      "duration_sec": 4.24,
+      "rms": 0.14483074843883514,
+      "spectral_centroid": 2633.872233134028,
+      "zcr": 0.1278707993090452,
+      "content_ok": true,
+      "record": {
+        "id": "gen_3313c651517f",
+        "mode": "custom_voice",
+        "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+        "language": "Korean",
+        "speaker": "mai",
+        "instruction": "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+        "preset_id": null,
+        "output_audio_path": "data/generated/audio_59c1382fa111.wav",
+        "output_audio_url": "/files/generated/audio_59c1382fa111.wav",
+        "source_ref_audio_path": null,
+        "source_ref_text": null,
+        "created_at": "2026-04-13T03:59:35.482114+00:00",
+        "meta": {
+          "simulation": false,
+          "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+          "seed": 7,
+          "generation_kwargs": {},
+          "postprocess": {
+            "leading_trim_samples": 0,
+            "fade_in_samples": 0,
+            "reverted_to_raw": false
+          },
+          "audio_metrics": {
+            "duration_sec": 4.24,
+            "rms": 0.14483074843883514,
+            "peak": 0.8359375
+          },
+          "raw_audio_metrics": {
+            "duration_sec": 4.24,
+            "rms": 0.14483074843883514,
+            "peak": 0.8359375
+          }
+        }
+      }
+    }
+  ],
+  "skipped_checks": []
+}

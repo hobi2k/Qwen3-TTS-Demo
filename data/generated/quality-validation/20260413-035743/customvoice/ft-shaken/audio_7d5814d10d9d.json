@@ -1,0 +1,41 @@
+{
+  "record": {
+    "id": "gen_f72bbb2c0004",
+    "mode": "custom_voice",
+    "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+    "language": "Korean",
+    "speaker": "mai",
+    "instruction": "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요.",
+    "preset_id": null,
+    "output_audio_path": "data/generated/audio_7d5814d10d9d.wav",
+    "output_audio_url": "/files/generated/audio_7d5814d10d9d.wav",
+    "source_ref_audio_path": null,
+    "source_ref_text": null,
+    "created_at": "2026-04-13T03:59:18.387143+00:00",
+    "meta": {
+      "simulation": false,
+      "model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+      "seed": 7,
+      "generation_kwargs": {},
+      "postprocess": {
+        "leading_trim_samples": 0,
+        "fade_in_samples": 0,
+        "reverted_to_raw": false
+      },
+      "audio_metrics": {
+        "duration_sec": 3.68,
+        "rms": 0.14853279292583466,
+        "peak": 0.6953125
+      },
+      "raw_audio_metrics": {
+        "duration_sec": 3.68,
+        "rms": 0.14853279292583466,
+        "peak": 0.6953125
+      }
+    }
+  },
+  "metadata": {
+    "speaker": "mai",
+    "instruction": "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요."
+  }
+}

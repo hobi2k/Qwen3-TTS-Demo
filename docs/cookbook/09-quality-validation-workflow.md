@@ -8,6 +8,9 @@
 - `CustomVoice` fine-tune 결과가 instruct 입력에 따라 스타일이 달라지는지
 - `clone prompt + instruct hybrid` 경로가 저장된 스타일 자산과 instruct 제어를 함께 살리는지
 
+기본 instruct pack은 `aggressive`입니다. 이 pack은 감정 차이를 크게 벌려서,
+CustomVoice와 hybrid의 instruct 준수 여부를 듣기로 판별하기 쉽게 만듭니다.
+
 이 워크플로우는 **업스트림 `Qwen3-TTS` 코드를 수정하지 않습니다.**
 대신 저장소 루트의 `scripts/`와 `docs/`만 사용해서 검증합니다.
 
@@ -41,6 +44,25 @@
 
 - clone prompt로 스타일 자산을 저장한 뒤 다시 쓸 수 있는지
 - hybrid 경로에서 `Base` clone 성질과 `CustomVoice` instruct 성질이 동시에 유지되는지
+
+## 1.1 Aggressive instruct pack
+
+기본 `aggressive` pack은 아래 3개 문장을 사용합니다.
+
+- `furious`: 폭발 직전의 분노, 날카롭고 거친 발화
+- `shaken`: 분노와 공포가 동시에 올라오는, 숨이 가쁘고 떨리는 발화
+- `cold`: 감정을 억누른 채 차갑고 단호하게 압박하는 발화
+
+스크립트에서 해당 pack은 `--prompt-set aggressive`로 선택할 수 있습니다.
+
+예시:
+
+```bash
+python scripts/validate_speech_quality.py \
+  --api-base http://127.0.0.1:8000 \
+  --suite customvoice \
+  --prompt-set aggressive
+```
 
 ## 2. 준비 조건
 
@@ -156,6 +178,9 @@ data/generated/quality-validation/20260412-153000/
 - 어떤 결과 wav가 만들어졌는지
 - 자동 점수는 어땠는지
 
+`report.md`는 각 suite별로 결과를 표로 정리하므로, 생성된 WAV를 순서대로 들어 보면서
+`furious -> shaken -> cold` 순으로 감정이 실제로 갈라지는지 확인할 수 있습니다.
+
 ## 5. 자동 점수 해석
 
 스크립트는 각 샘플에 대해 아주 느슨한 자동 점수를 계산합니다.
@@ -187,7 +212,7 @@ data/generated/quality-validation/20260412-153000/
 
 ### CustomVoice FT
 
-- `neutral`, `angry`, `gentle`, `breathy` 사이의 느낌 차이가 들린다
+- `furious`, `shaken`, `cold` 사이의 느낌 차이가 들린다
 - instruct를 바꿔도 문장 내용은 유지된다
 - fine-tuned 결과가 stock보다 더 목적에 맞게 보정되어 있다
 
@@ -197,7 +222,17 @@ data/generated/quality-validation/20260412-153000/
 - instruct 제어도 들린다
 - clone prompt + instruct를 함께 썼을 때 결과가 아예 무너지지 않는다
 
-## 7. 실패했을 때 보는 순서
+## 7. 청취 평가 순서
+
+결과가 생성되면 아래 순서로 듣는 것을 권장합니다.
+
+1. `report.md`를 열고 suite별 표를 본다.
+2. `customvoice`의 `furious`, `shaken`, `cold`를 연속해서 듣는다.
+3. 같은 순서로 `hybrid`를 듣고, 스타일이 clone prompt 쪽으로 고정되는지 확인한다.
+4. transcript가 너무 틀어진 샘플이 있으면 `report.json`의 `transcript_similarity`를 확인한다.
+5. 최종 평가는 자동 점수보다 실제 청취를 우선한다.
+
+## 8. 실패했을 때 보는 순서
 
 1. `GET /api/health`가 `runtime_mode=real`인지 확인합니다.
 2. `GET /api/models` 또는 `GET /api/bootstrap`에서 원하는 stock / fine-tuned 모델이 보이는지 확인합니다.
@@ -205,7 +240,7 @@ data/generated/quality-validation/20260412-153000/
 4. 참조 음성 경로가 실제 파일인지 확인합니다.
 5. 특정 체크포인트만 점검하고 싶다면 `--base-ft-model-id`, `--customvoice-ft-model-id` 같은 명시적 인자를 사용합니다.
 
-## 8. 이 워크플로우의 역할
+## 9. 이 워크플로우의 역할
 
 이 검증 스크립트는 훈련이 "돌아갔다"를 확인하는 도구가 아닙니다.
 이 스크립트는 다음 질문에 답하기 위한 도구입니다.

@@ -1,0 +1,46 @@
+{
+  "record": {
+    "id": "gen_3bb0f543b425",
+    "mode": "hybrid_clone_instruct",
+    "input_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+    "language": "Korean",
+    "speaker": null,
+    "instruction": "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+    "preset_id": null,
+    "output_audio_path": "data/generated/audio_06c70ca955e4.wav",
+    "output_audio_url": "/files/generated/audio_06c70ca955e4.wav",
+    "source_ref_audio_path": "data/datasets/mai_ko_full/audio/00000.wav",
+    "source_ref_text": "그래서 말인데, 올해는 유괴도 인단도 함께 즐길 수 있게 미카 집재를 제대로 열어보려고.",
+    "created_at": "2026-04-13T04:07:48.598279+00:00",
+    "meta": {
+      "simulation": false,
+      "base_model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-Base",
+      "custom_model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+      "seed": 7,
+      "generation_kwargs": {},
+      "postprocess": {
+        "leading_trim_samples": 0,
+        "fade_in_samples": 0,
+        "reverted_to_raw": false
+      },
+      "audio_metrics": {
+        "duration_sec": 4.16,
+        "rms": 0.1451241672039032,
+        "peak": 0.62890625
+      },
+      "raw_audio_metrics": {
+        "duration_sec": 4.16,
+        "rms": 0.1451241672039032,
+        "peak": 0.62890625
+      },
+      "path_kind": "hybrid_clone_instruct"
+    }
+  },
+  "metadata": {
+    "base_model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/models/Qwen3-TTS-12Hz-1.7B-Base",
+    "custom_model_id": "/home/hosung/pytorch-demo/Qwen3-TTS-Demo/data/finetune-runs/mai_ko_customvoice17b_full/checkpoint-epoch-2",
+    "instruction": "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+    "reference_audio": "data/datasets/mai_ko_full/audio/00000.wav",
+    "reference_text": "그래서 말인데, 올해는 유괴도 인단도 함께 즐길 수 있게 미카 집재를 제대로 열어보려고."
+  }
+}
