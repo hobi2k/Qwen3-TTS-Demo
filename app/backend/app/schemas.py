@@ -82,6 +82,17 @@ class VoiceDesignRequest(GenerationRequestBase):
     instruct: str = Field(..., min_length=1)
 
 
+class StoryStudioRequest(GenerationRequestBase):
+    """장시간 대본을 여러 세그먼트로 나눠 합성하는 요청 스키마다."""
+
+    model_id: Optional[str] = None
+    instruct: str = Field(..., min_length=1)
+    speaker: Optional[str] = None
+    generation_mode: str = "voice_design"
+    split_mode: str = "line"
+    pause_ms: int = Field(350, ge=0, le=3000)
+
+
 class VoiceCloneRequest(GenerationRequestBase):
     """clone prompt 또는 참조 음성 기반 Base 합성 요청 스키마다."""
 
@@ -252,13 +263,20 @@ class SoundEffectRequest(BaseModel):
 
 
 class VoiceChangerRequest(BaseModel):
-    """기존 음성 파일에 스타일 변조를 적용하는 요청 스키마다."""
+    """RVC/Applio 기반 audio-to-audio 보이스 체인저 요청 스키마다."""
 
     audio_path: str = Field(..., min_length=1)
-    preset: str = "helium"
-    pitch_shift: float = 0.0
-    speed: float = Field(1.0, ge=0.5, le=1.8)
-    gain_db: float = 0.0
+    model_path: Optional[str] = None
+    index_path: Optional[str] = None
+    pitch_shift_semitones: float = 0.0
+    f0_method: str = "rmvpe"
+    index_rate: float = Field(0.3, ge=0.0, le=1.0)
+    protect: float = Field(0.33, ge=0.0, le=0.5)
+    split_audio: bool = False
+    f0_autotune: bool = False
+    clean_audio: bool = False
+    clean_strength: float = Field(0.7, ge=0.0, le=1.0)
+    embedder_model: str = "contentvec"
 
 
 class AudioConvertRequest(BaseModel):

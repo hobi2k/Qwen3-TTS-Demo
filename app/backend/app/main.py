@@ -46,6 +46,7 @@ from .schemas import (
     HybridCloneInstructRequest,
     ModelInfo,
     SoundEffectRequest,
+    StoryStudioRequest,
     PrepareDatasetRequest,
     PresetGenerateRequest,
     AudioTranslateRequest,
@@ -55,6 +56,7 @@ from .schemas import (
     VoiceDesignRequest,
 )
 from .storage import Storage, utc_now
+from .voice_changer import ApplioVoiceChanger, VoiceChangerError, applio_voice_changer_available
 
 JsonDict = Dict[str, Any]
 
@@ -67,6 +69,7 @@ load_dotenv(BACKEND_DIR / ".env")
 
 storage = Storage(REPO_ROOT)
 engine = QwenDemoEngine(storage)
+voice_changer = ApplioVoiceChanger(REPO_ROOT)
 
 
 def default_model_id(category: str) -> str:
@@ -895,6 +898,58 @@ def generation_options_from_payload(payload: Any) -> Dict[str, Any]:
     return options
 
 
+def split_story_script(script: str, split_mode: str) -> List[str]:
+    """장시간 대본을 합성 가능한 세그먼트 목록으로 나눈다.
+
+    Args:
+        script: 사용자가 입력한 전체 대본.
+        split_mode: `line` 또는 `paragraph`.
+
+    Returns:
+        비어 있지 않은 대본 세그먼트 목록.
+    """
+
+    normalized = script.replace("\r\n", "\n").strip()
+    if not normalized:
+        return []
+
+    if split_mode == "paragraph":
+        parts = [part.strip() for part in re.split(r"\n\s*\n", normalized) if part.strip()]
+    else:
+        parts = [part.strip() for part in normalized.split("\n") if part.strip()]
+    return parts
+
+
+def concatenate_audio_segments(segment_paths: List[Path], output_path: Path, pause_ms: int) -> None:
+    """여러 세그먼트 오디오를 짧은 무음 간격과 함께 하나로 합친다.
+
+    Args:
+        segment_paths: 이어 붙일 오디오 파일 경로 목록.
+        output_path: 최종 출력 파일 경로.
+        pause_ms: 세그먼트 사이에 넣을 무음 길이.
+    """
+
+    if not segment_paths:
+        raise ValueError("At least one segment is required.")
+
+    combined: List[np.ndarray] = []
+    target_sr: Optional[int] = None
+    for index, path in enumerate(segment_paths):
+        waveform, sample_rate = sf.read(str(path), dtype="float32")
+        if waveform.ndim > 1:
+            waveform = waveform.mean(axis=1)
+        if target_sr is None:
+            target_sr = sample_rate
+        elif sample_rate != target_sr:
+            waveform = librosa.resample(np.asarray(waveform, dtype=np.float32), orig_sr=sample_rate, target_sr=target_sr)
+        combined.append(np.asarray(waveform, dtype=np.float32))
+        if pause_ms > 0 and index < len(segment_paths) - 1:
+            silence = np.zeros(int(target_sr * (pause_ms / 1000.0)), dtype=np.float32)
+            combined.append(silence)
+
+    sf.write(str(output_path), np.concatenate(combined), int(target_sr or 24000))
+
+
 def list_server_audio_assets() -> List[AudioAsset]:
     """서버 내부에 저장된 오디오 파일 목록을 최신순으로 반환한다."""
 
@@ -1318,37 +1373,34 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
     return [
         AudioToolCapability(
             key="sound_effects",
-            label="Sound Effects",
-            description="텍스트 프롬프트에서 로컬 procedural 효과음을 생성합니다.",
+            label="사운드 효과",
+            description="짧은 효과음을 만들고 바로 다시 들어봅니다.",
             available=True,
-            notes="Beatoven/Fish급 모델이 아니라 demo-side procedural synthesis입니다.",
         ),
         AudioToolCapability(
             key="voice_changer",
-            label="Voice Changer",
-            description="업로드/생성 음성에 피치, 속도, 톤 변조 프리셋을 적용합니다.",
-            available=True,
-            notes="helium, deep, robot, telephone 네 가지 기본 프리셋을 제공합니다.",
+            label="보이스 체인저",
+            description="RVC/Applio로 기존 음성의 타이밍을 유지한 채 음색을 바꿉니다.",
+            available=applio_voice_changer_available(REPO_ROOT),
+            notes="RVC 모델(.pth)과 인덱스(.index)가 필요합니다.",
         ),
         AudioToolCapability(
             key="audio_converter",
-            label="Audio Converter",
+            label="오디오 변환",
             description="포맷과 샘플레이트를 바꾸고 mono로 정리합니다.",
             available=True,
         ),
         AudioToolCapability(
             key="audio_separation",
-            label="Audio Separation",
+            label="오디오 분리",
             description="librosa HPSS로 harmonic/percussive stems를 분리합니다.",
             available=True,
-            notes="정밀 vocal separation 모델이 아니라 lightweight local split입니다.",
         ),
         AudioToolCapability(
             key="audio_translation",
-            label="Audio Translation",
-            description="Whisper 전사 후 사용자가 제공한 번역 텍스트로 재합성하는 보조 흐름입니다.",
+            label="전사와 재합성",
+            description="전사한 문장을 다른 언어 또는 다른 목소리로 다시 읽게 합니다.",
             available=True,
-            notes="자동 번역 모델은 포함하지 않으므로 번역 텍스트를 직접 넣는 방식이 가장 정확합니다.",
         ),
     ]
 
@@ -1482,45 +1534,6 @@ def synthesize_sound_effect(prompt: str, duration_sec: float, intensity: float, 
     if peak > 0:
         signal = signal / max(peak / 0.92, 1.0)
     return signal.astype(np.float32)
-
-
-def apply_voice_changer_effect(
-    waveform: np.ndarray,
-    sample_rate: int,
-    *,
-    preset: str,
-    pitch_shift: float,
-    speed: float,
-    gain_db: float,
-) -> np.ndarray:
-    mono = waveform.mean(axis=1) if waveform.ndim > 1 else waveform.astype(np.float32)
-    transformed = mono.astype(np.float32)
-    preset_key = preset.strip().lower()
-
-    preset_pitch = {
-        "helium": 5.0,
-        "deep": -5.0,
-        "robot": -2.0,
-        "telephone": 1.0,
-    }.get(preset_key, 0.0)
-    effective_pitch = preset_pitch + pitch_shift
-    if abs(effective_pitch) > 0.01:
-        transformed = librosa.effects.pitch_shift(transformed, sr=sample_rate, n_steps=effective_pitch)
-
-    if abs(speed - 1.0) > 1e-3:
-        transformed = librosa.effects.time_stretch(transformed, rate=speed)
-
-    if preset_key == "telephone":
-        transformed = librosa.effects.preemphasis(transformed, coef=0.95)
-    elif preset_key == "robot":
-        mod = np.sign(np.sin(2 * np.pi * 38 * np.arange(len(transformed), dtype=np.float32) / sample_rate))
-        transformed = 0.75 * transformed + 0.25 * mod * np.abs(transformed)
-
-    transformed *= float(10 ** (gain_db / 20.0))
-    peak = float(np.max(np.abs(transformed))) if len(transformed) else 0.0
-    if peak > 0:
-        transformed = transformed / max(peak / 0.92, 1.0)
-    return transformed.astype(np.float32)
 
 
 def basename_for_asset(value: str) -> str:
@@ -1741,46 +1754,61 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
 
 @app.post("/api/audio-tools/voice-changer", response_model=AudioToolResponse)
 def change_voice(payload: VoiceChangerRequest) -> AudioToolResponse:
-    """음성 파일에 보이스 체인저 프리셋을 적용한다."""
+    """Applio/RVC로 기존 음성의 음색을 직접 바꾼다.
 
-    source_path = resolve_audio_absolute_path(payload.audio_path)
-    waveform, sample_rate = sf.read(str(source_path), dtype="float32")
-    transformed = apply_voice_changer_effect(
-        waveform,
-        sample_rate,
-        preset=payload.preset,
-        pitch_shift=payload.pitch_shift,
-        speed=payload.speed,
-        gain_db=payload.gain_db,
-    )
-    output_path = generated_audio_path("voice-changer", f"{payload.preset} voice change", "wav")
-    sf.write(str(output_path), transformed, sample_rate)
+    Args:
+        payload: 원본 오디오와 RVC 변환 설정.
+
+    Returns:
+        변환된 오디오 결과.
+    """
+    if not voice_changer.is_available():
+        raise HTTPException(status_code=400, detail="Applio repository is not available for voice conversion.")
+
+    output_path = generated_audio_path("voice-changer", "voice conversion", "wav")
+    try:
+        audio_path, meta = voice_changer.transform(
+            input_audio_path=payload.audio_path,
+            output_path=output_path,
+            model_path=payload.model_path,
+            index_path=payload.index_path,
+            pitch_shift_semitones=payload.pitch_shift_semitones,
+            f0_method=payload.f0_method,
+            index_rate=payload.index_rate,
+            protect=payload.protect,
+            split_audio=payload.split_audio,
+            f0_autotune=payload.f0_autotune,
+            clean_audio=payload.clean_audio,
+            clean_strength=payload.clean_strength,
+            embedder_model=payload.embedder_model,
+        )
+    except VoiceChangerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Voice changer failed: {exc}") from exc
+
     record = write_audio_tool_generation_record(
         mode="voice_changer",
-        text=f"{payload.preset} voice change",
+        text="voice conversion",
         language="N/A",
-        audio_path=output_path,
-        instruction=payload.preset,
+        audio_path=audio_path,
         meta={
             "tool_kind": "voice_changer",
             "source_audio_path": payload.audio_path,
-            "preset": payload.preset,
-            "pitch_shift": payload.pitch_shift,
-            "speed": payload.speed,
-            "gain_db": payload.gain_db,
+            **meta,
         },
     )
-    asset = create_audio_tool_asset(output_path, f"voice changer · {payload.preset}")
+    asset = create_audio_tool_asset(audio_path, "voice changed speech")
     save_audio_tool_job(
         kind="voice_changer",
-        input_summary=f"{payload.preset} voice change",
-        message="Voice changer effect applied.",
+        input_summary="voice conversion",
+        message="Voice converted from source audio.",
         assets=[asset],
     )
     return AudioToolResponse(
         kind="voice_changer",
         status="completed",
-        message="Voice changer effect applied.",
+        message="Voice converted from source audio.",
         assets=[asset],
         record=record,
     )
@@ -1997,12 +2025,79 @@ def generate_voice_design(payload: VoiceDesignRequest) -> GenerationResponse:
     record_id = storage.new_id("gen")
     record = build_generation_record(
         record_id=record_id,
-        mode="voice_design",
+        mode="story_studio",
         text=payload.text,
         language=payload.language,
         audio_path=audio_path,
         instruction=payload.instruct,
         meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.post("/api/generate/story-studio", response_model=GenerationResponse)
+def generate_story_studio(payload: StoryStudioRequest) -> GenerationResponse:
+    """장시간 대본을 세그먼트 단위로 합성한 뒤 하나의 오디오로 묶는다.
+
+    Args:
+        payload: 장면 지시와 긴 대본을 포함한 요청.
+
+    Returns:
+        세그먼트 합성 결과를 합친 생성 이력 응답.
+    """
+
+    segments = split_story_script(payload.text, payload.split_mode)
+    if not segments:
+        raise HTTPException(status_code=400, detail="Story script is empty.")
+
+    segment_paths: List[Path] = []
+    segment_meta: List[Dict[str, Any]] = []
+    options = generation_options_from_payload(payload)
+    for segment in segments:
+        if payload.generation_mode == "custom_voice":
+            audio_path, _, meta = run_generation_or_http(
+                lambda segment_text=segment: engine.generate_custom_voice(
+                    text=segment_text,
+                    language=payload.language,
+                    speaker=payload.speaker or stock_speaker_names()[0],
+                    instruct=payload.instruct,
+                    model_id=payload.model_id or default_model_id("custom_voice"),
+                    **options,
+                )
+            )
+        else:
+            audio_path, _, meta = run_generation_or_http(
+                lambda segment_text=segment: engine.generate_voice_design(
+                    text=segment_text,
+                    language=payload.language,
+                    instruct=payload.instruct,
+                    model_id=payload.model_id or default_model_id("voice_design"),
+                    **options,
+                )
+            )
+        segment_paths.append(audio_path)
+        segment_meta.append({"text": segment, **meta})
+
+    output_path = generated_audio_path("story-studio", segments[0], "wav")
+    concatenate_audio_segments(segment_paths, output_path, payload.pause_ms)
+    record_id = storage.new_id("gen")
+    record = build_generation_record(
+        record_id=record_id,
+        mode="voice_design",
+        text=payload.text,
+        language=payload.language,
+        audio_path=output_path,
+        speaker=payload.speaker or "",
+        instruction=payload.instruct,
+        meta={
+            "story_studio": True,
+            "generation_mode": payload.generation_mode,
+            "split_mode": payload.split_mode,
+            "pause_ms": payload.pause_ms,
+            "segment_count": len(segments),
+            "segments": segment_meta,
+        },
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))

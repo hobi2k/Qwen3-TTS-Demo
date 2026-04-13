@@ -113,6 +113,9 @@ export interface FineTuneDataset {
   id: string;
   name: string;
   source_type: string;
+  dataset_root_path?: string | null;
+  audio_dir_path?: string | null;
+  manifest_path?: string | null;
   raw_jsonl_path: string;
   prepared_jsonl_path?: string | null;
   ref_audio_path: string;
@@ -139,6 +142,31 @@ export interface FineTuneRun {
   command?: string[] | null;
 }
 
+export interface AudioToolCapability {
+  key: string;
+  label: string;
+  description: string;
+  available: boolean;
+  notes: string;
+}
+
+export interface AudioToolAsset {
+  label: string;
+  path: string;
+  url: string;
+  filename: string;
+}
+
+export interface AudioToolJob {
+  id: string;
+  kind: string;
+  status: string;
+  input_summary: string;
+  created_at: string;
+  artifacts: AudioToolAsset[];
+  message: string;
+}
+
 export interface BootstrapResponse {
   health: HealthResponse;
   models: ModelInfo[];
@@ -148,6 +176,8 @@ export interface BootstrapResponse {
   presets: CharacterPreset[];
   datasets: FineTuneDataset[];
   finetune_runs: FineTuneRun[];
+  audio_tool_capabilities: AudioToolCapability[];
+  audio_tool_jobs: AudioToolJob[];
 }
 
 export interface CloneFromSampleRequest {
@@ -228,6 +258,17 @@ export interface VoiceDesignRequest extends GenerationRequestExtras {
   instruct: string;
 }
 
+export interface StoryStudioRequest extends GenerationRequestExtras {
+  text: string;
+  language: string;
+  instruct: string;
+  model_id?: string;
+  speaker?: string;
+  generation_mode: string;
+  split_mode: string;
+  pause_ms: number;
+}
+
 export interface UniversalInferenceRequest extends GenerationRequestExtras {
   model_id: string;
   text: string;
@@ -254,4 +295,56 @@ export interface HybridCloneInstructRequest extends GenerationRequestExtras {
 export interface GenerateFromPresetRequest extends GenerationRequestExtras {
   text: string;
   language: string;
+}
+
+export interface SoundEffectRequest {
+  prompt: string;
+  duration_sec: number;
+  intensity: number;
+  seed?: number;
+}
+
+export interface VoiceChangerRequest {
+  audio_path: string;
+  model_path?: string;
+  index_path?: string;
+  pitch_shift_semitones: number;
+  f0_method: string;
+  index_rate: number;
+  protect: number;
+  split_audio: boolean;
+  f0_autotune: boolean;
+  clean_audio: boolean;
+  clean_strength: number;
+  embedder_model: string;
+}
+
+export interface AudioConvertRequest {
+  audio_path: string;
+  output_format: string;
+  sample_rate: number;
+  mono: boolean;
+}
+
+export interface AudioSeparationRequest {
+  audio_path: string;
+}
+
+export interface AudioTranslateRequest {
+  audio_path: string;
+  target_language: string;
+  translated_text: string;
+  model_id?: string;
+  speaker: string;
+  instruct: string;
+}
+
+export interface AudioToolResponse {
+  kind: string;
+  status: string;
+  message: string;
+  assets: AudioToolAsset[];
+  transcript_text?: string | null;
+  translated_text?: string | null;
+  record?: GenerationRecord | null;
 }

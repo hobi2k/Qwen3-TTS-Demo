@@ -3,6 +3,9 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "./lib/api";
 import type {
   AudioAsset,
+  AudioToolCapability,
+  AudioToolJob,
+  AudioToolResponse,
   CharacterPreset,
   ClonePromptRecord,
   FineTuneDataset,
@@ -14,7 +17,9 @@ import type {
   UploadResponse,
 } from "./lib/types";
 
-type TabKey = "custom" | "design" | "character" | "inference" | "finetune";
+type TabKey = "home" | "voices" | "discover" | "custom" | "design" | "character" | "inference" | "hybrid" | "audio" | "finetune";
+type AudioWorkspaceKey = "effects" | "changer" | "converter" | "separation" | "translation";
+type AudioEffectsView = "explore" | "history";
 type GenerationModeKey = "custom" | "design" | "clone";
 type CharacterBuilderSource = "design" | "upload";
 type FineTuneMode = "base" | "custom_voice";
@@ -34,13 +39,123 @@ type GenerationControlsForm = {
   extra_generate_kwargs: string;
 };
 
-const tabs: { key: TabKey; label: string; description: string }[] = [
-  { key: "custom", label: "Quick Check", description: "" },
-  { key: "design", label: "Design Lab", description: "" },
-  { key: "character", label: "Character Builder", description: "" },
-  { key: "inference", label: "Inference Lab", description: "" },
-  { key: "finetune", label: "Training Lab", description: "" },
-];
+const PRODUCT_PAGES: Record<TabKey, { label: string; title: string; description: string }> = {
+  home: {
+    label: "홈",
+    title: "홈",
+    description: "지금 바로 시작할 작업을 고릅니다.",
+  },
+  voices: {
+    label: "나의 목소리들",
+    title: "나의 목소리들",
+    description: "내가 만든 프리셋, 생성 음성, 학습 결과를 모아 봅니다.",
+  },
+  discover: {
+    label: "발견",
+    title: "발견",
+    description: "자주 쓰는 템플릿과 시작점을 고릅니다.",
+  },
+  custom: {
+    label: "빠르게 들어보기",
+    title: "빠르게 들어보기",
+    description: "기본 CustomVoice로 짧게 미리 들어봅니다.",
+  },
+  character: {
+    label: "목소리 복제",
+    title: "새로운 목소리 만들기",
+    description: "참조 음성에서 스타일을 추출하고 저장합니다.",
+  },
+  design: {
+    label: "스토리 스튜디오",
+    title: "스토리 스튜디오",
+    description: "긴 대본과 장면용 목소리를 함께 다룹니다.",
+  },
+  audio: {
+    label: "오디오 작업실",
+    title: "오디오 작업실",
+    description: "효과음, 보이스 체인저, 분리, 변환, 전사를 처리합니다.",
+  },
+  inference: {
+    label: "텍스트 음성 변환",
+    title: "텍스트 음성 변환",
+    description: "모델을 직접 골라 원하는 문장을 음성으로 만듭니다.",
+  },
+  hybrid: {
+    label: "스타일 프리셋 + 말투 지시",
+    title: "스타일 프리셋 + 말투 지시",
+    description: "저장한 스타일 위에 말투 지시를 더해 결과를 만듭니다.",
+  },
+  finetune: {
+    label: "훈련 랩",
+    title: "훈련 랩",
+    description: "데이터셋 준비와 학습을 이어서 진행합니다.",
+  },
+};
+
+const CUSTOM_RECIPES = [
+  {
+    label: "Broadcast",
+    text: "오늘 회의는 여기서 정리하겠습니다. 각자 할 일을 다시 확인해 주세요.",
+    instruction: "차분하고 또렷하게, 스튜디오 나레이션처럼 안정적으로 읽어 주세요.",
+    language: "Korean",
+  },
+  {
+    label: "Warm",
+    text: "오늘은 정말 힘들었지. 그래도 여기까지 온 것만으로도 충분해.",
+    instruction: "따뜻하고 다정하게, 가까이에서 위로하듯 읽어 주세요.",
+    language: "Korean",
+  },
+  {
+    label: "Cold",
+    text: "이제 변명은 그만해. 남은 건 결과로 보여주는 것뿐이야.",
+    instruction: "차갑고 단호하게, 감정을 억누른 채 압박하듯 읽어 주세요.",
+    language: "Korean",
+  },
+] as const;
+
+const DESIGN_RECIPES = [
+  {
+    label: "Heroine",
+    instruction:
+      "Young Korean woman, cinematic and confident. Clear articulation, bright upper tone, slight emotional swell at the end of each sentence.",
+  },
+  {
+    label: "Late Night",
+    instruction:
+      "Korean female voice, intimate and low-key. Breathy but controlled, like a midnight radio host speaking very close to the mic.",
+  },
+  {
+    label: "Villain",
+    instruction:
+      "Korean woman with poised menace. Calm surface, cold authority, sharp consonants, restrained but dangerous energy.",
+  },
+] as const;
+
+const HYBRID_RECIPES = [
+  {
+    label: "Furious",
+    instruction: "폭발 직전의 분노로, 날카롭고 거칠게, 문장 끝을 강하게 끊어 읽어주세요.",
+  },
+  {
+    label: "Shaken",
+    instruction: "분노와 공포가 동시에 올라오는 느낌으로, 숨이 가쁘고 떨리는 톤으로 읽어주세요.",
+  },
+  {
+    label: "Cold",
+    instruction: "감정을 억누른 채 차갑고 단호하게, 상대를 압박하듯 읽어주세요.",
+  },
+] as const;
+
+const SOUND_EFFECT_LIBRARY = [
+  { id: "river", title: "강물", subtitle: "넓게 흐르는 물소리와 가까운 물 튐", duration: "0:30", prompt: "폭이 넓은 강물 소리, 가까운 물 튐, 잔잔한 흐름" },
+  { id: "thunder", title: "천둥", subtitle: "가까운 번개와 낮게 울리는 잔향", duration: "0:18", prompt: "가까운 천둥 번개, 낮게 울리는 공기, 요란한 잔향" },
+  { id: "gunshot", title: "총성", subtitle: "짧고 날카로운 근거리 충격음", duration: "0:02", prompt: "짧고 강한 총성, 가까운 거리, 날카로운 충격" },
+  { id: "explosion", title: "폭발", subtitle: "유리 파편이 섞인 무거운 폭발음", duration: "0:04", prompt: "강한 폭발, 유리 파편, 짧고 무거운 충격" },
+  { id: "rain", title: "폭우", subtitle: "차갑고 촘촘한 빗줄기가 길게 쏟아짐", duration: "0:30", prompt: "거센 폭우, 차가운 빗줄기, 낮은 바람, 지속적인 빗소리" },
+  { id: "applause", title: "박수", subtitle: "밝은 실내에서 터지는 환호와 박수", duration: "0:09", prompt: "관객 박수, 짧은 환호, 밝은 실내 잔향" },
+  { id: "wind", title: "강풍", subtitle: "낮게 울리는 거센 바람과 진동", duration: "0:30", prompt: "거센 폭풍 바람, 낮게 울리는 공기, 창문 틈새 진동" },
+  { id: "running", title: "달리는 발소리", subtitle: "마른 바닥을 빠르게 치는 일정한 발걸음", duration: "0:30", prompt: "빠르게 달리는 발소리, 마른 바닥, 일정한 리듬" },
+] as const;
 
 const LANGUAGE_OPTIONS = [
   { value: "Auto", label: "자동 감지" },
@@ -91,13 +206,100 @@ function basenameFromPath(value: string): string {
 function getAudioDownloadName(record: GenerationRecord): string {
   const sourceName = basenameFromPath(record.output_audio_path || record.output_audio_url);
   const hasExtension = /\.[a-z0-9]+$/i.test(sourceName);
-  return hasExtension ? sourceName : `${record.id}.wav`;
+  const looksOpaque = /^(audio|gen|sfx|voicechanger|convert|harmonic|percussive)_[a-f0-9]{8,}/i.test(sourceName);
+  if (hasExtension && !looksOpaque) {
+    return sourceName;
+  }
+
+  const extension = hasExtension ? sourceName.split(".").pop() || "wav" : "wav";
+  const readableText = (record.input_text || record.mode || "audio")
+    .trim()
+    .replace(/[^\w\s가-힣-]+/g, " ")
+    .replace(/\s+/g, "-")
+    .slice(0, 48)
+    .replace(/^-+|-+$/g, "");
+  const base = readableText || record.mode || "audio";
+  return `${base}.${extension}`;
 }
 
 function getDatasetSourceLabel(value: string): string {
   if (value === "voice_design_batch") return "Voice Design 샘플 묶음";
   if (value === "uploaded_audio_batch") return "직접 업로드한 음성 묶음";
   return value;
+}
+
+function getModeLabel(mode: string): string {
+  const labels: Record<string, string> = {
+    custom_voice: "텍스트 음성 변환",
+    voice_design: "스토리 스튜디오",
+    story_studio: "스토리 스튜디오",
+    voice_clone: "목소리 복제",
+    hybrid_clone_instruct: "하이브리드",
+    sound_effect: "사운드 효과",
+    voice_changer: "보이스 체인저",
+    audio_converter: "오디오 변환",
+    audio_separation: "오디오 분리",
+    audio_translation: "전사/번역",
+  };
+  return labels[mode] || mode;
+}
+
+function getModelDisplayLabel(model: ModelInfo): string {
+  if (model.source === "stock") {
+    return model.label;
+  }
+  const speaker = model.default_speaker ? ` · ${model.default_speaker}` : "";
+  const checkpoint = model.label.includes("/") ? model.label.split("/").pop()?.trim() || model.label : model.label;
+  return `${checkpoint}${speaker}`;
+}
+
+function getAudioToolJobLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    sound_effect: "사운드 효과",
+    voice_changer: "보이스 체인저",
+    audio_converter: "오디오 변환",
+    audio_separation: "오디오 분리",
+    audio_translation: "전사/번역",
+  };
+  return labels[kind] || kind;
+}
+
+function getPresetSourceLabel(sourceType: string): string {
+  const labels: Record<string, string> = {
+    generated_sample: "생성 음성에서 저장",
+    uploaded_reference: "참조 음성에서 저장",
+    design_sample: "디자인 샘플에서 저장",
+    upload_clone_prompt: "업로드 음성에서 저장",
+  };
+  return labels[sourceType] || "저장된 스타일";
+}
+
+function getRecordDisplayTitle(record: GenerationRecord): string {
+  const text = record.input_text?.trim();
+  if (text) {
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    return cleaned.length > 34 ? `${cleaned.slice(0, 34)}…` : cleaned;
+  }
+  return getModeLabel(record.mode);
+}
+
+function getAudioToolJobDisplayTitle(job: AudioToolJob): string {
+  if (job.kind === "sound_effect") {
+    return "사운드 효과";
+  }
+  if (job.kind === "voice_changer") {
+    return "보이스 체인저";
+  }
+  if (job.kind === "audio_converter") {
+    return "오디오 변환";
+  }
+  if (job.kind === "audio_separation") {
+    return "오디오 분리";
+  }
+  if (job.kind === "audio_translation") {
+    return "전사와 재합성";
+  }
+  return getAudioToolJobLabel(job.kind);
 }
 
 function normalizeLanguageValue(value: string): string {
@@ -125,6 +327,30 @@ function LanguageSelect({
     <select value={normalizedValue} onChange={(event) => onChange(event.target.value)}>
       {!hasKnownValue && normalizedValue ? <option value={normalizedValue}>{normalizedValue}</option> : null}
       {LANGUAGE_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function TargetLanguageSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const normalizedValue = normalizeLanguageValue(value);
+  const targetOptions = LANGUAGE_OPTIONS.filter((option) => option.value !== "Auto");
+  const fallbackValue = normalizedValue === "Auto" ? "English" : normalizedValue;
+  const hasKnownValue = targetOptions.some((option) => option.value === fallbackValue);
+
+  return (
+    <select value={fallbackValue} onChange={(event) => onChange(event.target.value)}>
+      {!hasKnownValue && fallbackValue ? <option value={fallbackValue}>{fallbackValue}</option> : null}
+      {targetOptions.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
@@ -314,7 +540,7 @@ function AudioCard({
       <p className="audio-card__text">{record.input_text}</p>
       <audio controls src={record.output_audio_url} className="audio-card__player" />
       <div className="audio-card__meta">
-        <span>{record.mode}</span>
+        <span>{getModeLabel(record.mode)}</span>
         <span>{record.language}</span>
         {record.speaker ? <span>{record.speaker}</span> : null}
       </div>
@@ -396,26 +622,120 @@ function PromptSummaryCard({
       </div>
       <div className="result-card__grid">
         <div>
-          <span className="meta-label">ID</span>
-          <strong>{prompt.id}</strong>
+          <span className="meta-label">생성 방식</span>
+          <strong>{prompt.source_type === "generated_sample" ? "생성 음성에서 추출" : "참조 음성에서 추출"}</strong>
         </div>
         <div>
-          <span className="meta-label">Source</span>
-          <strong>{prompt.source_type}</strong>
-        </div>
-        <div>
-          <span className="meta-label">Base Model</span>
-          <strong>{prompt.base_model}</strong>
+          <span className="meta-label">모드</span>
+          <strong>{prompt.x_vector_only_mode ? "x-vector only" : "full prompt"}</strong>
         </div>
       </div>
-      <div className="path-chip">{prompt.prompt_path}</div>
       <p>{prompt.reference_text}</p>
     </article>
   );
 }
 
+function RecipeBar({
+  title,
+  items,
+  onApply,
+}: {
+  title: string;
+  items: ReadonlyArray<{ label: string; instruction?: string; text?: string; language?: string }>;
+  onApply: (item: { label: string; instruction?: string; text?: string; language?: string }) => void;
+}) {
+  return (
+    <section className="recipe-bar">
+      <div className="recipe-bar__header">
+        <span className="eyebrow eyebrow--soft">{title}</span>
+        <p>자주 쓰는 템플릿을 바로 적용합니다.</p>
+      </div>
+      <div className="recipe-bar__chips">
+        {items.map((item) => (
+          <button className="recipe-chip" key={item.label} onClick={() => onApply(item)} type="button">
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HeroMetric({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <article className="hero-metric">
+      <span className="meta-label">{label}</span>
+      <strong style={accent ? { color: accent } : undefined}>{value}</strong>
+    </article>
+  );
+}
+
+function SpotlightCard({
+  eyebrow,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <article className="spotlight-card">
+      <span className="eyebrow eyebrow--soft">{eyebrow}</span>
+      <h3>{title}</h3>
+      <p>{description}</p>
+      <button className="secondary-button" onClick={onAction} type="button">
+        {actionLabel}
+      </button>
+    </article>
+  );
+}
+
+function PageHeader({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <header className="page-header">
+      <span className="eyebrow eyebrow--soft">Voice Studio</span>
+      <h1>{title}</h1>
+      <p>{description}</p>
+    </header>
+  );
+}
+
+function MiniWaveform({ dense = false }: { dense?: boolean }) {
+  const bars = dense
+    ? [10, 18, 24, 16, 12, 20, 26, 18, 14, 10, 8, 12, 16, 20, 18, 12, 10, 8, 6, 5]
+    : [6, 9, 12, 18, 24, 28, 25, 20, 15, 10, 8, 6, 5, 4, 6, 8, 10, 13, 16, 18, 15, 12, 9];
+
+  return (
+    <div className="mini-waveform" aria-hidden="true">
+      {bars.map((height, index) => (
+        <span key={`${height}-${index}`} style={{ height }} />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabKey>("custom");
+  const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const [audioWorkspace, setAudioWorkspace] = useState<AudioWorkspaceKey>("effects");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [speakers, setSpeakers] = useState<SpeakerInfo[]>([]);
@@ -438,10 +758,14 @@ export default function App() {
   });
   const [designForm, setDesignForm] = useState({
     model_id: "",
-    text: "환영해. 오늘부터 넌 내 세계에 들어온 거야.",
+    text: "장면 1\n오늘 회의는 여기서 끝내죠. 다들 자리에 남아 주세요.\n\n장면 2\n문이 닫히는 순간, 방 안 공기가 완전히 달라졌어.",
     language: "Korean",
     instruct:
       "Young Korean woman, calm and slightly cool. Very clear articulation, restrained emotion, but a faint warmth at the end of each sentence.",
+    generation_mode: "voice_design",
+    split_mode: "line",
+    pause_ms: "350",
+    speaker: "Sohee",
   });
   const [lastCustomRecord, setLastCustomRecord] = useState<GenerationRecord | null>(null);
   const [lastDesignRecord, setLastDesignRecord] = useState<GenerationRecord | null>(null);
@@ -485,9 +809,9 @@ export default function App() {
   const [selectedDatasetAssetPaths, setSelectedDatasetAssetPaths] = useState<string[]>([]);
   const [selectedHistorySampleIds, setSelectedHistorySampleIds] = useState<string[]>([]);
   const [datasetForm, setDatasetForm] = useState({
-    name: "voice-design-dataset",
+    name: "",
     source_type: "voice_design_batch",
-    speaker_name: "speaker_demo",
+    speaker_name: "",
     ref_audio_path: "",
   });
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
@@ -515,6 +839,44 @@ export default function App() {
   });
   const [hybridControls, setHybridControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
   const [lastHybridRecord, setLastHybridRecord] = useState<GenerationRecord | null>(null);
+  const [audioToolCapabilities, setAudioToolCapabilities] = useState<AudioToolCapability[]>([]);
+  const [audioToolJobs, setAudioToolJobs] = useState<AudioToolJob[]>([]);
+  const [audioEffectsView, setAudioEffectsView] = useState<AudioEffectsView>("explore");
+  const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
+  const [soundEffectForm, setSoundEffectForm] = useState({
+    prompt: "금속 지붕에 내리는 차가운 비와 멀리서 울리는 낮은 천둥",
+    duration_sec: "4.0",
+    intensity: "0.9",
+  });
+  const [voiceChangerForm, setVoiceChangerForm] = useState({
+    audio_path: "",
+    model_path: "",
+    index_path: "",
+    pitch_shift_semitones: "0",
+    f0_method: "rmvpe",
+    index_rate: "0.3",
+    protect: "0.33",
+    split_audio: false,
+    f0_autotune: false,
+    clean_audio: false,
+    clean_strength: "0.7",
+    embedder_model: "contentvec",
+  });
+  const [audioConvertForm, setAudioConvertForm] = useState({
+    audio_path: "",
+    output_format: "wav",
+    sample_rate: "24000",
+    mono: true,
+  });
+  const [audioTranslateForm, setAudioTranslateForm] = useState({
+    audio_path: "",
+    target_language: "English",
+    translated_text: "",
+    model_id: "",
+    speaker: "Sohee",
+    instruct: "",
+  });
+  const [lastAudioToolResult, setLastAudioToolResult] = useState<AudioToolResponse | null>(null);
 
   async function refreshAll() {
     const data = await api.bootstrap();
@@ -526,6 +888,8 @@ export default function App() {
     setPresets(data.presets);
     setDatasets(data.datasets);
     setRuns(data.finetune_runs);
+    setAudioToolCapabilities(data.audio_tool_capabilities || []);
+    setAudioToolJobs(data.audio_tool_jobs || []);
   }
 
   useEffect(() => {
@@ -590,6 +954,12 @@ export default function App() {
     if (customVoiceModels.length > 0 && !customForm.model_id) {
       setCustomForm((prev) => ({ ...prev, model_id: preferredStockCustomVoiceModel?.model_id ?? prev.model_id }));
     }
+    if (customVoiceModels.length > 0 && !audioTranslateForm.model_id) {
+      setAudioTranslateForm((prev) => ({
+        ...prev,
+        model_id: preferredStockCustomVoiceModel?.model_id ?? prev.model_id,
+      }));
+    }
     if (voiceDesignModels.length > 0 && !designForm.model_id) {
       const preferred = voiceDesignModels.find((model) => model.recommended) ?? voiceDesignModels[0];
       setDesignForm((prev) => ({ ...prev, model_id: preferred.model_id }));
@@ -619,7 +989,7 @@ export default function App() {
     if (tokenizerModels.length > 0 && !runForm.tokenizer_model_path) {
       setRunForm((prev) => ({ ...prev, tokenizer_model_path: tokenizerModels[0].model_id }));
     }
-  }, [customVoiceModels, customVoiceCapableModels, voiceDesignModels, baseModels, inferenceModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel]);
+  }, [customVoiceModels, customVoiceCapableModels, voiceDesignModels, baseModels, inferenceModels, tokenizerModels, customForm.model_id, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel, audioTranslateForm.model_id]);
 
   useEffect(() => {
     if (!selectedInferenceModel) {
@@ -688,9 +1058,47 @@ export default function App() {
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
   const selectableDatasetAssets = audioAssets.filter((asset) => asset.source === "generated" || asset.source === "upload");
+  const finetunedModels = models.filter((model) => model.source === "finetuned");
+  const stockModels = models.filter((model) => model.source === "stock" && model.inference_mode);
+  const latestGeneratedRecord = history[0] ?? null;
+  const audioToolCapabilityMap = new Map(audioToolCapabilities.map((capability) => [capability.key, capability]));
   const assetTextByPath = new Map(
     audioAssets.map((asset) => [asset.path, (asset.transcript_text || "").trim()]),
   );
+  const soundEffectsAvailable = audioToolCapabilityMap.get("sound_effects")?.available ?? true;
+  const voiceChangerAvailable = audioToolCapabilityMap.get("voice_changer")?.available ?? true;
+  const audioConverterAvailable = audioToolCapabilityMap.get("audio_converter")?.available ?? true;
+  const audioSeparationAvailable = audioToolCapabilityMap.get("audio_separation")?.available ?? true;
+  const audioTranslationAvailable = audioToolCapabilityMap.get("audio_translation")?.available ?? true;
+  const pageMeta = PRODUCT_PAGES[activeTab];
+  const soundEffectJobs = audioToolJobs.filter((job) => job.kind === "sound_effect");
+  const filteredSoundEffectLibrary = SOUND_EFFECT_LIBRARY.filter((item) => {
+    const query = audioEffectsSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${item.title} ${item.subtitle} ${item.prompt}`.toLowerCase().includes(query);
+  });
+  const audioWorkspaceMeta: Record<AudioWorkspaceKey, { title: string; description: string }> = {
+    effects: {
+      title: "사운드 효과 생성",
+      description: "효과음을 찾고, 바로 생성하고, 최근 작업을 다시 확인합니다.",
+    },
+    changer: {
+      title: "보이스 체인저",
+      description: "RVC 모델로 기존 음성의 음색을 직접 바꿉니다.",
+    },
+    converter: {
+      title: "오디오 변환",
+      description: "포맷, 샘플레이트, 모노 정리를 한 번에 처리합니다.",
+    },
+    separation: {
+      title: "오디오 분리",
+      description: "lightweight HPSS 기반으로 harmonic/percussive stem을 나눕니다.",
+    },
+    translation: {
+      title: "음성을 텍스트로 / 번역 보조",
+      description: "Whisper 전사와 확정 번역문 재합성을 정확도 우선으로 묶습니다.",
+    },
+  };
 
   function updateDatasetSample(
     index: number,
@@ -754,6 +1162,114 @@ export default function App() {
     );
   }
 
+  function applyCustomRecipe(item: { text?: string; instruction?: string; language?: string }) {
+    setCustomForm((prev) => ({
+      ...prev,
+      text: item.text || prev.text,
+      instruct: item.instruction || prev.instruct,
+      language: item.language || prev.language,
+    }));
+  }
+
+  function applyDesignRecipe(item: { instruction?: string }) {
+    setDesignForm((prev) => ({
+      ...prev,
+      instruct: item.instruction || prev.instruct,
+    }));
+  }
+
+  function applyHybridRecipe(item: { instruction?: string }) {
+    setHybridForm((prev) => ({
+      ...prev,
+      instruct: item.instruction || prev.instruct,
+    }));
+  }
+
+  function applySoundEffectRecipe(prompt: string) {
+    setSoundEffectForm((prev) => ({
+      ...prev,
+      prompt,
+    }));
+  }
+
+  async function handleSoundEffectSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.generateSoundEffect({
+        prompt: soundEffectForm.prompt,
+        duration_sec: Number(soundEffectForm.duration_sec || "4"),
+        intensity: Number(soundEffectForm.intensity || "0.9"),
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("사운드 이펙트를 생성했습니다.");
+    });
+  }
+
+  async function handleVoiceChangerSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.changeVoice({
+        audio_path: voiceChangerForm.audio_path,
+        model_path: voiceChangerForm.model_path || undefined,
+        index_path: voiceChangerForm.index_path || undefined,
+        pitch_shift_semitones: Number(voiceChangerForm.pitch_shift_semitones || "0"),
+        f0_method: voiceChangerForm.f0_method,
+        index_rate: Number(voiceChangerForm.index_rate || "0.3"),
+        protect: Number(voiceChangerForm.protect || "0.33"),
+        split_audio: voiceChangerForm.split_audio,
+        f0_autotune: voiceChangerForm.f0_autotune,
+        clean_audio: voiceChangerForm.clean_audio,
+        clean_strength: Number(voiceChangerForm.clean_strength || "0.7"),
+        embedder_model: voiceChangerForm.embedder_model,
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("원본 음성의 음색을 변환했습니다.");
+    });
+  }
+
+  async function handleAudioConvertSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.convertAudio({
+        audio_path: audioConvertForm.audio_path,
+        output_format: audioConvertForm.output_format,
+        sample_rate: Number(audioConvertForm.sample_rate || "24000"),
+        mono: audioConvertForm.mono,
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("오디오 변환을 완료했습니다.");
+    });
+  }
+
+  async function handleAudioSeparation(audioPath: string) {
+    await runAction(async () => {
+      const result = await api.separateAudio({ audio_path: audioPath });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("오디오 분리를 완료했습니다.");
+    });
+  }
+
+  async function handleAudioTranslateSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.translateAudio({
+        audio_path: audioTranslateForm.audio_path,
+        target_language: audioTranslateForm.target_language,
+        translated_text: audioTranslateForm.translated_text,
+        model_id: audioTranslateForm.model_id || undefined,
+        speaker: audioTranslateForm.speaker,
+        instruct: audioTranslateForm.instruct,
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("오디오 번역 보조 흐름을 실행했습니다.");
+    });
+  }
+
   async function handleCustomSubmit(event: FormEvent) {
     event.preventDefault();
     await runAction(async () => {
@@ -770,14 +1286,21 @@ export default function App() {
   async function handleVoiceDesignSubmit(event: FormEvent) {
     event.preventDefault();
     await runAction(async () => {
-      const result = await api.generateVoiceDesign({
-        ...designForm,
+      const result = await api.generateStoryStudio({
+        model_id: designForm.model_id || undefined,
+        text: designForm.text,
+        language: designForm.language,
+        instruct: designForm.instruct,
+        generation_mode: designForm.generation_mode,
+        split_mode: designForm.split_mode,
+        pause_ms: Number(designForm.pause_ms || "350"),
+        speaker: designForm.generation_mode === "custom_voice" ? designForm.speaker : undefined,
         ...serializeGenerationControls(designControls),
       });
       setLastDesignRecord(result.record);
       setSelectedDesignSampleId(result.record.id);
       await refreshAll();
-      setMessage("디자인 샘플을 생성했습니다.");
+      setMessage("장시간 대본 생성을 완료했습니다.");
     });
   }
 
@@ -952,7 +1475,7 @@ export default function App() {
       }
       setSelectedDatasetId(finalDataset.id);
       await refreshAll();
-      setMessage(options?.prepareAfterCreate ? "데이터셋 생성과 학습용 준비를 함께 완료했습니다." : "파인튜닝용 raw JSONL 데이터셋을 만들었습니다.");
+      setMessage(options?.prepareAfterCreate ? "데이터셋 생성과 학습 시작 준비를 함께 완료했습니다." : "데이터셋 JSONL 생성을 완료했습니다.");
     });
   }
 
@@ -1001,7 +1524,7 @@ export default function App() {
         simulate_only: runForm.simulate_only,
       });
       await refreshAll();
-      setMessage(runForm.simulate_only ? "시뮬레이션용 prepared JSONL을 만들었습니다." : "실학습용 prepared JSONL을 만들었습니다.");
+      setMessage(runForm.simulate_only ? "학습 시작 전 점검용 파일 생성을 완료했습니다." : "학습 시작용 파일 생성을 완료했습니다.");
     });
   }
 
@@ -1161,7 +1684,7 @@ export default function App() {
       });
       setLastHybridRecord(result.record);
       await refreshAll();
-      setMessage("clone prompt + instruct hybrid 추론을 완료했습니다.");
+      setMessage("스타일 프리셋과 말투 지시를 함께 적용한 생성을 완료했습니다.");
     });
   }
 
@@ -1185,32 +1708,247 @@ export default function App() {
 
   return (
     <div className="page-shell">
-      <header className="hero">
-        <div className="hero__copy">
-          <span className="eyebrow">Voice Demo Tool</span>
-          <h1>Voice Demo Tool</h1>
-        </div>
-      </header>
+      <div className="app-shell">
+        <aside className="sidebar">
+          <div className="sidebar__brand">
+            <span className="eyebrow">Voice Studio</span>
+            <strong>Voice Studio</strong>
+            <small>음성 생성과 스타일 작업을 위한 작업실</small>
+          </div>
 
-      <nav className="tab-strip">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            className={tab.key === activeTab ? "tab is-active" : "tab"}
-            onClick={() => setActiveTab(tab.key)}
-            type="button"
-          >
-            <span>{tab.label}</span>
-            <small>{tab.description}</small>
-          </button>
-        ))}
-      </nav>
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">홈</span>
+            <button className={activeTab === "home" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("home")} type="button">
+              <span>홈</span>
+              <small>전체 상태와 바로가기</small>
+            </button>
+            <button className={activeTab === "voices" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("voices")} type="button">
+              <span>나의 목소리들</span>
+              <small>내 작업물 보기</small>
+            </button>
+            <button className={activeTab === "discover" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("discover")} type="button">
+              <span>발견</span>
+              <small>템플릿 모아보기</small>
+            </button>
+          </div>
 
-      {message ? <div className="message-banner">{message}</div> : null}
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">제품</span>
+            <button className={activeTab === "custom" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("custom")} type="button">
+              <span>빠르게 들어보기</span>
+              <small>빠르게 들어보기</small>
+            </button>
+            <button className={activeTab === "character" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("character")} type="button">
+              <span>목소리 복제</span>
+              <small>스타일 저장</small>
+            </button>
+            <button className={activeTab === "design" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("design")} type="button">
+              <span>스토리 스튜디오</span>
+              <small>장시간 대본 작업</small>
+            </button>
+            <button className={activeTab === "hybrid" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("hybrid")} type="button">
+              <span>스타일 프리셋 + 말투 지시</span>
+              <small>저장한 스타일에 감정 더하기</small>
+            </button>
+            <button className={activeTab === "audio" && audioWorkspace === "effects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => { setActiveTab("audio"); setAudioWorkspace("effects"); }} type="button">
+              <span>사운드 효과</span>
+              <small>효과음 만들기</small>
+            </button>
+            <button className={activeTab === "audio" && audioWorkspace === "separation" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => { setActiveTab("audio"); setAudioWorkspace("separation"); }} type="button">
+              <span>오디오 분리</span>
+              <small>오디오 나누기</small>
+            </button>
+            <button className={activeTab === "audio" && audioWorkspace === "translation" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => { setActiveTab("audio"); setAudioWorkspace("translation"); }} type="button">
+              <span>음성을 텍스트로</span>
+              <small>전사와 재합성</small>
+            </button>
+            <button className={activeTab === "audio" && audioWorkspace === "changer" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => { setActiveTab("audio"); setAudioWorkspace("changer"); }} type="button">
+              <span>보이스 체인저</span>
+              <small>음색 바꾸기</small>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">실험 / 개발</span>
+            <button className={activeTab === "inference" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("inference")} type="button">
+              <span>텍스트 음성 변환</span>
+              <small>모델 직접 선택</small>
+            </button>
+            <button className={activeTab === "finetune" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("finetune")} type="button">
+              <span>훈련 랩</span>
+              <small>데이터셋과 학습</small>
+            </button>
+          </div>
+        </aside>
+
+        <main className="page-main">
+          {activeTab === "home" ? (
+            <header className="hero">
+              <div className="hero__copy">
+                <span className="eyebrow">Voice Studio</span>
+                <h1>오늘 할 작업을 고르세요</h1>
+                <p>빠르게 들어보기, 텍스트 음성 변환, 스타일 작업, 오디오 작업, 학습을 각 화면으로 나눠 정리했습니다.</p>
+              </div>
+              <div className="spotlight-grid">
+                <SpotlightCard
+                  eyebrow="바로 시작"
+                  title="빠르게 들어보기"
+                  description="기본 CustomVoice로 짧게 미리 들어봅니다."
+                  actionLabel="빠르게 들어보기"
+                  onAction={() => setActiveTab("custom")}
+                />
+                <SpotlightCard
+                  eyebrow="스타일"
+                  title="목소리 복제"
+                  description="참조 음성에서 스타일을 추출하고 저장합니다."
+                  actionLabel="목소리 복제"
+                  onAction={() => setActiveTab("character")}
+                />
+                <SpotlightCard
+                  eyebrow="모델"
+                  title="텍스트 음성 변환"
+                  description="모델을 직접 골라 원하는 문장을 음성으로 만듭니다."
+                  actionLabel="텍스트 음성 변환"
+                  onAction={() => setActiveTab("inference")}
+                />
+                <SpotlightCard
+                  eyebrow="학습"
+                  title="훈련 랩"
+                  description="데이터셋을 만들고 학습을 실행합니다."
+                  actionLabel="훈련 랩"
+                  onAction={() => setActiveTab("finetune")}
+                />
+                <SpotlightCard
+                  eyebrow="스타일"
+                  title="스타일 프리셋 + 말투 지시"
+                  description="저장한 스타일 위에 감정과 말투를 더합니다."
+                  actionLabel="스타일 실험"
+                  onAction={() => setActiveTab("hybrid")}
+                />
+              </div>
+            </header>
+          ) : (
+            <PageHeader title={pageMeta.title} description={pageMeta.description} />
+          )}
+
+          {message ? <div className="message-banner">{message}</div> : null}
+      {activeTab === "voices" ? (
+        <section className="workspace workspace--stacked">
+          <div className="panel-grid">
+            <section className="panel">
+              <h2>저장된 프리셋</h2>
+              <p>저장해 둔 스타일을 다시 불러옵니다.</p>
+              <div className="preset-list">
+                {presets.length ? presets.map((preset) => (
+                  <article className="preset-card" key={preset.id}>
+                    <strong>{preset.name}</strong>
+                    <span>{formatDate(preset.created_at)}</span>
+                    <p>{preset.reference_text}</p>
+                    <div className="button-row">
+                      <button className="secondary-button" onClick={() => { setSelectedPresetId(preset.id); setSelectedHybridPresetId(preset.id); setActiveTab("character"); }} type="button">
+                        프리셋 열기
+                      </button>
+                      <button className="secondary-button" onClick={() => { setSelectedHybridPresetId(preset.id); setActiveTab("hybrid"); }} type="button">
+                        스타일 실험 열기
+                      </button>
+                    </div>
+                  </article>
+                )) : <p className="field-hint">아직 저장된 프리셋이 없습니다.</p>}
+              </div>
+            </section>
+
+            <section className="panel">
+              <h2>최근 생성 음성</h2>
+              <p>최근 만든 음성을 바로 다시 사용할 수 있습니다.</p>
+              <div className="history-list">
+                {history.slice(0, 10).map((record) => (
+                  <article className="history-item" key={record.id}>
+                    <button className="history-item__button" onClick={() => setActiveTab("inference")} type="button">
+                      <strong>{getAudioDownloadName(record)}</strong>
+                      <span>{getModeLabel(record.mode)}</span>
+                      <small>{formatDate(record.created_at)}</small>
+                    </button>
+                    <a className="history-item__download" href={record.output_audio_url} download={getAudioDownloadName(record)}>
+                      다운로드
+                    </a>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <div className="panel-grid">
+            <section className="panel">
+              <h2>Fine-tuned 체크포인트</h2>
+              <div className="preset-list">
+                {finetunedModels.length ? finetunedModels.map((model) => (
+                  <article className="preset-card" key={model.key}>
+                    <strong>{getModelDisplayLabel(model)}</strong>
+                    <span>{model.category === "custom_voice_finetuned" ? "CustomVoice" : "Base"}</span>
+                    <p>{model.default_speaker ? `${model.default_speaker} 화자 포함` : "추론용 체크포인트"}</p>
+                    <button className="secondary-button" onClick={() => { setInferenceForm((prev) => ({ ...prev, model_id: model.model_id })); setActiveTab("inference"); }} type="button">
+                      모델 선택 추론에서 열기
+                    </button>
+                  </article>
+                )) : <p className="field-hint">아직 fine-tuned 체크포인트가 없습니다.</p>}
+              </div>
+            </section>
+
+            <section className="panel">
+              <h2>데이터셋 라이브러리</h2>
+              <div className="preset-list">
+                {datasets.length ? datasets.map((dataset) => (
+                  <article className="preset-card" key={dataset.id}>
+                    <strong>{dataset.name}</strong>
+                    <span>{dataset.sample_count}개 샘플</span>
+                    <p>{dataset.speaker_name} 화자 기준 데이터셋</p>
+                    <button className="secondary-button" onClick={() => { setSelectedDatasetId(dataset.id); setActiveTab("finetune"); }} type="button">
+                      학습 화면에서 열기
+                    </button>
+                  </article>
+                )) : <p className="field-hint">아직 데이터셋이 없습니다.</p>}
+              </div>
+            </section>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "discover" ? (
+        <section className="workspace workspace--stacked">
+          <div className="panel-grid">
+            <section className="panel">
+              <h2>빠르게 들어보기 템플릿</h2>
+              <RecipeBar title="말투 템플릿" items={CUSTOM_RECIPES} onApply={(item) => { applyCustomRecipe(item); setActiveTab("custom"); }} />
+            </section>
+            <section className="panel">
+              <h2>스토리 스튜디오 템플릿</h2>
+              <RecipeBar title="장면 템플릿" items={DESIGN_RECIPES} onApply={(item) => { applyDesignRecipe(item); setActiveTab("design"); }} />
+            </section>
+          </div>
+          <div className="panel-grid">
+            <section className="panel">
+              <h2>감정 템플릿</h2>
+              <RecipeBar title="감정 강도" items={HYBRID_RECIPES} onApply={(item) => { applyHybridRecipe(item); setActiveTab("inference"); }} />
+            </section>
+            <section className="panel">
+              <h2>바로 시작</h2>
+              <div className="spotlight-grid">
+                <SpotlightCard eyebrow="미리듣기" title="빠르게 들어보기" description="기본 CustomVoice로 짧게 확인합니다." actionLabel="열기" onAction={() => setActiveTab("custom")} />
+                <SpotlightCard eyebrow="스타일" title="목소리 복제" description="참조 음성에서 스타일을 추출합니다." actionLabel="열기" onAction={() => setActiveTab("character")} />
+                <SpotlightCard eyebrow="텍스트 음성 변환" title="텍스트 음성 변환" description="모델을 직접 골라 생성합니다." actionLabel="열기" onAction={() => setActiveTab("inference")} />
+                <SpotlightCard eyebrow="하이브리드" title="스타일 프리셋 + 말투 지시" description="저장한 스타일과 말투 지시를 함께 씁니다." actionLabel="열기" onAction={() => setActiveTab("hybrid")} />
+              </div>
+            </section>
+          </div>
+        </section>
+      ) : null}
+
       {activeTab === "custom" ? (
         <section className="workspace">
           <form className="panel" onSubmit={handleCustomSubmit}>
-            <h2>Quick Voice Check</h2>
+            <h2>빠르게 들어보기</h2>
+            <p className="field-hint">기본 CustomVoice로 짧은 문장을 빠르게 미리 확인하는 화면입니다.</p>
+            <RecipeBar title="빠른 미리듣기 템플릿" items={CUSTOM_RECIPES} onApply={applyCustomRecipe} />
             <label>
               텍스트
               <textarea
@@ -1220,19 +1958,6 @@ export default function App() {
             </label>
             <div className="field-row">
               <label>
-                모델
-                <select
-                  value={customForm.model_id}
-                  onChange={(event) => setCustomForm({ ...customForm, model_id: event.target.value })}
-                >
-                  {customVoiceModels.map((model) => (
-                    <option key={model.key} value={model.model_id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
                 언어
                 <LanguageSelect
                   value={customForm.language}
@@ -1240,7 +1965,7 @@ export default function App() {
                 />
               </label>
               <label>
-                speaker
+                화자
                 <select
                   value={customForm.speaker}
                   onChange={(event) => setCustomForm({ ...customForm, speaker: event.target.value })}
@@ -1254,7 +1979,7 @@ export default function App() {
               </label>
             </div>
             <label>
-              instruction
+              말투 지시
               <textarea
                 value={customForm.instruct}
                 onChange={(event) => setCustomForm({ ...customForm, instruct: event.target.value })}
@@ -1262,12 +1987,12 @@ export default function App() {
             </label>
             <GenerationControlsEditor value={customControls} onChange={setCustomControls} />
             <button className="primary-button" disabled={loading} type="submit">
-              샘플 생성
+              미리듣기 생성
             </button>
           </form>
 
           <aside className="panel">
-            <h3>speaker 참고</h3>
+            <h3>현재 빠른 미리듣기 화자</h3>
             <div className="speaker-list">
               {speakers.map((speaker) => (
                 <div className="speaker-card" key={speaker.speaker}>
@@ -1278,7 +2003,7 @@ export default function App() {
               ))}
             </div>
             {lastCustomRecord ? (
-              <AudioCard title="방금 생성한 샘플" record={lastCustomRecord} />
+              <AudioCard title="방금 만든 미리듣기" record={lastCustomRecord} />
             ) : null}
           </aside>
         </section>
@@ -1287,30 +2012,77 @@ export default function App() {
       {activeTab === "design" ? (
         <section className="workspace">
           <form className="panel" onSubmit={handleVoiceDesignSubmit}>
-            <h2>Voice Design Studio</h2>
+            <h2>스토리 스튜디오</h2>
+            <p className="field-hint">장시간 대본, 장면 지시, 캐릭터 톤을 함께 다루는 화면입니다.</p>
+            <RecipeBar title="장면 지시 템플릿" items={DESIGN_RECIPES} onApply={applyDesignRecipe} />
+            <div className="field-row">
+              <label>
+                생성 방식
+                <select
+                  value={designForm.generation_mode}
+                  onChange={(event) => setDesignForm({ ...designForm, generation_mode: event.target.value })}
+                >
+                  <option value="voice_design">Voice Design</option>
+                  <option value="custom_voice">CustomVoice</option>
+                </select>
+              </label>
+              <label>
+                모델
+                <select
+                  value={designForm.model_id}
+                  onChange={(event) => setDesignForm({ ...designForm, model_id: event.target.value })}
+                >
+                  {(designForm.generation_mode === "custom_voice" ? customVoiceModels : voiceDesignModels).map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                분할 방식
+                <select
+                  value={designForm.split_mode}
+                  onChange={(event) => setDesignForm({ ...designForm, split_mode: event.target.value })}
+                >
+                  <option value="line">줄마다</option>
+                  <option value="paragraph">문단마다</option>
+                </select>
+              </label>
+              <label>
+                문장 사이 간격(ms)
+                <input
+                  value={designForm.pause_ms}
+                  onChange={(event) => setDesignForm({ ...designForm, pause_ms: event.target.value })}
+                />
+              </label>
+            </div>
+            {designForm.generation_mode === "custom_voice" ? (
+              <label>
+                화자
+                <select
+                  value={designForm.speaker}
+                  onChange={(event) => setDesignForm({ ...designForm, speaker: event.target.value })}
+                >
+                  {speakers.map((speaker) => (
+                    <option key={speaker.speaker} value={speaker.speaker}>
+                      {speaker.speaker}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label>
-              모델
-              <select
-                value={designForm.model_id}
-                onChange={(event) => setDesignForm({ ...designForm, model_id: event.target.value })}
-              >
-                {voiceDesignModels.map((model) => (
-                  <option key={model.key} value={model.model_id}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              음성 설명문
+              장면/화자 지시
               <textarea
                 value={designForm.instruct}
                 onChange={(event) => setDesignForm({ ...designForm, instruct: event.target.value })}
               />
             </label>
             <label>
-              샘플 텍스트
+              대본
               <textarea
+                className="bulk-path-textarea"
                 value={designForm.text}
                 onChange={(event) => setDesignForm({ ...designForm, text: event.target.value })}
               />
@@ -1324,12 +2096,13 @@ export default function App() {
             </label>
             <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
             <button className="primary-button" disabled={loading} type="submit">
-              디자인 샘플 생성
+              장면 음성 생성
             </button>
           </form>
 
           <aside className="panel">
-            <h3>디자인 샘플 기록</h3>
+            <h3>스토리 스튜디오 기록</h3>
+            <p className="field-hint">긴 대본은 줄마다 또는 문단마다 잘라 순서대로 합성한 뒤 하나의 오디오로 묶습니다.</p>
               <div className="history-list">
                 {voiceDesignHistory.slice(0, 6).map((record) => (
                   <article
@@ -1337,7 +2110,7 @@ export default function App() {
                     className={record.id === selectedDesignSampleId ? "history-item is-selected" : "history-item"}
                   >
                     <button className="history-item__button" onClick={() => setSelectedDesignSampleId(record.id)} type="button">
-                      <strong>{record.id}</strong>
+                      <strong>{getAudioDownloadName(record)}</strong>
                       <span>{record.input_text.slice(0, 60)}</span>
                     </button>
                     <a
@@ -1352,8 +2125,8 @@ export default function App() {
               </div>
             {lastDesignRecord ? (
               <AudioCard
-                title="방금 생성한 디자인 샘플"
-                subtitle="독립적인 음성 디자인 실험 결과"
+                title="방금 생성한 장면 음성"
+                subtitle="장면 지시와 대본을 함께 적용한 결과"
                 record={lastDesignRecord}
               />
             ) : null}
@@ -1366,9 +2139,9 @@ export default function App() {
           <section className="panel builder-panel">
             <div className="builder-header">
               <div>
-                <span className="eyebrow eyebrow--soft">Character Builder</span>
-                <h2>참조 소스 {"->"} clone prompt {"->"} preset 저장</h2>
-                <p>업로드 음성은 자동으로 Whisper 전사를 채우고, 필요하면 직접 수정한 뒤 prompt를 만들 수 있습니다.</p>
+                <span className="eyebrow eyebrow--soft">목소리 복제</span>
+                <h2>참조 음성에서 스타일을 추출하고 프리셋으로 저장</h2>
+                <p>업로드 음성은 자동으로 Whisper 전사를 채우고, 필요하면 직접 수정한 뒤 스타일 자산으로 저장할 수 있습니다.</p>
               </div>
               <label>
                 Base 모델
@@ -1420,8 +2193,8 @@ export default function App() {
                     </label>
                     {uploadedRef ? (
                       <div className="source-summary">
-                        <span className="meta-label">업로드 경로</span>
-                        <div className="path-chip">{uploadedRef.path}</div>
+                        <span className="meta-label">선택한 참조 음성</span>
+                        <strong>{uploadedRef.filename}</strong>
                       </div>
                     ) : null}
                     <label>
@@ -1438,7 +2211,7 @@ export default function App() {
                         Whisper로 다시 전사
                       </button>
                       <button className="primary-button" onClick={handleCreateCloneFromUpload} type="button">
-                        업로드 음성으로 clone prompt 만들기
+                        업로드 음성에서 스타일 추출
                       </button>
                     </div>
                   </>
@@ -1469,7 +2242,7 @@ export default function App() {
                             onClick={() => setSelectedDesignSampleId(record.id)}
                             type="button"
                           >
-                            <strong>{record.id}</strong>
+                            <strong>{getAudioDownloadName(record)}</strong>
                             <span>{record.input_text.slice(0, 80)}</span>
                           </button>
                           <a
@@ -1483,7 +2256,7 @@ export default function App() {
                       ))}
                     </div>
                     <button className="primary-button" onClick={handleCreateCloneFromDesign} type="button">
-                      디자인 샘플에서 clone prompt 만들기
+                      디자인 샘플에서 스타일 추출
                     </button>
                   </>
                 )}
@@ -1492,7 +2265,7 @@ export default function App() {
               <section className="step-card">
                 <span className="step-card__index">2</span>
                 <PromptSummaryCard
-                  title={builderSource === "upload" ? "업로드 참조 prompt" : "디자인 샘플 prompt"}
+                  title={builderSource === "upload" ? "업로드 스타일 자산" : "디자인 스타일 자산"}
                   prompt={activeClonePrompt}
                 />
               </section>
@@ -1527,7 +2300,7 @@ export default function App() {
                   onClick={() => void handleCreatePreset(builderSource)}
                   type="button"
                 >
-                  현재 prompt로 preset 저장
+                  현재 스타일로 프리셋 저장
                 </button>
               </section>
             </div>
@@ -1549,8 +2322,9 @@ export default function App() {
               </label>
               {selectedPreset ? (
                 <div className="source-summary">
-                  <span className="meta-label">선택된 preset</span>
-                  <div className="path-chip">{selectedPreset.clone_prompt_path}</div>
+                  <span className="meta-label">선택한 스타일</span>
+                  <strong>{selectedPreset.name}</strong>
+                  <span>{getPresetSourceLabel(selectedPreset.source_type)}</span>
                   <p>{selectedPreset.reference_text}</p>
                 </div>
               ) : null}
@@ -1565,7 +2339,7 @@ export default function App() {
             </section>
 
             <section className="panel">
-              <h2>Preset Library</h2>
+              <h2>스타일 라이브러리</h2>
               <div className="preset-list">
                 {presets.map((preset) => (
                   <article
@@ -1574,9 +2348,8 @@ export default function App() {
                     onClick={() => setSelectedPresetId(preset.id)}
                   >
                     <strong>{preset.name}</strong>
-                    <span>{preset.source_type}</span>
+                    <span>{getPresetSourceLabel(preset.source_type)}</span>
                     <p>{preset.reference_text}</p>
-                    <div className="path-chip">{preset.clone_prompt_path}</div>
                   </article>
                 ))}
               </div>
@@ -1591,9 +2364,9 @@ export default function App() {
           <form className="panel inference-panel" onSubmit={handleModelInferenceSubmit}>
             <div className="result-card__header">
               <div>
-                <span className="eyebrow eyebrow--soft">Inference Lab</span>
-                <h2>모델 선택형 추론</h2>
-                <p>Stock Base, Stock CustomVoice, 그리고 로컬 fine-tuned 체크포인트까지 한 화면에서 바로 테스트합니다.</p>
+                <span className="eyebrow eyebrow--soft">Model Lab</span>
+                <h2>텍스트 음성 변환</h2>
+                <p>Base, CustomVoice, fine-tuned 체크포인트를 직접 골라 원하는 문장을 음성으로 만듭니다.</p>
               </div>
             </div>
 
@@ -1623,12 +2396,11 @@ export default function App() {
 
             {selectedInferenceModel ? (
               <article className="status-card status-card--ready">
-                <strong>{selectedInferenceModel.label}</strong>
+                <strong>{getModelDisplayLabel(selectedInferenceModel)}</strong>
                 <p>{selectedInferenceModel.notes}</p>
                 <div className="audio-card__meta">
-                  <span>{selectedInferenceModel.source}</span>
-                  <span>{selectedInferenceModel.category}</span>
-                  <span>{selectedInferenceModel.inference_mode}</span>
+                  <span>{selectedInferenceModel.source === "stock" ? "기본 모델" : "학습된 모델"}</span>
+                  <span>{selectedInferenceMode === "voice_clone" ? "참조 음성 기반" : selectedInferenceMode === "custom_voice" ? "화자 선택형" : "설명문 기반"}</span>
                 </div>
               </article>
             ) : null}
@@ -1643,7 +2415,7 @@ export default function App() {
 
             {selectedInferenceMode === "custom_voice" ? (
               <label>
-                speaker
+                화자
                 {selectedInferenceModel?.available_speakers?.length ? (
                   <select
                     value={inferenceForm.speaker}
@@ -1665,7 +2437,7 @@ export default function App() {
             ) : null}
 
             <label>
-              instruct
+              말투 지시
               <textarea
                 disabled={selectedInferenceModel ? !selectedInferenceModel.supports_instruction : false}
                 placeholder={
@@ -1679,41 +2451,44 @@ export default function App() {
             </label>
 
             {selectedInferenceMode === "voice_clone" ? (
-              <div className="inference-clone-grid">
-                <label>
-                  ref_audio_path
-                  <input
-                    value={inferenceForm.ref_audio_path}
-                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  voice_clone_prompt_path
-                  <input
-                    value={inferenceForm.voice_clone_prompt_path}
-                    onChange={(event) =>
-                      setInferenceForm((prev) => ({ ...prev, voice_clone_prompt_path: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="inference-clone-grid__wide">
-                  ref_text
-                  <textarea
-                    value={inferenceForm.ref_text}
-                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))}
-                  />
-                </label>
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={inferenceForm.x_vector_only_mode}
-                    onChange={(event) =>
-                      setInferenceForm((prev) => ({ ...prev, x_vector_only_mode: event.target.checked }))
-                    }
-                  />
-                  x_vector_only_mode
-                </label>
-              </div>
+              <details className="advanced-inline">
+                <summary>참조 음성 설정</summary>
+                <div className="inference-clone-grid">
+                  <label>
+                    기준 음성 경로
+                    <input
+                      value={inferenceForm.ref_audio_path}
+                      onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    스타일 자산 경로
+                    <input
+                      value={inferenceForm.voice_clone_prompt_path}
+                      onChange={(event) =>
+                        setInferenceForm((prev) => ({ ...prev, voice_clone_prompt_path: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="inference-clone-grid__wide">
+                    기준 음성 문장
+                    <textarea
+                      value={inferenceForm.ref_text}
+                      onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))}
+                    />
+                  </label>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={inferenceForm.x_vector_only_mode}
+                      onChange={(event) =>
+                        setInferenceForm((prev) => ({ ...prev, x_vector_only_mode: event.target.checked }))
+                      }
+                    />
+                    빠른 음색 추출 모드
+                  </label>
+                </div>
+              </details>
             ) : null}
 
             <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
@@ -1724,7 +2499,7 @@ export default function App() {
 
           <aside className="panel inference-side">
             <h3>참조 음성 빠른 선택</h3>
-            <p className="field-hint">Base 계열 모델일 때 아래 파일을 선택하면 `ref_audio_path`와 `ref_text`를 바로 채웁니다.</p>
+            <p className="field-hint">Base 계열 모델일 때 아래 파일을 고르면 기준 음성과 참조 문장이 바로 채워집니다.</p>
             <ServerAudioPicker
               assets={generatedAudioAssets}
               selectedPath={inferenceForm.ref_audio_path}
@@ -1735,16 +2510,21 @@ export default function App() {
             ) : null}
           </aside>
           </div>
+        </section>
+      ) : null}
 
+      {activeTab === "hybrid" ? (
+        <section className="workspace workspace--stacked">
           <div className="panel-grid">
             <form className="panel inference-panel" onSubmit={handleHybridInferenceSubmit}>
               <div className="result-card__header">
                 <div>
-                  <span className="eyebrow eyebrow--soft">Experimental</span>
-                  <h2>Style Preset + Instruct Hybrid</h2>
-                  <p>저장된 스타일 프리셋을 다시 불러온 뒤, 그 위에 CustomVoice instruct를 덧입혀 감정 차이를 테스트합니다.</p>
+                  <span className="eyebrow eyebrow--soft">Hybrid</span>
+                  <h2>스타일 프리셋 + 말투 지시</h2>
+                  <p>저장한 스타일을 불러온 뒤, 그 위에 말투 지시를 더해 감정 차이를 확인합니다.</p>
                 </div>
               </div>
+              <RecipeBar title="감정 템플릿" items={HYBRID_RECIPES} onApply={applyHybridRecipe} />
 
               <label>
                 스타일 프리셋
@@ -1760,7 +2540,8 @@ export default function App() {
               {selectedHybridPreset ? (
                 <div className="source-summary">
                   <span className="meta-label">현재 스타일 소스</span>
-                  <div className="path-chip">{selectedHybridPreset.clone_prompt_path}</div>
+                  <strong>{selectedHybridPreset.name}</strong>
+                  <span>{getPresetSourceLabel(selectedHybridPreset.source_type)}</span>
                   <p>{selectedHybridPreset.reference_text}</p>
                 </div>
               ) : (
@@ -1808,7 +2589,7 @@ export default function App() {
                 />
               </label>
               <label>
-                instruct
+                말투 지시
                 <textarea
                   value={hybridForm.instruct}
                   onChange={(event) => setHybridForm((prev) => ({ ...prev, instruct: event.target.value }))}
@@ -1828,21 +2609,21 @@ export default function App() {
                     checked={hybridForm.x_vector_only_mode}
                     onChange={(event) => setHybridForm((prev) => ({ ...prev, x_vector_only_mode: event.target.checked }))}
                   />
-                  x_vector_only_mode
+                  빠른 음색 추출 모드
                 </label>
               </div>
               <p className="field-hint">
-                프리셋을 고르면 `ref_audio_path`와 `ref_text`가 자동으로 채워집니다. 필요하면 아래에서 덮어쓸 수 있습니다.
+                프리셋을 고르면 기준 음성과 참조 문장이 자동으로 채워집니다. 필요하면 아래에서 바꿀 수 있습니다.
               </p>
               <label>
-                ref_audio_path
+                기준 음성 경로
                 <input
                   value={hybridForm.ref_audio_path}
                   onChange={(event) => setHybridForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))}
                 />
               </label>
               <label>
-                ref_text
+                기준 음성 문장
                 <textarea
                   value={hybridForm.ref_text}
                   onChange={(event) => setHybridForm((prev) => ({ ...prev, ref_text: event.target.value }))}
@@ -1871,12 +2652,359 @@ export default function App() {
         </section>
       ) : null}
 
+      {activeTab === "audio" ? (
+        <section className="workspace workspace--stacked">
+          <section className="panel product-switcher">
+            <div>
+              <span className="eyebrow eyebrow--soft">오디오 작업</span>
+              <h2>{audioWorkspaceMeta[audioWorkspace].title}</h2>
+              <p>{audioWorkspaceMeta[audioWorkspace].description}</p>
+            </div>
+            <div className="product-switcher__grid">
+              <button className={audioWorkspace === "effects" ? "tab is-active" : "tab"} onClick={() => setAudioWorkspace("effects")} type="button">
+                <span>사운드 효과</span>
+                <small>효과음 만들기</small>
+              </button>
+              <button className={audioWorkspace === "changer" ? "tab is-active" : "tab"} onClick={() => setAudioWorkspace("changer")} type="button">
+                <span>보이스 체인저</span>
+                <small>음색 바꾸기</small>
+              </button>
+              <button className={audioWorkspace === "converter" ? "tab is-active" : "tab"} onClick={() => setAudioWorkspace("converter")} type="button">
+                <span>오디오 변환</span>
+                <small>포맷 바꾸기</small>
+              </button>
+              <button className={audioWorkspace === "separation" ? "tab is-active" : "tab"} onClick={() => setAudioWorkspace("separation")} type="button">
+                <span>오디오 분리</span>
+                <small>트랙 나누기</small>
+              </button>
+              <button className={audioWorkspace === "translation" ? "tab is-active" : "tab"} onClick={() => setAudioWorkspace("translation")} type="button">
+                <span>음성을 텍스트로</span>
+                <small>전사와 재합성</small>
+              </button>
+            </div>
+          </section>
+
+          {audioWorkspace === "effects" ? (
+            <section className="sound-effects-shell">
+              <div className="sound-effects-top">
+                <div>
+                  <h2>사운드 효과</h2>
+                  <p>원하는 분위기의 효과음을 찾거나 직접 만들어보세요.</p>
+                </div>
+                <div className="sound-effects-tabs">
+                  <button
+                    className={audioEffectsView === "explore" ? "sound-effects-tab is-active" : "sound-effects-tab"}
+                    onClick={() => setAudioEffectsView("explore")}
+                    type="button"
+                  >
+                    탐색
+                  </button>
+                  <button
+                    className={audioEffectsView === "history" ? "sound-effects-tab is-active" : "sound-effects-tab"}
+                    onClick={() => setAudioEffectsView("history")}
+                    type="button"
+                  >
+                    히스토리
+                  </button>
+                </div>
+              </div>
+
+              <div className="sound-effects-search">
+                <input
+                  placeholder="효과음 검색"
+                  value={audioEffectsSearch}
+                  onChange={(event) => setAudioEffectsSearch(event.target.value)}
+                />
+              </div>
+
+              {audioEffectsView === "explore" ? (
+                <div className="sound-effects-list">
+                  {filteredSoundEffectLibrary.map((item) => (
+                    <article className="sound-effects-row" key={item.id}>
+                      <div className="sound-effects-row__main">
+                        <span className={`sound-effects-dot sound-effects-dot--${item.id}`} />
+                        <div>
+                          <strong>{item.title}</strong>
+                          <p>{item.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="sound-effects-row__player">
+                        <span>{item.duration}</span>
+                        <MiniWaveform />
+                        <button className="icon-button" onClick={() => applySoundEffectRecipe(item.prompt)} type="button">
+                          프롬프트 넣기
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="sound-effects-list">
+                  {soundEffectJobs.length ? soundEffectJobs.map((job) => (
+                    <article className="sound-effects-row" key={job.id}>
+                      <div className="sound-effects-row__main">
+                        <span className="sound-effects-dot sound-effects-dot--history" />
+                        <div>
+                          <strong>{getAudioToolJobDisplayTitle(job)}</strong>
+                          <p>{formatDate(job.created_at)}</p>
+                        </div>
+                      </div>
+                      <div className="sound-effects-row__player">
+                        <span>{job.artifacts[0] ? "완료" : "-"}</span>
+                        <MiniWaveform dense />
+                        {job.artifacts[0] ? (
+                          <a className="icon-button icon-button--link" href={job.artifacts[0].url} download={job.artifacts[0].filename}>
+                            다운로드
+                          </a>
+                        ) : (
+                          <button className="icon-button" disabled type="button">
+                            없음
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  )) : (
+                    <div className="sound-effects-empty">아직 생성한 효과음이 없습니다.</div>
+                  )}
+                </div>
+              )}
+
+              <form className="sound-effects-composer" onSubmit={handleSoundEffectSubmit}>
+                <div className="sound-effects-composer__label">프롬프트</div>
+                <textarea
+                  placeholder="생성하려는 효과음을 설명하세요..."
+                  value={soundEffectForm.prompt}
+                  onChange={(event) => setSoundEffectForm({ ...soundEffectForm, prompt: event.target.value })}
+                />
+                <div className="sound-effects-composer__meta">
+                  <span>길이 {soundEffectForm.duration_sec}초</span>
+                  <span>강도 {soundEffectForm.intensity}</span>
+                  <button className="primary-button" disabled={loading || !soundEffectsAvailable} type="submit">
+                    생성
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : null}
+
+          {audioWorkspace !== "effects" ? (
+          <>
+          <div className="panel-grid">
+            {audioWorkspace === "changer" ? (
+            <form className="panel" onSubmit={handleVoiceChangerSubmit}>
+              <h2>보이스 체인저</h2>
+              <p>기존 음성의 타이밍과 호흡을 유지한 채, RVC 모델로 음색만 바꿉니다.</p>
+              {!voiceChangerAvailable ? <p className="field-hint">현재 이 기능은 비활성 상태입니다.</p> : null}
+              <label>
+                원본 오디오 경로
+                <input value={voiceChangerForm.audio_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, audio_path: event.target.value })} />
+              </label>
+              <div className="field-row">
+                <label>
+                  RVC 모델 경로 (.pth)
+                  <input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
+                </label>
+                <label>
+                  인덱스 경로 (.index)
+                  <input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
+                </label>
+                <label>
+                  피치 이동
+                  <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
+                </label>
+              </div>
+              <div className="field-row">
+                <label>
+                  F0 방식
+                  <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
+                    <option value="rmvpe">rmvpe</option>
+                    <option value="fcpe">fcpe</option>
+                    <option value="crepe">crepe</option>
+                  </select>
+                </label>
+                <label>
+                  Index rate
+                  <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
+                </label>
+                <label>
+                  Protect
+                  <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
+                </label>
+              </div>
+              <div className="field-row">
+                <label>
+                  Clean strength
+                  <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
+                </label>
+                <label>
+                  Embedder
+                  <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
+                    <option value="contentvec">contentvec</option>
+                    <option value="hubert">hubert</option>
+                  </select>
+                </label>
+              </div>
+              <div className="field-row">
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={voiceChangerForm.split_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, split_audio: event.target.checked })} />
+                  긴 오디오 분할 처리
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={voiceChangerForm.f0_autotune} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_autotune: event.target.checked })} />
+                  오토튠
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={voiceChangerForm.clean_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_audio: event.target.checked })} />
+                  후처리 정리
+                </label>
+              </div>
+              <button className="primary-button" disabled={loading || !voiceChangerAvailable} type="submit">목소리 바꾸기</button>
+            </form>
+            ) : null}
+          </div>
+
+          <div className="panel-grid">
+            {audioWorkspace === "converter" ? (
+            <form className="panel" onSubmit={handleAudioConvertSubmit}>
+              <h2>오디오 변환</h2>
+              <p>포맷, 샘플레이트, mono 여부를 정리합니다.</p>
+              {!audioConverterAvailable ? <p className="field-hint">현재 변환 기능은 비활성 상태입니다.</p> : null}
+              <label>
+                원본 오디오 경로
+                <input value={audioConvertForm.audio_path} onChange={(event) => setAudioConvertForm({ ...audioConvertForm, audio_path: event.target.value })} />
+              </label>
+              <div className="field-row">
+                <label>
+                  출력 형식
+                  <select value={audioConvertForm.output_format} onChange={(event) => setAudioConvertForm({ ...audioConvertForm, output_format: event.target.value })}>
+                    <option value="wav">wav</option>
+                    <option value="flac">flac</option>
+                    <option value="ogg">ogg</option>
+                  </select>
+                </label>
+                <label>
+                  샘플레이트
+                  <input value={audioConvertForm.sample_rate} onChange={(event) => setAudioConvertForm({ ...audioConvertForm, sample_rate: event.target.value })} />
+                </label>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={audioConvertForm.mono} onChange={(event) => setAudioConvertForm({ ...audioConvertForm, mono: event.target.checked })} />
+                  모노로 정리
+                </label>
+              </div>
+              <div className="button-row">
+                <button className="primary-button" disabled={loading || !audioConverterAvailable} type="submit">변환 실행</button>
+              </div>
+            </form>
+            ) : null}
+
+            {audioWorkspace === "translation" ? (
+            <form className="panel" onSubmit={handleAudioTranslateSubmit}>
+              <h2>전사와 재합성</h2>
+              <p>음성을 전사하고, 원하는 번역문으로 다시 읽게 합니다.</p>
+              {!audioTranslationAvailable ? <p className="field-hint">현재 이 기능은 비활성 상태입니다.</p> : null}
+              <label>
+                원본 오디오 경로
+                <input value={audioTranslateForm.audio_path} onChange={(event) => setAudioTranslateForm({ ...audioTranslateForm, audio_path: event.target.value })} />
+              </label>
+              <div className="field-row">
+                <label>
+                  대상 언어
+                  <TargetLanguageSelect value={audioTranslateForm.target_language} onChange={(language) => setAudioTranslateForm({ ...audioTranslateForm, target_language: language })} />
+                </label>
+                <label>
+                  읽어줄 모델
+                  <select value={audioTranslateForm.model_id} onChange={(event) => setAudioTranslateForm({ ...audioTranslateForm, model_id: event.target.value })}>
+                    {customVoiceModels.map((model) => (
+                      <option key={model.key} value={model.model_id}>{model.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  화자
+                  <select value={audioTranslateForm.speaker} onChange={(event) => setAudioTranslateForm({ ...audioTranslateForm, speaker: event.target.value })}>
+                    {speakers.map((speaker) => (
+                      <option key={speaker.speaker} value={speaker.speaker}>{speaker.speaker}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label>
+                읽어줄 문장
+                <textarea value={audioTranslateForm.translated_text} onChange={(event) => setAudioTranslateForm({ ...audioTranslateForm, translated_text: event.target.value })} />
+              </label>
+              <label>
+                말투 지시
+                <textarea value={audioTranslateForm.instruct} onChange={(event) => setAudioTranslateForm({ ...audioTranslateForm, instruct: event.target.value })} />
+              </label>
+              <button className="primary-button" disabled={loading || !audioTranslationAvailable} type="submit">전사/번역 흐름 실행</button>
+            </form>
+            ) : null}
+
+            {audioWorkspace === "separation" ? (
+            <form className="panel" onSubmit={(event) => {
+              event.preventDefault();
+              void handleAudioSeparation(audioConvertForm.audio_path);
+            }}>
+              <h2>오디오 분리</h2>
+              <p>오디오를 두 갈래로 나눠 확인합니다.</p>
+              {!audioSeparationAvailable ? <p className="field-hint">현재 이 기능은 비활성 상태입니다.</p> : null}
+              <label>
+                원본 오디오 경로
+                <input value={audioConvertForm.audio_path} onChange={(event) => setAudioConvertForm({ ...audioConvertForm, audio_path: event.target.value })} />
+              </label>
+              <button className="primary-button" disabled={loading || !audioConvertForm.audio_path || !audioSeparationAvailable} type="submit">분리 실행</button>
+            </form>
+            ) : null}
+          </div>
+
+          <div className="panel-grid">
+            <section className="panel">
+              <h2>최근 결과</h2>
+              <div className="history-list">
+                {audioToolJobs.map((job) => (
+                  <article className="history-item" key={job.id}>
+                    <button className="history-item__button" type="button">
+                      <strong>{getAudioToolJobDisplayTitle(job)}</strong>
+                      <span>{formatDate(job.created_at)}</span>
+                      <small>{job.message}</small>
+                    </button>
+                    {job.artifacts[0] ? (
+                      <a className="history-item__download" href={job.artifacts[0].url} download={job.artifacts[0].filename}>다운로드</a>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+              {lastAudioToolResult?.record ? <AudioCard title="방금 생성한 오디오 도구 결과" record={lastAudioToolResult.record} /> : null}
+              {lastAudioToolResult?.assets?.length ? (
+                <div className="preset-list">
+                  {lastAudioToolResult.assets.map((asset) => (
+                    <article className="preset-card" key={`${asset.path}-${asset.label}`}>
+                      <strong>{asset.label}</strong>
+                      <audio controls className="audio-card__player" src={asset.url} />
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+              {lastAudioToolResult?.transcript_text ? (
+                <article className="status-card">
+                  <strong>전사문</strong>
+                  <p>{lastAudioToolResult.transcript_text}</p>
+                  {lastAudioToolResult.translated_text ? <p>{lastAudioToolResult.translated_text}</p> : null}
+                </article>
+              ) : null}
+            </section>
+          </div>
+          </>
+          ) : null}
+        </section>
+      ) : null}
+
       {activeTab === "finetune" ? (
         <section className="workspace workspace--stacked">
           <section className="panel finetune-flow">
             <div className="finetune-header">
               <div>
-                <span className="eyebrow eyebrow--soft">Training Lab</span>
+                <span className="eyebrow eyebrow--soft">훈련 랩</span>
                 <h2>데이터셋 만들기부터 학습 실행까지 한 흐름으로 정리</h2>
                 <p>기준 음성을 정하고, 샘플을 채운 뒤, 데이터셋 생성과 학습 준비를 순서대로 진행하세요.</p>
               </div>
@@ -1894,7 +3022,7 @@ export default function App() {
                   <span className="step-card__index">1</span>
                   <h3>기준 음성 경로 입력</h3>
                 </div>
-                <p>Training Lab은 파일 업로드 대신 경로 입력을 기본으로 사용합니다. 기준 음성 하나를 먼저 정하고, 나머지 샘플이 그 화자를 따라가게 만드세요.</p>
+                <p>이 화면은 파일 업로드 대신 경로 입력을 기본으로 사용합니다. 기준 음성 하나를 먼저 정하고, 나머지 샘플이 그 화자를 따라가게 만드세요.</p>
               </div>
               <div className="field-row">
                 <label>
@@ -1918,7 +3046,7 @@ export default function App() {
                 <p>텍스트 파일을 같이 정리할 때는 `/dataset-root/text/0001.txt`, `/dataset-root/text/0002.txt`처럼 같은 파일명을 맞춰 두면 검수하기 쉽습니다. WEB UI가 로컬 폴더를 직접 읽지는 않으므로, 아래에 절대 경로나 프로젝트 기준 경로를 입력해주세요.</p>
               </article>
               <label>
-                ref_audio_path
+                기준 음성 경로
                 <input
                   placeholder="예: D:/my_tts_dataset/mai/ref/ref.wav 또는 data/uploads/ref.wav"
                   value={datasetForm.ref_audio_path}
@@ -1943,7 +3071,7 @@ export default function App() {
                       />
                       <div>
                         <strong>{asset.filename}</strong>
-                        <span>{asset.path}</span>
+                        <span>{asset.created_at ? formatDate(asset.created_at) : "저장된 오디오"}</span>
                       </div>
                     </label>
                   ))}
@@ -1956,10 +3084,6 @@ export default function App() {
                   <strong>{basenameFromPath(datasetForm.ref_audio_path)}</strong>
                   <p>이 경로의 오디오가 전체 데이터셋의 대표 화자로 사용됩니다.</p>
                   <audio controls className="audio-card__player" src={fileUrlFromPath(datasetForm.ref_audio_path)} />
-                  <details className="advanced-inline">
-                    <summary>저장 경로 보기</summary>
-                    <div className="path-chip">{datasetForm.ref_audio_path}</div>
-                  </details>
                 </article>
               ) : null}
 
@@ -1988,7 +3112,7 @@ export default function App() {
               </div>
               <article className="status-card">
                 <strong>경로 입력 형식</strong>
-                <p>한 줄에 하나씩 적고, 필요하면 `|` 뒤에 텍스트를 같이 붙이세요. 텍스트를 비우면 데이터셋 생성 시 Whisper 자동 전사를 시도합니다.</p>
+                <p>한 줄에 하나씩 적고, 필요하면 `|` 뒤에 텍스트를 같이 붙이세요. 텍스트를 비우면 데이터셋을 만들 때 자동 전사를 시도합니다.</p>
                 <p>예시: `D:/my_tts_dataset/mai/wavs/0001.wav | 안녕하세요. 반갑습니다.`</p>
                 <p>예시: `D:/my_tts_dataset/mai/wavs/0002.wav`</p>
               </article>
@@ -2021,7 +3145,7 @@ export default function App() {
                       />
                       <div>
                         <strong>{asset.filename}</strong>
-                        <span>{asset.path}</span>
+                        <span>{asset.created_at ? formatDate(asset.created_at) : "저장된 오디오"}</span>
                         {asset.transcript_text ? <small>{asset.transcript_text}</small> : null}
                       </div>
                     </label>
@@ -2047,8 +3171,8 @@ export default function App() {
                         type="checkbox"
                       />
                       <div>
-                        <strong>{record.id}</strong>
-                        <span>{record.output_audio_path}</span>
+                        <strong>{getRecordDisplayTitle(record)}</strong>
+                        <span>{formatDate(record.created_at)}</span>
                         <small>{record.input_text}</small>
                       </div>
                     </label>
@@ -2108,10 +3232,6 @@ export default function App() {
                         <span className="meta-label">현재 선택된 샘플 오디오</span>
                         <strong>{sample.original_filename || basenameFromPath(sample.audio_path)}</strong>
                         <audio controls className="audio-card__player" src={fileUrlFromPath(sample.audio_path)} />
-                        <details className="advanced-inline">
-                          <summary>저장 경로 보기</summary>
-                          <div className="path-chip">{sample.audio_path}</div>
-                        </details>
                       </article>
                     ) : null}
 
@@ -2142,7 +3262,7 @@ export default function App() {
                   {voiceDesignHistory.slice(0, 4).map((record) => (
                     <article className="history-item" key={record.id}>
                       <button className="history-item__button" onClick={() => addHistorySample(record)} type="button">
-                        <strong>{record.id}</strong>
+                        <strong>{getAudioDownloadName(record)}</strong>
                         <span>{record.input_text.slice(0, 42)}</span>
                       </button>
                       <a
@@ -2162,16 +3282,16 @@ export default function App() {
               <div className="finetune-stage__header">
                 <div>
                   <span className="step-card__index">3</span>
-                  <h3>데이터셋 생성</h3>
+                  <h3>데이터셋 만들기</h3>
                 </div>
-                <p>샘플이 준비되면 데이터셋을 만들고, 원하면 같은 단계에서 바로 학습용으로 준비까지 이어가세요.</p>
+                <p>샘플이 준비되면 먼저 데이터셋을 만들고, 원하면 같은 흐름에서 바로 학습 시작 전 단계까지 끝낼 수 있습니다.</p>
               </div>
               <div className="button-row">
                 <button className="secondary-button" onClick={() => void handleCreateDataset()} type="button">
-                  raw 데이터셋만 만들기
+                  JSONL만 만들기
                 </button>
                 <button className="primary-button" onClick={() => void handleCreateDataset({ prepareAfterCreate: true })} type="button">
-                  데이터셋 만들고 학습용 준비까지
+                  JSONL + 학습 시작 준비까지
                 </button>
               </div>
               {selectedDataset ? (
@@ -2181,26 +3301,36 @@ export default function App() {
                     {selectedDataset.sample_count}개 샘플 · {getDatasetSourceLabel(selectedDataset.source_type)}
                   </span>
                   <div>
-                    <span className="meta-label">Raw JSONL</span>
-                    <div className="path-chip">{selectedDataset.raw_jsonl_path}</div>
+                    <span className="meta-label">데이터셋 원본</span>
                     <a
                       className="secondary-button button-link"
                       href={fileUrlFromPath(selectedDataset.raw_jsonl_path)}
                       download={basenameFromPath(selectedDataset.raw_jsonl_path)}
                     >
-                      raw JSONL 다운로드
+                      다운로드
                     </a>
                   </div>
                   {selectedDataset.prepared_jsonl_path ? (
                     <div>
-                      <span className="meta-label">Prepared JSONL</span>
-                      <div className="path-chip">{selectedDataset.prepared_jsonl_path}</div>
+                      <span className="meta-label">학습 파일</span>
                       <a
                         className="secondary-button button-link"
                         href={fileUrlFromPath(selectedDataset.prepared_jsonl_path)}
                         download={basenameFromPath(selectedDataset.prepared_jsonl_path)}
                       >
-                        prepared JSONL 다운로드
+                        다운로드
+                      </a>
+                    </div>
+                  ) : null}
+                  {selectedDataset.manifest_path ? (
+                    <div>
+                      <span className="meta-label">데이터셋 정보</span>
+                      <a
+                        className="secondary-button button-link"
+                        href={fileUrlFromPath(selectedDataset.manifest_path)}
+                        download={basenameFromPath(selectedDataset.manifest_path)}
+                      >
+                        다운로드
                       </a>
                     </div>
                   ) : null}
@@ -2248,27 +3378,24 @@ export default function App() {
               ) : null}
               {selectedDataset ? (
                 <article className={datasetReadyForTraining ? "status-card status-card--ready" : "status-card"}>
-                  <strong>{datasetReadyForTraining ? "학습 준비 완료" : "학습 준비 필요"}</strong>
+                  <strong>{datasetReadyForTraining ? "학습 가능" : "학습 시작 전 준비 필요"}</strong>
                   <p>
                     {datasetReadyForTraining
                       ? "학습용 파일이 준비되어 바로 학습을 시작할 수 있습니다."
-                      : "3단계에서 `데이터셋 만들고 학습용 준비까지`를 누르거나, 아래 보조 액션으로 기존 데이터셋을 준비해야 합니다."}
+                      : "3단계에서 `JSONL + 학습 시작 준비까지`를 누르거나, 아래 버튼으로 학습 시작 준비를 먼저 해주세요."}
                   </p>
                 </article>
               ) : null}
               <div className="button-row">
+                {!datasetReadyForTraining && selectedDataset ? (
+                  <button className="secondary-button" onClick={handlePrepareDataset} type="button">
+                    선택한 데이터셋 학습 시작 준비
+                  </button>
+                ) : null}
                 <button className="primary-button" disabled={!datasetReadyForTraining} onClick={handleCreateRun} type="button">
                   학습 시작
                 </button>
               </div>
-              {!datasetReadyForTraining && selectedDataset ? (
-                <details className="advanced-inline">
-                  <summary>기존 데이터셋을 학습용으로 준비</summary>
-                  <button className="secondary-button" onClick={handlePrepareDataset} type="button">
-                    선택한 데이터셋 준비 실행
-                  </button>
-                </details>
-              ) : null}
               <details className="advanced-inline">
                 <summary>학습 설정 열기</summary>
                 <div className="field-row">
@@ -2328,7 +3455,7 @@ export default function App() {
                 {runForm.training_mode === "custom_voice" ? (
                   <div className="field-row">
                     <label>
-                      speaker_encoder_model_path
+                      음색 인코더 기준 모델
                       <select
                         value={runForm.speaker_encoder_model_path}
                         onChange={(event) => setRunForm({ ...runForm, speaker_encoder_model_path: event.target.value })}
@@ -2403,7 +3530,7 @@ export default function App() {
                   >
                     <strong>{dataset.name}</strong>
                     <span>{dataset.sample_count}개 샘플</span>
-                    <span>{dataset.prepared_jsonl_path ? "준비 완료" : "준비 전"}</span>
+                    <span>{dataset.prepared_jsonl_path ? "학습 가능" : "학습 전"}</span>
                     <div className="button-row">
                       <button className="secondary-button" onClick={() => setSelectedDatasetId(dataset.id)} type="button">
                         이 데이터셋 사용
@@ -2413,7 +3540,7 @@ export default function App() {
                         href={fileUrlFromPath(dataset.raw_jsonl_path)}
                         download={basenameFromPath(dataset.raw_jsonl_path)}
                       >
-                        raw 다운로드
+                        원본 다운로드
                       </a>
                       {dataset.prepared_jsonl_path ? (
                         <a
@@ -2421,12 +3548,19 @@ export default function App() {
                           href={fileUrlFromPath(dataset.prepared_jsonl_path)}
                           download={basenameFromPath(dataset.prepared_jsonl_path)}
                         >
-                          prepared 다운로드
+                          학습 파일 다운로드
+                        </a>
+                      ) : null}
+                      {dataset.manifest_path ? (
+                        <a
+                          className="secondary-button button-link"
+                          href={fileUrlFromPath(dataset.manifest_path)}
+                          download={basenameFromPath(dataset.manifest_path)}
+                        >
+                          데이터셋 정보 다운로드
                         </a>
                       ) : null}
                     </div>
-                    <div className="path-chip">{dataset.raw_jsonl_path}</div>
-                    {dataset.prepared_jsonl_path ? <div className="path-chip">{dataset.prepared_jsonl_path}</div> : null}
                   </article>
                 ))}
               </div>
@@ -2437,12 +3571,10 @@ export default function App() {
               <div className="dataset-list">
                 {runs.map((run) => (
                   <article className="dataset-card" key={run.id}>
-                    <strong>{run.id}</strong>
+                    <strong>{run.training_mode === "custom_voice" ? "CustomVoice 학습" : "Base 학습"}</strong>
                     <span>{run.status}</span>
-                    <span>{run.training_mode}</span>
-                    <code>{run.output_model_path}</code>
-                    {run.speaker_encoder_model_path ? <code>{run.speaker_encoder_model_path}</code> : null}
-                    {run.log_path ? <code>{run.log_path}</code> : null}
+                    <span>{run.speaker_name}</span>
+                    <span>{formatDate(run.created_at)}</span>
                   </article>
                 ))}
               </div>
@@ -2457,10 +3589,12 @@ export default function App() {
         </div>
         <div className="audio-grid">
           {history.slice(0, 8).map((record) => (
-            <AudioCard key={record.id} title={record.id} subtitle={record.mode} record={record} />
+            <AudioCard key={record.id} title={getAudioDownloadName(record)} subtitle={record.mode} record={record} />
           ))}
         </div>
       </section>
+        </main>
+      </div>
     </div>
   );
 }

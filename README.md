@@ -8,6 +8,7 @@ React + TypeScript 프런트엔드와 Python/FastAPI 백엔드로 만든 `Qwen3-
 - `VoiceDesign` 전용 실험 페이지
 - `VoiceDesign -> Base clone prompt -> 고정 캐릭터 프리셋`
 - 사용자 업로드 음성 -> `Base clone prompt -> 고정 캐릭터 프리셋`
+- `Sound Effects`, `Voice Changer`, `Audio Converter`, `Audio Separation`, `Audio Translation` 작업실
 - `Base` 단일 화자 파인튜닝용 데이터셋 빌더
 - `CustomVoice` 전용 파인튜닝 실행 경로
 - `Base clone prompt + CustomVoice instruct` 실험 경로
@@ -63,8 +64,44 @@ data/datasets/mai_ko_full/
   dataset.json
 ```
 
+추가 원칙:
+
+- `dataset_id`는 랜덤 `dataset_xxx`가 아니라 데이터셋 이름 기반 slug를 우선 사용합니다.
+- 기준 음성은 `reference_<원본이름>.wav`, 샘플은 `sample_0001_<원본이름>.wav`처럼 복사됩니다.
+- WEB UI와 API는 `dataset_root_path`, `audio_dir_path`, `manifest_path`를 함께 노출해 폴더 전체를 추적할 수 있게 합니다.
+
+## 생성 파일명 원칙
+
+생성 오디오도 더 이상 flat `audio_xxx.wav`만 쓰지 않습니다. 새로 생성되는 파일은 기능별/날짜별 폴더에 읽을 수 있는 slug 이름으로 저장됩니다.
+
+예시:
+
+```text
+data/generated/sound-effects/2026-04-13/151244_짧은-쇳소리-충돌음.wav
+data/generated/tts-custom/2026-04-13/152015_sohee_오늘은-정말-힘들었어.wav
+data/generated/audio-separation/2026-04-13/152430_harmonic_00000-wav.wav
+```
+
+이 규칙은 다운로드 파일명, 이력 카드, 오디오 자산 브라우저에서 모두 같은 이름을 보게 하기 위한 것입니다.
+
+기존 flat/random 산출물도 서버 시작 시 한 번 정리합니다.
+
+- `data/generated/*.wav`, `gen_*.json` 같은 옛 파일은 기능별/date 폴더로 이동합니다.
+- `data/audio-tools/*.json`도 tool/date 구조로 이동합니다.
+- `data/clone-prompts/*.pkl|json`, `data/presets/*.json`도 읽을 수 있는 slug 이름으로 재배치됩니다.
+
 `Training Lab`에서 새 데이터셋을 만들 때도 외부 파일 경로를 그대로 참조하지 않고,
 선택한 음성 파일을 이 폴더 안 `audio/`로 복사한 뒤 JSONL을 생성하는 것을 표준으로 삼습니다.
+
+## UI 구조
+
+fish.audio 스타일을 참고해 좌측 제품 네비게이션과 작업실 중심 흐름으로 정리했습니다.
+
+- `홈`: 전체 상태, 최근 작업, 빠른 시작 카드
+- `나의 목소리들`: 프리셋, 최근 생성 음성, fine-tuned 체크포인트, 데이터셋 라이브러리
+- `발견`: 템플릿, instruct 레시피, 각 제품 진입점
+- `빠르게 들어보기`, `텍스트 음성 변환`, `목소리 복제`, `스토리 스튜디오`, `사운드 효과`, `오디오 분리`, `전사와 재합성`, `보이스 체인저`
+- `Inference Lab`, `Training Lab`
 
 ## 빠른 시작
 
@@ -343,6 +380,19 @@ python scripts/validate_speech_quality.py \
   - `Base` 계열이면 `ref_audio_path`, `ref_text`, `voice_clone_prompt_path`, `x_vector_only_mode`
   - 별도 `Style Preset + Instruct Hybrid` 카드 제공
   - hybrid 기본값은 `Base 1.7B` + stock `CustomVoice 1.7B`, 저장된 프리셋이 있으면 그 프리셋을 먼저 불러오고 없으면 수동 입력으로 진행
+- 상단 `Voice Studio` 대시보드
+  - runtime, attention, preset/dataset/checkpoint 개수 즉시 확인
+  - stock playground, preset hybrid, training pipeline으로 바로 점프
+- recipe bars
+  - `Quick Check`, `Design Lab`, `Style Preset + Instruct Hybrid`에 one-click prompt recipe 제공
+  - 공격적인 감정 비교용 instruct pack을 바로 불러와 청취 검수 가능
+- `Audio Suite`
+  - `Sound Effects`: 텍스트 프롬프트에서 로컬 procedural 효과음 생성
+  - `Voice Changer`: Applio/RVC 기반 audio-to-audio 음색 변환
+  - `Audio Converter`: `wav`, `flac`, `ogg` 변환과 샘플레이트 조정
+  - `Audio Separation`: lightweight HPSS 기반 `harmonic/percussive` stem 분리
+  - `Audio Translation`: Whisper 전사 후 사용자가 확정한 번역문으로 재합성
+  - 최근 작업은 각 작업실과 공용 이력에서 다시 확인 가능
 - `Training Lab`
   - `Base Fine-Tune`
   - `CustomVoice Fine-Tune`
@@ -357,7 +407,7 @@ python scripts/validate_speech_quality.py \
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
 - macOS / Apple Silicon에서는 `sdpa` fallback이 기본 경로입니다.
 - Windows 또는 Ubuntu에서 CUDA가 감지되면 `flash-attn` 설치를 우선 시도하고, 가능할 때 `flash_attention_2`를 사용합니다.
-- `flash_attn`이 없거나 CPU-only 환경이면 `sdpa`로 자동 fallback 합니다.
+- `보이스 체인저`는 별도의 RVC 모델 `.pth`와 `.index`가 필요합니다.
 - `setup_backend.sh`가 `uv sync` 단계에서 실패한다면, 대개 네트워크 또는 DNS 문제입니다.
 - Apple Silicon 환경에서는 `device=mps`, `attention=sdpa` 조합이 정상 동작 경로일 수 있습니다.
 - 일부 생성 결과에서 시작 직후 아주 짧은 저레벨 웅얼거림처럼 들리는 앞머리 구간이 있을 수 있어, 백엔드에서는 생성 후 첫 `35ms` 범위 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.

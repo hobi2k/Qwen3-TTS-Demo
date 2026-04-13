@@ -1,5 +1,11 @@
 import type {
   AudioTranscriptionResponse,
+  AudioConvertRequest,
+  AudioSeparationRequest,
+  AudioToolCapability,
+  AudioToolJob,
+  AudioToolResponse,
+  AudioTranslateRequest,
   BootstrapResponse,
   CharacterPreset,
   CloneFromSampleRequest,
@@ -18,9 +24,12 @@ import type {
   HybridCloneInstructRequest,
   ModelInfo,
   PrepareDatasetRequest,
+  SoundEffectRequest,
   SpeakerInfo,
+  StoryStudioRequest,
   UploadResponse,
   UniversalInferenceRequest,
+  VoiceChangerRequest,
   VoiceDesignRequest,
 } from "./types";
 
@@ -75,6 +84,14 @@ export const api = {
     return request<FineTuneRun[]>("/api/finetune-runs");
   },
 
+  audioToolCapabilities(): Promise<AudioToolCapability[]> {
+    return request<AudioToolCapability[]>("/api/audio-tools/capabilities");
+  },
+
+  audioToolJobs(): Promise<AudioToolJob[]> {
+    return request<AudioToolJob[]>("/api/audio-tools/jobs");
+  },
+
   generateCustomVoice(payload: CustomVoiceRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/generate/custom-voice", {
       method: "POST",
@@ -85,6 +102,14 @@ export const api = {
 
   generateVoiceDesign(payload: VoiceDesignRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/generate/voice-design", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateStoryStudio(payload: StoryStudioRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/generate/story-studio", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -175,6 +200,46 @@ export const api = {
 
   createFineTuneRun(payload: CreateFineTuneRunRequest): Promise<FineTuneRun> {
     return request<FineTuneRun>("/api/finetune-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateSoundEffect(payload: SoundEffectRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/sound-effects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  changeVoice(payload: VoiceChangerRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/voice-changer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  convertAudio(payload: AudioConvertRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  separateAudio(payload: AudioSeparationRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/separate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  translateAudio(payload: AudioTranslateRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
