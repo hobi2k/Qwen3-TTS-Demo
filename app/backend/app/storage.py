@@ -2,10 +2,12 @@
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import unicodedata
 
 
 def utc_now() -> str:
@@ -40,6 +42,7 @@ class Storage:
         self.presets_dir = self.data_dir / "presets"
         self.datasets_dir = self.data_dir / "datasets"
         self.finetune_runs_dir = self.data_dir / "finetune-runs"
+        self.audio_tools_dir = self.data_dir / "audio-tools"
         self.ensure_dirs()
 
     def ensure_dirs(self) -> None:
@@ -53,6 +56,7 @@ class Storage:
             self.presets_dir,
             self.datasets_dir,
             self.finetune_runs_dir,
+            self.audio_tools_dir,
         ]:
             directory.mkdir(parents=True, exist_ok=True)
 
@@ -117,11 +121,33 @@ class Storage:
         if not directory.exists():
             return items
 
-        for path in sorted(directory.glob("*.json")):
-            items.append(self.read_json(path))
+        for path in sorted(directory.rglob("*.json")):
+            payload = self.read_json(path)
+            if isinstance(payload, dict):
+                items.append(payload)
 
         items.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         return items
+
+    def list_json_record_paths(self, directory: Path) -> List[Path]:
+        """디렉터리 아래 JSON 레코드 파일 경로를 생성 시각 역순으로 반환한다.
+
+        Args:
+            directory: 조회할 JSON 레코드 디렉터리.
+
+        Returns:
+            최신 생성 시각 기준으로 정렬된 JSON 파일 경로 목록.
+        """
+
+        paths = []
+        for path in sorted(directory.rglob("*.json")):
+            if not path.exists():
+                continue
+            payload = self.read_json(path)
+            if isinstance(payload, dict):
+                paths.append(path)
+        paths.sort(key=lambda path: self.read_json(path).get("created_at", ""), reverse=True)
+        return paths
 
     def record_path(self, directory: Path, record_id: str) -> Path:
         """레코드 ID에 해당하는 JSON 파일 경로를 계산한다.
@@ -135,6 +161,127 @@ class Storage:
         """
 
         return directory / f"{record_id}.json"
+
+    def named_record_path(
+        self,
+        *,
+        root: Path,
+        category: str,
+        label: str,
+        record_id: str,
+        created_at: Optional[datetime] = None,
+    ) -> Path:
+        """사람이 읽을 수 있는 JSON 레코드 파일 경로를 만든다.
+
+        Args:
+            root: 레코드 루트 디렉터리.
+            category: 기능별 하위 카테고리.
+            label: 파일명에 반영할 설명문.
+            record_id: 내부 식별자.
+            created_at: 기준 시각.
+
+        Returns:
+            `HHMMSS_slug__record_id.json` 형식의 레코드 경로.
+        """
+
+        moment = created_at or datetime.now(timezone.utc)
+        directory = self.dated_child_dir(root, category, created_at=moment)
+        slug = self.slugify(label, default=category)
+        base_name = f"{moment.strftime('%H%M%S')}_{slug}__{record_id}"
+        candidate = directory / f"{base_name}.json"
+        index = 2
+        while candidate.exists():
+            candidate = directory / f"{base_name}_{index}.json"
+            index += 1
+        return candidate
+
+    def slugify(self, value: str, default: str = "item", max_length: int = 48) -> str:
+        """사람이 읽을 수 있는 짧은 파일명 slug를 만든다.
+
+        Args:
+            value: slug로 바꿀 원본 문자열.
+            default: 내용이 비었을 때 사용할 기본값.
+            max_length: 잘라낼 최대 길이.
+
+        Returns:
+            파일명에 넣기 안전한 짧은 slug.
+        """
+
+        normalized = unicodedata.normalize("NFKC", value or "").strip().lower()
+        normalized = re.sub(r"[^\w\s-]", " ", normalized, flags=re.UNICODE)
+        normalized = re.sub(r"[-\s]+", "-", normalized, flags=re.UNICODE).strip("-_")
+        if not normalized:
+            normalized = default
+        return normalized[:max_length].strip("-_") or default
+
+    def dated_child_dir(self, root: Path, category: str, created_at: Optional[datetime] = None) -> Path:
+        """카테고리와 날짜 기준 하위 디렉터리를 만든다.
+
+        Args:
+            root: 기준 루트 폴더.
+            category: 기능별 하위 카테고리.
+            created_at: 사용할 기준 시각.
+
+        Returns:
+            `root/category/YYYY-MM-DD` 폴더 경로.
+        """
+
+        moment = created_at or datetime.now(timezone.utc)
+        directory = root / self.slugify(category, default="misc") / moment.strftime("%Y-%m-%d")
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def named_output_path(
+        self,
+        *,
+        root: Path,
+        category: str,
+        label: str,
+        extension: str,
+        created_at: Optional[datetime] = None,
+    ) -> Path:
+        """사람이 읽을 수 있는 카테고리/날짜/slug 기반 출력 파일 경로를 만든다.
+
+        Args:
+            root: 생성물 루트 폴더.
+            category: 기능별 하위 카테고리.
+            label: 파일명에 반영할 설명문.
+            extension: 확장자.
+            created_at: 기준 시각.
+
+        Returns:
+            충돌을 피해 생성된 출력 파일 경로.
+        """
+
+        moment = created_at or datetime.now(timezone.utc)
+        directory = self.dated_child_dir(root, category, created_at=moment)
+        slug = self.slugify(label, default=category)
+        ext = extension.lstrip(".") or "wav"
+        base_name = f"{moment.strftime('%H%M%S')}_{slug}"
+        candidate = directory / f"{base_name}.{ext}"
+        index = 2
+        while candidate.exists():
+            candidate = directory / f"{base_name}_{index}.{ext}"
+            index += 1
+        return candidate
+
+    def unique_dataset_id(self, name: str) -> str:
+        """데이터셋 이름 기반의 읽기 쉬운 폴더 식별자를 만든다.
+
+        Args:
+            name: 사용자가 입력한 데이터셋 이름.
+
+        Returns:
+            중복을 피한 dataset id.
+        """
+
+        base = self.slugify(name, default="dataset")
+        candidate = base
+        index = 2
+        while self.dataset_dir(candidate).exists():
+            candidate = f"{base}-{index}"
+            index += 1
+        return candidate
 
     def dataset_dir(self, dataset_id: str) -> Path:
         """데이터셋 전용 루트 디렉터리를 반환한다.
@@ -197,5 +344,15 @@ class Storage:
 
         path = self.record_path(directory, record_id)
         if not path.exists():
+            nested_matches = sorted(directory.rglob(f"*{record_id}.json"))
+            if nested_matches:
+                payload = self.read_json(nested_matches[0])
+                return payload if isinstance(payload, dict) else None
+
+            for candidate in directory.rglob("*.json"):
+                payload = self.read_json(candidate)
+                if isinstance(payload, dict) and payload.get("id") == record_id:
+                    return payload
             return None
-        return self.read_json(path)
+        payload = self.read_json(path)
+        return payload if isinstance(payload, dict) else None

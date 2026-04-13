@@ -3,11 +3,16 @@
 import json
 import os
 import pickle
+import re
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import librosa
+import numpy as np
+import soundfile as sf
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +21,12 @@ from dotenv import load_dotenv
 from .qwen import QwenDemoEngine
 from .schemas import (
     AudioAsset,
+    AudioConvertRequest,
+    AudioSeparationRequest,
+    AudioToolAsset,
+    AudioToolCapability,
+    AudioToolJob,
+    AudioToolResponse,
     BootstrapResponse,
     AudioTranscriptionRequest,
     AudioTranscriptionResponse,
@@ -34,9 +45,12 @@ from .schemas import (
     HealthResponse,
     HybridCloneInstructRequest,
     ModelInfo,
+    SoundEffectRequest,
     PrepareDatasetRequest,
     PresetGenerateRequest,
+    AudioTranslateRequest,
     UniversalInferenceRequest,
+    VoiceChangerRequest,
     VoiceCloneRequest,
     VoiceDesignRequest,
 )
@@ -268,6 +282,19 @@ app.add_middleware(
 app.mount("/files", StaticFiles(directory=storage.data_dir), name="files")
 
 
+@app.on_event("startup")
+def startup_housekeeping() -> None:
+    """서버 시작 시 저장 구조를 최신 규칙으로 정리한다.
+
+    기존 실행에서 남은 flat 파일명이나 루트 직하 JSON 레코드가 있더라도,
+    서버가 뜰 때 한 번 정리해서 프런트와 백엔드가 같은 규칙으로만 동작하게 만든다.
+    이렇게 해두면 이후 화면에서 예전 무작위 파일명이나 낡은 경로 구조가 다시
+    튀어나오는 일을 줄일 수 있다.
+    """
+
+    migrate_existing_storage_layout()
+
+
 def audio_url_for(relative_path: str) -> str:
     """상대 파일 경로를 정적 파일 접근 URL로 변환한다.
 
@@ -284,6 +311,72 @@ def audio_url_for(relative_path: str) -> str:
     return f"/files/{relative_path.replace(os.sep, '/')}"
 
 
+def utc_now_datetime() -> datetime:
+    """현재 UTC 시각을 datetime으로 반환한다."""
+
+    return datetime.now(timezone.utc)
+
+
+def readable_label(value: str, default: str) -> str:
+    """파일명/디렉터리용 설명문 후보를 짧게 정리한다."""
+
+    normalized = " ".join((value or "").strip().split())
+    return normalized[:72] if normalized else default
+
+
+def generated_audio_path(category: str, label: str, extension: str = "wav") -> Path:
+    """사람이 읽을 수 있는 생성 오디오 경로를 만든다."""
+
+    return storage.named_output_path(
+        root=storage.generated_dir,
+        category=category,
+        label=readable_label(label, category),
+        extension=extension,
+        created_at=utc_now_datetime(),
+    )
+
+
+def parse_created_at(value: Optional[str]) -> datetime:
+    """ISO 시각 문자열을 UTC datetime으로 안전하게 변환한다.
+
+    Args:
+        value: 레코드에 저장된 created_at 문자열.
+
+    Returns:
+        파싱된 UTC datetime. 실패하면 현재 시각을 반환한다.
+    """
+
+    if value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            pass
+    return utc_now_datetime()
+
+
+def is_opaque_generated_filename(filename: str) -> bool:
+    """랜덤 접두사 기반의 읽기 어려운 생성 파일명인지 판별한다."""
+
+    return bool(filename and re.match(r"^(audio|gen|sfx|voicechanger|convert|harmonic|percussive)_[a-f0-9]{8,}", filename, flags=re.IGNORECASE))
+
+
+def readable_record_label(record: JsonDict, fallback: str) -> str:
+    """기록에서 사람이 읽기 쉬운 대표 라벨을 뽑는다."""
+
+    candidates = [
+        str(record.get("name") or "").strip(),
+        str(record.get("input_summary") or "").strip(),
+        str(record.get("input_text") or "").strip(),
+        str(record.get("reference_text") or "").strip(),
+        str(record.get("instruction") or "").strip(),
+        str(record.get("speaker") or "").strip(),
+    ]
+    for candidate in candidates:
+        if candidate:
+            return readable_label(candidate, fallback)
+    return fallback
+
+
 def save_generation_record(payload: JsonDict) -> JsonDict:
     """생성 이력 레코드를 디스크에 저장한 뒤 그대로 반환한다.
 
@@ -294,7 +387,14 @@ def save_generation_record(payload: JsonDict) -> JsonDict:
         저장된 생성 이력 데이터.
     """
 
-    record_path = storage.generated_dir / f"{payload['id']}.json"
+    created_at = parse_created_at(payload.get("created_at"))
+    record_path = storage.named_record_path(
+        root=storage.generated_dir,
+        category=f"{payload.get('mode', 'generation')}-records",
+        label=readable_record_label(payload, str(payload.get("mode") or "generation")),
+        record_id=str(payload["id"]),
+        created_at=created_at,
+    )
     storage.write_json(record_path, payload)
     return payload
 
@@ -460,7 +560,16 @@ def create_clone_prompt_record(
     """
 
     prompt_id = storage.new_id("clone")
-    prompt_path = storage.clone_prompts_dir / f"{prompt_id}.pkl"
+    created_at = utc_now()
+    prompt_label = reference_text or basename_for_asset(reference_audio_path)
+    created_moment = parse_created_at(created_at)
+    prompt_path = storage.named_output_path(
+        root=storage.clone_prompts_dir,
+        category=source_type,
+        label=prompt_label,
+        extension="pkl",
+        created_at=created_moment,
+    )
     create_clone_prompt_file(
         prompt_path=prompt_path,
         model_id=model_id,
@@ -477,10 +586,19 @@ def create_clone_prompt_record(
         "reference_audio_path": reference_audio_path,
         "reference_text": reference_text,
         "x_vector_only_mode": x_vector_only_mode,
-        "created_at": utc_now(),
+        "created_at": created_at,
         "meta": meta or {},
     }
-    storage.write_json(storage.clone_prompts_dir / f"{prompt_id}.json", record)
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.clone_prompts_dir,
+            category=source_type,
+            label=prompt_label,
+            record_id=prompt_id,
+            created_at=created_moment,
+        ),
+        record,
+    )
     return ClonePromptRecord(**record)
 
 
@@ -545,6 +663,44 @@ def copy_audio_into_dataset(dataset_dir: Path, source_audio_path: str, filename:
         shutil.copy2(source, target)
 
     return storage.relpath(target)
+
+
+def dataset_manifest_payload(
+    *,
+    dataset_id: str,
+    dataset_name: str,
+    dataset_dir: Path,
+    record: Dict[str, Any],
+) -> Dict[str, Any]:
+    """데이터셋 폴더 구조를 설명하는 보조 manifest를 만든다.
+
+    Args:
+        dataset_id: 데이터셋 식별자.
+        dataset_name: 사용자에게 보이는 데이터셋 이름.
+        dataset_dir: 데이터셋 루트 폴더.
+        record: 현재 dataset.json 레코드.
+
+    Returns:
+        폴더/자산/JSONL 위치를 설명하는 manifest 데이터.
+    """
+
+    audio_dir = dataset_dir / "audio"
+    return {
+        "id": dataset_id,
+        "name": dataset_name,
+        "dataset_root_path": storage.relpath(dataset_dir),
+        "audio_dir_path": storage.relpath(audio_dir),
+        "raw_jsonl_path": record.get("raw_jsonl_path"),
+        "prepared_jsonl_path": record.get("prepared_jsonl_path"),
+        "ref_audio_path": record.get("ref_audio_path"),
+        "speaker_name": record.get("speaker_name"),
+        "sample_count": record.get("sample_count", 0),
+        "created_at": record.get("created_at", utc_now()),
+        "files": {
+            "dataset_record": storage.relpath(storage.dataset_record_path(dataset_id)),
+            "manifest": storage.relpath(storage.dataset_manifest_path(dataset_id)),
+        },
+    }
 
 
 def normalize_dataset_jsonl_paths(dataset_path: Path) -> None:
@@ -743,7 +899,7 @@ def list_server_audio_assets() -> List[AudioAsset]:
     """서버 내부에 저장된 오디오 파일 목록을 최신순으로 반환한다."""
 
     assets: List[AudioAsset] = []
-    generation_records = storage.list_json_records(storage.generated_dir)
+    generation_records = [record.model_dump() for record in list_generation_records()]
     seen_paths = set()
 
     for record in generation_records:
@@ -764,7 +920,7 @@ def list_server_audio_assets() -> List[AudioAsset]:
             )
         )
 
-    for path in sorted(storage.uploads_dir.glob("*")):
+    for path in sorted(storage.uploads_dir.rglob("*")):
         if not path.is_file():
             continue
         rel_path = storage.relpath(path)
@@ -789,7 +945,15 @@ def list_server_audio_assets() -> List[AudioAsset]:
 
 def list_generation_records() -> List[GenerationRecord]:
     records = storage.list_json_records(storage.generated_dir)
-    return [GenerationRecord(**record) for record in records]
+    items: List[GenerationRecord] = []
+    for record in records:
+        if not all(key in record for key in ("id", "mode", "input_text", "language", "output_audio_path", "output_audio_url")):
+            continue
+        try:
+            items.append(GenerationRecord(**record))
+        except Exception:
+            continue
+    return items
 
 
 def list_preset_records() -> List[CharacterPreset]:
@@ -813,6 +977,10 @@ def normalize_legacy_dataset_record(record: Dict[str, Any], fallback_name: str) 
         normalized = dict(record)
         if "ref_audio_path" not in normalized and record.get("ref_audio"):
             normalized["ref_audio_path"] = record["ref_audio"]
+        dataset_id = normalized.get("id") or fallback_name
+        normalized.setdefault("dataset_root_path", storage.relpath(storage.dataset_dir(dataset_id)) if storage.dataset_dir(dataset_id).exists() else None)
+        normalized.setdefault("audio_dir_path", storage.relpath(storage.dataset_dir(dataset_id) / "audio") if (storage.dataset_dir(dataset_id) / "audio").exists() else None)
+        normalized.setdefault("manifest_path", storage.relpath(storage.dataset_manifest_path(dataset_id)) if storage.dataset_manifest_path(dataset_id).exists() else None)
         return normalized
 
     # Older manifests stored only train/eval JSONL paths plus aggregate counts.
@@ -829,6 +997,9 @@ def normalize_legacy_dataset_record(record: Dict[str, Any], fallback_name: str) 
         "id": manifest_id,
         "name": manifest_id,
         "source_type": "legacy_manifest",
+        "dataset_root_path": None,
+        "audio_dir_path": None,
+        "manifest_path": None,
         "raw_jsonl_path": storage.relpath(train_jsonl) if os.path.isabs(train_jsonl) else train_jsonl,
         "prepared_jsonl_path": None,
         "prepared_with_simulation": None,
@@ -878,12 +1049,489 @@ def list_dataset_records() -> List[FineTuneDataset]:
 
 def list_finetune_run_records() -> List[FineTuneRun]:
     records = storage.list_json_records(storage.finetune_runs_dir)
-    return [FineTuneRun(**record) for record in records]
+    items: List[FineTuneRun] = []
+    for record in records:
+        if not all(
+            key in record
+            for key in (
+                "id",
+                "dataset_id",
+                "training_mode",
+                "init_model_path",
+                "output_model_path",
+                "batch_size",
+                "lr",
+                "num_epochs",
+                "speaker_name",
+                "status",
+                "created_at",
+            )
+        ):
+            continue
+        try:
+            items.append(FineTuneRun(**record))
+        except Exception:
+            continue
+    return items
+
+
+def list_audio_tool_jobs() -> List[AudioToolJob]:
+    records = storage.list_json_records(storage.audio_tools_dir)
+    jobs: List[AudioToolJob] = []
+    for record in records:
+        try:
+            jobs.append(AudioToolJob(**record))
+        except Exception:
+            continue
+    return jobs
+
+
+def maybe_move_file(source: Path, destination: Path) -> Path:
+    """파일이 존재하면 목적지로 이동하고 최종 경로를 반환한다.
+
+    Args:
+        source: 현재 파일 경로.
+        destination: 옮길 목표 경로.
+
+    Returns:
+        이동 후 실제 파일 경로.
+    """
+
+    if not source.exists():
+        return destination
+    if source.resolve() == destination.resolve():
+        return destination
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(destination))
+    return destination
+
+
+def migrate_generation_records() -> None:
+    """기존 flat/random 생성 이력을 읽기 쉬운 구조로 정리한다.
+
+    예전 실행에서 `data/generated` 루트에 바로 떨어진 오디오와 JSON 기록을 읽어,
+    현재 규칙인 `category/date/readable-name` 구조로 옮긴다. 오디오 파일과 레코드
+    JSON을 함께 갱신해서 프런트가 사람에게 읽히는 이름만 보도록 맞춘다.
+    """
+
+    for record_path in sorted(storage.generated_dir.rglob("*.json")):
+        try:
+            record = storage.read_json(record_path)
+        except Exception:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if not record.get("id") or not record.get("output_audio_path"):
+            continue
+
+        created_at = parse_created_at(record.get("created_at"))
+        label = readable_record_label(record, str(record.get("mode") or "generation"))
+        audio_path = Path(record["output_audio_path"])
+        if not audio_path.is_absolute():
+            audio_path = REPO_ROOT / audio_path
+
+        if audio_path.exists() and (audio_path.parent == storage.generated_dir or is_opaque_generated_filename(audio_path.name)):
+            extension = audio_path.suffix.lstrip(".") or "wav"
+            target_audio = storage.named_output_path(
+                root=storage.generated_dir,
+                category=str(record.get("mode") or "generation"),
+                label=label,
+                extension=extension,
+                created_at=created_at,
+            )
+            moved_audio = maybe_move_file(audio_path, target_audio)
+            rel_audio = storage.relpath(moved_audio)
+            record["output_audio_path"] = rel_audio
+            record["output_audio_url"] = audio_url_for(rel_audio)
+
+        target_record = storage.named_record_path(
+            root=storage.generated_dir,
+            category=f"{record.get('mode', 'generation')}-records",
+            label=label,
+            record_id=str(record["id"]),
+            created_at=created_at,
+        )
+        final_record_path = maybe_move_file(record_path, target_record)
+        storage.write_json(final_record_path, record)
+
+
+def migrate_clone_prompt_records() -> None:
+    """clone prompt 자산과 메타데이터를 읽기 쉬운 구조로 정리한다.
+
+    과거의 `clone_xxxxx.pkl` 같은 파일명과 루트 직하 JSON 메타데이터를 현재 구조로
+    이동시켜, 프리셋/하이브리드 화면에서 내부 경로나 무작위 이름이 그대로 노출되지
+    않도록 정리한다.
+    """
+
+    for record_path in sorted(storage.clone_prompts_dir.rglob("*.json")):
+        try:
+            record = storage.read_json(record_path)
+        except Exception:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if not record.get("id") or not record.get("prompt_path"):
+            continue
+
+        created_at = parse_created_at(record.get("created_at"))
+        label = readable_record_label(record, basename_for_asset(record.get("reference_audio_path") or "") or "clone-prompt")
+        prompt_path = Path(record["prompt_path"])
+        if not prompt_path.is_absolute():
+            prompt_path = REPO_ROOT / prompt_path
+
+        if prompt_path.exists() and (prompt_path.parent == storage.clone_prompts_dir or prompt_path.name.startswith("clone_")):
+            target_prompt = storage.named_output_path(
+                root=storage.clone_prompts_dir,
+                category=str(record.get("source_type") or "clone-prompt"),
+                label=label,
+                extension="pkl",
+                created_at=created_at,
+            )
+            moved_prompt = maybe_move_file(prompt_path, target_prompt)
+            record["prompt_path"] = storage.relpath(moved_prompt)
+
+        target_record = storage.named_record_path(
+            root=storage.clone_prompts_dir,
+            category=str(record.get("source_type") or "clone-prompt"),
+            label=label,
+            record_id=str(record["id"]),
+            created_at=created_at,
+        )
+        final_record_path = maybe_move_file(record_path, target_record)
+        storage.write_json(final_record_path, record)
+
+
+def migrate_preset_records() -> None:
+    """preset 메타데이터 파일을 이름 기반 폴더 구조로 정리한다.
+
+    프리셋 JSON은 오디오 산출물처럼 직접 재생되는 파일은 아니지만, 화면에서 자주
+    조회되기 때문에 이름과 생성 시각 기준으로 정리해 두어야 관리가 쉬워진다.
+    """
+
+    for record_path in sorted(storage.presets_dir.rglob("*.json")):
+        try:
+            record = storage.read_json(record_path)
+        except Exception:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if not record.get("id"):
+            continue
+
+        created_at = parse_created_at(record.get("created_at"))
+        label = readable_record_label(record, "preset")
+        target_record = storage.named_record_path(
+            root=storage.presets_dir,
+            category=str(record.get("source_type") or "preset"),
+            label=label,
+            record_id=str(record["id"]),
+            created_at=created_at,
+        )
+        final_record_path = maybe_move_file(record_path, target_record)
+        storage.write_json(final_record_path, record)
+
+
+def migrate_audio_tool_jobs() -> None:
+    """오디오 도구 메타데이터와 산출물 경로를 읽기 쉬운 구조로 정리한다.
+
+    사운드 효과, 보이스 체인저, 오디오 분리처럼 새로 늘어난 기능은 산출물 종류가
+    섞이기 쉽다. 이 정리 단계는 각 작업 기록과 산출물 파일을 함께 옮겨서 기능별
+    카테고리와 읽을 수 있는 파일명 규칙을 강제한다.
+    """
+
+    for record_path in sorted(storage.audio_tools_dir.rglob("*.json")):
+        try:
+            record = storage.read_json(record_path)
+        except Exception:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if not record.get("id"):
+            continue
+
+        created_at = parse_created_at(record.get("created_at"))
+        label = readable_record_label(record, str(record.get("kind") or "audio-tool"))
+        artifacts = record.get("artifacts", []) or []
+        updated_artifacts = []
+        for artifact in artifacts:
+            artifact_path = Path(artifact.get("path") or "")
+            if not artifact_path:
+                updated_artifacts.append(artifact)
+                continue
+            if not artifact_path.is_absolute():
+                artifact_path = REPO_ROOT / artifact_path
+
+            if artifact_path.exists() and (artifact_path.parent == storage.generated_dir or is_opaque_generated_filename(artifact_path.name)):
+                extension = artifact_path.suffix.lstrip(".") or "wav"
+                target_path = storage.named_output_path(
+                    root=storage.generated_dir,
+                    category=str(record.get("kind") or "audio-tool"),
+                    label=artifact.get("label") or label,
+                    extension=extension,
+                    created_at=created_at,
+                )
+                artifact_path = maybe_move_file(artifact_path, target_path)
+
+            rel_path = storage.relpath(artifact_path) if artifact_path.exists() else artifact.get("path")
+            updated_artifacts.append(
+                {
+                    **artifact,
+                    "path": rel_path,
+                    "url": audio_url_for(rel_path) if rel_path else artifact.get("url"),
+                    "filename": basename_for_asset(rel_path) if rel_path else artifact.get("filename"),
+                }
+            )
+
+        record["artifacts"] = updated_artifacts
+        target_record = storage.named_record_path(
+            root=storage.audio_tools_dir,
+            category=str(record.get("kind") or "audio-tool"),
+            label=label,
+            record_id=str(record["id"]),
+            created_at=created_at,
+        )
+        final_record_path = maybe_move_file(record_path, target_record)
+        storage.write_json(final_record_path, record)
+
+
+def migrate_existing_storage_layout() -> None:
+    """기존 flat/random 파일 구조를 현재 readable layout으로 한 번 정리한다.
+
+    개별 마이그레이션은 서로 다른 저장 영역을 담당하므로, 서버 시작 시 이 함수를
+    한 번 호출해 전체 저장소를 동일한 규칙으로 맞춘다.
+    """
+
+    migrate_generation_records()
+    migrate_clone_prompt_records()
+    migrate_preset_records()
+    migrate_audio_tool_jobs()
+
+
+def audio_tool_capabilities() -> List[AudioToolCapability]:
+    """오디오 작업실에서 노출할 기능 설명 목록을 반환한다.
+
+    Returns:
+        프런트가 각 작업실의 제목과 안내 문구를 구성할 때 사용하는 capability 목록.
+    """
+
+    return [
+        AudioToolCapability(
+            key="sound_effects",
+            label="Sound Effects",
+            description="텍스트 프롬프트에서 로컬 procedural 효과음을 생성합니다.",
+            available=True,
+            notes="Beatoven/Fish급 모델이 아니라 demo-side procedural synthesis입니다.",
+        ),
+        AudioToolCapability(
+            key="voice_changer",
+            label="Voice Changer",
+            description="업로드/생성 음성에 피치, 속도, 톤 변조 프리셋을 적용합니다.",
+            available=True,
+            notes="helium, deep, robot, telephone 네 가지 기본 프리셋을 제공합니다.",
+        ),
+        AudioToolCapability(
+            key="audio_converter",
+            label="Audio Converter",
+            description="포맷과 샘플레이트를 바꾸고 mono로 정리합니다.",
+            available=True,
+        ),
+        AudioToolCapability(
+            key="audio_separation",
+            label="Audio Separation",
+            description="librosa HPSS로 harmonic/percussive stems를 분리합니다.",
+            available=True,
+            notes="정밀 vocal separation 모델이 아니라 lightweight local split입니다.",
+        ),
+        AudioToolCapability(
+            key="audio_translation",
+            label="Audio Translation",
+            description="Whisper 전사 후 사용자가 제공한 번역 텍스트로 재합성하는 보조 흐름입니다.",
+            available=True,
+            notes="자동 번역 모델은 포함하지 않으므로 번역 텍스트를 직접 넣는 방식이 가장 정확합니다.",
+        ),
+    ]
+
+
+def resolve_audio_absolute_path(audio_path: str) -> Path:
+    candidate = Path(audio_path.strip())
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    if not candidate.exists():
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
+    return candidate
+
+
+def create_audio_tool_asset(path: Path, label: str) -> AudioToolAsset:
+    rel_path = storage.relpath(path)
+    return AudioToolAsset(
+        label=label,
+        path=rel_path,
+        url=audio_url_for(rel_path),
+        filename=path.name,
+    )
+
+
+def save_audio_tool_job(
+    *,
+    kind: str,
+    input_summary: str,
+    message: str,
+    assets: List[AudioToolAsset],
+    status: str = "completed",
+) -> AudioToolJob:
+    job_id = storage.new_id(kind)
+    created_at = utc_now()
+    record = {
+        "id": job_id,
+        "kind": kind,
+        "status": status,
+        "input_summary": input_summary,
+        "created_at": created_at,
+        "artifacts": [asset.model_dump() for asset in assets],
+        "message": message,
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.audio_tools_dir,
+            category=kind,
+            label=readable_label(input_summary, kind),
+            record_id=job_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
+    return AudioToolJob(**record)
+
+
+def write_audio_tool_generation_record(
+    *,
+    mode: str,
+    text: str,
+    language: str,
+    audio_path: Path,
+    instruction: str = "",
+    meta: Optional[JsonDict] = None,
+) -> GenerationRecord:
+    record_id = storage.new_id("audio")
+    record = build_generation_record(
+        record_id=record_id,
+        mode=mode,
+        text=text,
+        language=language,
+        audio_path=audio_path,
+        instruction=instruction,
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationRecord(**record)
+
+
+def audio_tool_format_or_422(output_format: str) -> str:
+    """지원하는 출력 포맷만 통과시킨다.
+
+    Args:
+        output_format: 사용자가 요청한 출력 포맷 문자열.
+
+    Returns:
+        soundfile이 직접 기록할 수 있는 확장자 문자열.
+    """
+
+    normalized = (output_format or "wav").strip().lower()
+    allowed_formats = {"wav", "flac", "ogg"}
+    if normalized not in allowed_formats:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported output format: {output_format}. Use one of: wav, flac, ogg.",
+        )
+    return normalized
+
+
+def synthesize_sound_effect(prompt: str, duration_sec: float, intensity: float, seed: Optional[int]) -> np.ndarray:
+    rng = np.random.default_rng(seed if seed is not None else abs(hash(prompt)) % (2**32))
+    sample_rate = 24000
+    length = max(int(sample_rate * duration_sec), 1)
+    timeline = np.linspace(0.0, duration_sec, length, endpoint=False, dtype=np.float32)
+    prompt_lower = prompt.lower()
+
+    base_noise = rng.normal(0.0, 1.0, length).astype(np.float32)
+    envelope = np.linspace(1.0, 0.2, length, dtype=np.float32)
+
+    if any(keyword in prompt_lower for keyword in ["rain", "비", "storm", "wind", "바람"]):
+        signal = 0.18 * np.tanh(base_noise * 0.9)
+        signal += 0.08 * np.sin(2 * np.pi * 220 * timeline)
+        signal *= envelope
+    elif any(keyword in prompt_lower for keyword in ["footstep", "발", "walk", "gravel", "steps"]):
+        signal = np.zeros(length, dtype=np.float32)
+        interval = max(length // 7, 1)
+        for start in range(0, length, interval):
+            burst = min(interval // 4, length - start)
+            if burst <= 0:
+                continue
+            signal[start : start + burst] += rng.normal(0.0, 0.35, burst).astype(np.float32) * np.hanning(burst)
+    elif any(keyword in prompt_lower for keyword in ["explosion", "boom", "폭발", "impact"]):
+        signal = 0.35 * np.tanh(base_noise * 1.6) * np.exp(-timeline * 1.4)
+        signal += 0.1 * np.sin(2 * np.pi * 48 * timeline) * np.exp(-timeline * 2.2)
+    else:
+        signal = 0.22 * np.tanh(base_noise)
+        signal += 0.06 * np.sin(2 * np.pi * 330 * timeline)
+        signal *= np.hanning(length)
+
+    signal = signal * float(intensity)
+    peak = float(np.max(np.abs(signal))) if len(signal) else 0.0
+    if peak > 0:
+        signal = signal / max(peak / 0.92, 1.0)
+    return signal.astype(np.float32)
+
+
+def apply_voice_changer_effect(
+    waveform: np.ndarray,
+    sample_rate: int,
+    *,
+    preset: str,
+    pitch_shift: float,
+    speed: float,
+    gain_db: float,
+) -> np.ndarray:
+    mono = waveform.mean(axis=1) if waveform.ndim > 1 else waveform.astype(np.float32)
+    transformed = mono.astype(np.float32)
+    preset_key = preset.strip().lower()
+
+    preset_pitch = {
+        "helium": 5.0,
+        "deep": -5.0,
+        "robot": -2.0,
+        "telephone": 1.0,
+    }.get(preset_key, 0.0)
+    effective_pitch = preset_pitch + pitch_shift
+    if abs(effective_pitch) > 0.01:
+        transformed = librosa.effects.pitch_shift(transformed, sr=sample_rate, n_steps=effective_pitch)
+
+    if abs(speed - 1.0) > 1e-3:
+        transformed = librosa.effects.time_stretch(transformed, rate=speed)
+
+    if preset_key == "telephone":
+        transformed = librosa.effects.preemphasis(transformed, coef=0.95)
+    elif preset_key == "robot":
+        mod = np.sign(np.sin(2 * np.pi * 38 * np.arange(len(transformed), dtype=np.float32) / sample_rate))
+        transformed = 0.75 * transformed + 0.25 * mod * np.abs(transformed)
+
+    transformed *= float(10 ** (gain_db / 20.0))
+    peak = float(np.max(np.abs(transformed))) if len(transformed) else 0.0
+    if peak > 0:
+        transformed = transformed / max(peak / 0.92, 1.0)
+    return transformed.astype(np.float32)
 
 
 def basename_for_asset(value: str) -> str:
     normalized = value.replace(os.sep, "/")
     return normalized.split("/")[-1]
+
+
+def asset_stem(value: str) -> str:
+    """경로에서 확장자를 제외한 파일명만 꺼낸다."""
+
+    return Path(basename_for_asset(value)).stem
 
 
 def utc_now_from_stat(path: Path) -> str:
@@ -950,6 +1598,8 @@ def bootstrap() -> BootstrapResponse:
         presets=list_preset_records(),
         datasets=list_dataset_records(),
         finetune_runs=list_finetune_run_records(),
+        audio_tool_capabilities=audio_tool_capabilities(),
+        audio_tool_jobs=list_audio_tool_jobs(),
     )
 
 
@@ -1020,7 +1670,12 @@ async def upload_reference_audio(file: UploadFile = File(...)) -> Dict[str, str]
 
     file_id = storage.new_id("upload")
     extension = Path(file.filename or "reference.wav").suffix or ".wav"
-    destination = storage.uploads_dir / f"{file_id}{extension}"
+    destination = storage.named_output_path(
+        root=storage.uploads_dir,
+        category="reference-audio",
+        label=Path(file.filename or "reference").stem,
+        extension=extension,
+    )
     contents = await file.read()
 
     # 업로드 원본을 그대로 보존해야 이후 clone prompt 생성과 데이터셋 빌드가
@@ -1033,6 +1688,254 @@ async def upload_reference_audio(file: UploadFile = File(...)) -> Dict[str, str]
         "url": audio_url_for(rel_path),
         "filename": file.filename or destination.name,
     }
+
+
+@app.get("/api/audio-tools/capabilities", response_model=List[AudioToolCapability])
+def list_audio_tool_capability_records() -> List[AudioToolCapability]:
+    """오디오 제품군 기능 지원 범위를 반환한다."""
+
+    return audio_tool_capabilities()
+
+
+@app.get("/api/audio-tools/jobs", response_model=List[AudioToolJob])
+def audio_tool_jobs() -> List[AudioToolJob]:
+    """최근 오디오 도구 작업 이력을 반환한다."""
+
+    return list_audio_tool_jobs()
+
+
+@app.post("/api/audio-tools/sound-effects", response_model=AudioToolResponse)
+def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
+    """텍스트 프롬프트에서 로컬 procedural 효과음을 생성한다."""
+
+    waveform = synthesize_sound_effect(payload.prompt, payload.duration_sec, payload.intensity, payload.seed)
+    output_path = generated_audio_path("sound-effects", payload.prompt, "wav")
+    sf.write(str(output_path), waveform, 24000)
+    record = write_audio_tool_generation_record(
+        mode="sound_effect",
+        text=payload.prompt,
+        language="N/A",
+        audio_path=output_path,
+        meta={
+            "tool_kind": "sound_effect",
+            "duration_sec": payload.duration_sec,
+            "intensity": payload.intensity,
+            "seed": payload.seed,
+        },
+    )
+    asset = create_audio_tool_asset(output_path, "generated sound effect")
+    save_audio_tool_job(
+        kind="sound_effect",
+        input_summary=payload.prompt,
+        message="Procedural sound effect generated.",
+        assets=[asset],
+    )
+    return AudioToolResponse(
+        kind="sound_effect",
+        status="completed",
+        message="Procedural sound effect generated.",
+        assets=[asset],
+        record=record,
+    )
+
+
+@app.post("/api/audio-tools/voice-changer", response_model=AudioToolResponse)
+def change_voice(payload: VoiceChangerRequest) -> AudioToolResponse:
+    """음성 파일에 보이스 체인저 프리셋을 적용한다."""
+
+    source_path = resolve_audio_absolute_path(payload.audio_path)
+    waveform, sample_rate = sf.read(str(source_path), dtype="float32")
+    transformed = apply_voice_changer_effect(
+        waveform,
+        sample_rate,
+        preset=payload.preset,
+        pitch_shift=payload.pitch_shift,
+        speed=payload.speed,
+        gain_db=payload.gain_db,
+    )
+    output_path = generated_audio_path("voice-changer", f"{payload.preset} voice change", "wav")
+    sf.write(str(output_path), transformed, sample_rate)
+    record = write_audio_tool_generation_record(
+        mode="voice_changer",
+        text=f"{payload.preset} voice change",
+        language="N/A",
+        audio_path=output_path,
+        instruction=payload.preset,
+        meta={
+            "tool_kind": "voice_changer",
+            "source_audio_path": payload.audio_path,
+            "preset": payload.preset,
+            "pitch_shift": payload.pitch_shift,
+            "speed": payload.speed,
+            "gain_db": payload.gain_db,
+        },
+    )
+    asset = create_audio_tool_asset(output_path, f"voice changer · {payload.preset}")
+    save_audio_tool_job(
+        kind="voice_changer",
+        input_summary=f"{payload.preset} voice change",
+        message="Voice changer effect applied.",
+        assets=[asset],
+    )
+    return AudioToolResponse(
+        kind="voice_changer",
+        status="completed",
+        message="Voice changer effect applied.",
+        assets=[asset],
+        record=record,
+    )
+
+
+@app.post("/api/audio-tools/convert", response_model=AudioToolResponse)
+def convert_audio(payload: AudioConvertRequest) -> AudioToolResponse:
+    """오디오 포맷과 샘플레이트를 변환한다."""
+
+    source_path = resolve_audio_absolute_path(payload.audio_path)
+    waveform, sample_rate = sf.read(str(source_path), dtype="float32")
+    if waveform.ndim > 1 and payload.mono:
+        waveform = waveform.mean(axis=1)
+    if sample_rate != payload.sample_rate:
+        waveform = librosa.resample(np.asarray(waveform, dtype=np.float32), orig_sr=sample_rate, target_sr=payload.sample_rate)
+        sample_rate = payload.sample_rate
+    extension = audio_tool_format_or_422(payload.output_format)
+    output_path = generated_audio_path("audio-converter", f"convert {extension} {sample_rate}hz", extension)
+    sf.write(str(output_path), waveform, sample_rate)
+    record = write_audio_tool_generation_record(
+        mode="audio_converter",
+        text=f"convert to {extension} {sample_rate}hz",
+        language="N/A",
+        audio_path=output_path,
+        meta={
+            "tool_kind": "audio_converter",
+            "source_audio_path": payload.audio_path,
+            "output_format": extension,
+            "sample_rate": sample_rate,
+            "mono": payload.mono,
+        },
+    )
+    asset = create_audio_tool_asset(output_path, f"converted {extension}")
+    save_audio_tool_job(
+        kind="audio_converter",
+        input_summary=f"convert to {extension} {sample_rate}Hz",
+        message="Audio conversion completed.",
+        assets=[asset],
+    )
+    return AudioToolResponse(
+        kind="audio_converter",
+        status="completed",
+        message="Audio conversion completed.",
+        assets=[asset],
+        record=record,
+    )
+
+
+@app.post("/api/audio-tools/separate", response_model=AudioToolResponse)
+def separate_audio(payload: AudioSeparationRequest) -> AudioToolResponse:
+    """librosa HPSS로 harmonic/percussive를 분리한다."""
+
+    source_path = resolve_audio_absolute_path(payload.audio_path)
+    waveform, sample_rate = librosa.load(str(source_path), sr=None, mono=True)
+    harmonic, percussive = librosa.effects.hpss(waveform)
+    base_label = asset_stem(payload.audio_path) or "source"
+    harmonic_path = generated_audio_path("audio-separation", f"{base_label} harmonic", "wav")
+    percussive_path = generated_audio_path("audio-separation", f"{base_label} percussive", "wav")
+    sf.write(str(harmonic_path), harmonic, sample_rate)
+    sf.write(str(percussive_path), percussive, sample_rate)
+    assets = [
+        create_audio_tool_asset(harmonic_path, "harmonic stem"),
+        create_audio_tool_asset(percussive_path, "percussive stem"),
+    ]
+    record = write_audio_tool_generation_record(
+        mode="audio_separation",
+        text=f"{base_label} harmonic",
+        language="N/A",
+        audio_path=harmonic_path,
+        meta={
+            "tool_kind": "audio_separation",
+            "source_audio_path": payload.audio_path,
+            "stem_role": "harmonic",
+            "paired_artifact_path": storage.relpath(percussive_path),
+        },
+    )
+    write_audio_tool_generation_record(
+        mode="audio_separation",
+        text=f"{base_label} percussive",
+        language="N/A",
+        audio_path=percussive_path,
+        meta={
+            "tool_kind": "audio_separation",
+            "source_audio_path": payload.audio_path,
+            "stem_role": "percussive",
+            "paired_artifact_path": storage.relpath(harmonic_path),
+        },
+    )
+    save_audio_tool_job(
+        kind="audio_separation",
+        input_summary=f"{base_label} split",
+        message="HPSS separation completed.",
+        assets=assets,
+    )
+    return AudioToolResponse(
+        kind="audio_separation",
+        status="completed",
+        message="HPSS separation completed.",
+        assets=assets,
+        record=record,
+    )
+
+
+@app.post("/api/audio-tools/translate", response_model=AudioToolResponse)
+def translate_audio(payload: AudioTranslateRequest) -> AudioToolResponse:
+    """Whisper 전사와 선택적 재합성을 묶은 번역 보조 흐름."""
+
+    transcript = transcribe_audio_or_raise(payload.audio_path)
+    translated_text = payload.translated_text.strip()
+    assets: List[AudioToolAsset] = []
+    record: Optional[GenerationRecord] = None
+    message = "Transcript captured. Add translated_text to synthesize translated speech."
+
+    if translated_text:
+        audio_path, _, meta = run_generation_or_http(
+            lambda: engine.generate_custom_voice(
+                text=translated_text,
+                language=payload.target_language,
+                speaker=payload.speaker,
+                instruct=payload.instruct,
+                model_id=payload.model_id or default_model_id("custom_voice"),
+            )
+        )
+        record = write_audio_tool_generation_record(
+            mode="audio_translation",
+            text=translated_text,
+            language=payload.target_language,
+            audio_path=audio_path,
+            instruction=payload.instruct,
+            meta={
+                **meta,
+                "tool_kind": "audio_translation",
+                "source_audio_path": payload.audio_path,
+                "transcript_text": transcript.text,
+                "target_language": payload.target_language,
+            },
+        )
+        assets.append(create_audio_tool_asset(audio_path, "translated speech"))
+        message = "Transcript captured and translated speech synthesized from supplied text."
+
+    save_audio_tool_job(
+        kind="audio_translation",
+        input_summary=f"translate to {payload.target_language}",
+        message=message,
+        assets=assets,
+    )
+    return AudioToolResponse(
+        kind="audio_translation",
+        status="completed",
+        message=message,
+        assets=assets,
+        transcript_text=transcript.text,
+        translated_text=translated_text or None,
+        record=record,
+    )
 
 
 @app.post("/api/generate/custom-voice", response_model=GenerationResponse)
@@ -1340,6 +2243,7 @@ def create_preset(payload: CharacterPresetCreateRequest) -> CharacterPreset:
     """
 
     preset_id = storage.new_id("preset")
+    created_at = utc_now()
     record = {
         "id": preset_id,
         "name": payload.name,
@@ -1349,10 +2253,19 @@ def create_preset(payload: CharacterPresetCreateRequest) -> CharacterPreset:
         "reference_text": payload.reference_text,
         "reference_audio_path": payload.reference_audio_path,
         "clone_prompt_path": payload.clone_prompt_path,
-        "created_at": utc_now(),
+        "created_at": created_at,
         "notes": payload.notes,
     }
-    storage.write_json(storage.presets_dir / f"{preset_id}.json", record)
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.presets_dir,
+            category=payload.source_type or "preset",
+            label=payload.name,
+            record_id=preset_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
     return CharacterPreset(**record)
 
 
@@ -1436,19 +2349,29 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
     if not normalized_samples:
         raise HTTPException(status_code=400, detail="At least one valid sample with audio_path is required.")
 
-    dataset_id = storage.new_id("dataset")
+    dataset_id = storage.unique_dataset_id(payload.name)
     dataset_dir = storage.dataset_dir(dataset_id)
     dataset_dir.mkdir(parents=True, exist_ok=True)
     raw_jsonl_path = dataset_dir / "raw.jsonl"
+    ref_source_name = Path(payload.ref_audio_path.strip()).stem or "reference"
     ref_suffix = Path(payload.ref_audio_path.strip()).suffix or ".wav"
-    copied_ref_audio_path = copy_audio_into_dataset(dataset_dir, payload.ref_audio_path, f"ref{ref_suffix}")
+    copied_ref_audio_path = copy_audio_into_dataset(
+        dataset_dir,
+        payload.ref_audio_path,
+        f"reference_{storage.slugify(ref_source_name, default='reference')}{ref_suffix}",
+    )
 
     dataset_local_samples = []
     for index, sample in enumerate(normalized_samples):
+        source_stem = Path(sample["audio_path"]).stem or f"sample-{index + 1}"
         sample_suffix = Path(sample["audio_path"]).suffix or ".wav"
         copied_audio_path = copied_ref_audio_path
         if resolve_repo_audio_path(sample["audio_path"]) != resolve_repo_audio_path(payload.ref_audio_path):
-            copied_audio_path = copy_audio_into_dataset(dataset_dir, sample["audio_path"], f"{index:05d}{sample_suffix}")
+            copied_audio_path = copy_audio_into_dataset(
+                dataset_dir,
+                sample["audio_path"],
+                f"sample_{index + 1:04d}_{storage.slugify(source_stem, default='sample')}{sample_suffix}",
+            )
         dataset_local_samples.append({"audio_path": copied_audio_path, "text": sample["text"]})
 
     write_dataset_jsonl(raw_jsonl_path, copied_ref_audio_path, dataset_local_samples)
@@ -1457,6 +2380,9 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         "id": dataset_id,
         "name": payload.name,
         "source_type": payload.source_type,
+        "dataset_root_path": storage.relpath(dataset_dir),
+        "audio_dir_path": storage.relpath(dataset_dir / "audio"),
+        "manifest_path": storage.relpath(storage.dataset_manifest_path(dataset_id)),
         "raw_jsonl_path": storage.relpath(raw_jsonl_path),
         "prepared_jsonl_path": None,
         "prepared_with_simulation": None,
@@ -1468,6 +2394,15 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         "created_at": utc_now(),
     }
     storage.write_json(storage.dataset_record_path(dataset_id), record)
+    storage.write_json(
+        storage.dataset_manifest_path(dataset_id),
+        dataset_manifest_payload(
+            dataset_id=dataset_id,
+            dataset_name=payload.name,
+            dataset_dir=dataset_dir,
+            record=record,
+        ),
+    )
     return FineTuneDataset(**record)
 
 
@@ -1539,7 +2474,19 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
     dataset["prepared_with_simulation"] = simulate
     dataset["prepared_tokenizer_model_path"] = payload.tokenizer_model_path
     dataset["prepared_device"] = payload.device
+    dataset["dataset_root_path"] = storage.relpath(dataset_dir)
+    dataset["audio_dir_path"] = storage.relpath(dataset_dir / "audio")
+    dataset["manifest_path"] = storage.relpath(storage.dataset_manifest_path(dataset_id))
     storage.write_json(storage.dataset_record_path(dataset_id), dataset)
+    storage.write_json(
+        storage.dataset_manifest_path(dataset_id),
+        dataset_manifest_payload(
+            dataset_id=dataset_id,
+            dataset_name=dataset.get("name", dataset_id),
+            dataset_dir=dataset_dir,
+            record=dataset,
+        ),
+    )
     return FineTuneDataset(**dataset)
 
 
@@ -1606,6 +2553,7 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
         log_path.write_text("Simulation mode fine-tuning completed.\n", encoding="utf-8")
         status = "completed"
 
+    created_at = utc_now()
     record = {
         "id": run_id,
         "dataset_id": payload.dataset_id,
@@ -1618,12 +2566,21 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
         "num_epochs": payload.num_epochs,
         "speaker_name": payload.speaker_name,
         "status": status,
-        "created_at": utc_now(),
+        "created_at": created_at,
         "finished_at": utc_now(),
         "log_path": storage.relpath(log_path),
         "command": command,
     }
-    storage.write_json(storage.finetune_runs_dir / f"{run_id}.json", record)
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.finetune_runs_dir,
+            category=payload.training_mode,
+            label=f"{payload.output_name} {payload.speaker_name}",
+            record_id=run_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
     return FineTuneRun(**record)
 
 

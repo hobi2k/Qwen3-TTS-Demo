@@ -121,6 +121,16 @@ class QwenDemoEngine:
         if bool(self._torch.cuda.is_available()):
             self._torch.cuda.manual_seed_all(seed)
 
+    def _generated_audio_path(self, category: str, label: str) -> Path:
+        """읽기 쉬운 생성 오디오 경로를 만든다."""
+
+        return self.storage.named_output_path(
+            root=self.storage.generated_dir,
+            category=category,
+            label=label or category,
+            extension="wav",
+        )
+
     def resolve_device(self) -> str:
         """실행 환경에 맞는 device 문자열을 계산한다."""
 
@@ -489,7 +499,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self.storage.generated_dir / f"{self.storage.new_id('audio')}.wav"
+        output_path = self._generated_audio_path("tts-custom", f"{speaker} {text[:48]}")
 
         if self.simulation_mode or not self._qwen_available:
             sample_rate = self._fake_wave(text, output_path, f"custom:{speaker}:{instruct}")
@@ -537,7 +547,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self.storage.generated_dir / f"{self.storage.new_id('audio')}.wav"
+        output_path = self._generated_audio_path("voice-design", text[:48] or instruct[:48])
 
         if self.simulation_mode or not self._qwen_available:
             sample_rate = self._fake_wave(text, output_path, f"design:{instruct}")
@@ -590,7 +600,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self.storage.generated_dir / f"{self.storage.new_id('audio')}.wav"
+        output_path = self._generated_audio_path("voice-clone", text[:48])
 
         if self.simulation_mode or not self._qwen_available:
             seed_hint = voice_clone_prompt_path or ref_audio_path or ref_text
@@ -668,7 +678,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self.storage.generated_dir / f"{self.storage.new_id('audio')}.wav"
+        output_path = self._generated_audio_path("hybrid-clone-instruct", text[:48])
 
         if self.simulation_mode or not self._qwen_available:
             seed_hint = f"{base_model_id}:{custom_model_id}:{ref_audio_path}:{instruct}"

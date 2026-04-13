@@ -242,6 +242,94 @@ class AudioTranscriptionResponse(BaseModel):
     model_id: Optional[str] = None
 
 
+class SoundEffectRequest(BaseModel):
+    """텍스트 설명에서 로컬 procedural 효과음을 생성하는 요청 스키마다."""
+
+    prompt: str = Field(..., min_length=1)
+    duration_sec: float = Field(4.0, ge=0.5, le=15.0)
+    intensity: float = Field(0.8, ge=0.1, le=1.5)
+    seed: Optional[int] = None
+
+
+class VoiceChangerRequest(BaseModel):
+    """기존 음성 파일에 스타일 변조를 적용하는 요청 스키마다."""
+
+    audio_path: str = Field(..., min_length=1)
+    preset: str = "helium"
+    pitch_shift: float = 0.0
+    speed: float = Field(1.0, ge=0.5, le=1.8)
+    gain_db: float = 0.0
+
+
+class AudioConvertRequest(BaseModel):
+    """오디오 포맷/샘플레이트 변환 요청 스키마다."""
+
+    audio_path: str = Field(..., min_length=1)
+    output_format: str = "wav"
+    sample_rate: int = Field(24000, ge=8000, le=96000)
+    mono: bool = True
+
+
+class AudioSeparationRequest(BaseModel):
+    """로컬 HPSS 기반 오디오 분리 요청 스키마다."""
+
+    audio_path: str = Field(..., min_length=1)
+
+
+class AudioTranslateRequest(BaseModel):
+    """전사 기반 오디오 번역/재합성 보조 요청 스키마다."""
+
+    audio_path: str = Field(..., min_length=1)
+    target_language: str = "English"
+    translated_text: str = ""
+    model_id: Optional[str] = None
+    speaker: str = "Sohee"
+    instruct: str = ""
+
+
+class AudioToolAsset(BaseModel):
+    """오디오 도구가 반환하는 결과 자산 스키마다."""
+
+    label: str
+    path: str
+    url: str
+    filename: str
+
+
+class AudioToolResponse(BaseModel):
+    """사운드 효과/보이스 체인저/오디오 툴 공통 응답 스키마다."""
+
+    kind: str
+    status: str
+    message: str
+    assets: List[AudioToolAsset] = Field(default_factory=list)
+    transcript_text: Optional[str] = None
+    translated_text: Optional[str] = None
+    record: Optional[GenerationRecord] = None
+
+
+class AudioToolCapability(BaseModel):
+    """프런트엔드가 렌더링할 오디오 도구 기능 메타데이터."""
+
+    key: str
+    label: str
+    description: str
+    available: bool = True
+    notes: str = ""
+
+
+class AudioToolJob(BaseModel):
+    """최근 실행된 오디오 도구 작업 이력 스키마다."""
+
+    id: str
+    kind: str
+    status: str
+    input_summary: str
+    created_at: str
+    artifacts: List[AudioToolAsset] = Field(default_factory=list)
+    message: str = ""
+
+
 class BootstrapResponse(BaseModel):
     """프런트엔드 초기 렌더에 필요한 공통 데이터 묶음."""
 
@@ -253,6 +341,8 @@ class BootstrapResponse(BaseModel):
     presets: List[CharacterPreset]
     datasets: List["FineTuneDataset"]
     finetune_runs: List["FineTuneRun"]
+    audio_tool_capabilities: List[AudioToolCapability] = Field(default_factory=list)
+    audio_tool_jobs: List[AudioToolJob] = Field(default_factory=list)
 
 
 class FineTuneDatasetCreateRequest(BaseModel):
@@ -271,6 +361,9 @@ class FineTuneDataset(BaseModel):
     id: str
     name: str
     source_type: str
+    dataset_root_path: Optional[str] = None
+    audio_dir_path: Optional[str] = None
+    manifest_path: Optional[str] = None
     raw_jsonl_path: str
     prepared_jsonl_path: Optional[str] = None
     prepared_with_simulation: Optional[bool] = None
