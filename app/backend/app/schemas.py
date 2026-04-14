@@ -47,6 +47,23 @@ class AudioAsset(BaseModel):
     transcript_text: Optional[str] = None
 
 
+class GalleryItem(BaseModel):
+    """하나의 갤러리 화면에서 다루는 오디오 결과물 요약 스키마다."""
+
+    id: str
+    kind: str
+    title: str
+    subtitle: str = ""
+    created_at: str
+    audio_path: str
+    audio_url: str
+    filename: str
+    source: str
+    transcript_text: Optional[str] = None
+    preview_text: Optional[str] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class GenerationRequestBase(BaseModel):
     """모든 음성 생성 요청이 공유하는 기본 입력 스키마다."""
 
@@ -363,6 +380,7 @@ class BootstrapResponse(BaseModel):
     health: HealthResponse
     models: List[ModelInfo]
     speakers: List[Dict[str, str]]
+    gallery: List[GalleryItem] = Field(default_factory=list)
     audio_assets: List[AudioAsset]
     history: List[GenerationRecord]
     presets: List[CharacterPreset]
@@ -401,6 +419,9 @@ class FineTuneDataset(BaseModel):
     speaker_name: str
     sample_count: int
     created_at: str
+    training_ready: bool = False
+    status_label: str = ""
+    next_step_label: str = ""
 
 
 class PrepareDatasetRequest(BaseModel):
@@ -445,3 +466,8 @@ class FineTuneRun(BaseModel):
     finished_at: Optional[str] = None
     log_path: Optional[str] = None
     command: Optional[List[str]] = None
+    final_checkpoint_path: Optional[str] = None
+    selectable_model_path: Optional[str] = None
+    is_selectable: bool = False
+    stage_label: str = ""
+    summary_label: str = ""

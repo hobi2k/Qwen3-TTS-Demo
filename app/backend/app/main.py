@@ -41,6 +41,7 @@ from .schemas import (
     FineTuneDatasetCreateRequest,
     FineTuneRun,
     FineTuneRunCreateRequest,
+    GalleryItem,
     GenerationRecord,
     GenerationResponse,
     HealthResponse,
@@ -121,6 +122,119 @@ def stock_speaker_names() -> List[str]:
     return [speaker["speaker"] for speaker in engine.supported_speakers()]
 
 
+def checkpoint_epoch(checkpoint_dir: Path) -> int:
+    """Extract the numeric epoch from a checkpoint directory name.
+
+    Args:
+        checkpoint_dir: Directory named like ``checkpoint-epoch-2``.
+
+    Returns:
+        Parsed epoch number, or ``-1`` when parsing fails.
+    """
+
+    try:
+        return int(checkpoint_dir.name.rsplit("-", 1)[-1])
+    except Exception:
+        return -1
+
+
+def final_checkpoint_for_run(run_dir: Path) -> Optional[Path]:
+    """Return the last checkpoint directory inside one finetune run folder.
+
+    Args:
+        run_dir: A run directory under ``data/finetune-runs``.
+
+    Returns:
+        Highest-epoch checkpoint directory, or ``None`` if the run has no checkpoints.
+    """
+
+    final_dir = run_dir / "final"
+    if final_dir.exists():
+        return final_dir
+
+    checkpoints = [path for path in run_dir.glob("checkpoint-epoch-*") if path.is_dir()]
+    if not checkpoints:
+        return None
+    checkpoints.sort(key=checkpoint_epoch)
+    return checkpoints[-1]
+
+
+def collapse_run_checkpoints(run_dir: Path) -> Optional[Path]:
+    """여러 epoch 체크포인트를 `final` 하나만 남기도록 정리한다.
+
+    Args:
+        run_dir: `data/finetune-runs/<run_name>` 디렉터리.
+
+    Returns:
+        최종 선택 가능한 체크포인트 경로.
+    """
+
+    latest = final_checkpoint_for_run(run_dir)
+    if latest is None:
+        final_dir = run_dir / "final"
+        return final_dir if final_dir.exists() else None
+
+    final_dir = run_dir / "final"
+    if latest != final_dir:
+        if final_dir.exists():
+            shutil.rmtree(final_dir)
+        shutil.copytree(latest, final_dir)
+
+    for candidate in run_dir.glob("checkpoint-epoch-*"):
+        if candidate.is_dir():
+            shutil.rmtree(candidate)
+    return final_dir if final_dir.exists() else latest
+
+
+def infer_finetune_run_record(run_dir: Path) -> Optional[FineTuneRun]:
+    """run 레코드 JSON이 없어도 최종 체크포인트만으로 실행 목록을 복구한다."""
+
+    checkpoint_dir = collapse_run_checkpoints(run_dir)
+    if checkpoint_dir is None:
+        return None
+
+    config_path = checkpoint_dir / "config.json"
+    if not config_path.exists():
+        return None
+
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    talker_config = dict(config.get("talker_config", {}) or {})
+    speaker_map = dict(talker_config.get("spk_id", {}) or {})
+    stock_names = {name.lower() for name in stock_speaker_names()}
+    custom_speakers = [name for name in speaker_map.keys() if name.lower() not in stock_names]
+    speaker_name = custom_speakers[-1] if custom_speakers else (next(reversed(speaker_map.keys())) if speaker_map else "speaker")
+    training_mode = str(config.get("tts_model_type") or "base").strip().lower() or "base"
+    created_at = utc_now_from_stat(checkpoint_dir)
+    summary_label = "CustomVoice 학습 모델" if training_mode == "custom_voice" else "Base 학습 모델"
+
+    return FineTuneRun(
+        id=run_dir.name,
+        dataset_id="unknown",
+        training_mode=training_mode,
+        init_model_path="",
+        speaker_encoder_model_path=None,
+        output_model_path=storage.relpath(run_dir),
+        batch_size=0,
+        lr=0.0,
+        num_epochs=0,
+        speaker_name=speaker_name,
+        status="completed",
+        created_at=created_at,
+        finished_at=created_at,
+        log_path=None,
+        command=None,
+        final_checkpoint_path=storage.relpath(checkpoint_dir),
+        selectable_model_path=storage.relpath(checkpoint_dir),
+        is_selectable=True,
+        stage_label="학습 완료",
+        summary_label=summary_label,
+    )
+
+
 def scan_finetuned_model_infos() -> List[ModelInfo]:
     """로컬 fine-tuning 산출물 중 추론 가능한 체크포인트를 찾아 모델 목록으로 변환한다."""
 
@@ -129,7 +243,10 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
     if not run_root.exists():
         return infos
 
-    for checkpoint_dir in sorted(run_root.glob("*/checkpoint-epoch-*")):
+    for run_dir in sorted([path for path in run_root.iterdir() if path.is_dir()], reverse=True):
+        checkpoint_dir = final_checkpoint_for_run(run_dir)
+        if checkpoint_dir is None:
+            continue
         config_path = checkpoint_dir / "config.json"
         weights_path = checkpoint_dir / "model.safetensors"
         if not config_path.exists() or not weights_path.exists():
@@ -165,18 +282,15 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
 
         run_name = checkpoint_dir.parent.name
         checkpoint_name = checkpoint_dir.name
-        label = f"FT {run_name} / {checkpoint_name}"
-        notes = f"Local fine-tuned checkpoint discovered at {storage.relpath(checkpoint_dir)}"
+        label = f"학습된 {run_name}"
+        notes = f"최종 체크포인트: {storage.relpath(checkpoint_dir)}"
         if custom_names:
             notes = f"{notes} · new speaker: {', '.join(custom_names)}"
-        recommended = (
-            checkpoint_name == "checkpoint-epoch-2"
-            and run_name in {"mai_ko_base17b_full", "mai_ko_customvoice17b_full"}
-        )
+        recommended = run_name in {"mai_ko_base17b_full", "mai_ko_customvoice17b_full"}
 
         infos.append(
             ModelInfo(
-                key=f"ft_{run_name}_{checkpoint_name}".replace("/", "_").replace(".", "_"),
+                key=f"ft_{run_name}".replace("/", "_").replace(".", "_"),
                 category=category,
                 label=label,
                 model_id=str(checkpoint_dir),
@@ -190,7 +304,7 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
             )
         )
 
-    infos.sort(key=lambda item: item.model_id, reverse=True)
+    infos.sort(key=lambda item: item.label.lower())
     return infos
 
 
@@ -304,6 +418,8 @@ def startup_housekeeping() -> None:
     """
 
     migrate_existing_storage_layout()
+    for run_dir in sorted([path for path in storage.finetune_runs_dir.iterdir() if path.is_dir()], reverse=True):
+        collapse_run_checkpoints(run_dir)
 
 
 def audio_url_for(relative_path: str) -> str:
@@ -1053,6 +1169,34 @@ def list_generation_records() -> List[GenerationRecord]:
     return items
 
 
+def list_gallery_items() -> List[GalleryItem]:
+    """최근 생성 결과를 하나의 갤러리 화면에서 다룰 수 있게 정리한다."""
+
+    items: List[GalleryItem] = []
+    for record in list_generation_records():
+        filename = Path(record.output_audio_path).name
+        title = (record.input_text or "").strip() or filename
+        items.append(
+            GalleryItem(
+                id=record.id,
+                kind=record.mode,
+                title=title[:80],
+                subtitle=(record.speaker or record.mode or "").replace("_", " "),
+                created_at=record.created_at,
+                audio_path=record.output_audio_path,
+                audio_url=record.output_audio_url,
+                filename=filename,
+                source="generation",
+                transcript_text=record.input_text,
+                preview_text=(record.instruction or "")[:120] or None,
+                meta=record.meta,
+            )
+        )
+
+    items.sort(key=lambda item: item.created_at or "", reverse=True)
+    return items
+
+
 def list_preset_records() -> List[CharacterPreset]:
     records = storage.list_json_records(storage.presets_dir)
     return [CharacterPreset(**record) for record in records]
@@ -1124,6 +1268,9 @@ def list_dataset_records() -> List[FineTuneDataset]:
             continue
 
         try:
+            normalized["training_ready"] = bool(normalized.get("prepared_jsonl_path"))
+            normalized["status_label"] = "학습 가능" if normalized["training_ready"] else "데이터셋 생성 완료"
+            normalized["next_step_label"] = "학습 시작" if normalized["training_ready"] else "학습용 준비 실행"
             dataset = FineTuneDataset(**normalized)
         except Exception:
             continue
@@ -1147,6 +1294,7 @@ def list_dataset_records() -> List[FineTuneDataset]:
 def list_finetune_run_records() -> List[FineTuneRun]:
     records = storage.list_json_records(storage.finetune_runs_dir)
     items: List[FineTuneRun] = []
+    seen_ids = set()
     for record in records:
         if not all(
             key in record
@@ -1165,10 +1313,28 @@ def list_finetune_run_records() -> List[FineTuneRun]:
             )
         ):
             continue
+        output_model_path = REPO_ROOT / record["output_model_path"]
+        final_checkpoint = collapse_run_checkpoints(output_model_path)
+        record["final_checkpoint_path"] = storage.relpath(final_checkpoint) if final_checkpoint else None
+        record["selectable_model_path"] = record["final_checkpoint_path"]
+        record["is_selectable"] = bool(record["final_checkpoint_path"]) and record.get("status") == "completed"
+        record["stage_label"] = "학습 완료" if record.get("status") == "completed" else "학습 실패"
+        record["summary_label"] = (
+            "CustomVoice 학습 모델" if record.get("training_mode") == "custom_voice" else "Base 학습 모델"
+        )
         try:
-            items.append(FineTuneRun(**record))
+            parsed = FineTuneRun(**record)
+            items.append(parsed)
+            seen_ids.add(parsed.id)
         except Exception:
             continue
+    for run_dir in sorted([path for path in storage.finetune_runs_dir.iterdir() if path.is_dir()], reverse=True):
+        if run_dir.name in seen_ids:
+            continue
+        inferred = infer_finetune_run_record(run_dir)
+        if inferred is not None:
+            items.append(inferred)
+    items.sort(key=lambda item: item.created_at or "", reverse=True)
     return items
 
 
@@ -1412,6 +1578,8 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
         프런트가 각 오디오 기능 페이지의 제목과 안내 문구를 구성할 때 사용하는 capability 목록.
     """
 
+    available_voice_models = list_voice_changer_models()
+
     return [
         AudioToolCapability(
             key="sound_effects",
@@ -1424,8 +1592,8 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
             key="voice_changer",
             label="보이스 체인저",
             description="RVC/Applio로 기존 음성의 타이밍을 유지한 채 음색을 바꿉니다.",
-            available=applio_voice_changer_available(REPO_ROOT),
-            notes="RVC 모델(.pth)과 인덱스(.index)가 필요합니다.",
+            available=applio_voice_changer_available(REPO_ROOT) and bool(available_voice_models),
+            notes="Applio 저장소만으로는 부족하고, RVC 모델(.pth)과 인덱스(.index)가 함께 있어야 합니다.",
         ),
         AudioToolCapability(
             key="audio_separation",
@@ -1600,6 +1768,7 @@ def bootstrap() -> BootstrapResponse:
         health=health(),
         models=list_models(),
         speakers=list_speakers(),
+        gallery=list_gallery_items(),
         audio_assets=list_server_audio_assets(),
         history=list_generation_records(),
         presets=list_preset_records(),
@@ -1609,6 +1778,13 @@ def bootstrap() -> BootstrapResponse:
         audio_tool_jobs=list_audio_tool_jobs(),
         voice_changer_models=list_voice_changer_models(),
     )
+
+
+@app.get("/api/gallery", response_model=List[GalleryItem])
+def gallery() -> List[GalleryItem]:
+    """최근 생성 결과를 갤러리 전용 화면에서 사용할 수 있게 반환한다."""
+
+    return list_gallery_items()
 
 
 def list_voice_changer_models() -> List[VoiceChangerModelInfo]:
@@ -2502,6 +2678,9 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         "speaker_name": payload.speaker_name,
         "sample_count": len(normalized_samples),
         "created_at": utc_now(),
+        "training_ready": False,
+        "status_label": "데이터셋 생성 완료",
+        "next_step_label": "학습용 준비 실행",
     }
     storage.write_json(storage.dataset_record_path(dataset_id), record)
     storage.write_json(
@@ -2587,6 +2766,9 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
     dataset["dataset_root_path"] = storage.relpath(dataset_dir)
     dataset["audio_dir_path"] = storage.relpath(dataset_dir / "audio")
     dataset["manifest_path"] = storage.relpath(storage.dataset_manifest_path(dataset_id))
+    dataset["training_ready"] = True
+    dataset["status_label"] = "학습 가능"
+    dataset["next_step_label"] = "학습 시작"
     storage.write_json(storage.dataset_record_path(dataset_id), dataset)
     storage.write_json(
         storage.dataset_manifest_path(dataset_id),
@@ -2598,6 +2780,17 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
         ),
     )
     return FineTuneDataset(**dataset)
+
+
+@app.post("/api/datasets/{dataset_id}/prepare-for-training", response_model=FineTuneDataset)
+def prepare_dataset_for_training(dataset_id: str, payload: PrepareDatasetRequest) -> FineTuneDataset:
+    """사용자 용어 기준의 학습 시작 준비 엔드포인트.
+
+    내부적으로는 audio code 전처리를 수행하지만, UI에는 raw/prepared 같은
+    구현 용어 대신 '학습 시작 준비' 단계로만 노출할 수 있게 별칭을 제공한다.
+    """
+
+    return prepare_dataset(dataset_id, payload)
 
 
 @app.post("/api/finetune-runs", response_model=FineTuneRun)
@@ -2663,6 +2856,7 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
         log_path.write_text("Simulation mode fine-tuning completed.\n", encoding="utf-8")
         status = "completed"
 
+    final_checkpoint = collapse_run_checkpoints(output_model_path) if status == "completed" else None
     created_at = utc_now()
     record = {
         "id": run_id,
@@ -2680,6 +2874,11 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
         "finished_at": utc_now(),
         "log_path": storage.relpath(log_path),
         "command": command,
+        "final_checkpoint_path": storage.relpath(final_checkpoint) if final_checkpoint else None,
+        "selectable_model_path": storage.relpath(final_checkpoint) if final_checkpoint else None,
+        "is_selectable": bool(final_checkpoint) and status == "completed",
+        "stage_label": "학습 완료" if status == "completed" else "학습 실패",
+        "summary_label": "CustomVoice 학습 모델" if payload.training_mode == "custom_voice" else "Base 학습 모델",
     }
     storage.write_json(
         storage.named_record_path(

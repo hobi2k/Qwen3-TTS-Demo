@@ -6,7 +6,7 @@
 
 ### `examples/test_model_12hz_custom_voice.py`
 
-데모의 `CustomVoice` 탭에 대응합니다.
+데모의 `텍스트 음성 변환` 화면에서 `CustomVoice`를 고르는 흐름에 대응합니다.
 
 - speaker 선택
 - language 전달
@@ -15,14 +15,14 @@
 
 ### `examples/test_model_12hz_voice_design.py`
 
-데모의 `VoiceDesign` 탭에 대응합니다.
+데모의 `목소리 설계` 화면에 대응합니다.
 
 - 설명문 기반 음성 설계
 - 현재 웹에서는 `VoiceDesign 1.7B`를 선택 대상으로 노출
 
 ### `examples/test_model_12hz_base.py`
 
-데모의 `Fixed Character` 탭에 대응합니다.
+데모의 `목소리 복제` 화면에 대응합니다.
 
 - `create_voice_clone_prompt`
 - `generate_voice_clone`
@@ -31,7 +31,7 @@
 
 ### `examples/test_model_12hz_custom_clone_instruct.py`
 
-현재 데모의 `스토리 스튜디오`에서 다루는 hybrid 실험 경로에 대응합니다.
+현재 데모의 `프리셋 프로젝트`에서 다루는 hybrid 실험 경로에 대응합니다.
 
 - `Base` 모델로 clone prompt 생성
 - `CustomVoice` 모델에 `instruct` 전달
@@ -40,7 +40,7 @@
 
 ### `examples/test_tokenizer_12hz.py`
 
-데모의 `Fine-tuning` 탭 전처리 단계와 연결됩니다.
+데모의 `데이터셋 만들기`와 `훈련 랩` 사이 전처리 단계와 연결됩니다.
 
 - tokenizer 선택
 - `audio_codes` 준비
@@ -54,7 +54,7 @@
 
 ### raw JSONL
 
-데모의 dataset builder는 아래 포맷으로 raw JSONL을 만듭니다.
+데모의 `데이터셋 만들기` 화면은 아래 포맷의 raw JSONL을 만듭니다.
 
 - `audio`
 - `text`
@@ -75,42 +75,42 @@ data/datasets/<dataset_id>/
 
 ### `prepare_data.py`
 
-데모의 `prepareDataset` 단계와 연결됩니다.
+데모에서는 사용자가 “raw JSONL”과 “prepared JSONL”이라는 내부 용어를 굳이 몰라도 되도록 문구를 정리합니다. 다만 실제 처리 단계는 여전히 이 스크립트가 담당합니다.
 
 - tokenizer 모델 선택 가능
 - 선택된 tokenizer로 `audio_codes` 포함 JSONL 생성
 
 ### `sft_12hz.py`
 
-데모의 fine-tune run 단계와 연결됩니다.
+데모의 `훈련 랩 -> Base Fine-Tune` 단계와 연결됩니다.
 
 - init model 선택 가능
 - 0.6B / 1.7B `Base` 중 원하는 모델을 시작점으로 설정 가능
 
 ### `sft_custom_voice_12hz.py`
 
-데모의 `Training Lab -> CustomVoice Fine-Tune`에 대응합니다.
+데모의 `훈련 랩 -> CustomVoice Fine-Tune`에 대응합니다.
 
 - 기존 `sft_12hz.py`와 분리된 별도 스크립트
 - `CustomVoice` 체크포인트를 시작점으로 사용
 - 새 화자 추가용 `speaker_name`을 받음
 - `speaker_encoder_model_path`를 별도로 받아 `Base` 체크포인트의 speaker encoder를 보조로 사용
-- 결과 체크포인트는 `custom_voice` 타입으로 내보내며, 현재 UI에서는 `나의 목소리들`과 생성 페이지의 모델 선택 영역에서 다시 확인합니다.
+- 결과 체크포인트는 `custom_voice` 타입으로 내보내며, 현재 UI에서는 최종 선택 모델 기준으로 `텍스트 음성 변환`과 품질 검수 흐름에서 다시 사용합니다.
 
 ## WEB UI와의 연결
 
-### 통합 추론 화면
+### 텍스트 음성 변환
 
-과거 문서에서는 이 영역을 `Inference Lab`이라고 불렀습니다. 현재 UI 라벨은 다르지만, 여기서 설명하는 “학습 결과를 바로 웹에서 선택해 검수하는 흐름” 자체는 그대로 유지됩니다.
+과거 문서에서는 이 영역을 `Inference Lab`이라고 불렀습니다. 현재는 `텍스트 음성 변환`이 메인 추론 화면입니다.
 
 - stock 모델과 fine-tuned 체크포인트를 한 번에 노출
 - `inference_mode`에 따라 폼이 달라짐
   - `custom_voice`: `speaker`, `instruct`, 대사, 고급 샘플링 파라미터
   - `voice_clone`: `ref_audio_path`, `ref_text`, `voice_clone_prompt_path`, `x_vector_only_mode`, 대사, 고급 샘플링 파라미터
   - `voice_design`: 설명문 기반 instruct와 대사, 고급 샘플링 파라미터
-- 같은 탭 안에 `Clone Prompt + Instruct Hybrid` 실험 카드도 따로 배치
+- 메인 화면은 일반 TTS에 집중하고, `Clone Prompt + Instruct Hybrid`는 `프리셋 프로젝트`로 분리합니다.
 
-### `Training Lab`
+### `훈련 랩`
 
 - `Base Fine-Tune`
   - 스크립트: `sft_12hz.py`
@@ -128,14 +128,49 @@ data/datasets/<dataset_id>/
 - 추론 단계
 - 모델 재학습 없음
 - 저장된 참조 입력 재사용
+- `목소리 복제`, `목소리 설계`, `프리셋 프로젝트`에서 재사용
 
 ### fine-tuning
 
 - 학습 단계
 - 모델 가중치 변경
-- raw JSONL, prepared JSONL, checkpoint 필요
+- 데이터셋, 전처리 결과, 최종 모델 산출물 필요
 
-즉, `고정 캐릭터 프리셋`은 "추론용 자산 저장", `fine-tuning`은 "모델 자체를 다시 학습"하는 흐름입니다.
+즉, 프리셋은 “저장해서 반복 생성하는 자산”, fine-tuning은 “모델 자체를 다시 학습하는 작업”입니다.
+
+## 사용자 관점에서의 모델 차이
+
+- `CustomVoice`
+  화자와 말투 지시를 바로 받을 수 있어서 일반 TTS에 가장 쉽게 씁니다.
+- `Base`
+  참조 음성이나 clone prompt로 “이 목소리로 말하라”는 기준을 먼저 주어야 합니다.
+
+그래서 UI도 아래처럼 나뉩니다.
+
+- `텍스트 음성 변환`
+  `CustomVoice` 중심의 메인 화면
+- `목소리 복제`
+  `Base` 중심의 스타일 추출 화면
+- `프리셋 프로젝트`
+  저장한 스타일과 말투 지시를 반복 조합하는 화면
+
+## 샘플 수와 학습 기대치
+
+- `1~5개`
+  파이프라인 점검용
+- `10개 안팎`
+  작은 실험용
+- `20~50개`
+  최소한의 화자 적응을 기대할 수 있는 구간
+- `50개 이상`
+  음색 반영과 안정성이 더 나아질 가능성이 큼
+
+기대치:
+
+- `Base Fine-Tune`
+  dataset 음색 적응 실험에는 의미가 있지만, instruct 준수까지 자동으로 좋아진다고 보면 안 됩니다.
+- `CustomVoice Fine-Tune`
+  dataset 음색 반영과 말투 지시 유지라는 두 목표를 함께 노릴 수 있는 쪽입니다. 다만 데이터 품질, 전사 정확도, 샘플 수에 크게 영향을 받습니다.
 
 ## 현재 구현 기준 메모
 

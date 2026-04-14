@@ -28,6 +28,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,7 @@ from qwen_tts.core.models.modeling_qwen3_tts import Qwen3TTSSpeakerEncoder  # no
 from qwen_tts.inference.qwen3_tts_model import Qwen3TTSModel  # noqa: E402
 
 TARGET_SPEAKER_EMBEDDING = None
+CHECKPOINT_EPOCH_RE = re.compile(r"checkpoint-epoch-(\d+)$")
 
 
 def repo_path(value: str) -> Path:
@@ -219,6 +221,38 @@ def resolve_output_speaker_id(talker_config: dict[str, Any], speaker_name: str) 
     return max(int(value) for value in spk_id_map.values()) + 1
 
 
+def checkpoint_epoch(path: Path) -> int:
+    """체크포인트 디렉터리 이름에서 epoch 번호를 읽는다."""
+
+    match = CHECKPOINT_EPOCH_RE.match(path.name)
+    return int(match.group(1)) if match else -1
+
+
+def finalize_checkpoint_layout(output_model_path: Path) -> Path:
+    """학습 결과를 `final/` 하나만 남기는 구조로 정리한다.
+
+    Args:
+        output_model_path: 체크포인트들이 쌓이는 run 디렉터리.
+
+    Returns:
+        선택용으로 노출할 `final/` 경로.
+    """
+
+    checkpoints = [path for path in output_model_path.glob("checkpoint-epoch-*") if path.is_dir()]
+    if not checkpoints:
+        final_dir = output_model_path / "final"
+        return final_dir if final_dir.exists() else output_model_path
+
+    latest = max(checkpoints, key=checkpoint_epoch)
+    final_dir = output_model_path / "final"
+    if final_dir.exists():
+        shutil.rmtree(final_dir)
+    shutil.copytree(latest, final_dir)
+    for checkpoint in checkpoints:
+        shutil.rmtree(checkpoint)
+    return final_dir
+
+
 def prepare_data_command(args: argparse.Namespace) -> None:
     """Run the pristine upstream prepare_data.py script."""
 
@@ -301,6 +335,7 @@ def train_base_command(args: argparse.Namespace) -> None:
             args.speaker_name,
         ]
     )
+    finalize_checkpoint_layout(output_model_path)
 
 
 def train_customvoice_command(args: argparse.Namespace) -> None:
@@ -445,6 +480,9 @@ def train_customvoice_command(args: argparse.Namespace) -> None:
                 codec_weight.device
             ).to(codec_weight.dtype)
             save_file(state_dict, str(output_dir / "model.safetensors"))
+
+    if accelerator.is_main_process:
+        finalize_checkpoint_layout(output_model_path)
 
 
 def build_parser() -> argparse.ArgumentParser:

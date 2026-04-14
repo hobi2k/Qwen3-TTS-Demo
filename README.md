@@ -2,17 +2,26 @@
 
 React + TypeScript 프런트엔드와 Python/FastAPI 백엔드로 만든 `Qwen3-TTS` 로컬 데모입니다.
 
-이 프로젝트는 아래 흐름을 실제로 연결합니다.
+이 프로젝트는 아래 사용자 작업을 하나의 로컬 제품으로 묶습니다.
 
-- `CustomVoice` 빠른 품질 확인
-- `VoiceDesign` 전용 실험 페이지
-- `VoiceDesign -> Base clone prompt -> 고정 캐릭터 프리셋`
-- 사용자 업로드 음성 -> `Base clone prompt -> 고정 캐릭터 프리셋`
-- `Sound Effects`, `Voice Changer`, `Audio Separation` 독립 페이지
-- `Base` 단일 화자 파인튜닝용 데이터셋 빌더
-- `CustomVoice` 전용 파인튜닝 실행 경로
-- `Base clone prompt + CustomVoice instruct` 실험 경로
-- `prepare_data.py`, `sft_12hz.py` 실행 진입점
+- `텍스트 음성 변환`
+  메인 TTS 화면입니다. 빠른 확인과 모델 선택형 추론을 한 화면으로 합쳤습니다.
+- `목소리 복제`
+  참조 음성에서 clone prompt를 만들고 저장합니다.
+- `목소리 설계`
+  설명문으로 새 스타일을 설계하고 저장합니다.
+- `프리셋 프로젝트`
+  저장한 스타일 프리셋으로 반복 생성과 프로젝트 관리를 합니다.
+- `스토리 스튜디오`
+  긴 대본을 한 번에 생성합니다.
+- `갤러리`
+  최근 생성 이력과 저장 자산을 한곳에서 관리합니다.
+- `데이터셋 만들기`
+  학습용 오디오와 전사 텍스트를 정리합니다.
+- `훈련 랩`
+  준비된 데이터셋으로 `Base` 또는 `CustomVoice` 파인튜닝을 실행합니다.
+- `사운드 효과`, `보이스 체인저`, `오디오 분리`
+  TTS 외 오디오 작업을 담당합니다.
 - 학습 결과 음성 품질 검증 워크플로우
 
 ## 문서 허브
@@ -90,18 +99,61 @@ data/generated/audio-separation/2026-04-13/152430_harmonic_00000-wav.wav
 - `data/audio-tools/*.json`도 tool/date 구조로 이동합니다.
 - `data/clone-prompts/*.pkl|json`, `data/presets/*.json`도 읽을 수 있는 slug 이름으로 재배치됩니다.
 
-`Training Lab`에서 새 데이터셋을 만들 때도 외부 파일 경로를 그대로 참조하지 않고,
+`데이터셋 만들기` 화면에서 새 데이터셋을 만들 때도 외부 파일 경로를 그대로 참조하지 않고,
 선택한 음성 파일을 이 폴더 안 `audio/`로 복사한 뒤 JSONL을 생성하는 것을 표준으로 삼습니다.
 
 ## UI 구조
 
-fish.audio 스타일을 참고해 좌측 제품 네비게이션과 페이지별 독립 작업 흐름으로 정리했습니다.
+현재 사용자 기준 화면 구조는 아래와 같습니다.
 
-- `홈`: 전체 상태, 최근 작업, 빠른 시작 카드
-- `나의 목소리들`: 프리셋, 최근 생성 음성, fine-tuned 체크포인트, 데이터셋 라이브러리
-- `빠르게 들어보기`, `목소리 복제`, `스토리 스튜디오`
-- `사운드 효과`, `보이스 체인저`, `오디오 분리`
-- `Training Lab`
+- `홈`
+  무엇을 할지 고르는 시작 화면
+- `갤러리`
+  최근 생성 이력과 저장 자산을 한곳에서 보는 화면
+- `텍스트 음성 변환`
+  모델을 고르고 바로 들어보는 메인 TTS 화면
+- `목소리 복제`
+  참조 음성에서 스타일을 추출하는 화면
+- `목소리 설계`
+  설명문으로 스타일을 만드는 화면
+- `프리셋 프로젝트`
+  저장한 프리셋으로 반복 생성하는 화면
+- `스토리 스튜디오`
+  장시간 대본을 한 번에 처리하는 화면
+- `사운드 효과`
+- `보이스 체인저`
+- `오디오 분리`
+- `데이터셋 만들기`
+- `훈련 랩`
+
+문서 기준 원칙:
+
+- 최근 생성 이력은 여러 탭에 흩어두지 않고 `갤러리`에서 관리합니다.
+- `텍스트 음성 변환`은 “빠르게 들어보기”와 “모델 선택 추론”을 합친 메인 화면입니다.
+- `목소리 복제`와 `목소리 설계`는 별도 탭으로 나눕니다.
+- `프리셋 프로젝트`는 반복 생성 전용 탭입니다.
+- `스토리 스튜디오`는 장면 번호를 읽게 하는 기능이 아니라 긴 대본 생성 기능입니다.
+- `데이터셋 만들기`와 `훈련 랩`은 분리합니다.
+
+## Base와 CustomVoice를 사용자 입장에서 이해하기
+
+두 모델의 차이는 기술 구현보다 “무엇을 먼저 준비해야 하는지”로 이해하는 편이 쉽습니다.
+
+- `CustomVoice`
+  이미 화자와 말투 지시를 바로 받을 수 있는 모델입니다. 짧은 문장 확인, 일반적인 TTS, 말투 지시 실험에 적합합니다.
+- `Base`
+  누구 목소리로 말할지 먼저 알려줘야 하는 모델입니다. 그래서 `Base`를 쓸 때는 참조 음성이나 저장된 스타일 프리셋이 필요합니다.
+
+정리하면:
+
+- `CustomVoice`는 바로 말시키기 쉬운 모델
+- `Base`는 목소리 기준을 먼저 알려줘야 하는 모델
+
+이 차이 때문에 UI도 다르게 구성합니다.
+
+- `텍스트 음성 변환`에서는 보통 `CustomVoice`를 가장 쉽게 씁니다.
+- `목소리 복제`에서는 `Base`로 스타일을 추출해 프리셋을 만듭니다.
+- 저장한 프리셋은 이후 `텍스트 음성 변환`, `프리셋 프로젝트`, `스토리 스튜디오`에서 다시 사용합니다.
 
 ## 빠른 시작
 
@@ -256,6 +308,11 @@ Windows PowerShell 기준:
   - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
   - `Qwen3-TTS-12Hz-0.6B-Base`
   - `whisper-large-v3`
+- `vendor/Applio`와 `vendor/MMAudio` 저장소 clone
+- 주의:
+  - Applio 저장소 clone만으로는 보이스 체인저용 RVC 모델이 생기지 않습니다.
+  - `.pth`와 `.index`를 함께 받으려면 `APPLIO_RVC_MODEL_URL`, `APPLIO_RVC_INDEX_URL`를 둘 다 지정해야 합니다.
+  - 현재 다운로드 상태는 `python scripts/inspect_applio_downloads.py`로 바로 확인할 수 있습니다.
 - 프런트엔드에서는 다운로드된 전체 모델 중에서 기능별로 선택 가능
   - clone prompt용 참조 텍스트 자동 전사도 `data/models/whisper-large-v3`를 우선 사용
 - 추가로 vendor repo와 오디오 툴 자산도 처리
@@ -312,16 +369,8 @@ curl http://127.0.0.1:5173/api/health
 권장 입력 원칙:
 
 - 대사 텍스트는 한국어로 넣어도 됩니다.
-- `CustomVoice` instruction과 `VoiceDesign` 설명문은 영어를 기본 권장으로 사용합니다.
+- `CustomVoice`의 말투 지시와 `목소리 설계` 설명문은 영어 입력을 기본 권장으로 사용합니다.
 - `GET /api/health`에서 `runtime_mode=real`인지 먼저 확인한 뒤 실제 음성을 점검하는 흐름을 권장합니다.
-
-시뮬레이션 생성 확인:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/generate/custom-voice \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"시뮬레이션 검증 문장입니다.","language":"Korean","speaker":"Sohee","instruct":"또렷하게"}'
-```
 
 ## 품질 검증
 
@@ -370,8 +419,8 @@ python scripts/validate_speech_quality.py \
 - 업스트림 기본 경로
 - 실행 스크립트: `Qwen3-TTS/finetuning/sft_12hz.py`
 - WEB UI:
-  `Training Lab`
-- 결과 체크포인트는 `나의 목소리들`과 생성 페이지의 모델 선택 영역에서 다시 확인합니다.
+  `훈련 랩`
+- 결과는 여러 체크포인트를 모두 노출하는 대신, 최종 선택용 모델 하나를 기준으로 다시 사용합니다.
 
 ### 2. CustomVoice Fine-Tune
 
@@ -381,7 +430,7 @@ python scripts/validate_speech_quality.py \
 - 핵심 차이:
   `CustomVoice` 체크포인트는 speaker encoder가 없어서, `Base` 체크포인트의 speaker encoder를 보조로 받아 새 화자를 추가합니다.
 - WEB UI:
-  `Training Lab`
+  `훈련 랩`
   여기서 `speaker_encoder_model_path`도 함께 선택합니다.
 
 ### 3. Clone Prompt + Instruct Hybrid
@@ -391,40 +440,41 @@ python scripts/validate_speech_quality.py \
 - 별도 스크립트:
   `Qwen3-TTS/examples/test_model_12hz_custom_clone_instruct.py`
 - WEB UI:
-  `스토리 스튜디오`
+  `프리셋 프로젝트`
 - 입력:
-  저장된 `스타일 프리셋`을 먼저 고르고, 필요하면 `Base 모델`, `ref_audio_path`, `ref_text`를 고급 입력으로 덮어쓴 뒤 `CustomVoice 모델`, `instruct`, `대사`, 고급 생성 파라미터를 조절합니다.
+  저장된 `스타일 프리셋`을 먼저 고르고, 필요하면 `Base 모델`, 참조 음성, 참조 텍스트를 고급 입력으로 덮어쓴 뒤 `CustomVoice 모델`, `instruct`, `대사`, 고급 생성 파라미터를 조절합니다.
 
 ### 4. WEB UI에서 확인되는 것
 
 - `홈`
-  - 최근 생성 음성, 빠른 시작 카드, 주요 기능 진입점
-- `나의 목소리들`
-  - 프리셋, 최근 생성 음성, 데이터셋, 학습 실행 기록
-- `빠르게 들어보기`
-  - 한국어 대사 + 영어 style/instruction 조합으로 즉시 샘플 확인
-  - 화자 선택 가능한 모델에서는 speaker selector 제공
+  - 기능 진입점과 현재 준비 상태 요약
+- `갤러리`
+  - 최근 생성 음성, 저장 프리셋, 프로젝트 자산 확인
+- `텍스트 음성 변환`
+  - 모델 선택, 대사 입력, 필요 시 저장 프리셋 적용
+  - `Base`를 고르면 왜 참조 음성 또는 프리셋이 필요한지 함께 설명
 - `목소리 복제`
-  - 업로드 또는 기존 생성 음성으로 clone prompt / preset 생성
-  - `Base` 모델 선택이 필수
+  - 참조 음성에서 clone prompt와 프리셋 생성
+- `목소리 설계`
+  - 설명문에서 스타일 생성 및 저장
+- `프리셋 프로젝트`
+  - 저장한 프리셋을 반복 생성용 프로젝트로 관리
 - `스토리 스튜디오`
-  - 저장된 스타일 프리셋 위에 영어 말투 지시를 얹어 반복 생성
+  - 긴 대본 생성
 - `사운드 효과`
   - `MMAudio` 기반 효과음 생성
-  - 길이와 강도는 실제 요청 파라미터로 동작
 - `보이스 체인저`
   - `Applio/RVC` 기반 audio-to-audio 음색 변환
-  - 제품 UI는 모델 경로 직접 입력보다 발견된 모델 목록 선택을 우선
 - `오디오 분리`
-  - 독립 페이지에서 업로드 또는 서버 오디오 선택 후 분리 실행
-- `Training Lab`
-  - dataset 생성, `prepare_data.py`, `sft_12hz.py` 실행
-  - raw/prepared JSONL 다운로드와 최근 실행 기록 확인
+  - 업로드 또는 서버 오디오 선택 후 분리 실행
+- `데이터셋 만들기`
+  - 학습 샘플 정리와 데이터셋 생성
+- `훈련 랩`
+  - 준비된 데이터셋을 골라 Base / CustomVoice 학습 실행
 
 ## 주의 사항
 
-- 현재 파인튜닝 흐름은 upstream `Qwen3-TTS/finetuning/README.md` 기준의 `Base` 단일 화자 워크플로우에 맞춰져 있습니다.
-- 시뮬레이션 모드에서는 실제 모델 대신 테스트용 오디오와 더미 학습 산출물을 만들어 전체 UX 흐름을 검증할 수 있습니다.
+- 현재 파인튜닝 흐름은 upstream `Qwen3-TTS/finetuning/README.md` 기준의 `Base` 단일 화자 워크플로우를 기본으로 하고, `CustomVoice`는 별도 엔트리로 확장합니다.
 - 실제 파인튜닝 실행은 `qwen-tts`, `torch`, GPU, tokenizer/model 다운로드 상태에 따라 추가 설정이 필요합니다.
 - `ffmpeg`는 Python `requirements.txt`에 넣는 항목이 아니라 시스템 바이너리입니다. Whisper 전사를 쓰려면 PATH에 설치되어 있어야 합니다.
 - `sox`는 현재 환경 기준 필수는 아니지만, 설치되지 않으면 업스트림 초기화 경고가 출력됩니다.
@@ -436,5 +486,26 @@ python scripts/validate_speech_quality.py \
 - 일부 생성 결과에서 시작 직후 아주 짧은 저레벨 웅얼거림처럼 들리는 앞머리 구간이 있을 수 있어, 백엔드에서는 생성 후 첫 `35ms` 범위 안에서만 보수적인 leading trim과 짧은 fade-in을 적용합니다.
 - 이 보정이 실제로 적용됐는지는 생성 이력 JSON의 `meta.postprocess.leading_trim_samples`와 `meta.postprocess.fade_in_samples`에서 확인할 수 있습니다.
 - 업스트림에는 `negative prompt` 개념이 별도로 노출되어 있지 않습니다.
-- 대신 웹 UI의 `Advanced Controls`에서 `seed`, `do_sample`, `top_k`, `top_p`, `temperature`, `repetition_penalty`, `subtalker_*`, `max_new_tokens`, `non_streaming_mode`, `extra_generate_kwargs`를 직접 조절할 수 있습니다.
+- 대신 웹 UI의 `고급 제어`에서 `seed`, `do_sample`, `top_k`, `top_p`, `temperature`, `repetition_penalty`, `subtalker_*`, `max_new_tokens`, `non_streaming_mode`, `extra_generate_kwargs`를 직접 조절할 수 있습니다.
 - 같은 프롬프트에서도 `seed`를 고정하지 않으면 샘플링 차이로 한숨, 숨소리, 어택 차이가 생길 수 있습니다.
+
+## 학습 샘플 수와 기대치
+
+학습 화면에는 아래 기준을 함께 안내하는 것을 권장합니다.
+
+- `1~5개`
+  파이프라인 점검용
+- `10개 안팎`
+  아주 작은 실험용
+- `20~50개`
+  최소한의 화자 적응을 기대할 수 있는 구간
+- `50개 이상`
+  음색 반영과 안정성이 더 나아질 가능성이 큼
+
+중요한 점:
+
+- `Base Fine-Tune`은 dataset 음색 적응 실험에는 쓸 수 있지만, instruct 준수까지 자동으로 좋아지는 것은 아닙니다.
+- `CustomVoice Fine-Tune`은 말투 지시를 유지한 채 dataset 음색을 반영하는 후보 경로이지만, 데이터 품질과 양에 따라 결과 차이가 큽니다.
+- 품질 평가는 반드시 두 축으로 확인해야 합니다.
+  - dataset 음색을 제대로 닮았는지
+  - 말투 지시를 여전히 잘 따르는지

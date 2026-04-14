@@ -205,6 +205,8 @@ data/models/
 data/models/**
 data/generated/**
 data/audio-tools/**
+data/rvc-models/**
+!data/rvc-models/.gitkeep
 data/uploads/*
 !data/uploads/.gitkeep
 data/clone-prompts/**
@@ -216,6 +218,8 @@ data/source-datasets/**
 !data/source-datasets/.gitkeep
 data/finetune-runs/*
 !data/finetune-runs/.gitkeep
+vendor/**
+!vendor/.gitkeep
 
 # Ruff stuff:
 .ruff_cache/

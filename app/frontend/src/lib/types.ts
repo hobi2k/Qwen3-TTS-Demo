@@ -131,6 +131,7 @@ export interface FineTuneRun {
   init_model_path: string;
   speaker_encoder_model_path?: string | null;
   output_model_path: string;
+  final_checkpoint_path?: string | null;
   batch_size: number;
   lr: number;
   num_epochs: number;

@@ -83,6 +83,11 @@ echo "Models stored in: ${MODELS_DIR}"
 
 APPLIO_REPO_URL="${APPLIO_REPO_URL:-https://github.com/IAHispano/Applio.git}"
 MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-https://github.com/hkchengrex/MMAudio.git}"
+APPLIO_DEFAULT_RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth}"
+APPLIO_DEFAULT_RVC_INDEX_URL="${APPLIO_DEFAULT_RVC_INDEX_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/index/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index}"
+APPLIO_DEFAULT_RVC_MODEL_FILENAME="${APPLIO_DEFAULT_RVC_MODEL_FILENAME:-yui-mix-pro-hq-40k.pth}"
+APPLIO_DEFAULT_RVC_INDEX_FILENAME="${APPLIO_DEFAULT_RVC_INDEX_FILENAME:-added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index}"
+APPLIO_SKIP_DEFAULT_RVC="${APPLIO_SKIP_DEFAULT_RVC:-0}"
 
 if [[ ! -d "${APPLIO_DIR}/.git" ]]; then
   echo "Cloning Applio -> ${APPLIO_DIR}"
@@ -98,24 +103,44 @@ else
   echo "MMAudio already present at ${MMAUDIO_DIR}"
 fi
 
-if [[ -n "${APPLIO_RVC_MODEL_URL:-}" ]]; then
-  TARGET_ARCHIVE="${RVC_DIR}/${APPLIO_RVC_MODEL_FILENAME:-$(basename "${APPLIO_RVC_MODEL_URL}")}"
+RVC_MODEL_URL="${APPLIO_RVC_MODEL_URL:-}"
+RVC_INDEX_URL="${APPLIO_RVC_INDEX_URL:-}"
+RVC_MODEL_FILENAME="${APPLIO_RVC_MODEL_FILENAME:-}"
+RVC_INDEX_FILENAME="${APPLIO_RVC_INDEX_FILENAME:-}"
+
+if [[ -z "${RVC_MODEL_URL}" && -z "${RVC_INDEX_URL}" && "${APPLIO_SKIP_DEFAULT_RVC}" != "1" ]]; then
+  echo "No explicit Applio/RVC model URLs provided. Downloading the default demo voice-conversion pair."
+  RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL}"
+  RVC_INDEX_URL="${APPLIO_DEFAULT_RVC_INDEX_URL}"
+  RVC_MODEL_FILENAME="${APPLIO_DEFAULT_RVC_MODEL_FILENAME}"
+  RVC_INDEX_FILENAME="${APPLIO_DEFAULT_RVC_INDEX_FILENAME}"
+fi
+
+if [[ -n "${RVC_MODEL_URL}" ]]; then
+  TARGET_ARCHIVE="${RVC_DIR}/${RVC_MODEL_FILENAME:-$(basename "${RVC_MODEL_URL}")}"
   if [[ ! -f "${TARGET_ARCHIVE}" ]]; then
     echo "Downloading Applio/RVC model -> ${TARGET_ARCHIVE}"
-    curl -L "${APPLIO_RVC_MODEL_URL}" -o "${TARGET_ARCHIVE}"
+    curl -L "${RVC_MODEL_URL}" -o "${TARGET_ARCHIVE}"
   else
     echo "Applio/RVC model already present: ${TARGET_ARCHIVE}"
   fi
 fi
 
-if [[ -n "${APPLIO_RVC_INDEX_URL:-}" ]]; then
-  TARGET_INDEX="${RVC_DIR}/${APPLIO_RVC_INDEX_FILENAME:-$(basename "${APPLIO_RVC_INDEX_URL}")}"
+if [[ -n "${RVC_INDEX_URL}" ]]; then
+  TARGET_INDEX="${RVC_DIR}/${RVC_INDEX_FILENAME:-$(basename "${RVC_INDEX_URL}")}"
   if [[ ! -f "${TARGET_INDEX}" ]]; then
     echo "Downloading Applio/RVC index -> ${TARGET_INDEX}"
-    curl -L "${APPLIO_RVC_INDEX_URL}" -o "${TARGET_INDEX}"
+    curl -L "${RVC_INDEX_URL}" -o "${TARGET_INDEX}"
   else
     echo "Applio/RVC index already present: ${TARGET_INDEX}"
   fi
+fi
+
+if [[ -z "${RVC_MODEL_URL}" || -z "${RVC_INDEX_URL}" ]]; then
+  echo
+  echo "Applio repository is present, but no default RVC voice-conversion model was downloaded."
+  echo "Reason: provide APPLIO_RVC_MODEL_URL and APPLIO_RVC_INDEX_URL, or leave APPLIO_SKIP_DEFAULT_RVC unset so the built-in demo pair downloads."
+  echo "Current RVC asset directory: ${RVC_DIR}"
 fi
 
 if [[ -n "${MMAUDIO_MODEL_URL:-}" ]]; then

@@ -85,6 +85,11 @@ $ApplioDir = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Join-Pa
 $MMAudioDir = if ($env:MMAUDIO_REPO_ROOT) { $env:MMAUDIO_REPO_ROOT } else { Join-Path $VendorDir "MMAudio" }
 $ApplioRepoUrl = if ($env:APPLIO_REPO_URL) { $env:APPLIO_REPO_URL } else { "https://github.com/IAHispano/Applio.git" }
 $MMAudioRepoUrl = if ($env:MMAUDIO_REPO_URL) { $env:MMAUDIO_REPO_URL } else { "https://github.com/hkchengrex/MMAudio.git" }
+$DefaultRvcModelUrl = if ($env:APPLIO_DEFAULT_RVC_MODEL_URL) { $env:APPLIO_DEFAULT_RVC_MODEL_URL } else { "https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth" }
+$DefaultRvcIndexUrl = if ($env:APPLIO_DEFAULT_RVC_INDEX_URL) { $env:APPLIO_DEFAULT_RVC_INDEX_URL } else { "https://huggingface.co/SmlCoke/rvc-yui/resolve/main/index/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index" }
+$DefaultRvcModelFilename = if ($env:APPLIO_DEFAULT_RVC_MODEL_FILENAME) { $env:APPLIO_DEFAULT_RVC_MODEL_FILENAME } else { "yui-mix-pro-hq-40k.pth" }
+$DefaultRvcIndexFilename = if ($env:APPLIO_DEFAULT_RVC_INDEX_FILENAME) { $env:APPLIO_DEFAULT_RVC_INDEX_FILENAME } else { "added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index" }
+$SkipDefaultRvc = if ($env:APPLIO_SKIP_DEFAULT_RVC) { $env:APPLIO_SKIP_DEFAULT_RVC } else { "0" }
 
 if (-not (Test-Path (Join-Path $ApplioDir ".git"))) {
     Write-Host "Cloning Applio -> $ApplioDir"
@@ -102,28 +107,48 @@ else {
     Write-Host "MMAudio already present at $MMAudioDir"
 }
 
-if ($env:APPLIO_RVC_MODEL_URL) {
-    $ModelFilename = if ($env:APPLIO_RVC_MODEL_FILENAME) { $env:APPLIO_RVC_MODEL_FILENAME } else { [System.IO.Path]::GetFileName($env:APPLIO_RVC_MODEL_URL) }
+$RvcModelUrl = $env:APPLIO_RVC_MODEL_URL
+$RvcIndexUrl = $env:APPLIO_RVC_INDEX_URL
+$RvcModelFilename = $env:APPLIO_RVC_MODEL_FILENAME
+$RvcIndexFilename = $env:APPLIO_RVC_INDEX_FILENAME
+
+if ((-not $RvcModelUrl) -and (-not $RvcIndexUrl) -and ($SkipDefaultRvc -ne "1")) {
+    Write-Host "No explicit Applio/RVC model URLs provided. Downloading the default demo voice-conversion pair."
+    $RvcModelUrl = $DefaultRvcModelUrl
+    $RvcIndexUrl = $DefaultRvcIndexUrl
+    $RvcModelFilename = $DefaultRvcModelFilename
+    $RvcIndexFilename = $DefaultRvcIndexFilename
+}
+
+if ($RvcModelUrl) {
+    $ModelFilename = if ($RvcModelFilename) { $RvcModelFilename } else { [System.IO.Path]::GetFileName($RvcModelUrl) }
     $TargetArchive = Join-Path $RvcDir $ModelFilename
     if (-not (Test-Path $TargetArchive)) {
         Write-Host "Downloading Applio/RVC model -> $TargetArchive"
-        Invoke-WebRequest -Uri $env:APPLIO_RVC_MODEL_URL -OutFile $TargetArchive
+        Invoke-WebRequest -Uri $RvcModelUrl -OutFile $TargetArchive
     }
     else {
         Write-Host "Applio/RVC model already present: $TargetArchive"
     }
 }
 
-if ($env:APPLIO_RVC_INDEX_URL) {
-    $IndexFilename = if ($env:APPLIO_RVC_INDEX_FILENAME) { $env:APPLIO_RVC_INDEX_FILENAME } else { [System.IO.Path]::GetFileName($env:APPLIO_RVC_INDEX_URL) }
+if ($RvcIndexUrl) {
+    $IndexFilename = if ($RvcIndexFilename) { $RvcIndexFilename } else { [System.IO.Path]::GetFileName($RvcIndexUrl) }
     $TargetIndex = Join-Path $RvcDir $IndexFilename
     if (-not (Test-Path $TargetIndex)) {
         Write-Host "Downloading Applio/RVC index -> $TargetIndex"
-        Invoke-WebRequest -Uri $env:APPLIO_RVC_INDEX_URL -OutFile $TargetIndex
+        Invoke-WebRequest -Uri $RvcIndexUrl -OutFile $TargetIndex
     }
     else {
         Write-Host "Applio/RVC index already present: $TargetIndex"
     }
+}
+
+if ((-not $RvcModelUrl) -or (-not $RvcIndexUrl)) {
+    Write-Host ""
+    Write-Host "Applio repository is present, but no default RVC voice-conversion model was downloaded."
+    Write-Host "Reason: provide APPLIO_RVC_MODEL_URL and APPLIO_RVC_INDEX_URL, or leave APPLIO_SKIP_DEFAULT_RVC unset so the built-in demo pair downloads."
+    Write-Host "Current RVC asset directory: $RvcDir"
 }
 
 if ($env:MMAUDIO_MODEL_URL) {
