@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/app/backend"
 VENV_DIR="${ROOT_DIR}/.venv"
 MODELS_DIR="${ROOT_DIR}/data/models"
+VENDOR_DIR="${ROOT_DIR}/vendor"
+APPLIO_DIR="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
+MMAUDIO_DIR="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
+RVC_DIR="${ROOT_DIR}/data/rvc-models"
+MMAUDIO_MODELS_DIR="${ROOT_DIR}/data/mmaudio"
 PROFILE="${1:-all}"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
@@ -13,6 +18,9 @@ if [[ ! -d "${VENV_DIR}" ]]; then
 fi
 
 mkdir -p "${MODELS_DIR}"
+mkdir -p "${VENDOR_DIR}"
+mkdir -p "${RVC_DIR}"
+mkdir -p "${MMAUDIO_MODELS_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 if [[ -f "${BACKEND_DIR}/.env" ]]; then
@@ -72,5 +80,63 @@ PY
 echo
 echo "Downloaded model profile: ${PROFILE}"
 echo "Models stored in: ${MODELS_DIR}"
+
+APPLIO_REPO_URL="${APPLIO_REPO_URL:-https://github.com/IAHispano/Applio.git}"
+MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-https://github.com/hkchengrex/MMAudio.git}"
+
+if [[ ! -d "${APPLIO_DIR}/.git" ]]; then
+  echo "Cloning Applio -> ${APPLIO_DIR}"
+  git clone "${APPLIO_REPO_URL}" "${APPLIO_DIR}"
+else
+  echo "Applio already present at ${APPLIO_DIR}"
+fi
+
+if [[ ! -d "${MMAUDIO_DIR}/.git" ]]; then
+  echo "Cloning MMAudio -> ${MMAUDIO_DIR}"
+  git clone "${MMAUDIO_REPO_URL}" "${MMAUDIO_DIR}"
+else
+  echo "MMAudio already present at ${MMAUDIO_DIR}"
+fi
+
+if [[ -n "${APPLIO_RVC_MODEL_URL:-}" ]]; then
+  TARGET_ARCHIVE="${RVC_DIR}/${APPLIO_RVC_MODEL_FILENAME:-$(basename "${APPLIO_RVC_MODEL_URL}")}"
+  if [[ ! -f "${TARGET_ARCHIVE}" ]]; then
+    echo "Downloading Applio/RVC model -> ${TARGET_ARCHIVE}"
+    curl -L "${APPLIO_RVC_MODEL_URL}" -o "${TARGET_ARCHIVE}"
+  else
+    echo "Applio/RVC model already present: ${TARGET_ARCHIVE}"
+  fi
+fi
+
+if [[ -n "${APPLIO_RVC_INDEX_URL:-}" ]]; then
+  TARGET_INDEX="${RVC_DIR}/${APPLIO_RVC_INDEX_FILENAME:-$(basename "${APPLIO_RVC_INDEX_URL}")}"
+  if [[ ! -f "${TARGET_INDEX}" ]]; then
+    echo "Downloading Applio/RVC index -> ${TARGET_INDEX}"
+    curl -L "${APPLIO_RVC_INDEX_URL}" -o "${TARGET_INDEX}"
+  else
+    echo "Applio/RVC index already present: ${TARGET_INDEX}"
+  fi
+fi
+
+if [[ -n "${MMAUDIO_MODEL_URL:-}" ]]; then
+  TARGET_ARCHIVE="${MMAUDIO_MODELS_DIR}/${MMAUDIO_MODEL_FILENAME:-$(basename "${MMAUDIO_MODEL_URL}")}"
+  if [[ ! -f "${TARGET_ARCHIVE}" ]]; then
+    echo "Downloading MMAudio model -> ${TARGET_ARCHIVE}"
+    curl -L "${MMAUDIO_MODEL_URL}" -o "${TARGET_ARCHIVE}"
+  else
+    echo "MMAudio model already present: ${TARGET_ARCHIVE}"
+  fi
+fi
+
+if [[ -n "${MMAUDIO_CONFIG_URL:-}" ]]; then
+  TARGET_CONFIG="${MMAUDIO_MODELS_DIR}/${MMAUDIO_CONFIG_FILENAME:-$(basename "${MMAUDIO_CONFIG_URL}")}"
+  if [[ ! -f "${TARGET_CONFIG}" ]]; then
+    echo "Downloading MMAudio config -> ${TARGET_CONFIG}"
+    curl -L "${MMAUDIO_CONFIG_URL}" -o "${TARGET_CONFIG}"
+  else
+    echo "MMAudio config already present: ${TARGET_CONFIG}"
+  fi
+fi
+
 echo "Suggested next step:"
 echo "  cd ${BACKEND_DIR} && source ../../.venv/bin/activate && uvicorn app.main:app --reload"

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class VoiceChangerError(RuntimeError):
@@ -235,3 +235,63 @@ def applio_voice_changer_available(repo_root: Path) -> bool:
     """
 
     return ApplioVoiceChanger(repo_root).is_available()
+
+
+def resolve_voice_model_roots(repo_root: Path, applio_root: Path) -> List[Path]:
+    configured = (os.getenv("APPLIO_MODEL_DIR") or os.getenv("VOICE_CHANGER_MODEL_DIR") or "").strip()
+    candidates = [Path(configured).expanduser()] if configured else []
+    candidates.extend(
+        [
+            applio_root / "logs",
+            applio_root / "assets" / "weights",
+            repo_root / "data" / "rvc-models",
+            repo_root / "vendor" / "Applio" / "logs",
+        ]
+    )
+    resolved: List[Path] = []
+    seen = set()
+    for candidate in candidates:
+        path = candidate.resolve()
+        if path in seen:
+            continue
+        seen.add(path)
+        if path.exists():
+            resolved.append(path)
+    return resolved
+
+
+def _best_index_for_model(model_path: Path, index_paths: List[Path]) -> Optional[Path]:
+    stem_matches = [item for item in index_paths if item.stem == model_path.stem]
+    if stem_matches:
+        return stem_matches[0]
+    prefix_matches = [item for item in index_paths if item.stem.startswith(model_path.stem) or model_path.stem.startswith(item.stem)]
+    if prefix_matches:
+        return prefix_matches[0]
+    siblings = [item for item in index_paths if item.parent == model_path.parent]
+    if siblings:
+        return siblings[0]
+    return index_paths[0] if index_paths else None
+
+
+def list_available_voice_models(repo_root: Path, applio_root: Path) -> List[Dict[str, Optional[str]]]:
+    models: List[Dict[str, Optional[str]]] = []
+    seen = set()
+    for root in resolve_voice_model_roots(repo_root, applio_root):
+        for model_path in sorted(root.rglob("*.pth")):
+            key = str(model_path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            index_candidates = sorted(model_path.parent.rglob("*.index"))
+            best_index = _best_index_for_model(model_path, index_candidates)
+            label = model_path.stem.replace("_", " ").replace("-", " ").strip() or model_path.name
+            models.append(
+                {
+                    "id": model_path.stem,
+                    "label": label,
+                    "model_path": str(model_path.resolve()),
+                    "index_path": str(best_index.resolve()) if best_index else None,
+                }
+            )
+    models.sort(key=lambda item: item["label"].lower())
+    return models

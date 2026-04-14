@@ -31,7 +31,7 @@
 
 ### `examples/test_model_12hz_custom_clone_instruct.py`
 
-현재 데모의 `Inference Lab -> Clone Prompt + Instruct Hybrid`에 대응합니다.
+현재 데모의 `스토리 스튜디오`에서 다루는 hybrid 실험 경로에 대응합니다.
 
 - `Base` 모델로 clone prompt 생성
 - `CustomVoice` 모델에 `instruct` 전달
@@ -95,11 +95,13 @@ data/datasets/<dataset_id>/
 - `CustomVoice` 체크포인트를 시작점으로 사용
 - 새 화자 추가용 `speaker_name`을 받음
 - `speaker_encoder_model_path`를 별도로 받아 `Base` 체크포인트의 speaker encoder를 보조로 사용
-- 결과 체크포인트는 `custom_voice` 타입으로 내보내며, WEB UI `Inference Lab`에서 직접 선택 가능
+- 결과 체크포인트는 `custom_voice` 타입으로 내보내며, 현재 UI에서는 `나의 목소리들`과 생성 페이지의 모델 선택 영역에서 다시 확인합니다.
 
 ## WEB UI와의 연결
 
-### `Inference Lab`
+### 통합 추론 화면
+
+과거 문서에서는 이 영역을 `Inference Lab`이라고 불렀습니다. 현재 UI 라벨은 다르지만, 여기서 설명하는 “학습 결과를 바로 웹에서 선택해 검수하는 흐름” 자체는 그대로 유지됩니다.
 
 - stock 모델과 fine-tuned 체크포인트를 한 번에 노출
 - `inference_mode`에 따라 폼이 달라짐

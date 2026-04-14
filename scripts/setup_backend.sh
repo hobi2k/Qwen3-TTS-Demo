@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/app/backend"
 UPSTREAM_DIR="${ROOT_DIR}/Qwen3-TTS"
 VENV_DIR="${ROOT_DIR}/.venv"
+VENDOR_DIR="${ROOT_DIR}/vendor"
+MMAUDIO_REPO_URL_DEFAULT="https://github.com/hkchengrex/MMAudio.git"
+APPLIO_REPO_URL_DEFAULT="https://github.com/IAHispano/Applio.git"
 FLASH_ATTN_WHEEL_URL="https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 if [[ -n "${QWEN_DEMO_PYTHON:-}" ]]; then
@@ -22,6 +25,7 @@ echo "Using Python: ${PYTHON_BIN}"
 echo "Repo root: ${ROOT_DIR}"
 
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${ROOT_DIR}/.uv-cache}"
+mkdir -p "${VENDOR_DIR}"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required but not installed." >&2
@@ -72,6 +76,52 @@ if [[ ! -f "${BACKEND_DIR}/.env" ]]; then
   cp "${BACKEND_DIR}/.env.example" "${BACKEND_DIR}/.env"
   echo "Created ${BACKEND_DIR}/.env from template."
 fi
+
+set -a
+source "${BACKEND_DIR}/.env"
+set +a
+
+clone_repo_if_missing() {
+  local repo_url="$1"
+  local target_dir="$2"
+  if [[ -d "${target_dir}/.git" ]]; then
+    echo "Using existing repo: ${target_dir}"
+    return
+  fi
+  if [[ -d "${target_dir}" && ! -z "$(ls -A "${target_dir}" 2>/dev/null)" ]]; then
+    echo "Skipping clone because target exists and is not empty: ${target_dir}"
+    return
+  fi
+  echo "Cloning ${repo_url} -> ${target_dir}"
+  git clone "${repo_url}" "${target_dir}"
+}
+
+install_optional_repo_requirements() {
+  local repo_dir="$1"
+  for requirements_file in \
+    "${repo_dir}/requirements.txt" \
+    "${repo_dir}/requirements/main.txt" \
+    "${repo_dir}/requirements/base.txt"
+  do
+    if [[ -f "${requirements_file}" ]]; then
+      echo "Installing optional requirements from ${requirements_file}"
+      if ! uv pip install -r "${requirements_file}"; then
+        echo "Warning: failed to install ${requirements_file}. Continue and configure manually if needed."
+      fi
+      return
+    fi
+  done
+}
+
+MMAUDIO_REPO_ROOT="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
+APPLIO_REPO_ROOT="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
+MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-${MMAUDIO_REPO_URL_DEFAULT}}"
+APPLIO_REPO_URL="${APPLIO_REPO_URL:-${APPLIO_REPO_URL_DEFAULT}}"
+
+clone_repo_if_missing "${MMAUDIO_REPO_URL}" "${MMAUDIO_REPO_ROOT}"
+clone_repo_if_missing "${APPLIO_REPO_URL}" "${APPLIO_REPO_ROOT}"
+install_optional_repo_requirements "${MMAUDIO_REPO_ROOT}"
+install_optional_repo_requirements "${APPLIO_REPO_ROOT}"
 
 python - <<'PY'
 import importlib.util

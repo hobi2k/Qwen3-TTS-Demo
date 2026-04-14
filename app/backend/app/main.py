@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
+from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
 from .qwen import QwenDemoEngine
 from .schemas import (
     AudioAsset,
@@ -45,6 +46,7 @@ from .schemas import (
     HealthResponse,
     HybridCloneInstructRequest,
     ModelInfo,
+    VoiceChangerModelInfo,
     SoundEffectRequest,
     StoryStudioRequest,
     PrepareDatasetRequest,
@@ -56,7 +58,12 @@ from .schemas import (
     VoiceDesignRequest,
 )
 from .storage import Storage, utc_now
-from .voice_changer import ApplioVoiceChanger, VoiceChangerError, applio_voice_changer_available
+from .voice_changer import (
+    ApplioVoiceChanger,
+    VoiceChangerError,
+    applio_voice_changer_available,
+    list_available_voice_models,
+)
 
 JsonDict = Dict[str, Any]
 
@@ -70,6 +77,7 @@ load_dotenv(BACKEND_DIR / ".env")
 storage = Storage(REPO_ROOT)
 engine = QwenDemoEngine(storage)
 voice_changer = ApplioVoiceChanger(REPO_ROOT)
+mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
 
 
 def default_model_id(category: str) -> str:
@@ -1001,13 +1009,47 @@ def list_server_audio_assets() -> List[AudioAsset]:
 def list_generation_records() -> List[GenerationRecord]:
     records = storage.list_json_records(storage.generated_dir)
     items: List[GenerationRecord] = []
+    seen_audio_paths = set()
     for record in records:
         if not all(key in record for key in ("id", "mode", "input_text", "language", "output_audio_path", "output_audio_url")):
             continue
         try:
-            items.append(GenerationRecord(**record))
+            parsed = GenerationRecord(**record)
+            items.append(parsed)
+            seen_audio_paths.add(parsed.output_audio_path)
         except Exception:
             continue
+
+    audio_extensions = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".opus"}
+    for path in sorted(storage.generated_dir.rglob("*"), key=lambda candidate: candidate.stat().st_mtime, reverse=True):
+        if not path.is_file() or path.suffix.lower() not in audio_extensions:
+            continue
+        rel_path = storage.relpath(path)
+        if rel_path in seen_audio_paths:
+            continue
+
+        parent_name = path.parent.parent.name if path.parent != storage.generated_dir and path.parent.parent != path.parent else path.parent.name
+        mode_guess = (parent_name or path.parent.name or "generated").replace("-", "_")
+        stem_text = re.sub(r"^\d{6}_", "", path.stem).replace("-", " ").strip()
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+
+        items.append(
+            GenerationRecord(
+                id=f"file_{path.stem}",
+                mode=mode_guess,
+                input_text=stem_text or path.stem,
+                language="Auto",
+                output_audio_path=rel_path,
+                output_audio_url=audio_url_for(rel_path),
+                created_at=utc_now_from_timestamp(stat.st_mtime),
+                meta={"synthetic": True},
+            )
+        )
+
+    items.sort(key=lambda item: item.created_at or "", reverse=True)
     return items
 
 
@@ -1364,18 +1406,19 @@ def migrate_existing_storage_layout() -> None:
 
 
 def audio_tool_capabilities() -> List[AudioToolCapability]:
-    """오디오 작업실에서 노출할 기능 설명 목록을 반환한다.
+    """독립 오디오 기능 페이지에서 쓸 설명 목록을 반환한다.
 
     Returns:
-        프런트가 각 작업실의 제목과 안내 문구를 구성할 때 사용하는 capability 목록.
+        프런트가 각 오디오 기능 페이지의 제목과 안내 문구를 구성할 때 사용하는 capability 목록.
     """
 
     return [
         AudioToolCapability(
             key="sound_effects",
             label="사운드 효과",
-            description="짧은 효과음을 만들고 바로 다시 들어봅니다.",
-            available=True,
+            description="MMAudio로 텍스트 기반 효과음을 생성합니다.",
+            available=mmaudio_engine.is_available(),
+            notes=mmaudio_engine.availability_notes(),
         ),
         AudioToolCapability(
             key="voice_changer",
@@ -1385,21 +1428,9 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
             notes="RVC 모델(.pth)과 인덱스(.index)가 필요합니다.",
         ),
         AudioToolCapability(
-            key="audio_converter",
-            label="오디오 변환",
-            description="포맷과 샘플레이트를 바꾸고 mono로 정리합니다.",
-            available=True,
-        ),
-        AudioToolCapability(
             key="audio_separation",
             label="오디오 분리",
             description="librosa HPSS로 harmonic/percussive stems를 분리합니다.",
-            available=True,
-        ),
-        AudioToolCapability(
-            key="audio_translation",
-            label="전사와 재합성",
-            description="전사한 문장을 다른 언어 또는 다른 목소리로 다시 읽게 합니다.",
             available=True,
         ),
     ]
@@ -1499,43 +1530,6 @@ def audio_tool_format_or_422(output_format: str) -> str:
     return normalized
 
 
-def synthesize_sound_effect(prompt: str, duration_sec: float, intensity: float, seed: Optional[int]) -> np.ndarray:
-    rng = np.random.default_rng(seed if seed is not None else abs(hash(prompt)) % (2**32))
-    sample_rate = 24000
-    length = max(int(sample_rate * duration_sec), 1)
-    timeline = np.linspace(0.0, duration_sec, length, endpoint=False, dtype=np.float32)
-    prompt_lower = prompt.lower()
-
-    base_noise = rng.normal(0.0, 1.0, length).astype(np.float32)
-    envelope = np.linspace(1.0, 0.2, length, dtype=np.float32)
-
-    if any(keyword in prompt_lower for keyword in ["rain", "비", "storm", "wind", "바람"]):
-        signal = 0.18 * np.tanh(base_noise * 0.9)
-        signal += 0.08 * np.sin(2 * np.pi * 220 * timeline)
-        signal *= envelope
-    elif any(keyword in prompt_lower for keyword in ["footstep", "발", "walk", "gravel", "steps"]):
-        signal = np.zeros(length, dtype=np.float32)
-        interval = max(length // 7, 1)
-        for start in range(0, length, interval):
-            burst = min(interval // 4, length - start)
-            if burst <= 0:
-                continue
-            signal[start : start + burst] += rng.normal(0.0, 0.35, burst).astype(np.float32) * np.hanning(burst)
-    elif any(keyword in prompt_lower for keyword in ["explosion", "boom", "폭발", "impact"]):
-        signal = 0.35 * np.tanh(base_noise * 1.6) * np.exp(-timeline * 1.4)
-        signal += 0.1 * np.sin(2 * np.pi * 48 * timeline) * np.exp(-timeline * 2.2)
-    else:
-        signal = 0.22 * np.tanh(base_noise)
-        signal += 0.06 * np.sin(2 * np.pi * 330 * timeline)
-        signal *= np.hanning(length)
-
-    signal = signal * float(intensity)
-    peak = float(np.max(np.abs(signal))) if len(signal) else 0.0
-    if peak > 0:
-        signal = signal / max(peak / 0.92, 1.0)
-    return signal.astype(np.float32)
-
-
 def basename_for_asset(value: str) -> str:
     normalized = value.replace(os.sep, "/")
     return normalized.split("/")[-1]
@@ -1613,7 +1607,12 @@ def bootstrap() -> BootstrapResponse:
         finetune_runs=list_finetune_run_records(),
         audio_tool_capabilities=audio_tool_capabilities(),
         audio_tool_jobs=list_audio_tool_jobs(),
+        voice_changer_models=list_voice_changer_models(),
     )
+
+
+def list_voice_changer_models() -> List[VoiceChangerModelInfo]:
+    return [VoiceChangerModelInfo(**item) for item in list_available_voice_models(REPO_ROOT, voice_changer.applio_root)]
 
 
 @app.get("/api/models", response_model=List[ModelInfo])
@@ -1710,6 +1709,13 @@ def list_audio_tool_capability_records() -> List[AudioToolCapability]:
     return audio_tool_capabilities()
 
 
+@app.get("/api/audio-tools/voice-models", response_model=List[VoiceChangerModelInfo])
+def audio_tool_voice_models() -> List[VoiceChangerModelInfo]:
+    """Applio/RVC에서 선택 가능한 보이스 모델 목록을 반환한다."""
+
+    return list_voice_changer_models()
+
+
 @app.get("/api/audio-tools/jobs", response_model=List[AudioToolJob])
 def audio_tool_jobs() -> List[AudioToolJob]:
     """최근 오디오 도구 작업 이력을 반환한다."""
@@ -1719,11 +1725,19 @@ def audio_tool_jobs() -> List[AudioToolJob]:
 
 @app.post("/api/audio-tools/sound-effects", response_model=AudioToolResponse)
 def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
-    """텍스트 프롬프트에서 로컬 procedural 효과음을 생성한다."""
+    """텍스트 프롬프트에서 MMAudio 기반 효과음을 생성한다."""
 
-    waveform = synthesize_sound_effect(payload.prompt, payload.duration_sec, payload.intensity, payload.seed)
     output_path = generated_audio_path("sound-effects", payload.prompt, "wav")
-    sf.write(str(output_path), waveform, 24000)
+    try:
+        output_path, engine_meta = mmaudio_engine.generate(
+            prompt=payload.prompt,
+            duration_sec=payload.duration_sec,
+            intensity=payload.intensity,
+            seed=payload.seed,
+            output_path=output_path,
+        )
+    except MMAudioError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     record = write_audio_tool_generation_record(
         mode="sound_effect",
         text=payload.prompt,
@@ -1734,19 +1748,20 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
             "duration_sec": payload.duration_sec,
             "intensity": payload.intensity,
             "seed": payload.seed,
+            **engine_meta,
         },
     )
     asset = create_audio_tool_asset(output_path, "generated sound effect")
     save_audio_tool_job(
         kind="sound_effect",
         input_summary=payload.prompt,
-        message="Procedural sound effect generated.",
+        message="MMAudio sound effect generated.",
         assets=[asset],
     )
     return AudioToolResponse(
         kind="sound_effect",
         status="completed",
-        message="Procedural sound effect generated.",
+        message="MMAudio sound effect generated.",
         assets=[asset],
         record=record,
     )

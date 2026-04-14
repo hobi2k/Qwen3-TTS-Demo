@@ -20,7 +20,7 @@
 
 - 바로 띄우려면 [01-install-and-run.md](./01-install-and-run.md)부터 보면 됩니다.
 - 모델 로딩, clone prompt, 데이터셋, 파인튜닝 API는 [02-backend-guide.md](./02-backend-guide.md)에 정리했습니다.
-- 웹에서 모델 선택, `Audio Suite`, 탭별 워크플로우는 [03-frontend-guide.md](./03-frontend-guide.md)에 정리했습니다.
+- 웹에서 모델 선택, 독립 오디오 툴 페이지, 탭별 워크플로우는 [03-frontend-guide.md](./03-frontend-guide.md)에 정리했습니다.
 - 업스트림 `Qwen3-TTS` 구조는 [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)를 보면 됩니다.
 - 업스트림 examples와 fine-tuning 연결은 [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)를 보면 됩니다.
 - 학습 파이프라인이 어떻게 확장되었는지는 [06-training-pipeline-changes.md](./06-training-pipeline-changes.md)를 보면 됩니다.
@@ -43,7 +43,7 @@
 - macOS/Linux용 `.sh`와 Windows PowerShell용 `.ps1`를 모두 제공합니다.
 - 모델 다운로드 기본값은 `all`이며, 웹 UI에서 기능별로 모델을 선택할 수 있습니다.
 - `clone prompt / 프리셋`과 `fine-tuning`은 다른 기능군으로 구분합니다.
-- `Audio Suite`는 `Sound Effects`, `Voice Changer`, `Audio Converter`, `Audio Separation`, `Audio Translation`을 별도 작업실로 묶습니다.
+- 오디오 관련 기능은 `Sound Effects`, `Voice Changer`, `Audio Separation`을 각각 독립 페이지로 나눕니다.
 - 학습 결과의 음성 품질 검증 방법은 [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)를 보면 됩니다.
 - 검증 순서와 현재 막힌 점은 [10-quality-validation-plan.md](./10-quality-validation-plan.md)를 보면 됩니다.
 

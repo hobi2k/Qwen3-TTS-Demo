@@ -336,6 +336,15 @@ class AudioToolCapability(BaseModel):
     notes: str = ""
 
 
+class VoiceChangerModelInfo(BaseModel):
+    """보이스 체인저에서 선택할 수 있는 RVC 모델 메타데이터."""
+
+    id: str
+    label: str
+    model_path: str
+    index_path: Optional[str] = None
+
+
 class AudioToolJob(BaseModel):
     """최근 실행된 오디오 도구 작업 이력 스키마다."""
 
@@ -361,6 +370,7 @@ class BootstrapResponse(BaseModel):
     finetune_runs: List["FineTuneRun"]
     audio_tool_capabilities: List[AudioToolCapability] = Field(default_factory=list)
     audio_tool_jobs: List[AudioToolJob] = Field(default_factory=list)
+    voice_changer_models: List[VoiceChangerModelInfo] = Field(default_factory=list)
 
 
 class FineTuneDatasetCreateRequest(BaseModel):

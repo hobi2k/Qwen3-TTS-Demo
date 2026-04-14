@@ -30,6 +30,7 @@ import type {
   UploadResponse,
   UniversalInferenceRequest,
   VoiceChangerRequest,
+  VoiceChangerModelInfo,
   VoiceDesignRequest,
 } from "./types";
 
@@ -90,6 +91,10 @@ export const api = {
 
   audioToolJobs(): Promise<AudioToolJob[]> {
     return request<AudioToolJob[]>("/api/audio-tools/jobs");
+  },
+
+  voiceChangerModels(): Promise<VoiceChangerModelInfo[]> {
+    return request<VoiceChangerModelInfo[]>("/api/audio-tools/voice-models");
   },
 
   generateCustomVoice(payload: CustomVoiceRequest): Promise<GenerationResponse> {

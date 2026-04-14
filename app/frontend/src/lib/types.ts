@@ -150,6 +150,13 @@ export interface AudioToolCapability {
   notes: string;
 }
 
+export interface VoiceChangerModelInfo {
+  id: string;
+  label: string;
+  model_path: string;
+  index_path?: string | null;
+}
+
 export interface AudioToolAsset {
   label: string;
   path: string;
@@ -178,6 +185,7 @@ export interface BootstrapResponse {
   finetune_runs: FineTuneRun[];
   audio_tool_capabilities: AudioToolCapability[];
   audio_tool_jobs: AudioToolJob[];
+  voice_changer_models: VoiceChangerModelInfo[];
 }
 
 export interface CloneFromSampleRequest {

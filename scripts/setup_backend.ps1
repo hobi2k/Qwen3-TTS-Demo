@@ -7,6 +7,9 @@ $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "app\backend"
 $VenvDir = Join-Path $RootDir ".venv"
+$VendorDir = Join-Path $RootDir "vendor"
+$MMAudioRepoUrlDefault = "https://github.com/hkchengrex/MMAudio.git"
+$ApplioRepoUrlDefault = "https://github.com/IAHispano/Applio.git"
 $FlashAttnWheelUrl = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 function Resolve-Python {
@@ -37,6 +40,7 @@ function Resolve-Python {
 $PythonCmd = Resolve-Python -Requested $Python
 Write-Host "Using Python: $PythonCmd"
 Write-Host "Repo root: $RootDir"
+New-Item -ItemType Directory -Force -Path $VendorDir | Out-Null
 
 if (-not $env:UV_CACHE_DIR) {
     $env:UV_CACHE_DIR = Join-Path $RootDir ".uv-cache"
@@ -128,6 +132,66 @@ if (-not (Test-Path $EnvPath)) {
     Copy-Item $EnvExample $EnvPath
     Write-Host "Created $EnvPath from template."
 }
+
+Get-Content $EnvPath | ForEach-Object {
+    if ($_ -match '^\s*#' -or $_ -notmatch '=') {
+        return
+    }
+    $name, $value = $_ -split '=', 2
+    [System.Environment]::SetEnvironmentVariable($name.Trim(), $value.Trim(), "Process")
+}
+
+function Clone-RepoIfMissing {
+    param(
+        [string]$RepoUrl,
+        [string]$TargetDir
+    )
+
+    $GitDir = Join-Path $TargetDir ".git"
+    if (Test-Path $GitDir) {
+        Write-Host "Using existing repo: $TargetDir"
+        return
+    }
+
+    if ((Test-Path $TargetDir) -and (Get-ChildItem -Force $TargetDir | Select-Object -First 1)) {
+        Write-Warning "Skipping clone because target exists and is not empty: $TargetDir"
+        return
+    }
+
+    Write-Host "Cloning $RepoUrl -> $TargetDir"
+    git clone $RepoUrl $TargetDir
+}
+
+function Install-OptionalRepoRequirements {
+    param([string]$RepoDir)
+
+    foreach ($Candidate in @(
+        (Join-Path $RepoDir "requirements.txt"),
+        (Join-Path $RepoDir "requirements\main.txt"),
+        (Join-Path $RepoDir "requirements\base.txt")
+    )) {
+        if (Test-Path $Candidate) {
+            Write-Host "Installing optional requirements from $Candidate"
+            try {
+                uv pip install -r $Candidate
+            }
+            catch {
+                Write-Warning "Failed to install $Candidate. Continue and configure manually if needed."
+            }
+            return
+        }
+    }
+}
+
+$MMAudioRepoRoot = if ($env:MMAUDIO_REPO_ROOT) { $env:MMAUDIO_REPO_ROOT } else { Join-Path $VendorDir "MMAudio" }
+$ApplioRepoRoot = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Join-Path $VendorDir "Applio" }
+$MMAudioRepoUrl = if ($env:MMAUDIO_REPO_URL) { $env:MMAUDIO_REPO_URL } else { $MMAudioRepoUrlDefault }
+$ApplioRepoUrl = if ($env:APPLIO_REPO_URL) { $env:APPLIO_REPO_URL } else { $ApplioRepoUrlDefault }
+
+Clone-RepoIfMissing -RepoUrl $MMAudioRepoUrl -TargetDir $MMAudioRepoRoot
+Clone-RepoIfMissing -RepoUrl $ApplioRepoUrl -TargetDir $ApplioRepoRoot
+Install-OptionalRepoRequirements -RepoDir $MMAudioRepoRoot
+Install-OptionalRepoRequirements -RepoDir $ApplioRepoRoot
 
 python -c "import importlib.util, platform, torch; device='cpu'; device='cuda:0' if torch.cuda.is_available() else ('mps' if getattr(torch.backends,'mps',None) is not None and torch.backends.mps.is_available() else 'cpu'); attn='sdpa'; attn='flash_attention_2' if platform.system() != 'Darwin' and device.startswith('cuda') and importlib.util.find_spec('flash_attn') else attn; print(f'Runtime summary: device={device}, attention={attn}, torch={torch.__version__}')"
 
