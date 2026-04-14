@@ -391,6 +391,18 @@ class BootstrapResponse(BaseModel):
     voice_changer_models: List[VoiceChangerModelInfo] = Field(default_factory=list)
 
 
+class GenerationDeleteBatchRequest(BaseModel):
+    """생성 갤러리에서 여러 항목을 한 번에 삭제할 때 사용하는 요청 스키마다."""
+
+    ids: List[str] = Field(default_factory=list)
+
+
+class GenerationDeleteResponse(BaseModel):
+    """생성 갤러리 삭제 결과를 돌려주는 응답 스키마다."""
+
+    deleted_count: int
+
+
 class FineTuneDatasetCreateRequest(BaseModel):
     """파인튜닝용 JSONL 데이터셋 생성 요청 스키마다."""
 

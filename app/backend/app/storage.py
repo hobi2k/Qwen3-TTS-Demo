@@ -356,3 +356,31 @@ class Storage:
             return None
         payload = self.read_json(path)
         return payload if isinstance(payload, dict) else None
+
+    def find_record_paths(self, directory: Path, record_id: str) -> List[Path]:
+        """레코드 ID와 연결된 JSON 파일 경로를 모두 찾는다.
+
+        Args:
+            directory: 레코드가 저장된 루트 디렉터리.
+            record_id: 찾을 레코드 식별자.
+
+        Returns:
+            주어진 ID와 연결된 JSON 파일 경로 목록.
+        """
+
+        matches: List[Path] = []
+        direct_path = self.record_path(directory, record_id)
+        if direct_path.exists():
+            matches.append(direct_path)
+
+        for candidate in sorted(directory.rglob("*.json")):
+            if candidate in matches:
+                continue
+            try:
+                payload = self.read_json(candidate)
+            except Exception:
+                continue
+            if isinstance(payload, dict) and payload.get("id") == record_id:
+                matches.append(candidate)
+
+        return matches

@@ -42,6 +42,8 @@ from .schemas import (
     FineTuneRun,
     FineTuneRunCreateRequest,
     GalleryItem,
+    GenerationDeleteBatchRequest,
+    GenerationDeleteResponse,
     GenerationRecord,
     GenerationResponse,
     HealthResponse,
@@ -590,6 +592,34 @@ def get_generation_record(record_id: str) -> JsonDict:
     if not payload:
         raise HTTPException(status_code=404, detail="Generation record not found.")
     return payload
+
+
+def delete_generation_record_files(record_id: str) -> int:
+    """생성 갤러리 항목과 연결된 파일을 함께 삭제한다.
+
+    Args:
+        record_id: 삭제할 생성 이력 식별자.
+
+    Returns:
+        실제로 삭제한 레코드 수.
+    """
+
+    payload = get_generation_record(record_id)
+    deleted_any = False
+
+    audio_rel_path = str(payload.get("output_audio_path") or "").strip()
+    if audio_rel_path:
+        audio_path = REPO_ROOT / audio_rel_path
+        if audio_path.exists():
+            audio_path.unlink()
+            deleted_any = True
+
+    for record_path in storage.find_record_paths(storage.generated_dir, record_id):
+        if record_path.exists():
+            record_path.unlink()
+            deleted_any = True
+
+    return 1 if deleted_any else 0
 
 
 def get_preset_record(preset_id: str) -> JsonDict:
@@ -1836,6 +1866,57 @@ def history() -> List[GenerationRecord]:
     """
 
     return list_generation_records()
+
+
+@app.delete("/api/history/{record_id}", response_model=GenerationDeleteResponse)
+def delete_history_record(record_id: str) -> GenerationDeleteResponse:
+    """생성 갤러리 항목 하나를 삭제한다.
+
+    Args:
+        record_id: 삭제할 생성 이력 식별자.
+
+    Returns:
+        삭제된 항목 수.
+    """
+
+    return GenerationDeleteResponse(deleted_count=delete_generation_record_files(record_id))
+
+
+@app.post("/api/history/delete-batch", response_model=GenerationDeleteResponse)
+def delete_history_records(payload: GenerationDeleteBatchRequest) -> GenerationDeleteResponse:
+    """생성 갤러리 여러 항목을 한 번에 삭제한다.
+
+    Args:
+        payload: 삭제할 생성 이력 식별자 목록.
+
+    Returns:
+        삭제된 항목 수.
+    """
+
+    deleted_count = 0
+    for record_id in payload.ids:
+        try:
+            deleted_count += delete_generation_record_files(record_id)
+        except HTTPException:
+            continue
+    return GenerationDeleteResponse(deleted_count=deleted_count)
+
+
+@app.delete("/api/history", response_model=GenerationDeleteResponse)
+def delete_all_history_records() -> GenerationDeleteResponse:
+    """생성 갤러리 전체 항목을 한 번에 삭제한다.
+
+    Returns:
+        삭제된 항목 수.
+    """
+
+    deleted_count = 0
+    for record in list_generation_records():
+        try:
+            deleted_count += delete_generation_record_files(record.id)
+        except HTTPException:
+            continue
+    return GenerationDeleteResponse(deleted_count=deleted_count)
 
 
 @app.get("/api/audio-assets", response_model=List[AudioAsset])
