@@ -218,8 +218,6 @@ data/source-datasets/**
 !data/source-datasets/.gitkeep
 data/finetune-runs/*
 !data/finetune-runs/.gitkeep
-vendor/**
-!vendor/.gitkeep
 
 # Ruff stuff:
 .ruff_cache/
