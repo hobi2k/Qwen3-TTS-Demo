@@ -1,62 +1,102 @@
 # Cookbook Index
 
-`Qwen3-TTS-Demo`를 처음 클론한 뒤 환경 준비, 모델 다운로드, 실행, 화면 구조 파악까지 한 번에 따라갈 수 있도록 정리한 문서 허브입니다.
+이 문서는 `Qwen3-TTS-Demo`의 현재 구조를 따라가기 위한 문서 허브입니다.
+
+기준은 “지금 저장소가 실제로 어떻게 나뉘어 있고, 사용자가 어떤 흐름으로 쓰는가”입니다.
+현재 화면과 워크플로는 거의 완성 단계이므로, 이 허브는 새 기능을 소개하기보다 기존 구조를 정확히 따라가도록 돕는 쪽에 가깝습니다.
 
 ## 추천 읽기 순서
 
-1. [설치 및 실행 가이드](./01-install-and-run.md)
-2. [백엔드 구조 가이드](./02-backend-guide.md)
-3. [프런트엔드 구조 가이드](./03-frontend-guide.md)
+1. [설치 및 실행](./01-install-and-run.md)
+2. [프런트엔드 구조](./03-frontend-guide.md)
+3. [백엔드 구조](./02-backend-guide.md)
 4. [Qwen3-TTS 업스트림 개요](./04-qwen3-tts-overview.md)
-5. [Fine-tuning 및 examples 가이드](./05-finetuning-and-examples.md)
-6. [학습 파이프라인 변경 상세](./06-training-pipeline-changes.md)
-7. [추론 파이프라인 변경 상세](./07-inference-pipeline-changes.md)
-8. [FlashAttention 설치 가이드](./08-flash-attn-install.md)
-9. [Speech Quality Validation Workflow](./09-quality-validation-workflow.md)
-10. [Quality Validation Plan](./10-quality-validation-plan.md)
-11. [Pristine Upstream Fine-Tune Wrappers](./11-pristine-upstream-finetune.md)
-12. [Preset + Instruct 원리](./12-preset-plus-instruct.md)
-13. [CustomVoice 파인튜닝 가이드](./13-customvoice-finetuning.md)
+5. [Fine-tuning 및 examples](./05-finetuning-and-examples.md)
+6. [Preset + Instruct 원리](./12-preset-plus-instruct.md)
+7. [CustomVoice 파인튜닝](./13-customvoice-finetuning.md)
+8. [FlashAttention 2 설치](./08-flash-attn-install.md)
 
-## 문서 맵
+## 현재 문서 맵
 
-- 바로 띄우려면 [01-install-and-run.md](./01-install-and-run.md)부터 보면 됩니다.
-- 모델 로딩, clone prompt, 데이터셋, 파인튜닝 API는 [02-backend-guide.md](./02-backend-guide.md)에 정리했습니다.
-- 웹에서 `텍스트 음성 변환`, `목소리 복제`, `목소리 설계`, `프리셋 프로젝트`, `스토리 스튜디오`, `갤러리`, `데이터셋 만들기`, `훈련 랩`이 어떻게 나뉘는지는 [03-frontend-guide.md](./03-frontend-guide.md)에 정리했습니다.
-- 업스트림 `Qwen3-TTS` 구조는 [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)를 보면 됩니다.
-- 업스트림 examples와 fine-tuning 연결은 [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)를 보면 됩니다.
-- 학습 파이프라인이 어떻게 확장되었는지는 [06-training-pipeline-changes.md](./06-training-pipeline-changes.md)를 보면 됩니다.
-- 추론 파이프라인이 어떻게 확장되었는지는 [07-inference-pipeline-changes.md](./07-inference-pipeline-changes.md)를 보면 됩니다.
-- Linux + CUDA에서 FlashAttention 2를 설치하는 절차는 [08-flash-attn-install.md](./08-flash-attn-install.md)를 보면 됩니다.
-- 깨끗한 upstream 기준으로 Base/CustomVoice fine-tuning을 돌리는 demo-side wrapper
-  명령은 [11-pristine-upstream-finetune.md](./11-pristine-upstream-finetune.md)를 보면 됩니다.
-- `프리셋 기반 생성`에서 왜 `Base`와 `CustomVoice`를 함께 쓰는지는 [12-preset-plus-instruct.md](./12-preset-plus-instruct.md)를 보면 됩니다.
-- `CustomVoice`를 실제로 어떻게 학습하고 검수해야 하는지는 [13-customvoice-finetuning.md](./13-customvoice-finetuning.md)를 보면 됩니다.
+### 시작과 실행
+
+- [01-install-and-run.md](./01-install-and-run.md)
+  clone 이후 실제 실행 순서
+- [08-flash-attn-install.md](./08-flash-attn-install.md)
+  Linux + CUDA 기준 `flash-attn v2` 설치
+
+### 앱 구조
+
+- [03-frontend-guide.md](./03-frontend-guide.md)
+  현재 화면 구조와 UX 원칙
+- [02-backend-guide.md](./02-backend-guide.md)
+  FastAPI, 저장 구조, 오디오 툴, 학습 래퍼 구조
+
+### 업스트림과 연결
+
+- [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)
+  업스트림 `Qwen3-TTS` 개요
+- [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)
+  examples/finetuning과 현재 데모 연결
+- [11-pristine-upstream-finetune.md](./11-pristine-upstream-finetune.md)
+  upstream 실행을 감싸는 래퍼 스크립트 기준
+
+### 학습과 추론 상세
+
+- [06-training-pipeline-changes.md](./06-training-pipeline-changes.md)
+  데이터셋과 학습 파이프라인 확장
+- [07-inference-pipeline-changes.md](./07-inference-pipeline-changes.md)
+  추론 경로 확장
+- [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)
+  음성 품질 검수 절차
+- [10-quality-validation-plan.md](./10-quality-validation-plan.md)
+  품질 검수 계획과 기준
+
+### 현재 기능에서 중요한 두 문서
+
+- [12-preset-plus-instruct.md](./12-preset-plus-instruct.md)
+  왜 `프리셋 기반 생성`에 `Base`와 `CustomVoice`가 모두 필요한지
+- [13-customvoice-finetuning.md](./13-customvoice-finetuning.md)
+  `CustomVoice` 파인튜닝의 목적, 데이터셋, 검수 포인트
+
+## 현재 앱 정보 구조
+
+문서 기준 현재 주요 탭은 아래와 같습니다.
+
+- `홈`
+- `나의 목소리들`
+- `생성 갤러리`
+- `텍스트 음성 변환`
+- `목소리 복제`
+- `목소리 설계`
+- `프리셋 기반 생성`
+- `스토리 스튜디오`
+- `사운드 효과`
+- `보이스 체인저`
+- `오디오 분리`
+- `데이터셋 만들기`
+- `학습 실행`
+
+핵심 원칙:
+
+- 최근 생성 이력은 `생성 갤러리`에서만 관리합니다.
+- `나의 목소리들`은 저장 프리셋과 최종 학습 모델만 보여줍니다.
+- `텍스트 음성 변환`이 메인 TTS 화면입니다.
+- `목소리 복제`와 `목소리 설계`는 분리합니다.
+- `프리셋 기반 생성`은 저장된 스타일의 반복 생성용 화면입니다.
+- `스토리 스튜디오`는 장문 대본용입니다.
+- `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 
 ## 빠른 링크
 
 - 루트 소개: [README.md](../../README.md)
-- 구현 계획: [plan.md](../plan.md)
+- 현재 계획: [plan.md](../plan.md)
+- 남은 구조 과제: [TODO.md](../../TODO.md)
+- 프런트 진입점: [App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
 - 백엔드 진입점: [main.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/main.py)
-- 프런트엔드 진입점: [App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
 - 업스트림 소개: [README.md](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/Qwen3-TTS/README.md)
 
-## 현재 문서 기준 핵심 변경점
-
-- 백엔드는 바로 실행하는 구조가 아니라 `setup -> download -> start` 순서를 기준으로 문서화합니다.
-- macOS/Linux용 `.sh`와 Windows PowerShell용 `.ps1`를 모두 제공합니다.
-- 모델 다운로드 기본값은 `all`이며, 웹 UI에서 기능별로 모델을 선택할 수 있습니다.
-- `텍스트 음성 변환`은 메인 TTS 화면입니다.
-- `목소리 복제`와 `목소리 설계`는 분리합니다.
-- `프리셋 프로젝트`는 저장 프리셋의 반복 생성용 화면입니다.
-- `스토리 스튜디오`는 장시간 대본용 화면입니다.
-- 최근 생성 이력은 `갤러리`에서 관리합니다.
-- `데이터셋 만들기`와 `훈련 랩`은 분리합니다.
-- 오디오 관련 기능은 `Sound Effects`, `Voice Changer`, `Audio Separation`을 각각 독립 페이지로 나눕니다.
-- 학습 결과의 음성 품질 검증 방법은 [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)를 보면 됩니다.
-- 검증 순서와 현재 막힌 점은 [10-quality-validation-plan.md](./10-quality-validation-plan.md)를 보면 됩니다.
-
-## 참고
+## 메모
 
 - [02-backend.md](./02-backend.md), [03-frontend.md](./03-frontend.md), [04-qwen3-tts.md](./04-qwen3-tts.md)는 기존 링크 호환용 안내 페이지입니다.
 - 실제 설명은 `*-guide.md`, `*-overview.md` 문서를 기준으로 유지합니다.
