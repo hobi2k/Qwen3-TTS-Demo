@@ -67,6 +67,10 @@ export interface GenerationResponse {
   record: GenerationRecord;
 }
 
+export interface GenerationDeleteResponse {
+  deleted_count: number;
+}
+
 export interface ClonePromptRecord {
   id: string;
   source_type: string;
@@ -179,6 +183,7 @@ export interface BootstrapResponse {
   health: HealthResponse;
   models: ModelInfo[];
   speakers: SpeakerInfo[];
+  gallery?: unknown[];
   audio_assets: AudioAsset[];
   history: GenerationRecord[];
   presets: CharacterPreset[];

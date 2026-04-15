@@ -15,6 +15,8 @@
 9. [Speech Quality Validation Workflow](./09-quality-validation-workflow.md)
 10. [Quality Validation Plan](./10-quality-validation-plan.md)
 11. [Pristine Upstream Fine-Tune Wrappers](./11-pristine-upstream-finetune.md)
+12. [Preset + Instruct 원리](./12-preset-plus-instruct.md)
+13. [CustomVoice 파인튜닝 가이드](./13-customvoice-finetuning.md)
 
 ## 문서 맵
 
@@ -28,6 +30,8 @@
 - Linux + CUDA에서 FlashAttention 2를 설치하는 절차는 [08-flash-attn-install.md](./08-flash-attn-install.md)를 보면 됩니다.
 - 깨끗한 upstream 기준으로 Base/CustomVoice fine-tuning을 돌리는 demo-side wrapper
   명령은 [11-pristine-upstream-finetune.md](./11-pristine-upstream-finetune.md)를 보면 됩니다.
+- `프리셋 기반 생성`에서 왜 `Base`와 `CustomVoice`를 함께 쓰는지는 [12-preset-plus-instruct.md](./12-preset-plus-instruct.md)를 보면 됩니다.
+- `CustomVoice`를 실제로 어떻게 학습하고 검수해야 하는지는 [13-customvoice-finetuning.md](./13-customvoice-finetuning.md)를 보면 됩니다.
 
 ## 빠른 링크
 

@@ -17,6 +17,7 @@ import type {
   CustomVoiceRequest,
   FineTuneDataset,
   FineTuneRun,
+  GenerationDeleteResponse,
   GenerateFromPresetRequest,
   GenerationRecord,
   GenerationResponse,
@@ -71,6 +72,26 @@ export const api = {
 
   history(): Promise<GenerationRecord[]> {
     return request<GenerationRecord[]>("/api/history");
+  },
+
+  deleteHistoryRecord(recordId: string): Promise<GenerationDeleteResponse> {
+    return request<GenerationDeleteResponse>(`/api/history/${recordId}`, {
+      method: "DELETE",
+    });
+  },
+
+  deleteHistoryBatch(ids: string[]): Promise<GenerationDeleteResponse> {
+    return request<GenerationDeleteResponse>("/api/history/delete-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+  },
+
+  deleteAllHistory(): Promise<GenerationDeleteResponse> {
+    return request<GenerationDeleteResponse>("/api/history", {
+      method: "DELETE",
+    });
   },
 
   presets(): Promise<CharacterPreset[]> {

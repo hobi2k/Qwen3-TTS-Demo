@@ -8,19 +8,12 @@ import {
   createGenerationControls,
   CUSTOM_RECIPES,
   DESIGN_RECIPES,
-  fileUrlFromPath,
   FineTuneMode,
   formatDate,
   GenerationControlsEditor,
   GenerationControlsForm,
-  getAudioDownloadName,
-  getAudioToolJobDisplayTitle,
-  getDatasetSourceLabel,
   getModeLabel,
-  getModelDisplayLabel,
-  getPresetSourceLabel,
   getRecordDisplayTitle,
-  HeroMetric,
   HYBRID_RECIPES,
   LanguageSelect,
   MiniWaveform,
@@ -38,7 +31,6 @@ import {
 import type {
   AudioAsset,
   AudioToolCapability,
-  AudioToolJob,
   AudioToolResponse,
   CharacterPreset,
   ClonePromptRecord,
@@ -127,6 +119,21 @@ function keepLatestFineTunedModels(models: ModelInfo[]): ModelInfo[] {
   return Array.from(latestByGroup.values());
 }
 
+function guessMatchingCustomVoiceModel(
+  presetBaseModelId: string,
+  availableModels: ModelInfo[],
+  fallbackModelId: string,
+): string {
+  const normalized = presetBaseModelId.toLowerCase();
+  const familyHint = normalized.includes("1.7b") ? "1.7B" : normalized.includes("0.6b") ? "0.6B" : "";
+  const stockModels = availableModels.filter((model) => model.source === "stock");
+  const matched =
+    (familyHint ? stockModels.find((model) => model.label.includes(familyHint)) : null) ??
+    stockModels.find((model) => model.recommended) ??
+    stockModels[0];
+  return matched?.model_id || fallbackModelId;
+}
+
 function sanitizeLongScript(text: string): string {
   return text
     .split("\n")
@@ -143,6 +150,7 @@ export default function App() {
   const [speakers, setSpeakers] = useState<SpeakerInfo[]>([]);
   const [audioAssets, setAudioAssets] = useState<AudioAsset[]>([]);
   const [history, setHistory] = useState<GenerationRecord[]>([]);
+  const [selectedGalleryIds, setSelectedGalleryIds] = useState<string[]>([]);
   const [presets, setPresets] = useState<CharacterPreset[]>([]);
   const [datasets, setDatasets] = useState<FineTuneDataset[]>([]);
   const [runs, setRuns] = useState<FineTuneRun[]>([]);
@@ -204,7 +212,6 @@ export default function App() {
 
   const [datasetSamples, setDatasetSamples] = useState([createEmptyDatasetSample()]);
   const [datasetBulkInput, setDatasetBulkInput] = useState("");
-  const [selectedDatasetAssetPaths, setSelectedDatasetAssetPaths] = useState<string[]>([]);
   const [datasetForm, setDatasetForm] = useState({
     name: "",
     source_type: "voice_design_batch",
@@ -212,6 +219,7 @@ export default function App() {
     ref_audio_path: "",
   });
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [lastCreatedDatasetId, setLastCreatedDatasetId] = useState("");
   const [runForm, setRunForm] = useState({
     training_mode: "base" as FineTuneMode,
     init_model_path: "",
@@ -237,7 +245,6 @@ export default function App() {
   const [hybridControls, setHybridControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
   const [lastHybridRecord, setLastHybridRecord] = useState<GenerationRecord | null>(null);
   const [audioToolCapabilities, setAudioToolCapabilities] = useState<AudioToolCapability[]>([]);
-  const [audioToolJobs, setAudioToolJobs] = useState<AudioToolJob[]>([]);
   const [voiceChangerModels, setVoiceChangerModels] = useState<VoiceChangerModelInfo[]>([]);
   const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
   const [soundEffectForm, setSoundEffectForm] = useState({
@@ -280,7 +287,6 @@ export default function App() {
     setDatasets(data.datasets);
     setRuns(data.finetune_runs);
     setAudioToolCapabilities(data.audio_tool_capabilities || []);
-    setAudioToolJobs(data.audio_tool_jobs || []);
     setVoiceChangerModels(data.voice_changer_models || []);
   }
 
@@ -427,6 +433,10 @@ export default function App() {
   }, [voiceChangerModels, voiceChangerForm.selected_model_id]);
 
   useEffect(() => {
+    setSelectedGalleryIds((prev) => prev.filter((id) => history.some((record) => record.id === id)));
+  }, [history]);
+
+  useEffect(() => {
     setRunForm((prev) => {
       if (prev.training_mode === "custom_voice") {
         const preferredCustom = preferredStockCustomVoiceModel;
@@ -461,9 +471,9 @@ export default function App() {
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
   const selectedHybridPreset = presets.find((preset) => preset.id === selectedHybridPresetId) ?? null;
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
+  const lastCreatedDataset = datasets.find((dataset) => dataset.id === lastCreatedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
-  const selectableDatasetAssets = audioAssets.filter((asset) => asset.source === "generated" || asset.source === "upload");
   const finetunedModels = latestFineTunedModels;
   const audioToolCapabilityMap = new Map(audioToolCapabilities.map((capability) => [capability.key, capability]));
   const assetTextByPath = new Map(
@@ -473,7 +483,6 @@ export default function App() {
   const voiceChangerAvailable = audioToolCapabilityMap.get("voice_changer")?.available ?? true;
   const audioSeparationAvailable = audioToolCapabilityMap.get("audio_separation")?.available ?? true;
   const pageMeta = PRODUCT_PAGES[activeTab];
-  const soundEffectJobs = audioToolJobs.filter((job) => job.kind === "sound_effect");
   const filteredSoundEffectLibrary = SOUND_EFFECT_LIBRARY.filter((item) => {
     const query = audioEffectsSearch.trim().toLowerCase();
     if (!query) return true;
@@ -559,10 +568,12 @@ export default function App() {
     }));
   }
 
-  function applyHybridRecipe(item: { instruction?: string }) {
+  function applyHybridRecipe(item: { text?: string; instruction?: string; language?: string }) {
     setHybridForm((prev) => ({
       ...prev,
+      text: item.text || prev.text,
       instruct: item.instruction || prev.instruct,
+      language: item.language || prev.language,
     }));
   }
 
@@ -571,6 +582,36 @@ export default function App() {
       ...prev,
       prompt,
     }));
+  }
+
+  function toggleGallerySelection(recordId: string) {
+    setSelectedGalleryIds((prev) => (prev.includes(recordId) ? prev.filter((id) => id !== recordId) : [...prev, recordId]));
+  }
+
+  async function handleDeleteHistoryRecord(recordId: string) {
+    await runAction(async () => {
+      setHistory((prev) => prev.filter((record) => record.id !== recordId));
+      setSelectedGalleryIds((prev) => prev.filter((id) => id !== recordId));
+      await api.deleteHistoryRecord(recordId);
+      await refreshAll();
+      setMessage("선택한 생성 음성을 삭제했습니다.");
+    });
+  }
+
+  async function handleDeleteSelectedHistory() {
+    if (selectedGalleryIds.length === 0) {
+      setMessage("먼저 삭제할 음성을 선택해주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const selectedIds = [...selectedGalleryIds];
+      setHistory((prev) => prev.filter((record) => !selectedIds.includes(record.id)));
+      await api.deleteHistoryBatch(selectedGalleryIds);
+      setSelectedGalleryIds([]);
+      await refreshAll();
+      setMessage("선택한 생성 음성을 삭제했습니다.");
+    });
   }
 
   async function handleSoundEffectSubmit(event: FormEvent) {
@@ -790,11 +831,16 @@ export default function App() {
     setHybridForm((prev) => ({
       ...prev,
       base_model_id: selectedHybridPreset.base_model || prev.base_model_id || preferredStockBaseModel?.model_id || "",
+      custom_model_id: guessMatchingCustomVoiceModel(
+        selectedHybridPreset.base_model,
+        customVoiceCapableModels,
+        prev.custom_model_id || preferredHybridCustomModel?.model_id || "",
+      ),
       language: selectedHybridPreset.language || prev.language,
       ref_audio_path: selectedHybridPreset.reference_audio_path,
       ref_text: selectedHybridPreset.reference_text,
     }));
-  }, [selectedHybridPreset, preferredStockBaseModel]);
+  }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
 
   async function handleGenerateFromPreset() {
     const presetId = selectedPresetId || selectedHybridPresetId;
@@ -859,6 +905,7 @@ export default function App() {
         simulate_only: runForm.simulate_only,
       });
       setSelectedDatasetId(finalDataset.id);
+      setLastCreatedDatasetId(finalDataset.id);
       await refreshAll();
       setMessage("데이터셋 저장과 학습용 준비를 함께 완료했습니다.");
     });
@@ -934,17 +981,6 @@ export default function App() {
     });
   }
 
-  function handleSelectDatasetRefAsset(asset: AudioAsset) {
-    setDatasetForm((prev) => ({ ...prev, ref_audio_path: asset.path }));
-    setMessage(`기준 음성으로 ${asset.filename}을(를) 선택했습니다.`);
-  }
-
-  function toggleDatasetAssetSelection(path: string) {
-    setSelectedDatasetAssetPaths((prev) =>
-      prev.includes(path) ? prev.filter((item) => item !== path) : [...prev, path],
-    );
-  }
-
   function applyBulkDatasetPaths() {
     const parsed = parseDatasetSampleBulkInput(datasetBulkInput);
     if (parsed.length === 0) {
@@ -954,23 +990,6 @@ export default function App() {
     mergeDatasetSamples(parsed);
     setDatasetBulkInput("");
     setMessage(`${parsed.length}개 경로를 샘플 목록에 반영했습니다.`);
-  }
-
-  function applySelectedDatasetAssets() {
-    const selectedAssets = selectableDatasetAssets.filter((asset) => selectedDatasetAssetPaths.includes(asset.path));
-    if (selectedAssets.length === 0) {
-      setMessage("샘플로 추가할 서버 오디오를 먼저 체크해주세요.");
-      return;
-    }
-    mergeDatasetSamples(
-      selectedAssets.map((asset) => ({
-        audio_path: asset.path,
-        text: asset.transcript_text?.trim() || "",
-        original_filename: asset.filename,
-      })),
-    );
-    setSelectedDatasetAssetPaths([]);
-    setMessage(`${selectedAssets.length}개 서버 오디오를 샘플 목록에 추가했습니다.`);
   }
 
   async function handleModelInferenceSubmit(event: FormEvent) {
@@ -1002,7 +1021,7 @@ export default function App() {
   async function handleHybridInferenceSubmit(event: FormEvent) {
     event.preventDefault();
     if (!hybridForm.base_model_id || !hybridForm.custom_model_id || !hybridForm.ref_audio_path.trim()) {
-      setMessage("hybrid 추론에는 Base 모델, CustomVoice 모델, 참조 음성이 모두 필요합니다.");
+      setMessage("선택한 프리셋의 기준 정보가 아직 준비되지 않았습니다. 프리셋을 다시 선택해주세요.");
       return;
     }
 
@@ -1076,7 +1095,7 @@ export default function App() {
               <span>목소리 설계</span>
             </button>
             <button className={activeTab === "projects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("projects")} type="button">
-              <span>프리셋 프로젝트</span>
+              <span>프리셋 기반 생성</span>
             </button>
             <button className={activeTab === "story" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("story" as TabKey)} type="button">
               <span>스토리 스튜디오</span>
@@ -1138,9 +1157,9 @@ export default function App() {
                 />
                 <SpotlightCard
                   eyebrow="프로젝트"
-                  title="프리셋 프로젝트"
-                  description="저장한 스타일로 반복 생성하고 프로젝트 단위로 묶어 관리합니다."
-                  actionLabel="프리셋 프로젝트"
+                  title="프리셋 기반 생성"
+                  description="저장한 스타일을 그대로 쓰거나 말투 지시를 얹어 다시 생성합니다."
+                  actionLabel="프리셋 기반 생성"
                   onAction={() => setActiveTab("projects")}
                 />
               </div>
@@ -1155,7 +1174,7 @@ export default function App() {
           <div className="panel-grid">
             <section className="panel">
               <h2>저장된 스타일</h2>
-              <p>복제나 설계에서 저장한 스타일을 프로젝트처럼 다시 꺼내 씁니다.</p>
+              <p>복제나 설계에서 저장한 스타일을 다시 불러와 생성에 씁니다.</p>
               <div className="preset-list">
                 {presets.length ? presets.map((preset) => (
                   <article className="preset-card" key={preset.id}>
@@ -1164,7 +1183,7 @@ export default function App() {
                     <p>{preset.reference_text}</p>
                     <div className="button-row">
                       <button className="secondary-button" onClick={() => { setSelectedPresetId(preset.id); setSelectedHybridPresetId(preset.id); setActiveTab("projects"); }} type="button">
-                        프로젝트에서 열기
+                        생성에 사용
                       </button>
                     </div>
                   </article>
@@ -1196,10 +1215,31 @@ export default function App() {
         <section className="workspace workspace--stacked">
           <section className="panel">
             <h2>생성 갤러리</h2>
-            <p>최근 생성 이력은 이 탭에서만 확인하고 다시 씁니다.</p>
+            <div className="button-row">
+              <button className="secondary-button" disabled={!history.length} onClick={() => setSelectedGalleryIds(history.map((record) => record.id))} type="button">
+                모두 선택
+              </button>
+              <button className="secondary-button" disabled={!selectedGalleryIds.length} onClick={() => setSelectedGalleryIds([])} type="button">
+                선택 해제
+              </button>
+              <button className="secondary-button" disabled={!selectedGalleryIds.length} onClick={handleDeleteSelectedHistory} type="button">
+                선택 삭제
+              </button>
+            </div>
             <div className="audio-grid">
               {history.length ? history.map((record) => (
-                <AudioCard key={record.id} title={getRecordDisplayTitle(record)} subtitle={getModeLabel(record.mode)} record={record} />
+                <article className="preset-card" key={record.id}>
+                  <label className="checkbox-row">
+                    <input checked={selectedGalleryIds.includes(record.id)} onChange={() => toggleGallerySelection(record.id)} type="checkbox" />
+                    선택
+                  </label>
+                  <AudioCard title={getRecordDisplayTitle(record)} subtitle={getModeLabel(record.mode)} record={record} />
+                  <div className="button-row">
+                    <button className="ghost-button" onClick={() => void handleDeleteHistoryRecord(record.id)} type="button">
+                      삭제
+                    </button>
+                  </div>
+                </article>
               )) : (
                 <p className="field-hint">아직 생성한 음성이 없습니다.</p>
               )}
@@ -1210,104 +1250,80 @@ export default function App() {
 
       {activeTab === "tts" ? (
         <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <form className="panel inference-panel" onSubmit={handleModelInferenceSubmit}>
-              <h2>텍스트 음성 변환</h2>
-              <p className="field-hint">짧은 미리듣기와 실제 생성이 같은 화면에서 이어집니다. 먼저 모델을 고르고, 필요한 입력만 채우세요.</p>
-              <RecipeBar title="빠른 테스트 문장" items={CUSTOM_RECIPES} onApply={applyCustomRecipe} />
-              <div className="field-row">
+          <form className="panel inference-panel" onSubmit={handleModelInferenceSubmit}>
+            <h2>텍스트 음성 변환</h2>
+            <RecipeBar title="빠른 테스트 문장" items={CUSTOM_RECIPES} onApply={applyCustomRecipe} />
+            <div className="field-row">
+              <label>
+                모델
+                <select value={inferenceForm.model_id} onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}>
+                  <option value="">선택하세요</option>
+                  {inferenceModels.map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                언어
+                <LanguageSelect value={inferenceForm.language} onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))} />
+              </label>
+              {selectedInferenceModel?.available_speakers?.length ? (
                 <label>
-                  모델
-                  <select value={inferenceForm.model_id} onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}>
-                    <option value="">선택하세요</option>
-                    {inferenceModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {model.label}
+                  목소리
+                  <select value={inferenceForm.speaker} onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}>
+                    {selectedInferenceModel.available_speakers.map((speaker) => (
+                      <option key={speaker} value={speaker}>
+                        {speaker}
                       </option>
                     ))}
                   </select>
                 </label>
-                <label>
-                  언어
-                  <LanguageSelect value={inferenceForm.language} onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))} />
-                </label>
-                {selectedInferenceModel?.available_speakers?.length ? (
-                  <label>
-                    목소리
-                    <select value={inferenceForm.speaker} onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}>
-                      {selectedInferenceModel.available_speakers.map((speaker) => (
-                        <option key={speaker} value={speaker}>
-                          {speaker}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </div>
+              ) : null}
+            </div>
+            <label>
+              대사
+              <textarea value={inferenceForm.text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))} />
+            </label>
+            {selectedInferenceModel?.supports_instruction ? (
               <label>
-                대사
-                <textarea value={inferenceForm.text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))} />
+                말투 지시
+                <textarea
+                  placeholder="원하는 감정이나 말투를 짧게 적어주세요."
+                  value={inferenceForm.instruct}
+                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                />
               </label>
-              {selectedInferenceModel?.supports_instruction ? (
-                <label>
-                  말투 지시
-                  <textarea
-                    placeholder="영어로 적으면 가장 안정적입니다."
-                    value={inferenceForm.instruct}
-                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
-                  />
-                </label>
-              ) : null}
-              {selectedInferenceMode === "voice_clone" ? (
-                <details className="advanced-inline" open>
-                  <summary>참조 음성 설정</summary>
-                  <p className="field-hint">Base 모델은 미리 내장된 화자가 없어서, 짧은 참조 음성을 기준으로 같은 음색을 복제합니다.</p>
-                  <label>
-                    참조 음성 경로
-                    <input value={inferenceForm.ref_audio_path} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
-                  </label>
-                  <label>
-                    참조 음성 문장
-                    <textarea value={inferenceForm.ref_text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
-                  </label>
-                  <ServerAudioPicker assets={generatedAudioAssets} selectedPath={inferenceForm.ref_audio_path} onSelect={handleSelectInferenceAsset} />
-                </details>
-              ) : null}
+            ) : null}
+            {selectedInferenceMode === "voice_clone" ? (
               <details className="advanced-inline">
-                <summary>고급 제어</summary>
-                <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
+                <summary>참조 음성</summary>
+                <label>
+                  참조 음성 경로
+                  <input value={inferenceForm.ref_audio_path} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
+                </label>
+                <label>
+                  참조 음성 문장
+                  <textarea value={inferenceForm.ref_text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
+                </label>
+                <ServerAudioPicker assets={generatedAudioAssets} selectedPath={inferenceForm.ref_audio_path} onSelect={handleSelectInferenceAsset} />
               </details>
-              <button className="primary-button" disabled={loading || !selectedInferenceModel} type="submit">
-                음성 생성
-              </button>
-            </form>
-
-            <aside className="panel inference-side">
-              <h3>현재 모델 설명</h3>
-              {selectedInferenceModel ? (
-                <article className="status-card status-card--ready">
-                  <strong>{getModelDisplayLabel(selectedInferenceModel)}</strong>
-                  <p>
-                    {selectedInferenceMode === "voice_clone"
-                      ? "참조 음성의 음색을 복제하는 방식입니다."
-                      : selectedInferenceMode === "custom_voice"
-                        ? "참조 음성 없이 바로 말투 지시와 화자를 고를 수 있습니다."
-                        : "설명문으로 목소리를 설계해 쓰는 방식입니다."}
-                  </p>
-                  <div className="audio-card__meta">
-                    <span>{selectedInferenceModel.source === "stock" ? "기본 모델" : "학습된 목소리"}</span>
-                    <span>{selectedInferenceModel.notes}</span>
-                  </div>
-                </article>
-              ) : (
-                <div className="result-card result-card--empty">
-                  <strong>모델을 선택하세요</strong>
-                  <p>CustomVoice는 바로 생성하고, Base는 참조 음성을 기준으로 복제합니다.</p>
-                </div>
-              )}
-              {lastInferenceRecord ? <AudioCard title="방금 생성한 음성" record={lastInferenceRecord} /> : null}
-            </aside>
-          </div>
+            ) : null}
+            <details className="advanced-inline">
+              <summary>고급 제어</summary>
+              <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
+            </details>
+            <button className="primary-button" disabled={loading || !selectedInferenceModel} type="submit">
+              음성 생성
+            </button>
+          </form>
+          {lastInferenceRecord ? (
+            <section className="panel">
+              <h3>생성 결과</h3>
+              <AudioCard title="방금 생성한 음성" record={lastInferenceRecord} />
+            </section>
+          ) : null}
         </section>
       ) : null}
 
@@ -1401,29 +1417,55 @@ export default function App() {
       ) : null}
 
       {activeTab === "story" ? (
-        <section className="workspace">
-          <div className="panel-grid">
-            <form className="panel" onSubmit={handleStoryStudioSubmit}>
-              <h2>스토리 스튜디오</h2>
-              <p className="field-hint">긴 대본을 한 번에 생성하는 탭입니다. `장면 1`, `장면 2` 같은 레이블은 자동으로 제거해 읽지 않게 합니다.</p>
+        <section className="workspace workspace--stacked">
+          <form className="panel" onSubmit={handleStoryStudioSubmit}>
+            <h2>스토리 스튜디오</h2>
+            <div className="field-row">
+              <label>
+                생성 방식
+                <select value={storyForm.generation_mode} onChange={(event) => setStoryForm({ ...storyForm, generation_mode: event.target.value })}>
+                  <option value="voice_design">Voice Design</option>
+                  <option value="custom_voice">CustomVoice</option>
+                </select>
+              </label>
+              <label>
+                모델
+                <select value={storyForm.model_id} onChange={(event) => setStoryForm({ ...storyForm, model_id: event.target.value })}>
+                  {(storyForm.generation_mode === "custom_voice" ? customVoiceModels : voiceDesignModels).map((model) => (
+                    <option key={model.key} value={model.model_id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                언어
+                <LanguageSelect value={storyForm.language} onChange={(language) => setStoryForm({ ...storyForm, language })} />
+              </label>
+            </div>
+            {storyForm.generation_mode === "custom_voice" ? (
+              <label>
+                목소리
+                <select value={storyForm.speaker} onChange={(event) => setStoryForm({ ...storyForm, speaker: event.target.value })}>
+                  {speakers.map((speaker) => (
+                    <option key={speaker.speaker} value={speaker.speaker}>
+                      {speaker.speaker}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label>
+              말투 지시
+              <textarea value={storyForm.instruct} onChange={(event) => setStoryForm({ ...storyForm, instruct: event.target.value })} />
+            </label>
+            <label>
+              긴 대본
+              <textarea className="bulk-path-textarea" value={storyForm.text} onChange={(event) => setStoryForm({ ...storyForm, text: event.target.value })} />
+            </label>
+            <details className="advanced-inline">
+              <summary>고급 제어</summary>
               <div className="field-row">
-                <label>
-                  생성 방식
-                  <select value={storyForm.generation_mode} onChange={(event) => setStoryForm({ ...storyForm, generation_mode: event.target.value })}>
-                    <option value="voice_design">Voice Design</option>
-                    <option value="custom_voice">CustomVoice</option>
-                  </select>
-                </label>
-                <label>
-                  모델
-                  <select value={storyForm.model_id} onChange={(event) => setStoryForm({ ...storyForm, model_id: event.target.value })}>
-                    {(storyForm.generation_mode === "custom_voice" ? customVoiceModels : voiceDesignModels).map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <label>
                   분할 방식
                   <select value={storyForm.split_mode} onChange={(event) => setStoryForm({ ...storyForm, split_mode: event.target.value })}>
@@ -1431,52 +1473,24 @@ export default function App() {
                     <option value="line">줄마다</option>
                   </select>
                 </label>
-              </div>
-              {storyForm.generation_mode === "custom_voice" ? (
-                <label>
-                  화자
-                  <select value={storyForm.speaker} onChange={(event) => setStoryForm({ ...storyForm, speaker: event.target.value })}>
-                    {speakers.map((speaker) => (
-                      <option key={speaker.speaker} value={speaker.speaker}>
-                        {speaker.speaker}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <label>
-                말투 지시
-                <textarea value={storyForm.instruct} onChange={(event) => setStoryForm({ ...storyForm, instruct: event.target.value })} />
-              </label>
-              <label>
-                장문 대본
-                <textarea className="bulk-path-textarea" value={storyForm.text} onChange={(event) => setStoryForm({ ...storyForm, text: event.target.value })} />
-              </label>
-              <div className="field-row">
-                <label>
-                  언어
-                  <LanguageSelect value={storyForm.language} onChange={(language) => setStoryForm({ ...storyForm, language })} />
-                </label>
                 <label>
                   문장 사이 간격(ms)
                   <input value={storyForm.pause_ms} onChange={(event) => setStoryForm({ ...storyForm, pause_ms: event.target.value })} />
                 </label>
               </div>
-              <details className="advanced-inline">
-                <summary>고급 제어</summary>
-                <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
-              </details>
-              <button className="primary-button" disabled={loading} type="submit">
-                장문 음성 생성
-              </button>
-            </form>
+              <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
+            </details>
+            <button className="primary-button" disabled={loading} type="submit">
+              장문 음성 생성
+            </button>
+          </form>
 
-            <aside className="panel">
-              <h3>장문 생성 결과</h3>
-              <p className="field-hint">한 번에 생성한 장문 결과만 여기에서 확인합니다.</p>
-              {lastStoryRecord ? <AudioCard title="방금 생성한 장문 음성" record={lastStoryRecord} /> : <p className="field-hint">아직 생성한 장문 결과가 없습니다.</p>}
-            </aside>
-          </div>
+          {lastStoryRecord ? (
+            <section className="panel">
+              <h3>생성 결과</h3>
+              <AudioCard title="방금 생성한 장문 음성" record={lastStoryRecord} />
+            </section>
+          ) : null}
         </section>
       ) : null}
 
@@ -1487,7 +1501,7 @@ export default function App() {
               <div>
                 <span className="eyebrow eyebrow--soft">목소리 복제</span>
                 <h2>참조 음성에서 복제용 스타일 저장</h2>
-                <p>참조 음성에서 스타일 자산을 뽑고, 저장한 뒤 프로젝트 탭에서 반복 생성합니다.</p>
+                <p>참조 음성에서 스타일 자산을 뽑고 저장합니다.</p>
               </div>
               <label>
                 Base 모델
@@ -1591,90 +1605,96 @@ export default function App() {
 
       {activeTab === "projects" ? (
         <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <form className="panel inference-panel" onSubmit={handleHybridInferenceSubmit}>
-              <h2>프리셋 프로젝트</h2>
-              <p className="field-hint">저장한 스타일을 골라 반복 생성하거나, 같은 프로젝트 안에서 말투 지시를 덧입혀 차이를 비교합니다.</p>
-              <RecipeBar title="영어 스타일 템플릿" items={HYBRID_RECIPES} onApply={applyHybridRecipe} />
+          <section className="panel">
+            <h2>프리셋 기반 생성</h2>
+            <label>
+              프리셋
+              <select value={selectedHybridPresetId} onChange={(event) => { setSelectedHybridPresetId(event.target.value); setSelectedPresetId(event.target.value); }}>
+                <option value="">선택하세요</option>
+                {presets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedHybridPreset ? (
+              <article className="selected-audio-card">
+                <span className="meta-label">선택한 프리셋</span>
+                <strong>{selectedHybridPreset.name}</strong>
+                <p>{selectedHybridPreset.reference_text}</p>
+              </article>
+            ) : (
+              <p className="field-hint">먼저 저장된 프리셋을 고르세요.</p>
+            )}
+            {selectedHybridPreset ? (
+              <article className="status-card">
+                <strong>왜 모델이 두 개 필요한가</strong>
+                <p>Base 모델은 프리셋의 기준 음성에서 스타일 신호를 읽고, CustomVoice 모델은 그 스타일을 유지한 채 새 대사와 말투 지시를 적용해 말합니다.</p>
+              </article>
+            ) : null}
 
-              <label>
-                프로젝트 프리셋
-                <select value={selectedHybridPresetId} onChange={(event) => { setSelectedHybridPresetId(event.target.value); setSelectedPresetId(event.target.value); }}>
-                  <option value="">선택하세요</option>
-                  {presets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selectedHybridPreset ? (
-                <div className="source-summary">
-                  <span className="meta-label">현재 프로젝트 스타일</span>
-                  <strong>{selectedHybridPreset.name}</strong>
-                  <span>{getPresetSourceLabel(selectedHybridPreset.source_type)}</span>
-                  <p>{selectedHybridPreset.reference_text}</p>
+            <div className="panel-grid">
+              <form className="panel inference-panel" onSubmit={(event) => { event.preventDefault(); void handleGenerateFromPreset(); }}>
+                <h3>프리셋 그대로 생성</h3>
+                <label>
+                  대사
+                  <textarea value={presetGenerateText} onChange={(event) => setPresetGenerateText(event.target.value)} />
+                </label>
+                <details className="advanced-inline">
+                  <summary>고급 제어</summary>
+                  <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
+                </details>
+                <button className="secondary-button" disabled={!selectedHybridPreset} type="submit">
+                  프리셋 그대로 생성
+                </button>
+              </form>
+
+              <form className="panel inference-panel" onSubmit={handleHybridInferenceSubmit}>
+                <h3>프리셋 + 말투 지시</h3>
+                <RecipeBar title="말투 템플릿" items={HYBRID_RECIPES} onApply={applyHybridRecipe} />
+                <div className="field-row">
+                  <label>
+                    Base 모델
+                    <select
+                      value={hybridForm.base_model_id}
+                      onChange={(event) => setHybridForm((prev) => ({ ...prev, base_model_id: event.target.value }))}
+                    >
+                      <option value="">선택하세요</option>
+                      {baseModels.map((model) => (
+                        <option key={model.key} value={model.model_id}>
+                          {model.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    CustomVoice 모델
+                    <select
+                      value={hybridForm.custom_model_id}
+                      onChange={(event) => setHybridForm((prev) => ({ ...prev, custom_model_id: event.target.value }))}
+                    >
+                      <option value="">선택하세요</option>
+                      {customVoiceCapableModels.map((model) => (
+                        <option key={model.key} value={model.model_id}>
+                          {model.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-              ) : (
-                <p className="field-hint">먼저 복제 또는 설계 탭에서 저장한 프리셋을 선택하세요.</p>
-              )}
-
-              <label>
-                프리셋 그대로 반복 생성할 문장
-                <textarea value={presetGenerateText} onChange={(event) => setPresetGenerateText(event.target.value)} />
-              </label>
-              <button className="secondary-button" onClick={handleGenerateFromPreset} type="button">
-                프리셋 그대로 생성
-              </button>
-              <details className="advanced-inline">
-                <summary>프리셋 반복 생성 고급 제어</summary>
-                <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
-              </details>
-
-              <div className="field-row">
                 <label>
-                  Base 모델
-                  <select
-                    value={hybridForm.base_model_id}
-                    onChange={(event) => setHybridForm((prev) => ({ ...prev, base_model_id: event.target.value }))}
-                  >
-                    <option value="">선택하세요</option>
-                    {baseModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
+                  대사
+                  <textarea value={hybridForm.text} onChange={(event) => setHybridForm((prev) => ({ ...prev, text: event.target.value }))} />
                 </label>
                 <label>
-                  CustomVoice 모델
-                  <select
-                    value={hybridForm.custom_model_id}
-                    onChange={(event) => setHybridForm((prev) => ({ ...prev, custom_model_id: event.target.value }))}
-                  >
-                    <option value="">선택하세요</option>
-                    {customVoiceCapableModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
+                  말투 지시
+                  <textarea
+                    placeholder="원하는 감정이나 분위기를 적어주세요."
+                    value={hybridForm.instruct}
+                    onChange={(event) => setHybridForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                  />
                 </label>
-              </div>
-
-              <label>
-                대사
-                <textarea value={hybridForm.text} onChange={(event) => setHybridForm((prev) => ({ ...prev, text: event.target.value }))} />
-              </label>
-              <label>
-                말투 지시
-                <textarea
-                  placeholder="영어로 적으면 가장 안정적입니다."
-                  value={hybridForm.instruct}
-                  onChange={(event) => setHybridForm((prev) => ({ ...prev, instruct: event.target.value }))}
-                />
-              </label>
-              <div className="field-row">
                 <label>
                   언어
                   <LanguageSelect
@@ -1682,44 +1702,23 @@ export default function App() {
                     onChange={(language) => setHybridForm((prev) => ({ ...prev, language }))}
                   />
                 </label>
-              </div>
-              <details className="advanced-inline">
-                <summary>스타일 기준 정보</summary>
-                <p className="field-hint">프리셋을 고르면 기준 음성과 문장이 자동으로 채워집니다.</p>
-                <label>
-                  기준 음성 경로
-                  <input value={hybridForm.ref_audio_path} onChange={(event) => setHybridForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
-                </label>
-                <label>
-                  기준 음성 문장
-                  <textarea value={hybridForm.ref_text} onChange={(event) => setHybridForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
-                </label>
-              </details>
-              <details className="advanced-inline">
-                <summary>고급 제어</summary>
-                <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
-              </details>
-              <button className="primary-button" disabled={loading} type="submit">
-                말투 지시까지 적용해 생성
-              </button>
-            </form>
+                <details className="advanced-inline">
+                  <summary>고급 제어</summary>
+                  <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
+                </details>
+                <button className="primary-button" disabled={loading || !selectedHybridPreset} type="submit">
+                  말투 지시 적용 생성
+                </button>
+              </form>
+            </div>
+          </section>
 
-            <aside className="panel inference-side">
-              <h3>프로젝트 프리셋 목록</h3>
-              <div className="preset-list">
-                {presets.map((preset) => (
-                  <article className={preset.id === selectedHybridPresetId ? "preset-card preset-card--selected" : "preset-card"} key={preset.id} onClick={() => { setSelectedHybridPresetId(preset.id); setSelectedPresetId(preset.id); }}>
-                    <strong>{preset.name}</strong>
-                    <span>{getPresetSourceLabel(preset.source_type)}</span>
-                    <p>{preset.reference_text}</p>
-                  </article>
-                ))}
-              </div>
-              {lastHybridRecord ? (
-                <AudioCard title="방금 생성한 프로젝트 결과" subtitle={lastHybridRecord.mode} record={lastHybridRecord} />
-              ) : null}
-            </aside>
-          </div>
+          {lastHybridRecord ? (
+            <section className="panel">
+              <h3>생성 결과</h3>
+              <AudioCard title="방금 생성한 프리셋 결과" subtitle={lastHybridRecord.mode} record={lastHybridRecord} />
+            </section>
+          ) : null}
         </section>
       ) : null}
 
@@ -1832,11 +1831,10 @@ export default function App() {
 
             <form className="panel" onSubmit={handleVoiceChangerSubmit}>
               <h2>보이스 체인저</h2>
-              <p>Applio 기반 RVC 변환을 사용합니다. 경로를 직접 쓰지 않고 서버가 찾은 모델만 선택합니다.</p>
-              {!voiceChangerAvailable ? <p className="field-hint">Applio 저장소만으로는 부족합니다. `data/rvc-models` 또는 `vendor/Applio/logs` 아래에 `.pth`와 `.index`가 함께 있어야 합니다.</p> : null}
+              {!voiceChangerAvailable ? <p className="field-hint">보이스 체인저 모델이 아직 준비되지 않았습니다. 모델 다운로드 스크립트로 RVC 모델을 먼저 받아주세요.</p> : null}
               <div className="field-row">
                 <label>
-                  RVC 모델
+                  변환할 목소리
                   <select value={voiceChangerForm.selected_model_id} onChange={(event) => handleSelectVoiceChangerModel(event.target.value)}>
                     <option value="">선택하세요</option>
                     {voiceChangerModels.map((model) => (
@@ -1847,7 +1845,7 @@ export default function App() {
                   </select>
                 </label>
                 <label>
-                  피치 이동
+                  목소리 높낮이
                   <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
                 </label>
               </div>
@@ -1860,7 +1858,7 @@ export default function App() {
               ) : null}
               <div className="field-row">
                 <label>
-                  F0 방식
+                  피치 추출 방식
                   <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
                     <option value="rmvpe">rmvpe</option>
                     <option value="fcpe">fcpe</option>
@@ -1868,21 +1866,21 @@ export default function App() {
                   </select>
                 </label>
                 <label>
-                  Index rate
+                  음색 반영 강도
                   <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
                 </label>
                 <label>
-                  Protect
+                  원본 보존 비율
                   <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
                 </label>
               </div>
               <div className="field-row">
                 <label>
-                  Clean strength
+                  후처리 강도
                   <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
                 </label>
                 <label>
-                  Embedder
+                  음색 추출기
                   <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
                     <option value="contentvec">contentvec</option>
                     <option value="hubert">hubert</option>
@@ -1951,7 +1949,7 @@ export default function App() {
               void handleAudioSeparation(audioConvertForm.audio_path);
             }}>
               <h2>오디오 분리</h2>
-              <p>선택한 오디오를 harmonic / percussive 두 갈래로 분리합니다.</p>
+              <p>선택한 오디오를 두 갈래로 나눠 다시 확인합니다.</p>
               {!audioSeparationAvailable ? <p className="field-hint">현재 이 기능은 비활성 상태입니다.</p> : null}
               <button className="primary-button" disabled={loading || !audioConvertForm.audio_path || !audioSeparationAvailable} type="submit">
                 분리 실행
@@ -2062,30 +2060,23 @@ export default function App() {
             </div>
             <div className="button-row">
               <button className="secondary-button" onClick={addSampleRow} type="button">
-                샘플 행 추가
+                샘플 추가
               </button>
               <button className="primary-button" onClick={() => void handleCreateDataset()} type="button">
                 데이터셋 저장
               </button>
             </div>
-          </section>
-
-          <section className="panel">
-            <h3>데이터셋 목록</h3>
-            <div className="dataset-list">
-              {datasets.map((dataset) => (
-                <article className={dataset.id === selectedDatasetId ? "dataset-card preset-card--selected" : "dataset-card"} key={dataset.id}>
-                  <strong>{dataset.name}</strong>
-                  <span>{dataset.sample_count}개 샘플</span>
-                  <span>{dataset.prepared_jsonl_path ? "학습 가능" : "학습 전"}</span>
-                  <div className="button-row">
-                    <button className="secondary-button" onClick={() => setSelectedDatasetId(dataset.id)} type="button">
-                      이 데이터셋 선택
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+            {lastCreatedDataset ? (
+              <article className="status-card status-card--ready">
+                <strong>{lastCreatedDataset.name}</strong>
+                <p>{lastCreatedDataset.sample_count}개 샘플 · 학습 가능</p>
+                <div className="button-row">
+                  <button className="secondary-button" onClick={() => { setSelectedDatasetId(lastCreatedDataset.id); setActiveTab("training"); }} type="button">
+                    학습 실행으로 이동
+                  </button>
+                </div>
+              </article>
+            ) : null}
           </section>
         </section>
       ) : null}
