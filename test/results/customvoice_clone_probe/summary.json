@@ -1,0 +1,37 @@
+{
+  "model_path": "data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "ref_audio": "data/datasets/mai_ko_full/audio/00044.wav",
+  "language": "Korean",
+  "speaker": "Sohee",
+  "capabilities": {
+    "tts_model_type": "custom_voice",
+    "has_speech_tokenizer": true,
+    "has_speaker_encoder": true,
+    "speaker_encoder_is_callable": false,
+    "has_extract_speaker_embedding": true,
+    "supported_speakers_count": 9
+  },
+  "results": [
+    {
+      "name": "official_create_voice_clone_prompt",
+      "supported": false,
+      "detail": "model with \ntokenizer_type: qwen3_tts_tokenizer_12hz\ntts_model_size: 1b7\ntts_model_type: custom_voice\ndoes not support create_voice_clone_prompt, Please check Model Card or Readme for more details.",
+      "error_type": "ValueError",
+      "output_path": null
+    },
+    {
+      "name": "official_generate_voice_clone",
+      "supported": false,
+      "detail": "model with \ntokenizer_type: qwen3_tts_tokenizer_12hz\ntts_model_size: 1b7\ntts_model_type: custom_voice\ndoes not support generate_voice_clone, Please check Model Card or Readme for more details.",
+      "error_type": "ValueError",
+      "output_path": null
+    },
+    {
+      "name": "manual_low_level_voice_clone_prompt",
+      "supported": false,
+      "detail": "CustomVoice checkpoint exposes extract_speaker_embedding(), but speaker_encoder is not callable (None), so reference-audio speaker embedding cannot be built.",
+      "error_type": "SpeakerEncoderUnavailable",
+      "output_path": null
+    }
+  ]
+}

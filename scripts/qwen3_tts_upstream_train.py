@@ -37,6 +37,7 @@ from typing import Any
 
 import torch
 from accelerate import Accelerator
+from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -53,11 +54,13 @@ sys.path.insert(0, str(UPSTREAM_ROOT))
 sys.path.insert(0, str(UPSTREAM_FINETUNING_DIR))
 
 from dataset import TTSDataset  # noqa: E402
+from qwen_tts.core.models.configuration_qwen3_tts import Qwen3TTSConfig  # noqa: E402
 from qwen_tts.core.models.modeling_qwen3_tts import Qwen3TTSSpeakerEncoder  # noqa: E402
 from qwen_tts.inference.qwen3_tts_model import Qwen3TTSModel  # noqa: E402
 
 TARGET_SPEAKER_EMBEDDING = None
 CHECKPOINT_EPOCH_RE = re.compile(r"checkpoint-epoch-(\d+)$")
+VOICEBOX_FAMILY = "voicebox"
 
 
 def repo_path(value: str) -> Path:
@@ -190,11 +193,51 @@ def resolve_speaker_encoder_source(init_model_path: Path, speaker_encoder_model_
     return init_model_path
 
 
+def sanitize_speaker_encoder_config(config_dict: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Strip config keys that Qwen3TTSSpeakerEncoderConfig does not accept.
+
+    Args:
+        config_dict: Raw serialized speaker encoder config.
+
+    Returns:
+        Cleaned config dictionary suitable for ``Qwen3TTSSpeakerEncoderConfig``.
+    """
+
+    if config_dict is None:
+        return None
+    allowed_keys = {
+        "mel_dim",
+        "enc_dim",
+        "enc_channels",
+        "enc_kernel_sizes",
+        "enc_dilations",
+        "enc_attention_channels",
+        "enc_res2net_scale",
+        "enc_se_channels",
+        "sample_rate",
+    }
+    return {key: value for key, value in dict(config_dict).items() if key in allowed_keys}
+
+
 def load_speaker_encoder(model_path: Path, runtime: dict[str, Any]) -> Qwen3TTSSpeakerEncoder:
     """Load a standalone speaker encoder module from a checkpoint."""
 
-    config = AutoConfig.from_pretrained(str(model_path))
-    speaker_encoder = Qwen3TTSSpeakerEncoder(config.speaker_encoder_config)
+    config = Qwen3TTSConfig.from_pretrained(str(model_path))
+    speaker_encoder_config = config.speaker_encoder_config
+    if speaker_encoder_config is None:
+        config_path = model_path / "config.json"
+        raw_config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+        source_model_path = raw_config.get("speaker_encoder_source_model_path")
+        if source_model_path:
+            source_config = Qwen3TTSConfig.from_pretrained(str(Path(source_model_path)))
+            speaker_encoder_config = source_config.speaker_encoder_config
+    if speaker_encoder_config is None:
+        raise SystemExit(
+            "Checkpoint contains speaker_encoder weights but no speaker_encoder_config. "
+            f"Cannot build a standalone encoder from {model_path}."
+        )
+
+    speaker_encoder = Qwen3TTSSpeakerEncoder(speaker_encoder_config)
     state_dict = load_file(str(model_path / "model.safetensors"))
     speaker_state = {
         key.removeprefix("speaker_encoder."): value
@@ -210,6 +253,23 @@ def load_speaker_encoder(model_path: Path, runtime: dict[str, Any]) -> Qwen3TTSS
     return speaker_encoder
 
 
+def checkpoint_has_speaker_encoder(model_path: Path) -> bool:
+    """Return whether a checkpoint stores embedded speaker-encoder weights.
+
+    Args:
+        model_path: Checkpoint directory containing ``model.safetensors``.
+
+    Returns:
+        ``True`` when at least one ``speaker_encoder.*`` tensor exists.
+    """
+
+    weights_path = model_path / "model.safetensors"
+    if not weights_path.exists():
+        return False
+    with safe_open(str(weights_path), framework="pt", device="cpu") as handle:
+        return any(key.startswith("speaker_encoder.") for key in handle.keys())
+
+
 def resolve_output_speaker_id(talker_config: dict[str, Any], speaker_name: str) -> int:
     """Choose a stable speaker slot in the exported checkpoint config."""
 
@@ -219,6 +279,77 @@ def resolve_output_speaker_id(talker_config: dict[str, Any], speaker_name: str) 
     if not spk_id_map:
         return 3000
     return max(int(value) for value in spk_id_map.values()) + 1
+
+
+def resolve_voicebox_speaker_encoder(
+    qwen3tts: Qwen3TTSModel,
+    init_model_path: Path,
+    runtime: dict[str, Any],
+    speaker_encoder_model_path: Path | None,
+) -> Qwen3TTSSpeakerEncoder:
+    """Resolve the speaker encoder for CustomVoice/VoiceBox training.
+
+    Resolution order:
+    1. Embedded ``speaker_encoder`` module already present on the loaded model.
+    2. Embedded ``speaker_encoder.*`` weights inside the checkpoint itself.
+    3. Explicit fallback model path, typically Base 1.7B.
+    4. Inferred Base checkpoint path derived from the init model path.
+
+    Args:
+        qwen3tts: Loaded wrapper for the init checkpoint.
+        init_model_path: Init checkpoint directory.
+        runtime: Runtime dictionary from :func:`resolve_runtime`.
+        speaker_encoder_model_path: Optional explicit fallback source.
+
+    Returns:
+        Standalone speaker encoder module ready for evaluation use.
+    """
+
+    embedded = getattr(qwen3tts.model, "speaker_encoder", None)
+    if embedded is not None:
+        embedded = embedded.to(device=runtime["device_map"], dtype=runtime["dtype"])
+        embedded.eval()
+        return embedded
+
+    if checkpoint_has_speaker_encoder(init_model_path):
+        return load_speaker_encoder(init_model_path, runtime)
+
+    speaker_source = resolve_speaker_encoder_source(init_model_path, speaker_encoder_model_path)
+    return load_speaker_encoder(speaker_source, runtime)
+
+
+def voicebox_metadata(
+    *,
+    source_checkpoint: Path,
+    speaker_encoder_included: bool,
+    speaker_encoder_source_path: str | None,
+) -> dict[str, Any]:
+    """Build demo metadata persisted into exported VoiceBox checkpoints.
+
+    Args:
+        source_checkpoint: Init checkpoint path used for training.
+        speaker_encoder_included: Whether the exported checkpoint embeds the encoder.
+        speaker_encoder_source_path: Path that supplied the speaker encoder, if any.
+
+    Returns:
+        JSON-serializable metadata dictionary.
+    """
+
+    speaker_encoder_config = None
+    if speaker_encoder_source_path:
+        source_config = Qwen3TTSConfig.from_pretrained(str(Path(speaker_encoder_source_path)))
+        speaker_encoder_config = source_config.speaker_encoder_config
+        if speaker_encoder_config is not None and hasattr(speaker_encoder_config, "to_dict"):
+            speaker_encoder_config = speaker_encoder_config.to_dict()
+        speaker_encoder_config = sanitize_speaker_encoder_config(speaker_encoder_config)
+
+    return {
+        "demo_model_family": VOICEBOX_FAMILY,
+        "speaker_encoder_included": bool(speaker_encoder_included),
+        "speaker_encoder_source_model_path": speaker_encoder_source_path,
+        "speaker_encoder_config": speaker_encoder_config,
+        "voicebox_source_checkpoint": str(source_checkpoint),
+    }
 
 
 def checkpoint_epoch(path: Path) -> int:
@@ -370,10 +501,14 @@ def train_customvoice_command(args: argparse.Namespace) -> None:
     )
     config = AutoConfig.from_pretrained(str(init_model_path))
 
-    auxiliary_speaker_encoder = None
-    if getattr(qwen3tts.model, "speaker_encoder", None) is None:
-        speaker_source = resolve_speaker_encoder_source(init_model_path, speaker_encoder_model_path)
-        auxiliary_speaker_encoder = load_speaker_encoder(speaker_source, runtime)
+    checkpoint_embeds_encoder = checkpoint_has_speaker_encoder(init_model_path)
+    speaker_source = resolve_speaker_encoder_source(init_model_path, speaker_encoder_model_path)
+    auxiliary_speaker_encoder = resolve_voicebox_speaker_encoder(
+        qwen3tts=qwen3tts,
+        init_model_path=init_model_path,
+        runtime=runtime,
+        speaker_encoder_model_path=speaker_encoder_model_path,
+    )
 
     train_data = load_jsonl_records(train_jsonl)
     for row in train_data:
@@ -455,6 +590,13 @@ def train_customvoice_command(args: argparse.Namespace) -> None:
 
             config_dict = json.loads((init_model_path / "config.json").read_text(encoding="utf-8"))
             config_dict["tts_model_type"] = "custom_voice"
+            config_dict.update(
+                voicebox_metadata(
+                    source_checkpoint=init_model_path,
+                    speaker_encoder_included=True,
+                    speaker_encoder_source_path=str(init_model_path if checkpoint_embeds_encoder else speaker_source),
+                )
+            )
             talker_config = dict(config_dict.get("talker_config", {}) or {})
             spk_id_map = dict(talker_config.get("spk_id", {}) or {})
             spk_is_dialect = dict(talker_config.get("spk_is_dialect", {}) or {})
@@ -468,12 +610,11 @@ def train_customvoice_command(args: argparse.Namespace) -> None:
 
             unwrapped_model = accelerator.unwrap_model(model)
             state_dict = {key: value.detach().to("cpu") for key, value in unwrapped_model.state_dict().items()}
-
-            # Keep the exported checkpoint aligned with the current stock CustomVoice
-            # inference layout while swapping in the new speaker embedding.
-            for key in list(state_dict.keys()):
-                if key.startswith("speaker_encoder"):
-                    del state_dict[key]
+            speaker_encoder_state = {
+                f"speaker_encoder.{key}": value.detach().to("cpu")
+                for key, value in auxiliary_speaker_encoder.state_dict().items()
+            }
+            state_dict.update(speaker_encoder_state)
 
             codec_weight = state_dict["talker.model.codec_embedding.weight"]
             state_dict["talker.model.codec_embedding.weight"][speaker_id] = TARGET_SPEAKER_EMBEDDING[0].detach().to(

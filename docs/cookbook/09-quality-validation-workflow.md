@@ -59,7 +59,7 @@ CustomVoice와 hybrid의 instruct 준수 여부를 듣기로 판별하기 쉽게
 
 ```bash
 python scripts/validate_speech_quality.py \
-  --api-base http://127.0.0.1:8000 \
+  --api-base http://127.0.0.1:8190 \
   --suite customvoice \
   --prompt-set aggressive
 ```
@@ -79,17 +79,12 @@ python scripts/validate_speech_quality.py \
 cd ~/pytorch-demo/Qwen3-TTS-Demo
 ./scripts/setup_backend.sh
 ./scripts/download_models.sh
+cd app/frontend
+npm install
+npm run build
 cd app/backend
 source ../../.venv/bin/activate
-uvicorn app.main:app --reload
-```
-
-다른 터미널에서 프런트까지 함께 보려면:
-
-```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo/app/frontend
-npm install
-npm run dev
+uvicorn app.main:app --host 127.0.0.1 --port 8190
 ```
 
 ## 3. 실행 명령
@@ -100,7 +95,7 @@ npm run dev
 cd ~/pytorch-demo/Qwen3-TTS-Demo
 source .venv/bin/activate
 python scripts/validate_speech_quality.py \
-  --api-base http://127.0.0.1:8000 \
+  --api-base http://127.0.0.1:8190 \
   --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
   --probe-text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
   --suite all
@@ -112,7 +107,7 @@ python scripts/validate_speech_quality.py \
 
 ```bash
 python scripts/validate_speech_quality.py \
-  --api-base http://127.0.0.1:8000 \
+  --api-base http://127.0.0.1:8190 \
   --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
   --base-model-id /path/to/Qwen3-TTS-12Hz-1.7B-Base \
   --base-ft-model-id /path/to/finetuned/base/checkpoint-epoch-0 \

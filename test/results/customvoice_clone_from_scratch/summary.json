@@ -1,0 +1,64 @@
+{
+  "model_path": "data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "ref_audio": "data/datasets/mai_ko_full/audio/00000.wav",
+  "ref_text": "그래서 말인데, 올해는 요괴도 인간도 함께 즐길 수 있게 「미카와 축제」를 제대로 열어보려고",
+  "text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+  "language": "Korean",
+  "speaker": "Sohee",
+  "notes": [
+    "This experiment does not use Base.create_voice_clone_prompt or Base.generate_voice_clone.",
+    "It still uses the CustomVoice checkpoint's own tokenizer and low-level model.generate path.",
+    "A successful result does not automatically mean true reference-speaker cloning succeeded.",
+    "If the pseudo embedding stays too close to a stock speaker embedding, the result is better described as a hacky hybrid than real clone support."
+  ],
+  "capabilities": {
+    "tts_model_type": "custom_voice",
+    "speaker_encoder_present": false,
+    "supported_speakers": [
+      "aiden",
+      "dylan",
+      "eric",
+      "ono_anna",
+      "ryan",
+      "serena",
+      "sohee",
+      "uncle_fu",
+      "vivian"
+    ],
+    "pseudo_vs_stock_similarity": 0.026373490691184998
+  },
+  "results": [
+    {
+      "name": "control_stock_customvoice",
+      "ok": true,
+      "detail": "Generated control sample with stock speaker Sohee.",
+      "output_path": "test/results/customvoice_clone_from_scratch/control_stock_customvoice.wav",
+      "transcript_like_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "similarity_to_stock_speaker": null
+    },
+    {
+      "name": "borrowed_stock_embed_with_ref_code",
+      "ok": true,
+      "detail": "Generated audio at test/results/customvoice_clone_from_scratch/borrowed_stock_embed_with_ref_code.wav",
+      "output_path": "test/results/customvoice_clone_from_scratch/borrowed_stock_embed_with_ref_code.wav",
+      "transcript_like_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "similarity_to_stock_speaker": 1.0
+    },
+    {
+      "name": "pseudo_embed_only",
+      "ok": true,
+      "detail": "Generated audio at test/results/customvoice_clone_from_scratch/pseudo_embed_only.wav",
+      "output_path": "test/results/customvoice_clone_from_scratch/pseudo_embed_only.wav",
+      "transcript_like_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "similarity_to_stock_speaker": 0.026373490691184998
+    },
+    {
+      "name": "pseudo_embed_with_ref_code",
+      "ok": true,
+      "detail": "Generated audio at test/results/customvoice_clone_from_scratch/pseudo_embed_with_ref_code.wav",
+      "output_path": "test/results/customvoice_clone_from_scratch/pseudo_embed_with_ref_code.wav",
+      "transcript_like_text": "오늘은 정말 힘들었어. 언제쯤 끝날까?",
+      "similarity_to_stock_speaker": 0.026373490691184998
+    }
+  ]
+}

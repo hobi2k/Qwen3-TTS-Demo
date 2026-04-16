@@ -39,6 +39,20 @@
 - examples와 파인튜닝: [docs/cookbook/05-finetuning-and-examples.md](docs/cookbook/05-finetuning-and-examples.md)
 - 프리셋 + instruct 원리: [docs/cookbook/12-preset-plus-instruct.md](docs/cookbook/12-preset-plus-instruct.md)
 - CustomVoice 파인튜닝: [docs/cookbook/13-customvoice-finetuning.md](docs/cookbook/13-customvoice-finetuning.md)
+- VoiceBox 문서 허브: [docs/voicebox/README.md](docs/voicebox/README.md)
+- VoiceBox 체크포인트 변환: [docs/voicebox/01-checkpoint-conversion.md](docs/voicebox/01-checkpoint-conversion.md)
+- VoiceBox 파인튜닝: [docs/voicebox/02-finetuning.md](docs/voicebox/02-finetuning.md)
+- VoiceBox clone 실험: [docs/voicebox/03-clone-experiment.md](docs/voicebox/03-clone-experiment.md)
+- VoiceBox clone + instruct 실험: [docs/voicebox/04-clone-plus-instruct.md](docs/voicebox/04-clone-plus-instruct.md)
+
+VoiceBox 관련 스크립트는 역할을 분리합니다.
+
+- plain `CustomVoice` 학습:
+  - [qwen3_tts_customvoice_train.py](scripts/qwen3_tts_customvoice_train.py)
+- `CustomVoice + Base 1.7B -> VoiceBox` 생성:
+  - [qwen3_tts_voicebox_bootstrap.py](scripts/qwen3_tts_voicebox_bootstrap.py)
+- `VoiceBox -> VoiceBox` 재학습:
+  - [qwen3_tts_voicebox_retrain.py](scripts/qwen3_tts_voicebox_retrain.py)
 
 ## 현재 프로젝트 구조
 
@@ -158,16 +172,10 @@ cd Qwen3-TTS-Demo
 ./scripts/download_models.sh
 cd app/frontend
 npm install
+npm run build
 cd ../backend
 source ../../.venv/bin/activate
-uvicorn app.main:app --reload
-```
-
-다른 터미널:
-
-```bash
-cd app/frontend
-npm run dev
+uvicorn app.main:app --host 127.0.0.1 --port 8190
 ```
 
 Windows PowerShell:
@@ -179,12 +187,25 @@ cd Qwen3-TTS-Demo
 .\scripts\download_models.ps1
 cd app\frontend
 npm install
+npm run build
 cd ..\backend
 ..\..\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8190
 ```
 
 상세 절차는 [docs/cookbook/01-install-and-run.md](docs/cookbook/01-install-and-run.md)에 있습니다.
+
+기본 접속 주소:
+
+- `http://127.0.0.1:8190/`
+- 같은 서버에서 `/api/*`와 빌드된 프런트를 함께 제공합니다.
+
+프런트 `vite dev`는 선택 사항입니다. 개발 중 HMR이 필요할 때만 사용합니다.
+
+```bash
+cd app/frontend
+VITE_API_TARGET=http://127.0.0.1:8190 npm run dev
+```
 
 ## 백엔드 준비와 모델 다운로드
 
@@ -224,6 +245,9 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 - `스토리 스튜디오`는 긴 대본을 한 번에 생성하는 장문용 작업실입니다.
 - `보이스 체인저`는 TTS 재합성이 아니라 `Applio / RVC` 기반 audio-to-audio 변환을 전제로 합니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
+- `app/backend/.env`는 절대경로를 기본값으로 쓰지 않습니다.
+- 모델 경로는 비워 두면 `data/models/*`를 자동으로 찾습니다.
+- 기본 운영은 `FastAPI`가 빌드된 프런트까지 함께 서빙하는 방식입니다.
 
 ## 남은 핵심 과제
 

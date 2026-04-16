@@ -15,6 +15,7 @@ import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
@@ -73,6 +74,7 @@ JsonDict = Dict[str, Any]
 APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
+FRONTEND_DIST_DIR = REPO_ROOT / "app" / "frontend" / "dist"
 UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS" / "finetuning"
 DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
 load_dotenv(BACKEND_DIR / ".env")
@@ -206,12 +208,17 @@ def infer_finetune_run_record(run_dir: Path) -> Optional[FineTuneRun]:
 
     talker_config = dict(config.get("talker_config", {}) or {})
     speaker_map = dict(talker_config.get("spk_id", {}) or {})
+    model_family = str(config.get("demo_model_family") or "").strip().lower() or None
+    speaker_encoder_included = bool(config.get("speaker_encoder_included"))
     stock_names = {name.lower() for name in stock_speaker_names()}
     custom_speakers = [name for name in speaker_map.keys() if name.lower() not in stock_names]
     speaker_name = custom_speakers[-1] if custom_speakers else (next(reversed(speaker_map.keys())) if speaker_map else "speaker")
     training_mode = str(config.get("tts_model_type") or "base").strip().lower() or "base"
     created_at = utc_now_from_stat(checkpoint_dir)
-    summary_label = "CustomVoice 학습 모델" if training_mode == "custom_voice" else "Base 학습 모델"
+    if model_family == "voicebox":
+        summary_label = "VoiceBox 학습 모델"
+    else:
+        summary_label = "CustomVoice 학습 모델" if training_mode == "custom_voice" else "Base 학습 모델"
 
     return FineTuneRun(
         id=run_dir.name,
@@ -234,6 +241,8 @@ def infer_finetune_run_record(run_dir: Path) -> Optional[FineTuneRun]:
         is_selectable=True,
         stage_label="학습 완료",
         summary_label=summary_label,
+        model_family=model_family,
+        speaker_encoder_included=speaker_encoder_included,
     )
 
 
@@ -260,6 +269,8 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
             continue
 
         tts_model_type = str(config.get("tts_model_type") or "").strip().lower()
+        model_family = str(config.get("demo_model_family") or "").strip().lower() or None
+        speaker_encoder_included = bool(config.get("speaker_encoder_included"))
         talker_config = config.get("talker_config", {}) or {}
         speaker_map = talker_config.get("spk_id", {}) or {}
         speaker_names = [str(name) for name in speaker_map.keys()]
@@ -284,10 +295,13 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
 
         run_name = checkpoint_dir.parent.name
         checkpoint_name = checkpoint_dir.name
-        label = f"학습된 {run_name}"
+        label_prefix = "VoiceBox" if model_family == "voicebox" else "학습된"
+        label = f"{label_prefix} {run_name}" if model_family == "voicebox" else f"학습된 {run_name}"
         notes = f"최종 체크포인트: {storage.relpath(checkpoint_dir)}"
         if custom_names:
             notes = f"{notes} · new speaker: {', '.join(custom_names)}"
+        if speaker_encoder_included:
+            notes = f"{notes} · embedded speaker encoder"
         recommended = run_name in {"mai_ko_base17b_full", "mai_ko_customvoice17b_full"}
 
         infos.append(
@@ -303,6 +317,8 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
                 source="finetuned",
                 available_speakers=speaker_names,
                 default_speaker=default_speaker,
+                model_family=model_family,
+                speaker_encoder_included=speaker_encoder_included,
             )
         )
 
@@ -407,6 +423,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/files", StaticFiles(directory=storage.data_dir), name="files")
+if FRONTEND_DIST_DIR.exists():
+    assets_dir = FRONTEND_DIST_DIR / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
 
 
 @app.on_event("startup")
@@ -3000,3 +3020,47 @@ def get_finetune_run(run_id: str) -> FineTuneRun:
     if not payload:
         raise HTTPException(status_code=404, detail="Fine-tuning run not found.")
     return FineTuneRun(**payload)
+
+
+@app.get("/", include_in_schema=False)
+def serve_frontend_root() -> FileResponse:
+    """Serve the built frontend entrypoint from the backend.
+
+    Returns:
+        Built ``index.html`` when the frontend bundle exists.
+    """
+
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Frontend build not found. Run `npm run build` in `app/frontend` first.",
+        )
+    return FileResponse(index_path)
+
+
+@app.get("/{frontend_path:path}", include_in_schema=False)
+def serve_frontend_spa(frontend_path: str) -> FileResponse:
+    """Serve static frontend files and SPA routes from the backend.
+
+    Args:
+        frontend_path: Requested browser path below the site root.
+
+    Returns:
+        The matching built file, or ``index.html`` for SPA routes.
+    """
+
+    if not frontend_path:
+        return serve_frontend_root()
+
+    candidate = FRONTEND_DIST_DIR / frontend_path
+    if candidate.exists() and candidate.is_file():
+        return FileResponse(candidate)
+
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Frontend build not found. Run `npm run build` in `app/frontend` first.",
+        )
+    return FileResponse(index_path)

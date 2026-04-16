@@ -20,8 +20,11 @@ from typing import Any
 import torch
 from accelerate import Accelerator
 from dataset import TTSDataset
+from qwen_tts.core.models.configuration_qwen3_tts import Qwen3TTSConfig
+from qwen_tts.core.models.modeling_qwen3_tts import Qwen3TTSSpeakerEncoder
 from qwen_tts.inference.qwen3_tts_model import Qwen3TTSModel
-from safetensors.torch import save_file
+from safetensors import safe_open
+from safetensors.torch import load_file, save_file
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoConfig
@@ -93,6 +96,9 @@ def resolve_speaker_encoder(model: Any, fallback_model_path: str) -> Any:
     if speaker_encoder is not None:
         return speaker_encoder
 
+    if checkpoint_has_speaker_encoder(Path(model.model.config._name_or_path)):
+        return load_standalone_speaker_encoder(Path(model.model.config._name_or_path))
+
     if not fallback_model_path:
         raise ValueError(
             "CustomVoice checkpoint does not expose speaker_encoder; "
@@ -107,7 +113,64 @@ def resolve_speaker_encoder(model: Any, fallback_model_path: str) -> Any:
     fallback.model.eval()
     speaker_encoder = getattr(fallback.model, "speaker_encoder", None)
     if speaker_encoder is None:
+        if checkpoint_has_speaker_encoder(Path(fallback_model_path)):
+            return load_standalone_speaker_encoder(Path(fallback_model_path))
         raise ValueError("Fallback model does not expose speaker_encoder.")
+    return speaker_encoder
+
+
+def checkpoint_has_speaker_encoder(model_path: Path) -> bool:
+    """Return whether a checkpoint stores speaker_encoder tensors.
+
+    Args:
+        model_path: Checkpoint directory.
+
+    Returns:
+        ``True`` when ``model.safetensors`` contains ``speaker_encoder.*``.
+    """
+
+    weights_path = model_path / "model.safetensors"
+    if not weights_path.exists():
+        return False
+    with safe_open(str(weights_path), framework="pt", device="cpu") as handle:
+        return any(key.startswith("speaker_encoder.") for key in handle.keys())
+
+
+def load_standalone_speaker_encoder(model_path: Path) -> Qwen3TTSSpeakerEncoder:
+    """Load a standalone speaker encoder from an exported VoiceBox checkpoint.
+
+    Args:
+        model_path: Checkpoint directory.
+
+    Returns:
+        Speaker encoder module on the current runtime device.
+    """
+
+    config = Qwen3TTSConfig.from_pretrained(str(model_path))
+    speaker_encoder_config = config.speaker_encoder_config
+    if speaker_encoder_config is None:
+        config_path = model_path / "config.json"
+        raw_config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+        source_model_path = raw_config.get("speaker_encoder_source_model_path")
+        if source_model_path:
+            source_config = Qwen3TTSConfig.from_pretrained(str(Path(source_model_path)))
+            speaker_encoder_config = source_config.speaker_encoder_config
+    if speaker_encoder_config is None:
+        raise ValueError(
+            f"Checkpoint {model_path} stores speaker_encoder tensors but no speaker_encoder_config metadata."
+        )
+    speaker_encoder = Qwen3TTSSpeakerEncoder(speaker_encoder_config)
+    state_dict = load_file(str(model_path / "model.safetensors"))
+    speaker_state = {
+        key.removeprefix("speaker_encoder."): value
+        for key, value in state_dict.items()
+        if key.startswith("speaker_encoder.")
+    }
+    if not speaker_state:
+        raise ValueError(f"No speaker_encoder weights were found in {model_path}")
+    speaker_encoder.load_state_dict(speaker_state)
+    speaker_encoder = speaker_encoder.to(device="cuda:0" if torch.cuda.is_available() else "cpu", dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32)
+    speaker_encoder.eval()
     return speaker_encoder
 
 
@@ -141,6 +204,9 @@ def train() -> None:
 
     args = parse_args()
     accelerator = Accelerator(gradient_accumulation_steps=4, mixed_precision="bf16", log_with="tensorboard")
+    args.init_model_path = str(Path(args.init_model_path).resolve())
+    if args.speaker_encoder_model_path:
+        args.speaker_encoder_model_path = str(Path(args.speaker_encoder_model_path).resolve())
 
     model_path = args.init_model_path
     qwen3tts = Qwen3TTSModel.from_pretrained(
@@ -272,12 +338,6 @@ def export_checkpoint(
 
     with (output_dir / "config.json").open("w", encoding="utf-8") as handle:
         json.dump(config_dict, handle, indent=2, ensure_ascii=False)
-
-    # The current export stays compatible with stock CustomVoice checkpoints.
-    # We keep the new speaker embedding but do not yet serialize a standalone
-    # speaker encoder into the output model. That larger follow-up is tracked in TODO.md.
-    for key in [item for item in state_dict.keys() if item.startswith("speaker_encoder")]:
-        del state_dict[key]
 
     if target_speaker_embedding is None:
         raise RuntimeError("speaker embedding was never initialized during training")

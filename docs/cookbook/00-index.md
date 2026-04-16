@@ -5,6 +5,12 @@
 기준은 “지금 저장소가 실제로 어떻게 나뉘어 있고, 사용자가 어떤 흐름으로 쓰는가”입니다.
 현재 화면과 워크플로는 거의 완성 단계이므로, 이 허브는 새 기능을 소개하기보다 기존 구조를 정확히 따라가도록 돕는 쪽에 가깝습니다.
 
+현재 실행 기준은 `백엔드 단독 서빙`입니다.
+
+- `app/frontend`는 먼저 `npm run build`
+- `FastAPI`가 `/api/*`와 빌드된 프런트 페이지를 함께 제공
+- `vite dev`는 선택적 개발 모드
+
 ## 추천 읽기 순서
 
 1. [설치 및 실행](./01-install-and-run.md)
@@ -15,6 +21,11 @@
 6. [Preset + Instruct 원리](./12-preset-plus-instruct.md)
 7. [CustomVoice 파인튜닝](./13-customvoice-finetuning.md)
 8. [FlashAttention 2 설치](./08-flash-attn-install.md)
+9. [VoiceBox 문서 허브](../voicebox/README.md)
+10. [VoiceBox 체크포인트 변환](../voicebox/01-checkpoint-conversion.md)
+11. [VoiceBox 파인튜닝](../voicebox/02-finetuning.md)
+12. [VoiceBox clone 실험](../voicebox/03-clone-experiment.md)
+13. [VoiceBox clone + instruct 실험](../voicebox/04-clone-plus-instruct.md)
 
 ## 현재 문서 맵
 
@@ -58,6 +69,16 @@
   왜 `프리셋 기반 생성`에 `Base`와 `CustomVoice`가 모두 필요한지
 - [13-customvoice-finetuning.md](./13-customvoice-finetuning.md)
   `CustomVoice` 파인튜닝의 목적, 데이터셋, 검수 포인트
+- [../voicebox/README.md](../voicebox/README.md)
+  `VoiceBox` 전용 문서 모음 허브
+- [../voicebox/01-checkpoint-conversion.md](../voicebox/01-checkpoint-conversion.md)
+  plain `CustomVoice`를 self-contained `VoiceBox`로 바꾸는 단계
+- [../voicebox/02-finetuning.md](../voicebox/02-finetuning.md)
+  `CustomVoice + Base -> VoiceBox` 생성과 `VoiceBox -> VoiceBox` 재학습 경로
+- [../voicebox/03-clone-experiment.md](../voicebox/03-clone-experiment.md)
+  `VoiceBox`/`CustomVoice` clone 가능성 실험
+- [../voicebox/04-clone-plus-instruct.md](../voicebox/04-clone-plus-instruct.md)
+  `VoiceBox` clone-like conditioning과 instruct 결합 실험
 
 ## 현재 앱 정보 구조
 

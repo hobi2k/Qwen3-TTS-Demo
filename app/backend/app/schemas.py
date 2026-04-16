@@ -32,6 +32,8 @@ class ModelInfo(BaseModel):
     source: str = "stock"
     available_speakers: List[str] = Field(default_factory=list)
     default_speaker: Optional[str] = None
+    model_family: Optional[str] = None
+    speaker_encoder_included: bool = False
 
 
 class AudioAsset(BaseModel):
@@ -483,3 +485,5 @@ class FineTuneRun(BaseModel):
     is_selectable: bool = False
     stage_label: str = ""
     summary_label: str = ""
+    model_family: Optional[str] = None
+    speaker_encoder_included: bool = False

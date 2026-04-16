@@ -4,6 +4,9 @@
 
 기준은 “내부 구현이 아니라 사용자가 어떤 작업을 어떤 화면에서 처리하는가”입니다.
 
+현재 기본 운영은 `vite dev`가 아니라, 백엔드가 빌드된 프런트까지 함께 서빙하는 구조입니다.
+즉 프런트 구조 설명은 유지하되, 실행 방식은 `build -> backend serve` 기준으로 이해하면 됩니다.
+
 ## 핵심 원칙
 
 - 기능 이름과 실제 역할이 일치해야 합니다.
@@ -19,6 +22,15 @@
 - [api.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts)
 - [types.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/types.ts)
 - [styles.css](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/styles.css)
+
+## 실행 기준
+
+- 기본:
+  `npm run build` 후 FastAPI가 정적 프런트까지 함께 제공
+- 선택:
+  `VITE_API_TARGET=http://127.0.0.1:8190 npm run dev`
+
+즉 `vite dev`는 개발 편의용이고, 제품형 실행 흐름의 기준은 아닙니다.
 
 ## 현재 페이지 구조
 

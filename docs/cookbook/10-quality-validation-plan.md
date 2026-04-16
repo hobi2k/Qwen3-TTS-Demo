@@ -33,7 +33,7 @@
 
 ```bash
 python scripts/validate_speech_quality.py \
-  --api-base http://127.0.0.1:8000 \
+  --api-base http://127.0.0.1:8190 \
   --suite base \
   --reference-audio data/datasets/mai_ko_full/audio/00000.wav
 ```
@@ -49,7 +49,7 @@ python scripts/validate_speech_quality.py \
 
 ```bash
 python scripts/validate_speech_quality.py \
-  --api-base http://127.0.0.1:8000 \
+  --api-base http://127.0.0.1:8190 \
   --suite customvoice
 ```
 

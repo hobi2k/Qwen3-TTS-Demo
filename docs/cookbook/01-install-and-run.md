@@ -4,7 +4,7 @@
 
 기준 흐름:
 
-`setup -> download -> env 확인 -> backend -> frontend`
+`setup -> download -> env 확인 -> frontend build -> backend 단독 서빙`
 
 ## 요구 사항
 
@@ -104,14 +104,30 @@ Windows PowerShell:
 - `MMAUDIO_MODEL_URL`
 - `MMAUDIO_CONFIG_URL`
 
-## 5. 백엔드 실행
+현재 기준 원칙:
+
+- 절대경로를 기본값으로 쓰지 않습니다.
+- `QWEN_DEMO_CUSTOM_MODEL`, `QWEN_DEMO_BASE_MODEL` 등을 비워 두면 `data/models/*`를 자동으로 찾습니다.
+- 개발 머신마다 다른 경로를 `.env`에 박아두지 않는 쪽이 맞습니다.
+
+## 5. 프런트 빌드
+
+기본 운영은 백엔드가 빌드된 프런트까지 함께 서빙하는 구조입니다.
+
+```bash
+cd app/frontend
+npm install
+npm run build
+```
+
+## 6. 백엔드 실행
 
 macOS / Linux:
 
 ```bash
 cd app/backend
 source ../../.venv/bin/activate
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8190
 ```
 
 Windows PowerShell:
@@ -119,25 +135,32 @@ Windows PowerShell:
 ```powershell
 cd app\backend
 ..\..\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8190
 ```
 
-## 6. 프런트엔드 실행
+접속 주소:
 
-다른 터미널에서:
+```text
+http://127.0.0.1:8190/
+```
+
+## 7. 선택 사항: `vite dev`
+
+프런트 HMR이 필요할 때만 별도 개발 서버를 씁니다.
 
 ```bash
 cd app/frontend
-npm install
-npm run dev
+VITE_API_TARGET=http://127.0.0.1:8190 npm run dev
 ```
 
-## 7. 기본 확인
+이 경우 브라우저는 보통 `http://127.0.0.1:5173/`를 열고, API는 `8190`으로 프록시합니다.
+
+## 8. 기본 확인
 
 백엔드 상태:
 
 ```bash
-curl http://127.0.0.1:8000/api/health
+curl http://127.0.0.1:8190/api/health
 ```
 
 특히 볼 값:
@@ -146,7 +169,13 @@ curl http://127.0.0.1:8000/api/health
 - `device`
 - `attention_implementation`
 
-## 8. UI 기준 확인 포인트
+프런트 엔트리 확인:
+
+```bash
+curl http://127.0.0.1:8190/
+```
+
+## 9. UI 기준 확인 포인트
 
 - `텍스트 음성 변환`
   메인 TTS 화면으로 열리는지
@@ -159,7 +188,7 @@ curl http://127.0.0.1:8000/api/health
 - `스토리 스튜디오`
   긴 대본 생성 흐름인지
 - `생성 갤러리`
-  생성 결과가 이 탭에만 모이는지
+  생성 결과가 이 탭에만 모이고, 삭제 후 즉시 목록에서 사라지는지
 - `데이터셋 만들기`
   dataset folder가 canonical 구조로 만들어지는지
 - `학습 실행`
@@ -171,7 +200,7 @@ curl http://127.0.0.1:8000/api/health
 - `오디오 분리`
   독립 기능으로 동작하는지
 
-## 9. 현재 운영 기준
+## 10. 현재 운영 기준
 
 - 메인 TTS는 `텍스트 음성 변환`입니다.
 - 최근 생성 이력은 `생성 갤러리`에서만 관리합니다.
@@ -181,7 +210,7 @@ curl http://127.0.0.1:8000/api/health
 - `스토리 스튜디오`는 장문 전용 작업실입니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 
-## 10. Base와 CustomVoice 이해하기
+## 11. Base와 CustomVoice 이해하기
 
 - `CustomVoice`
   바로 말하게 만들기 쉬운 모델
@@ -190,7 +219,7 @@ curl http://127.0.0.1:8000/api/health
 
 즉 `Base`가 참조 음성을 요구하는 이유는 UI 예외가 아니라 모델 역할 차이 때문입니다.
 
-## 11. 샘플 수와 기대치
+## 12. 샘플 수와 기대치
 
 - `1~5개`
   파이프라인 점검용
@@ -200,6 +229,8 @@ curl http://127.0.0.1:8000/api/health
   최소한의 화자 적응 기대 구간
 - `50개 이상`
   음색 반영 안정성 개선 기대 구간
+
+최근 기준으로는, 목소리 파인튜닝 권장 분량은 `10~30분`, 최소 실용선은 `5분 이상`으로 보는 것이 맞습니다.
 
 기대치:
 

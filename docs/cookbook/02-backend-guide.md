@@ -12,6 +12,7 @@
 - `MMAudio` sound effects 호출
 - 생성 결과와 메타데이터 저장
 - `/files` 정적 제공
+- 빌드된 프런트 정적 파일 서빙
 
 ## 핵심 파일
 
@@ -35,6 +36,7 @@
 - `ApplioVoiceChanger(REPO_ROOT)` 생성
 - `MMAudioSoundEffectEngine(REPO_ROOT)` 생성
 - `/files` 정적 마운트
+- `app/frontend/dist`가 있으면 프런트 SPA도 함께 서빙
 
 ## 저장 구조
 
@@ -58,6 +60,21 @@
   canonical dataset 폴더
 - `data/finetune-runs`
   학습 run과 결과 모델
+
+## 프런트 동시 서빙
+
+현재 기준 기본 운영은 `FastAPI` 단독 서빙입니다.
+
+- `/api/*`
+  백엔드 API
+- `/files/*`
+  사용자 데이터 정적 파일
+- `/assets/*`
+  프런트 빌드 산출물
+- `/`
+  빌드된 `index.html`
+
+즉 배포나 로컬 실사용에서는 `vite dev`가 필수가 아닙니다.
 
 ## 모델 엔진
 
@@ -137,6 +154,11 @@
 - `GET /api/models`
 
 `bootstrap`은 프런트 첫 진입에 필요한 상태를 한 번에 내려줍니다.
+
+실제 기본 접속은 보통:
+
+- `http://127.0.0.1:8190/`
+- `http://127.0.0.1:8190/api/health`
 
 ### 생성
 
