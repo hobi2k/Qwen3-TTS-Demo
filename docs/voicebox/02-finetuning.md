@@ -1,6 +1,6 @@
 # VoiceBox 파인튜닝
 
-이 문서는 `VoiceBox` 전용 학습 경로를 설명합니다.
+이 문서는 `VoiceBox` 관련 학습 경로를 **세 단계**로 구분해 설명합니다.
 
 ## VoiceBox와 일반 CustomVoice의 차이
 
@@ -17,43 +17,80 @@
 
 ## 사용 스크립트
 
-- 기존 plain CustomVoice:
-  - [qwen3_tts_customvoice_train.py](../../scripts/qwen3_tts_customvoice_train.py)
-- VoiceBox 생성:
-  - [qwen3_tts_voicebox_bootstrap.py](../../scripts/qwen3_tts_voicebox_bootstrap.py)
-- VoiceBox 재학습:
-  - [qwen3_tts_voicebox_retrain.py](../../scripts/qwen3_tts_voicebox_retrain.py)
+- 1단계 plain `CustomVoice` 학습:
+  - [sft_plain_custom_voice_12hz.py](../../voicebox/sft_plain_custom_voice_12hz.py)
+  - [train_customvoice.py](../../voicebox/train_customvoice.py) 호환 래퍼
+- 2단계 `CustomVoice -> VoiceBox` 변환:
+  - [make_checkpoint.py](../../voicebox/make_checkpoint.py)
+- 3단계 `VoiceBox -> VoiceBox` 재학습:
+  - [sft_voicebox_12hz.py](../../voicebox/sft_voicebox_12hz.py)
+  - [retrain.py](../../voicebox/retrain.py) 호환 래퍼
+- 보조 경로:
+  - [sft_voicebox_bootstrap_12hz.py](../../voicebox/sft_voicebox_bootstrap_12hz.py)
+  - [bootstrap.py](../../voicebox/bootstrap.py) 호환 래퍼
 
-## 1. VoiceBox 생성
+## 1. plain `CustomVoice`에 새 화자 추가 학습
 
-처음 `VoiceBox`를 만들 때는 plain `CustomVoice`와 `Base 1.7B`를 같이 씁니다.
-
-```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
-QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python scripts/qwen3_tts_voicebox_bootstrap.py \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
-  --init-customvoice-model-path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
-  --base-speaker-encoder-model-path data/models/Qwen3-TTS-12Hz-1.7B-Base \
-  --output-model-path data/finetune-runs/mai_ko_voicebox17b_full \
-  --batch-size 1 \
-  --lr 2e-6 \
-  --num-epochs 1 \
-  --speaker-name mai
-```
-
-## 2. VoiceBox 재학습
+처음에는 plain `CustomVoice`에 `mai`를 추가합니다. 이 단계는 아직 `VoiceBox`가 아닙니다.
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python scripts/qwen3_tts_voicebox_retrain.py \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
-  --init-voicebox-model-path data/finetune-runs/mai_ko_voicebox17b_full/final \
-  --output-model-path data/finetune-runs/mai_ko_voicebox17b_retrain \
-  --batch-size 1 \
-  --lr 2e-6 \
-  --num-epochs 1 \
-  --speaker-name mai
+QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python voicebox/sft_plain_custom_voice_12hz.py \
+  --train_jsonl data/datasets/mai_ko_full/prepared.jsonl \
+  --init_model_path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+  --speaker_encoder_model_path data/models/Qwen3-TTS-12Hz-1.7B-Base \
+  --output_model_path data/finetune-runs/mai_ko_customvoice17b_full \
+  --batch_size 1 \
+  --lr 2e-5 \
+  --num_epochs 3 \
+  --speaker_name mai
 ```
+
+이 단계 결과:
+
+- `tts_model_type = custom_voice`
+- `speaker_encoder.*`는 checkpoint 안에 없음
+- 외부 `Base 1.7B` encoder에 의존한 학습 결과
+
+## 2. 파인튜닝된 `CustomVoice`를 `VoiceBox`로 변환
+
+이제 1단계 결과에 `Base 1.7B`의 `speaker_encoder`를 포함시켜 self-contained `VoiceBox`를 만듭니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+.venv/bin/python voicebox/make_checkpoint.py \
+  --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
+  --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
+  --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final
+```
+
+이 단계 결과:
+
+- `demo_model_family = "voicebox"`
+- `speaker_encoder_included = true`
+- `speaker_encoder.*`가 checkpoint 안에 포함됨
+
+## 3. `VoiceBox -> VoiceBox` 추가 학습
+
+이제 외부 `Base` 경로 없이 `VoiceBox`만으로 재학습합니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python voicebox/sft_voicebox_12hz.py \
+  --train_jsonl data/datasets/mai_ko_full/prepared.jsonl \
+  --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
+  --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_retrain \
+  --batch_size 1 \
+  --lr 2e-6 \
+  --num_epochs 1 \
+  --speaker_name mai
+```
+
+이 단계 결과:
+
+- `VoiceBox`를 다시 `VoiceBox`로 학습
+- `speaker_encoder.*` 유지
+- 외부 `Base` 경로 없이 추가 학습 가능
 
 ## smoke 검증 결과
 
@@ -69,23 +106,23 @@ QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python scripts/qwen3_tts_voicebox_retrain.py 
 - [mai_ko_voicebox17b_full/final](../../data/finetune-runs/mai_ko_voicebox17b_full/final)
 - [voicebox_smoke_retrain_20260415c/final](../../data/finetune-runs/voicebox_smoke_retrain_20260415c/final)
 
-## 권장 순서
+## 보조 경로: bootstrap
 
-1. plain `CustomVoice`를 먼저 학습
-2. `make_voicebox_checkpoint.py` 또는 `qwen3_tts_voicebox_bootstrap.py`로 첫 `VoiceBox`를 만든다
-3. 이후에는 `qwen3_tts_voicebox_retrain.py`만으로 추가 학습한다
+[sft_voicebox_bootstrap_12hz.py](../../voicebox/sft_voicebox_bootstrap_12hz.py)는 `CustomVoice + Base 1.7B`를 바로 물려 첫 `VoiceBox` 런을 만드는 보조 스크립트입니다.
+
+다만 지금 기준 주 경로는 아닙니다. 디버깅과 재현성을 위해서는 위의 `1 -> 2 -> 3` 단계를 권장합니다.
 
 ## Hub 업로드
 
 업로드 스크립트:
 
-- [upload_voicebox_to_hub.py](../../scripts/upload_voicebox_to_hub.py)
+- [upload_to_hub.py](../../voicebox/upload_to_hub.py)
 
 예시:
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python scripts/upload_voicebox_to_hub.py \
+.venv/bin/python voicebox/upload_to_hub.py \
   --checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final \
   --repo-id <your-hf-id>/mai-ko-voicebox-1.7b
 ```

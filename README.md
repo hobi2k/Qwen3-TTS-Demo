@@ -45,14 +45,19 @@
 - VoiceBox clone 실험: [docs/voicebox/03-clone-experiment.md](docs/voicebox/03-clone-experiment.md)
 - VoiceBox clone + instruct 실험: [docs/voicebox/04-clone-plus-instruct.md](docs/voicebox/04-clone-plus-instruct.md)
 
-VoiceBox 관련 스크립트는 역할을 분리합니다.
+VoiceBox 관련 스크립트는 `voicebox/` 폴더에서 세 단계를 분리합니다.
 
-- plain `CustomVoice` 학습:
-  - [qwen3_tts_customvoice_train.py](scripts/qwen3_tts_customvoice_train.py)
-- `CustomVoice + Base 1.7B -> VoiceBox` 생성:
-  - [qwen3_tts_voicebox_bootstrap.py](scripts/qwen3_tts_voicebox_bootstrap.py)
-- `VoiceBox -> VoiceBox` 재학습:
-  - [qwen3_tts_voicebox_retrain.py](scripts/qwen3_tts_voicebox_retrain.py)
+- 1단계 plain `CustomVoice` 학습:
+  - [train_customvoice.py](voicebox/train_customvoice.py)
+- 2단계 `CustomVoice -> VoiceBox` 변환:
+  - [make_checkpoint.py](voicebox/make_checkpoint.py)
+- 3단계 `VoiceBox -> VoiceBox` 재학습:
+  - [retrain.py](voicebox/retrain.py)
+
+보조 경로:
+
+- [bootstrap.py](voicebox/bootstrap.py)
+  - `CustomVoice + Base 1.7B`를 한 번에 묶는 보조 진입점
 
 ## 현재 프로젝트 구조
 
@@ -127,6 +132,22 @@ data/datasets/mai_ko_full/
 
 - 기본 사용자는 “무엇을 입력하면 어떤 결과가 나오는지”부터 이해해야 합니다.
 - 세부 샘플링 제어는 `고급 제어`에서만 다룹니다.
+
+## VoiceBox 3단계 워크플로
+
+`VoiceBox`는 한 번에 마법처럼 만들어지는 모델이 아니라, 아래 세 단계를 분리해서 보는 것이 가장 정확합니다.
+
+1. plain `CustomVoice`에 새 화자(`mai`) 추가 학습
+2. 그 결과에 `Base 1.7B`의 `speaker_encoder`를 합쳐 self-contained `VoiceBox`로 변환
+3. 변환된 `VoiceBox`만으로 추가 학습
+
+이 구조를 택한 이유:
+
+- 1단계는 plain `CustomVoice` 품질과 직접 비교하기 쉽습니다.
+- 2단계는 “speaker encoder를 포함하는 자립형 모델”로 승격하는 단계입니다.
+- 3단계는 외부 `Base` 의존성 없이 `VoiceBox -> VoiceBox` 경로를 재현하기 위한 단계입니다.
+
+상세 설명은 [docs/voicebox/02-finetuning.md](docs/voicebox/02-finetuning.md)에 있습니다.
 
 ## 모델 역할을 사용자 기준으로 이해하기
 

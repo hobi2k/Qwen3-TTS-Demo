@@ -22,8 +22,8 @@
 7. [CustomVoice 파인튜닝](./13-customvoice-finetuning.md)
 8. [FlashAttention 2 설치](./08-flash-attn-install.md)
 9. [VoiceBox 문서 허브](../voicebox/README.md)
-10. [VoiceBox 체크포인트 변환](../voicebox/01-checkpoint-conversion.md)
-11. [VoiceBox 파인튜닝](../voicebox/02-finetuning.md)
+10. [VoiceBox 파인튜닝 3단계](../voicebox/02-finetuning.md)
+11. [VoiceBox 체크포인트 변환](../voicebox/01-checkpoint-conversion.md)
 12. [VoiceBox clone 실험](../voicebox/03-clone-experiment.md)
 13. [VoiceBox clone + instruct 실험](../voicebox/04-clone-plus-instruct.md)
 
@@ -71,10 +71,10 @@
   `CustomVoice` 파인튜닝의 목적, 데이터셋, 검수 포인트
 - [../voicebox/README.md](../voicebox/README.md)
   `VoiceBox` 전용 문서 모음 허브
+- [../voicebox/02-finetuning.md](../voicebox/02-finetuning.md)
+  `1. plain CustomVoice 학습 -> 2. VoiceBox 변환 -> 3. VoiceBox 재학습`의 기준 문서
 - [../voicebox/01-checkpoint-conversion.md](../voicebox/01-checkpoint-conversion.md)
   plain `CustomVoice`를 self-contained `VoiceBox`로 바꾸는 단계
-- [../voicebox/02-finetuning.md](../voicebox/02-finetuning.md)
-  `CustomVoice + Base -> VoiceBox` 생성과 `VoiceBox -> VoiceBox` 재학습 경로
 - [../voicebox/03-clone-experiment.md](../voicebox/03-clone-experiment.md)
   `VoiceBox`/`CustomVoice` clone 가능성 실험
 - [../voicebox/04-clone-plus-instruct.md](../voicebox/04-clone-plus-instruct.md)
