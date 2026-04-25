@@ -2,7 +2,7 @@
 """Compatibility wrapper for the canonical VoiceBox training scripts.
 
 This entry point used to cover both bootstrap and retraining cases. It now
-dispatches to the maintained ``voicebox/`` scripts:
+dispatches to the maintained ``Qwen3-TTS/finetuning`` scripts:
 
 * with ``--speaker-encoder-model-path``: ``sft_voicebox_bootstrap_12hz.py``
 * without it: ``sft_voicebox_12hz.py``
@@ -16,8 +16,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RETRAIN_SCRIPT = REPO_ROOT / "voicebox" / "sft_voicebox_12hz.py"
-BOOTSTRAP_SCRIPT = REPO_ROOT / "voicebox" / "sft_voicebox_bootstrap_12hz.py"
+RETRAIN_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "finetuning" / "sft_voicebox_12hz.py"
+BOOTSTRAP_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "finetuning" / "sft_voicebox_bootstrap_12hz.py"
 RETRAIN_ALIASES = {
     "--train-jsonl": "--train_jsonl",
     "--init-model-path": "--init_model_path",

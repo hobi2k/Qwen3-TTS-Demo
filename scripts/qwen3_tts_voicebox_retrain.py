@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for ``voicebox/retrain.py``.
+"""Compatibility wrapper for VoiceBox -> VoiceBox retraining.
 
-The canonical VoiceBox -> VoiceBox retraining path is now under ``voicebox/``.
+The canonical VoiceBox -> VoiceBox retraining path is under ``Qwen3-TTS/finetuning``.
 This legacy entry point only translates old flag names and forwards execution.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "retrain.py"
+CANONICAL_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "finetuning" / "sft_voicebox_12hz.py"
 ARG_ALIASES = {
     "--train-jsonl": "--train_jsonl",
     "--init-voicebox-model-path": "--init_model_path",
@@ -32,7 +32,7 @@ def normalize_args(argv: list[str]) -> list[str]:
 
 
 def main() -> None:
-    """Forward execution into ``voicebox/retrain.py``."""
+    """Forward execution into the canonical VoiceBox retraining script."""
 
     subprocess.run([sys.executable, str(CANONICAL_SCRIPT), *normalize_args(sys.argv[1:])], check=True, cwd=REPO_ROOT)
 

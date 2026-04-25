@@ -59,7 +59,7 @@ data/finetune-runs/mai_ko_customvoice17b_full/final
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python voicebox/make_checkpoint.py \
+.venv/bin/python Qwen3-TTS/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final
@@ -97,7 +97,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
 QWEN_DEMO_GRAD_ACCUM_STEPS=1 \
-.venv/bin/python -u voicebox/retrain.py \
+.venv/bin/python -u Qwen3-TTS/finetuning/sft_voicebox_12hz.py \
   --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
   --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \
@@ -268,13 +268,13 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 ## 9. 관련 스크립트 정리
 
-현재 실험에서 기준으로 삼는 구현은 `voicebox/` 아래 canonical script입니다.
+현재 실험에서 기준으로 삼는 구현은 `Qwen3-TTS` 안의 역할별 canonical script입니다.
 
-- `voicebox/sft_plain_custom_voice_12hz.py`
-- `voicebox/make_checkpoint.py`
-- `voicebox/sft_voicebox_12hz.py`
-- `voicebox/clone.py`
-- `voicebox/clone_instruct.py`
+- `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py`
+- `Qwen3-TTS/fusion/make_voicebox_checkpoint.py`
+- `Qwen3-TTS/finetuning/sft_voicebox_12hz.py`
+- `Qwen3-TTS/inference/voicebox/clone.py`
+- `Qwen3-TTS/inference/voicebox/clone_instruct.py`
 
 `scripts/qwen3_tts_voicebox_*.py`와 `scripts/make_voicebox_checkpoint.py` 등은
 오래된 명령을 유지하기 위한 호환 래퍼입니다.

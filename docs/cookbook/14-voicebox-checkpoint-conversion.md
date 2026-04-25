@@ -15,7 +15,7 @@ VoiceBox 변환은 plain `CustomVoice` fine-tuned checkpoint에 `Base 1.7B`의
 사용 스크립트:
 
 ```text
-voicebox/make_checkpoint.py
+Qwen3-TTS/fusion/make_voicebox_checkpoint.py
 ```
 
 현재 검증된 변환 결과:
@@ -36,7 +36,7 @@ data/finetune-runs/mai_ko_voicebox17b_full/final
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python voicebox/make_checkpoint.py \
+.venv/bin/python Qwen3-TTS/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final

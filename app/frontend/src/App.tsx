@@ -1119,6 +1119,9 @@ export default function App() {
             <button className={activeTab === "training" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("training")} type="button">
               <span>학습 실행</span>
             </button>
+            <button className={activeTab === "voicebox" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("voicebox")} type="button">
+              <span>VoiceBox Lab</span>
+            </button>
           </div>
         </aside>
 
@@ -2191,6 +2194,71 @@ export default function App() {
                   <span>{formatDate(run.created_at)}</span>
                 </article>
               ))}
+            </div>
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === "voicebox" ? (
+        <section className="workspace workspace--stacked">
+          <section className="panel">
+            <h2>VoiceBox 작업 흐름</h2>
+            <p className="field-hint">
+              VoiceBox는 CustomVoice에 Base 1.7B의 speaker encoder를 포함시킨 self-contained 체크포인트입니다. 훈련, 변환, 재훈련, clone, clone+instruct 스크립트는 Qwen3-TTS 내부 역할별 폴더에 분리되어 있습니다.
+            </p>
+            <div className="panel-grid">
+              <article className="status-card">
+                <strong>1. CustomVoice 화자 추가</strong>
+                <p>Qwen3-TTS/finetuning/sft_custom_voice_12hz.py</p>
+              </article>
+              <article className="status-card">
+                <strong>2. Encoder fusion</strong>
+                <p>Qwen3-TTS/fusion/make_voicebox_checkpoint.py</p>
+              </article>
+              <article className="status-card">
+                <strong>3. VoiceBox 재훈련</strong>
+                <p>Qwen3-TTS/finetuning/sft_voicebox_12hz.py</p>
+              </article>
+              <article className="status-card">
+                <strong>4. VoiceBox 추론</strong>
+                <p>Qwen3-TTS/inference/voicebox/clone_instruct.py</p>
+              </article>
+            </div>
+            <div className="button-row">
+              <button className="secondary-button" onClick={() => setActiveTab("dataset")} type="button">
+                데이터셋 만들기
+              </button>
+              <button className="secondary-button" onClick={() => setActiveTab("training")} type="button">
+                일반 학습 실행
+              </button>
+              <button className="secondary-button" onClick={() => setActiveTab("clone")} type="button">
+                Voice clone 확인
+              </button>
+              <button className="secondary-button" onClick={() => setActiveTab("projects")} type="button">
+                clone prompt + instruct 확인
+              </button>
+            </div>
+          </section>
+
+          <section className="panel">
+            <h3>현재 감지된 VoiceBox 후보</h3>
+            <div className="preset-list">
+              {models.filter((model) => model.category.includes("voicebox") || model.label.toLowerCase().includes("voicebox")).length ? (
+                models
+                  .filter((model) => model.category.includes("voicebox") || model.label.toLowerCase().includes("voicebox"))
+                  .map((model) => (
+                    <article className="preset-card" key={model.key}>
+                      <strong>{model.label}</strong>
+                      <span>{model.model_id}</span>
+                      <p>{model.notes || "VoiceBox 체크포인트"}</p>
+                      <button className="secondary-button" onClick={() => { setInferenceForm((prev) => ({ ...prev, model_id: model.model_id })); setActiveTab("tts"); }} type="button">
+                        추론에서 사용
+                      </button>
+                    </article>
+                  ))
+              ) : (
+                <p className="field-hint">아직 등록된 VoiceBox 체크포인트가 없습니다. 변환 후 bootstrap을 새로고침하면 이 영역에 나타납니다.</p>
+              )}
             </div>
           </section>
         </section>

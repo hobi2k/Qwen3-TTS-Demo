@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for ``voicebox/make_checkpoint.py``."""
+"""Compatibility wrapper for VoiceBox checkpoint fusion."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "make_checkpoint.py"
+CANONICAL_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "fusion" / "make_voicebox_checkpoint.py"
 
 
 def main() -> None:

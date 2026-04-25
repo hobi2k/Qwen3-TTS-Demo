@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VoiceBox clone experiment entry point."""
+"""Compatibility wrapper for VoiceBox clone inference."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ import sys
 from pathlib import Path
 
 
-VOICEBOX_DIR = Path(__file__).resolve().parent
-EXPERIMENT = VOICEBOX_DIR / "clone_low_level.py"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CANONICAL_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "inference" / "voicebox" / "clone.py"
 
 
 def main() -> None:
-    """Forward all CLI args into the low-level VoiceBox clone experiment."""
+    """Forward execution to the canonical VoiceBox clone script."""
 
-    subprocess.run([sys.executable, str(EXPERIMENT), *sys.argv[1:]], check=True, cwd=VOICEBOX_DIR.parent)
+    subprocess.run([sys.executable, str(CANONICAL_SCRIPT), *sys.argv[1:]], check=True, cwd=REPO_ROOT)
 
 
 if __name__ == "__main__":

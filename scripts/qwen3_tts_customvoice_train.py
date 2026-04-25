@@ -2,7 +2,7 @@
 """Compatibility wrapper for plain CustomVoice fine-tuning.
 
 The maintained stage-1 implementation lives in
-``voicebox/sft_plain_custom_voice_12hz.py``. It preserves the plain
+``Qwen3-TTS/finetuning/sft_custom_voice_12hz.py``. It preserves the plain
 CustomVoice behavior: borrow an external Base speaker encoder during training,
 but do not embed ``speaker_encoder.*`` into the exported checkpoint.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "sft_plain_custom_voice_12hz.py"
+CANONICAL_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "finetuning" / "sft_custom_voice_12hz.py"
 ARG_ALIASES = {
     "--train-jsonl": "--train_jsonl",
     "--init-model-path": "--init_model_path",
@@ -34,7 +34,7 @@ def normalize_args(argv: list[str]) -> list[str]:
 
 
 def main() -> None:
-    """Forward execution into ``voicebox/sft_plain_custom_voice_12hz.py``."""
+    """Forward execution into the canonical Qwen3-TTS CustomVoice trainer."""
 
     subprocess.run([sys.executable, str(CANONICAL_SCRIPT), *normalize_args(sys.argv[1:])], check=True, cwd=REPO_ROOT)
 

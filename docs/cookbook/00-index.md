@@ -67,7 +67,7 @@
 - [18-current-experiment-results.md](./18-current-experiment-results.md)
   현재 MAI / CustomVoice / VoiceBox 실험 결과와 재현 명령
 - [19-script-entrypoints.md](./19-script-entrypoints.md)
-  canonical `voicebox/` 스크립트와 `scripts/` 호환 래퍼 구분
+  `Qwen3-TTS` 역할별 canonical 스크립트와 `scripts/`, `voicebox/` 호환 래퍼 구분
 
 ### 현재 기능에서 중요한 두 문서
 

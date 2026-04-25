@@ -15,9 +15,9 @@
 ## 사용 스크립트
 
 - 래퍼:
-  - [clone.py](../../voicebox/clone.py)
+  - [clone.py](../../Qwen3-TTS/inference/voicebox/clone.py)
 - 실제 실험:
-  - [clone_low_level.py](../../voicebox/clone_low_level.py)
+  - [clone_low_level.py](../../Qwen3-TTS/inference/voicebox/clone_low_level.py)
 
 ## 확인하는 질문
 

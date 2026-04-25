@@ -18,15 +18,16 @@
 ## 사용 스크립트
 
 - 1단계 plain `CustomVoice` 학습:
-  - [sft_plain_custom_voice_12hz.py](../../voicebox/sft_plain_custom_voice_12hz.py)
+  - [sft_custom_voice_12hz.py](../../Qwen3-TTS/finetuning/sft_custom_voice_12hz.py)
+  - [sft_custom_voice_12hz_legacy.py](../../Qwen3-TTS/finetuning/sft_custom_voice_12hz_legacy.py) 이전 구현 보존본
   - [train_customvoice.py](../../voicebox/train_customvoice.py) 호환 래퍼
 - 2단계 `CustomVoice -> VoiceBox` 변환:
-  - [make_checkpoint.py](../../voicebox/make_checkpoint.py)
+  - [make_voicebox_checkpoint.py](../../Qwen3-TTS/fusion/make_voicebox_checkpoint.py)
 - 3단계 `VoiceBox -> VoiceBox` 재학습:
-  - [sft_voicebox_12hz.py](../../voicebox/sft_voicebox_12hz.py)
+  - [sft_voicebox_12hz.py](../../Qwen3-TTS/finetuning/sft_voicebox_12hz.py)
   - [retrain.py](../../voicebox/retrain.py) 호환 래퍼
 - 보조 경로:
-  - [sft_voicebox_bootstrap_12hz.py](../../voicebox/sft_voicebox_bootstrap_12hz.py)
+  - [sft_voicebox_bootstrap_12hz.py](../../Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py)
   - [bootstrap.py](../../voicebox/bootstrap.py) 호환 래퍼
 
 ## 1. plain `CustomVoice`에 새 화자 추가 학습
@@ -38,7 +39,7 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
-.venv/bin/python voicebox/sft_plain_custom_voice_12hz.py \
+.venv/bin/python Qwen3-TTS/finetuning/sft_custom_voice_12hz.py \
   --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
   --speaker_encoder_model_path data/models/Qwen3-TTS-12Hz-1.7B-Base \
@@ -61,7 +62,7 @@ QWEN_DEMO_LOG_EVERY=25 \
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python voicebox/make_checkpoint.py \
+.venv/bin/python Qwen3-TTS/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final
@@ -82,7 +83,7 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
-.venv/bin/python voicebox/sft_voicebox_12hz.py \
+.venv/bin/python Qwen3-TTS/finetuning/sft_voicebox_12hz.py \
   --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
   --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \
@@ -132,7 +133,7 @@ QWEN_DEMO_GRAD_ACCUM_STEPS=1
 
 ## 보조 경로: bootstrap
 
-[sft_voicebox_bootstrap_12hz.py](../../voicebox/sft_voicebox_bootstrap_12hz.py)는 `CustomVoice + Base 1.7B`를 바로 물려 첫 `VoiceBox` 런을 만드는 보조 스크립트입니다.
+[sft_voicebox_bootstrap_12hz.py](../../Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py)는 `CustomVoice + Base 1.7B`를 바로 물려 첫 `VoiceBox` 런을 만드는 보조 스크립트입니다.
 
 다만 지금 기준 주 경로는 아닙니다. 디버깅과 재현성을 위해서는 위의 `1 -> 2 -> 3` 단계를 권장합니다.
 
@@ -140,13 +141,13 @@ QWEN_DEMO_GRAD_ACCUM_STEPS=1
 
 업로드 스크립트:
 
-- [upload_to_hub.py](../../voicebox/upload_to_hub.py)
+- [upload_voicebox_to_hub.py](../../Qwen3-TTS/fusion/upload_voicebox_to_hub.py)
 
 예시:
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python voicebox/upload_to_hub.py \
+.venv/bin/python Qwen3-TTS/fusion/upload_voicebox_to_hub.py \
   --checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final \
   --repo-id <your-hf-id>/mai-ko-voicebox-1.7b
 ```

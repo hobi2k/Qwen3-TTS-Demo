@@ -271,8 +271,8 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 현재 추가된 검수 스크립트:
 
 - `scripts/evaluate_customvoice_voicebox_quality.py`
-- `voicebox/clone.py`
-- `voicebox/clone_instruct.py`
+- `Qwen3-TTS/inference/voicebox/clone.py`
+- `Qwen3-TTS/inference/voicebox/clone_instruct.py`
 
 현재 기준 대표 결과:
 

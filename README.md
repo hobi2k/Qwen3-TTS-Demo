@@ -47,22 +47,24 @@
 - 현재 실험 결과: [docs/cookbook/18-current-experiment-results.md](docs/cookbook/18-current-experiment-results.md)
 - 스크립트 진입점 정리: [docs/cookbook/19-script-entrypoints.md](docs/cookbook/19-script-entrypoints.md)
 
-VoiceBox 관련 스크립트는 `voicebox/` 폴더에서 세 단계를 분리합니다.
+VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리합니다.
 
 - 1단계 plain `CustomVoice` 학습:
-  - [train_customvoice.py](voicebox/train_customvoice.py)
+  - [sft_custom_voice_12hz.py](Qwen3-TTS/finetuning/sft_custom_voice_12hz.py)
 - 2단계 `CustomVoice -> VoiceBox` 변환:
-  - [make_checkpoint.py](voicebox/make_checkpoint.py)
+  - [make_voicebox_checkpoint.py](Qwen3-TTS/fusion/make_voicebox_checkpoint.py)
 - 3단계 `VoiceBox -> VoiceBox` 재학습:
-  - [retrain.py](voicebox/retrain.py)
+  - [sft_voicebox_12hz.py](Qwen3-TTS/finetuning/sft_voicebox_12hz.py)
+- VoiceBox 추론:
+  - [clone_instruct.py](Qwen3-TTS/inference/voicebox/clone_instruct.py)
 
 보조 경로:
 
-- [bootstrap.py](voicebox/bootstrap.py)
+- [sft_voicebox_bootstrap_12hz.py](Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py)
   - `CustomVoice + Base 1.7B`를 한 번에 묶는 보조 진입점
 
-중복되어 보이는 `scripts/qwen3_tts_voicebox_*.py` 파일들은 현재 `voicebox/` 구현을 호출하는 호환 래퍼입니다.
-새 훈련 로직은 `voicebox/` 쪽 canonical script에 먼저 반영합니다.
+`voicebox/`와 `scripts/qwen3_tts_voicebox_*.py` 파일들은 예전 명령어를 깨지 않기 위한 호환 래퍼입니다.
+새 훈련 로직은 `Qwen3-TTS/finetuning`, 변환 로직은 `Qwen3-TTS/fusion`, 추론 로직은 `Qwen3-TTS/inference` 쪽 canonical script에 먼저 반영합니다.
 
 ## 현재 프로젝트 구조
 
@@ -294,7 +296,7 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 
 ## 남은 핵심 과제
 
-- `VoiceBox` 경로를 WEB UI의 모델 설명과 선택 UX에 더 명확히 연결하는 작업
+- `VoiceBox Lab` 화면에서 실제 실행 버튼과 진행 상태를 더 촘촘히 연결하는 작업
 - `MMAudio`와 `Applio/RVC` 운영 가이드를 더 다듬는 작업
 - 프런트 시각 언어를 더 제품 수준으로 밀어 올리는 작업
 

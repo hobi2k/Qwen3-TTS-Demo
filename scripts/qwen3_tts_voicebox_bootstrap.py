@@ -2,7 +2,7 @@
 """Compatibility wrapper for the VoiceBox bootstrap script.
 
 The maintained bootstrap implementation lives in
-``voicebox/sft_voicebox_bootstrap_12hz.py``. This wrapper keeps older commands
+``Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py``. This wrapper keeps older commands
 working while routing all behavior through the current VoiceBox code path.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "sft_voicebox_bootstrap_12hz.py"
+CANONICAL_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "finetuning" / "sft_voicebox_bootstrap_12hz.py"
 ARG_ALIASES = {
     "--train-jsonl": "--train_jsonl",
     "--init-customvoice-model-path": "--init_model_path",
@@ -35,7 +35,7 @@ def normalize_args(argv: list[str]) -> list[str]:
 
 
 def main() -> None:
-    """Forward execution into ``voicebox/sft_voicebox_bootstrap_12hz.py``."""
+    """Forward execution into the canonical VoiceBox bootstrap script."""
 
     subprocess.run([sys.executable, str(CANONICAL_SCRIPT), *normalize_args(sys.argv[1:])], check=True, cwd=REPO_ROOT)
 

@@ -13,7 +13,8 @@ export type TabKey =
   | "changer"
   | "separation"
   | "dataset"
-  | "training";
+  | "training"
+  | "voicebox";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
 export type CharacterBuilderSource = "design" | "upload";
@@ -100,6 +101,11 @@ export const PRODUCT_PAGES = {
     label: "학습 실행",
     title: "학습 실행",
     description: "준비된 데이터셋으로 실제 학습을 실행합니다.",
+  },
+  voicebox: {
+    label: "VoiceBox Lab",
+    title: "VoiceBox Lab",
+    description: "CustomVoice와 Base speaker encoder를 결합한 self-contained 모델 흐름을 관리합니다.",
   },
 } as const;
 

@@ -31,7 +31,7 @@ from transformers import AutoConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "Qwen3-TTS"))
-sys.path.insert(0, str(REPO_ROOT / "voicebox"))
+sys.path.insert(0, str(REPO_ROOT / "Qwen3-TTS" / "inference" / "voicebox"))
 
 from qwen_tts.core.models.configuration_qwen3_tts import Qwen3TTSConfig  # noqa: E402
 from qwen_tts.core.models.modeling_qwen3_tts import Qwen3TTSSpeakerEncoder, mel_spectrogram  # noqa: E402

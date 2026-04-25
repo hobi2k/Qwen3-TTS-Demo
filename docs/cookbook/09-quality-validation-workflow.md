@@ -134,7 +134,7 @@ python scripts/evaluate_customvoice_voicebox_quality.py \
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
 source .venv/bin/activate
-python voicebox/clone.py \
+python Qwen3-TTS/inference/voicebox/clone.py \
   --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
   --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
   --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \
@@ -146,7 +146,7 @@ python voicebox/clone.py \
 ```
 
 ```bash
-python voicebox/clone_instruct.py \
+python Qwen3-TTS/inference/voicebox/clone_instruct.py \
   --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
   --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
   --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \

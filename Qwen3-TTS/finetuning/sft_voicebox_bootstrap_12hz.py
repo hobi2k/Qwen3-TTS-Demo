@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Stage 1 fine-tuning for plain CustomVoice.
+"""Standalone stage-1 bootstrap training for VoiceBox.
 
-This is the demo-maintained CustomVoice path. It keeps the upstream file name
-because this stage is still CustomVoice fine-tuning, but the implementation
-uses ``voicebox_training_common`` so it matches the verified VoiceBox pipeline.
+This path trains from CustomVoice while exporting self-contained checkpoints
+that already embed the speaker encoder. It is useful for controlled experiments,
+although the recommended reproducible path is still:
+
+1. plain CustomVoice fine-tuning
+2. VoiceBox checkpoint conversion
+3. VoiceBox retraining
 """
 
 from __future__ import annotations
@@ -14,28 +18,28 @@ from voicebox_training_common import repo_path, run_customvoice_training
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for plain CustomVoice fine-tuning."""
+    """Parse CLI arguments for VoiceBox bootstrap training."""
 
     parser = argparse.ArgumentParser(
-        description="Fine-tune plain CustomVoice with an external Base 1.7B speaker encoder."
+        description="Bootstrap a VoiceBox checkpoint directly from CustomVoice + Base 1.7B encoder."
     )
     parser.add_argument("--train_jsonl", required=True, help="Prepared training JSONL path.")
     parser.add_argument("--init_model_path", required=True, help="Initial CustomVoice checkpoint path.")
     parser.add_argument(
         "--speaker_encoder_model_path",
         required=True,
-        help="External Base 1.7B checkpoint path used only during training.",
+        help="Base 1.7B checkpoint path used as speaker encoder source.",
     )
     parser.add_argument("--output_model_path", required=True, help="Output run directory.")
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--lr", type=float, default=2e-6)
-    parser.add_argument("--num_epochs", type=int, default=3)
+    parser.add_argument("--num_epochs", type=int, default=1)
     parser.add_argument("--speaker_name", default="speaker_test")
     return parser.parse_args()
 
 
 def main() -> None:
-    """Run stage-1 fine-tuning and export plain CustomVoice checkpoints."""
+    """Run bootstrap training and export VoiceBox checkpoints."""
 
     args = parse_args()
     run_customvoice_training(
@@ -47,7 +51,7 @@ def main() -> None:
         lr=args.lr,
         num_epochs=args.num_epochs,
         speaker_encoder_model_path=repo_path(args.speaker_encoder_model_path),
-        embed_speaker_encoder=False,
+        embed_speaker_encoder=True,
     )
 
 

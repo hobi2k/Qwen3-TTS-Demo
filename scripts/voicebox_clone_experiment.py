@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for ``voicebox/clone.py``."""
+"""Compatibility wrapper for VoiceBox clone inference."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "clone.py"
+CANONICAL_SCRIPT = REPO_ROOT / "Qwen3-TTS" / "inference" / "voicebox" / "clone.py"
 
 
 def main() -> None:
