@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Run the low-level VoiceBox/CustomVoice clone capability experiment.
-
-This wrapper keeps the experiment separate from the production clone path.
-It forwards into the scratch experiment under `test/` so the result can be
-reproduced without touching the official Base clone helpers.
-"""
+"""Compatibility wrapper for ``voicebox/clone.py``."""
 
 from __future__ import annotations
 
@@ -14,13 +9,13 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXPERIMENT = REPO_ROOT / "test" / "customvoice_clone_from_scratch.py"
+CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "clone.py"
 
 
 def main() -> None:
-    """Forward all CLI arguments into the scratch clone experiment."""
+    """Forward all CLI arguments to the canonical VoiceBox clone experiment."""
 
-    subprocess.run([sys.executable, str(EXPERIMENT), *sys.argv[1:]], check=True, cwd=REPO_ROOT)
+    subprocess.run([sys.executable, str(CANONICAL_SCRIPT), *sys.argv[1:]], check=True, cwd=REPO_ROOT)
 
 
 if __name__ == "__main__":

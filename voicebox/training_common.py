@@ -29,7 +29,7 @@ from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoConfig
+from transformers import Adafactor, AutoConfig
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -312,8 +312,9 @@ def run_customvoice_training(
     output_model_path.parent.mkdir(parents=True, exist_ok=True)
 
     runtime = resolve_runtime()
+    gradient_accumulation_steps = int(os.getenv("QWEN_DEMO_GRAD_ACCUM_STEPS", "1"))
     accelerator = Accelerator(
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         mixed_precision=runtime["mixed_precision"],
         log_with="tensorboard",
     )
@@ -340,20 +341,32 @@ def run_customvoice_training(
         row["audio"] = resolve_jsonl_audio_path(str(row["audio"]), train_jsonl)
         row["ref_audio"] = resolve_jsonl_audio_path(str(row["ref_audio"]), train_jsonl)
 
+    # Curriculum ordering keeps long codec sequences from causing early CUDA
+    # memory spikes before the optimizer has settled its state tensors.
+    train_data.sort(key=lambda row: len(row.get("audio_codes", [])))
     dataset = TTSDataset(train_data, qwen3tts.processor, config)
-    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=dataset.collate_fn)
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=dataset.collate_fn)
 
-    optimizer = AdamW(
-        qwen3tts.model.parameters(),
-        lr=lr,
-        weight_decay=0.01,
-        foreach=False,
-        fused=False,
-    )
+    optimizer_name = os.getenv("QWEN_DEMO_OPTIMIZER", "adamw").strip().lower()
+    if optimizer_name == "adafactor":
+        optimizer = Adafactor(
+            qwen3tts.model.parameters(),
+            lr=lr,
+            weight_decay=0.01,
+            scale_parameter=False,
+            relative_step=False,
+            warmup_init=False,
+        )
+    else:
+        optimizer_kwargs = {"lr": lr, "weight_decay": 0.01}
+        if torch.cuda.is_available():
+            optimizer_kwargs["fused"] = True
+        optimizer = AdamW(qwen3tts.model.parameters(), **optimizer_kwargs)
 
     model, optimizer, train_dataloader = accelerator.prepare(qwen3tts.model, optimizer, train_dataloader)
     model.train()
 
+    log_every = max(1, int(os.getenv("QWEN_DEMO_LOG_EVERY", "10")))
     for epoch in range(num_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(model):
@@ -406,7 +419,7 @@ def run_customvoice_training(
                 optimizer.step()
                 optimizer.zero_grad()
 
-            if step % 10 == 0:
+            if step % log_every == 0:
                 accelerator.print(f"Epoch {epoch} | Step {step} | Loss: {loss.item():.4f}")
 
         if accelerator.is_main_process:

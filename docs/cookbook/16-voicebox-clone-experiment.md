@@ -1,35 +1,33 @@
 # VoiceBox clone 실험
 
-이 문서는 `VoiceBox` 또는 `CustomVoice` 계열 체크포인트가
-공식 `Base` clone API 없이도 clone-like 조건부 생성을 할 수 있는지 실험하는 경로를 설명합니다.
+이 문서는 기존 링크 호환용 요약 페이지입니다.
 
-## 성격
+현재 기준 상세 문서는 아래를 봅니다.
 
-이 실험은 공식 지원 경로가 아닙니다.
+- [../voicebox/03-clone-experiment.md](../voicebox/03-clone-experiment.md)
+- [18-current-experiment-results.md](./18-current-experiment-results.md)
 
-- 공식 clone 경로는 `Base`
-- 이 문서의 실험은 저수준 `model.generate(...)`와 수동 prompt 조합
+## 현재 기준
 
-즉, 제품 기능이라기보다 기술 가능성 확인용입니다.
+VoiceBox clone은 업스트림 공식 `Base` clone high-level API가 아니라,
+VoiceBox에 내장된 `speaker_encoder`를 쓰는 low-level 실험 경로입니다.
 
-## 사용 스크립트
+사용 스크립트:
 
-- 래퍼:
-  - [voicebox_clone_experiment.py](../../scripts/voicebox_clone_experiment.py)
-- 실제 실험:
-  - [customvoice_clone_from_scratch.py](../../test/customvoice_clone_from_scratch.py)
-  - [customvoice_clone_probe.py](../../test/customvoice_clone_probe.py)
+```text
+voicebox/clone.py
+voicebox/clone_low_level.py
+```
 
-## 확인하는 질문
+현재 검증된 모델:
 
-1. `CustomVoice`만으로 clone prompt 생성이 가능한가
-2. 공식 high-level API를 우회하면 ref audio 기반 생성이 가능한가
-3. 생성은 되더라도 진짜 clone이라고 부를 수 있을 정도로 안정적인가
+```text
+data/finetune-runs/mai_ko_voicebox17b_full_extra1/final
+```
 
-## 현재 결론
+검증 결과:
 
-- 공식 지원: 아님
-- 저수준 hack: 일부 오디오는 생성됨
-- 하지만 정식 clone 경로로 보기엔 불안정
+- `embedded_encoder_only`: speaker similarity `0.9689`, target text similarity `1.000`
+- `embedded_encoder_with_ref_code`: speaker similarity `0.9670`, target text similarity `1.000`
 
-즉 현재 프로젝트 기준으로 clone의 기본 책임은 여전히 `Base`에 있습니다.
+현재 기본 후보는 `embedded_encoder_only`입니다.

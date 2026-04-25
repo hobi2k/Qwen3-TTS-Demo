@@ -82,6 +82,17 @@ python -c "import torch; from flash_attn.flash_attn_interface import flash_attn_
 즉 이 프로젝트에서는 Linux CUDA 머신이라면 `flash_attention_2`가 정상 경로이고,
 `sdpa`는 예외 상황용 fallback입니다.
 
+훈련에서도 같은 원칙을 유지합니다.
+
+- Linux + CUDA + flash-attn 설치됨: `flash_attention_2`
+- macOS / CPU / 미지원 환경: `sdpa`
+
+주의할 점:
+
+- optimizer 문제와 attention backend 문제는 다릅니다.
+- `Adafactor`는 attention을 바꾸는 설정이 아니라 optimizer state 메모리를 줄이는 설정입니다.
+- 현재 MAI full fine-tuning은 `flash_attention_2 + Adafactor` 조합으로 완료했습니다.
+
 ## 6. 왜 소스 빌드보다 wheel을 우선하나
 
 이 프로젝트에서는 WSL + 최신 GPU + CUDA 13.x 조합에서 소스 빌드가 자주 문제를 만들었습니다.
@@ -139,3 +150,26 @@ python -c "import os; print(os.getenv('QWEN_DEMO_ATTN_IMPL'))"
 ### macOS에서 FlashAttention을 기대하는 경우
 
 macOS는 이 프로젝트에서 `sdpa` fallback 대상입니다. 이 문서의 설치 경로는 Linux + CUDA 전용입니다.
+
+## 9. 훈련 전 GPU smoke test
+
+FlashAttention import만 성공했다고 학습 안정성이 보장되지는 않습니다.
+훈련 전에 아래를 확인합니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+source .venv/bin/activate
+nvidia-smi
+python - <<'PY'
+import torch
+m = torch.nn.Linear(4096, 4096, device="cuda", dtype=torch.bfloat16)
+opt = torch.optim.AdamW(m.parameters(), lr=1e-4)
+x = torch.randn(8, 4096, device="cuda", dtype=torch.bfloat16)
+y = m(x).float().pow(2).mean()
+y.backward()
+opt.step()
+print("optimizer ok")
+PY
+```
+
+이 smoke test는 GPU, PyTorch, optimizer 기본 동작이 살아 있는지 보는 최소 확인입니다.

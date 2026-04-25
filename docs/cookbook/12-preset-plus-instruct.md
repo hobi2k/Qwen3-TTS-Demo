@@ -101,7 +101,7 @@
 
 ## 6. 그렇다면 모델 하나로 줄일 수는 없는가
 
-경우에 따라 가능할 수도 있지만, 현재 이 프로젝트의 hybrid 경로는 그 방식으로 설계돼 있지 않습니다.
+경우에 따라 가능할 수도 있지만, 기존 `프리셋 기반 생성` hybrid 경로는 그 방식으로 설계돼 있지 않습니다.
 
 현재 구현 목표는 아래 둘을 동시에 살리는 것입니다.
 
@@ -111,6 +111,21 @@
 이 두 가지를 동시에 잡기 위해, 현재는 `Base + CustomVoice` 조합을 사용합니다.
 
 즉 지금 구조는 “복잡해서 두 개를 둔 것”이 아니라, 각 모델의 강점을 분리해서 쓰려는 선택입니다.
+
+다만 별도 실험 경로로 `VoiceBox`가 추가되었습니다.
+
+`VoiceBox`는 plain `CustomVoice`에 `Base 1.7B`의 `speaker_encoder`를 합친 self-contained 체크포인트입니다.
+이 경로에서는 한 체크포인트 안에서:
+
+- 참조 음성에서 speaker embedding 추출
+- `CustomVoice`식 instruct 생성
+- clone-like conditioning
+
+을 함께 실험할 수 있습니다.
+
+현재 검증 결과상 `VoiceBox` clone + instruct의 안정 후보는 `embedded_encoder_only`입니다.
+하지만 이 경로는 기존 `Base + CustomVoice` hybrid를 삭제하거나 대체하는 것이 아니라,
+“한 체크포인트로 통합 가능한가”를 보기 위한 별도 실험 경로입니다.
 
 ## 7. `프리셋 그대로 생성`과 `프리셋 + 말투 지시`의 차이
 
@@ -156,6 +171,22 @@
 
 이 문서도 그 이유로 분리했습니다.
 
+### 오해 4. VoiceBox가 있으면 Base + CustomVoice hybrid는 필요 없어지는 것 아닌가?
+
+아직 그렇게 단정하면 안 됩니다.
+
+현재 기준:
+
+- `Base + CustomVoice` hybrid:
+  - 기존 프리셋 기반 생성의 주 경로
+  - 역할 분리가 명확함
+- `VoiceBox`:
+  - speaker encoder를 포함한 self-contained 실험 경로
+  - clone + instruct 가능성은 확인됨
+  - aggressive instruct에서 전략별 안정성 차이가 있음
+
+따라서 제품 기본 경로와 연구/확장 경로를 분리해서 봅니다.
+
 ## 9. 어떤 조합을 먼저 쓰면 좋은가
 
 보통은 아래 순서를 권합니다.
@@ -177,3 +208,5 @@
 - [11-pristine-upstream-finetune.md](./11-pristine-upstream-finetune.md)
 - [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)
 - [13-customvoice-finetuning.md](./13-customvoice-finetuning.md)
+- [../voicebox/README.md](../voicebox/README.md)
+- [18-current-experiment-results.md](./18-current-experiment-results.md)

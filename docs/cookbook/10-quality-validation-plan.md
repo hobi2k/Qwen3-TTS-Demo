@@ -11,6 +11,7 @@
 - stock `VoiceDesign`
 - fine-tuned `Base`
 - fine-tuned `CustomVoice`
+- `VoiceBox`
 - `프리셋 기반 생성` hybrid 경로
 
 ## 검수에서 답해야 하는 질문
@@ -74,6 +75,16 @@ python scripts/validate_speech_quality.py \
 - 저장된 스타일이 유지되는가
 - 같은 스타일 위에 instruct 차이가 실제로 붙는가
 
+### Phase F. VoiceBox
+
+확인할 것:
+
+- `speaker_encoder.*`가 checkpoint에 포함되어 있는가
+- 외부 `Base` 없이 `VoiceBox -> VoiceBox` 추가 학습이 되는가
+- 일반 instruct 추론이 되는가
+- clone / clone + instruct 저수준 실험이 되는가
+- `embedded_encoder_only`와 `embedded_encoder_with_ref_code` 중 어떤 전략이 더 안정적인가
+
 ## 판정 기준
 
 자동 점수는 보조 지표입니다.
@@ -95,14 +106,18 @@ python scripts/validate_speech_quality.py \
   음색 반영과 instruct 유지 후보 경로
 - `프리셋 기반 생성`
   스타일 저장과 말투 지시를 함께 확인할 수 있는 핵심 검수 대상
+- `VoiceBox`
+  self-contained speaker encoder 실험 경로이며, 현재 clone+instruct 기본 후보는 `embedded_encoder_only`
 
 ## 남은 운영 과제
 
 - `CustomVoice` self-contained checkpoint 전환
 - validation harness를 이후 UI/데이터 변경에도 계속 재사용 가능하게 유지
+- VoiceBox 결과를 WEB UI 설명과 모델 선택 UX에 자연스럽게 반영
 
 ## 실행 원칙
 
 - stock 검증과 fine-tuned 검증은 분리해서 본다
 - 검수 결과는 보고서와 샘플 오디오를 같이 남긴다
 - UI가 바뀌어도 검수 질문은 바꾸지 않는다
+- optimizer, attention backend, dataset manifest를 결과 문서에 함께 남긴다

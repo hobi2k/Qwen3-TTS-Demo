@@ -239,6 +239,35 @@ curl http://127.0.0.1:8190/
 - `CustomVoice Fine-Tune`
   음색 반영과 말투 지시 유지 후보 경로
 
+## 13. 현재 검증된 MAI / VoiceBox 흐름
+
+현재 MAI 한국어 기준 검증된 학습 입력은 아래입니다.
+
+```text
+data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
+```
+
+검증된 산출물:
+
+- plain CustomVoice:
+  `data/finetune-runs/mai_ko_customvoice17b_full/final`
+- VoiceBox:
+  `data/finetune-runs/mai_ko_voicebox17b_full/final`
+- VoiceBox 1 epoch 추가 학습:
+  `data/finetune-runs/mai_ko_voicebox17b_full_extra1/final`
+
+1.7B full fine-tuning에서 RTX 5080 16GB 환경은 optimizer state 메모리 피크가 큽니다.
+현재 검증된 full run은 아래 운영 변수를 사용했습니다.
+
+```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+QWEN_DEMO_OPTIMIZER=adafactor
+QWEN_DEMO_LOG_EVERY=25
+QWEN_DEMO_GRAD_ACCUM_STEPS=1
+```
+
+자세한 결과와 재현 명령은 [18-current-experiment-results.md](./18-current-experiment-results.md)를 봅니다.
+
 다음 문서:
 
 - [02-backend-guide.md](./02-backend-guide.md)

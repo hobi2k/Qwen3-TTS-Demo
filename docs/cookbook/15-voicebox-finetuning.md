@@ -1,93 +1,50 @@
 # VoiceBox 파인튜닝
 
-이 문서는 `VoiceBox` 전용 학습 경로를 설명합니다.
+이 문서는 기존 링크 호환용 요약 페이지입니다.
 
-## VoiceBox와 일반 CustomVoice의 차이
+현재 기준 상세 문서는 아래를 봅니다.
 
-일반 `CustomVoice` 학습:
+- [../voicebox/02-finetuning.md](../voicebox/02-finetuning.md)
+- [18-current-experiment-results.md](./18-current-experiment-results.md)
 
-- 외부 `Base 1.7B`의 `speaker_encoder`가 필요할 수 있음
-- 결과 체크포인트는 plain `custom_voice`
+## 현재 기준 3단계
 
-`VoiceBox` 학습:
+1. plain `CustomVoice`에 `mai` 화자 추가 학습
+2. plain `CustomVoice -> VoiceBox` 변환
+3. `VoiceBox -> VoiceBox` 1 epoch 추가 학습
 
-- init 체크포인트가 이미 `speaker_encoder`를 포함할 수 있음
-- 결과 체크포인트도 `speaker_encoder`를 계속 포함함
-- 추가 파인튜닝을 다시 할 때 외부 Base 경로 없이 진행 가능
+현재 검증된 최종 VoiceBox 추가 학습 결과:
 
-## 사용 스크립트
+```text
+data/finetune-runs/mai_ko_voicebox17b_full_extra1/final
+```
 
-- 기존 plain CustomVoice:
-  - [qwen3_tts_customvoice_train.py](../../scripts/qwen3_tts_customvoice_train.py)
-- VoiceBox 생성:
-  - [qwen3_tts_voicebox_bootstrap.py](../../scripts/qwen3_tts_voicebox_bootstrap.py)
-- VoiceBox 재학습:
-  - [qwen3_tts_voicebox_retrain.py](../../scripts/qwen3_tts_voicebox_retrain.py)
+검증된 상태:
 
-## 1. VoiceBox 생성
+- `demo_model_family = voicebox`
+- `speaker_encoder_included = true`
+- `mai` speaker id: `3067`
+- `speaker_encoder.*` tensor count: `76`
+- 외부 `speaker_encoder_model_path` 없이 추가 학습 완료
 
-처음 `VoiceBox`를 만들 때는 plain `CustomVoice`와 `Base 1.7B`를 같이 씁니다.
+## 현재 full run 명령
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python scripts/qwen3_tts_voicebox_bootstrap.py \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
-  --init-customvoice-model-path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
-  --base-speaker-encoder-model-path data/models/Qwen3-TTS-12Hz-1.7B-Base \
-  --output-model-path data/finetune-runs/mai_ko_voicebox17b_full \
-  --batch-size 1 \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+QWEN_DEMO_OPTIMIZER=adafactor \
+QWEN_DEMO_LOG_EVERY=25 \
+.venv/bin/python voicebox/sft_voicebox_12hz.py \
+  --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
+  --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
+  --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \
+  --batch_size 1 \
   --lr 2e-6 \
-  --num-epochs 1 \
-  --speaker-name mai
+  --num_epochs 1 \
+  --speaker_name mai
 ```
 
-## 2. VoiceBox 재학습
+## Optimizer 메모
 
-```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
-QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python scripts/qwen3_tts_voicebox_retrain.py \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
-  --init-voicebox-model-path data/finetune-runs/mai_ko_voicebox17b_full/final \
-  --output-model-path data/finetune-runs/mai_ko_voicebox17b_retrain \
-  --batch-size 1 \
-  --lr 2e-6 \
-  --num-epochs 1 \
-  --speaker-name mai
-```
-
-## smoke 검증 결과
-
-작은 4샘플 subset으로 아래를 확인했습니다.
-
-- `VoiceBox final`에서 추가 파인튜닝 시작 가능
-- 새 checkpoint 생성 가능
-- 새 checkpoint에도 `speaker_encoder.*` 유지
-- `demo_model_family = "voicebox"` 유지
-
-산출물 예시:
-
-- [mai_ko_voicebox17b_full/final](../../data/finetune-runs/mai_ko_voicebox17b_full/final)
-- [voicebox_smoke_retrain_20260415c/final](../../data/finetune-runs/voicebox_smoke_retrain_20260415c/final)
-
-## 권장 순서
-
-1. plain `CustomVoice`를 먼저 학습
-2. `make_voicebox_checkpoint.py` 또는 `qwen3_tts_voicebox_bootstrap.py`로 첫 `VoiceBox`를 만든다
-3. 이후에는 `qwen3_tts_voicebox_retrain.py`만으로 추가 학습한다
-
-## Hub 업로드
-
-업로드 스크립트:
-
-- [upload_voicebox_to_hub.py](../../scripts/upload_voicebox_to_hub.py)
-
-예시:
-
-```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python scripts/upload_voicebox_to_hub.py \
-  --checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final \
-  --repo-id <your-hf-id>/mai-ko-voicebox-1.7b
-```
-
-실제 업로드에는 `HF_TOKEN` 또는 `huggingface-cli login`이 필요합니다.
+현재 MAI full run은 `QWEN_DEMO_OPTIMIZER=adafactor`로 완료했습니다.
+이는 품질 향상 설정이 아니라 RTX 5080 16GB 환경에서 optimizer state 메모리 피크를 낮추기 위한 운영 선택입니다.

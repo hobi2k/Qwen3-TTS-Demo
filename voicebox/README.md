@@ -7,6 +7,10 @@
 - 기존 `scripts/`와 `Qwen3-TTS` 안의 기존 경로는 그대로 유지합니다.
 - 이 폴더는 `VoiceBox` 관련 작업을 **세 단계**로 재현 가능하게 분리해 둔 전용 진입점 모음입니다.
 - 공통 런타임 로직은 이 폴더 안의 `runtime.py`와 `clone_low_level.py`에 둡니다.
+- 새 VoiceBox 기능 수정은 이 폴더의 canonical script에 먼저 반영합니다.
+- `scripts/qwen3_tts_voicebox_*.py` 파일들은 오래된 명령 호환용 래퍼입니다.
+
+중복 스크립트 정리는 [docs/cookbook/19-script-entrypoints.md](../docs/cookbook/19-script-entrypoints.md)에 별도로 기록되어 있습니다.
 
 ## 세 단계
 
@@ -57,18 +61,39 @@
 - `upload_to_hub.py`
   - `VoiceBox` 체크포인트를 허깅페이스 모델 저장소로 올립니다.
 
+## 현재 검증된 산출물
+
+- plain CustomVoice:
+  `data/finetune-runs/mai_ko_customvoice17b_full/final`
+- VoiceBox 변환본:
+  `data/finetune-runs/mai_ko_voicebox17b_full/final`
+- VoiceBox 1 epoch 추가 학습본:
+  `data/finetune-runs/mai_ko_voicebox17b_full_extra1/final`
+- clone / clone + instruct 검수 결과:
+  `data/generated/voicebox-clone-tests/20260425-extra1`
+
+현재 안정적인 clone+instruct 후보는 `embedded_encoder_only`입니다.
+`embedded_encoder_with_ref_code`는 참조 codec 흐름까지 넣는 방식이라 clone 느낌이 강해질 수 있지만,
+aggressive instruct에서 문장 보존이 흔들릴 수 있습니다.
+
 ## 권장 순서 예시
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
 
 # 1) plain CustomVoice에 mai 추가 학습
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+QWEN_DEMO_OPTIMIZER=adafactor \
+QWEN_DEMO_LOG_EVERY=25 \
 .venv/bin/python voicebox/sft_plain_custom_voice_12hz.py \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
-  --init-model-path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
-  --speaker-encoder-model-path data/models/Qwen3-TTS-12Hz-1.7B-Base \
-  --output-model-path data/finetune-runs/mai_ko_customvoice17b_full \
-  --speaker-name mai
+  --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
+  --init_model_path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+  --speaker_encoder_model_path data/models/Qwen3-TTS-12Hz-1.7B-Base \
+  --output_model_path data/finetune-runs/mai_ko_customvoice17b_full \
+  --batch_size 1 \
+  --lr 2e-6 \
+  --num_epochs 3 \
+  --speaker_name mai
 
 # 2) plain CustomVoice -> VoiceBox 변환
 .venv/bin/python voicebox/make_checkpoint.py \
@@ -77,9 +102,43 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final
 
 # 3) VoiceBox -> VoiceBox 추가 학습
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+QWEN_DEMO_OPTIMIZER=adafactor \
+QWEN_DEMO_LOG_EVERY=25 \
 .venv/bin/python voicebox/sft_voicebox_12hz.py \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
-  --init-voicebox-model-path data/finetune-runs/mai_ko_voicebox17b_full/final \
-  --output-model-path data/finetune-runs/mai_ko_voicebox17b_full_retrain \
-  --speaker-name mai
+  --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
+  --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
+  --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \
+  --batch_size 1 \
+  --lr 2e-6 \
+  --num_epochs 1 \
+  --speaker_name mai
+```
+
+## 품질 검수
+
+plain CustomVoice와 VoiceBox를 비교하려면:
+
+```bash
+.venv/bin/python scripts/evaluate_customvoice_voicebox_quality.py \
+  --plain-model data/finetune-runs/mai_ko_customvoice17b_full/final \
+  --voicebox-model data/finetune-runs/mai_ko_voicebox17b_full/final \
+  --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
+  --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
+  --speaker mai \
+  --language Korean
+```
+
+VoiceBox clone을 확인하려면:
+
+```bash
+.venv/bin/python voicebox/clone.py \
+  --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
+  --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
+  --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \
+  --text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
+  --language Korean \
+  --speaker mai \
+  --output-dir data/generated/voicebox-clone-tests/manual-clone \
+  --strategies embedded_encoder_only embedded_encoder_with_ref_code
 ```

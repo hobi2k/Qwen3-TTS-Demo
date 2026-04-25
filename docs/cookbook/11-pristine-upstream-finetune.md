@@ -29,7 +29,7 @@ Path assumptions:
 - The repository root is `Qwen3-TTS-Demo/`
 - The canonical dataset is `data/datasets/mai_ko_full/`
 - Raw JSONL lives at `data/datasets/mai_ko_full/raw.jsonl`
-- Prepared JSONL lives at `data/datasets/mai_ko_full/prepared.jsonl`
+- Current cleaned prepared JSONL lives at `data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl`
 - Dataset audio lives in `data/datasets/mai_ko_full/audio/`
 - The wrapper resolves repo-relative paths from the project root, so the raw JSONL
   can keep values like `data/datasets/mai_ko_full/audio/00000.wav`
@@ -60,15 +60,21 @@ python scripts/qwen3_tts_upstream_train.py \
   --device cuda:0
 ```
 
-This reads `data/datasets/mai_ko_full/raw.jsonl` and writes
-`data/datasets/mai_ko_full/prepared.jsonl`.
+This reads `data/datasets/mai_ko_full/raw.jsonl` and can write a prepared JSONL.
+For the current MAI full run, use the cleaned prepared JSONL instead:
+
+```text
+data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
+```
+
+That file keeps `727` rows after filtering unsuitable text and duration cases.
 
 ### 2) Base 1.7B fine-tuning
 
 ```bash
 python scripts/qwen3_tts_upstream_train.py \
   train-base \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
+  --train-jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init-model-path data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-model-path data/finetune-runs/mai_ko_base17b_full \
   --speaker-name mai \
@@ -90,7 +96,7 @@ Important blocker:
 ```bash
 python scripts/qwen3_tts_upstream_train.py \
   train-customvoice \
-  --train-jsonl data/datasets/mai_ko_full/prepared.jsonl \
+  --train-jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init-model-path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
   --speaker-encoder-model-path data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-model-path data/finetune-runs/mai_ko_customvoice17b_full \
@@ -106,6 +112,19 @@ script under `Qwen3-TTS/finetuning/`. The wrapper can still be used as the
 clean command-line front door, but the actual CustomVoice trainer also exists in
 the upstream tree as a new file so backend and manual CLI runs share the same
 layout.
+
+## Current optimizer note
+
+For 1.7B full runs on RTX 5080 16GB, `AdamW` may create a large optimizer-state
+memory peak. The current MAI full run was completed with:
+
+```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+QWEN_DEMO_OPTIMIZER=adafactor
+```
+
+`Adafactor` is a memory-stability choice, not a quality guarantee. Quality still
+needs generated wav review, Whisper transcription, and speaker-similarity checks.
 
 ## What to keep untouched
 

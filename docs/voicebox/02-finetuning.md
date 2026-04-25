@@ -35,13 +35,16 @@
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python voicebox/sft_plain_custom_voice_12hz.py \
-  --train_jsonl data/datasets/mai_ko_full/prepared.jsonl \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+QWEN_DEMO_OPTIMIZER=adafactor \
+QWEN_DEMO_LOG_EVERY=25 \
+.venv/bin/python voicebox/sft_plain_custom_voice_12hz.py \
+  --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/models/Qwen3-TTS-12Hz-1.7B-CustomVoice \
   --speaker_encoder_model_path data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output_model_path data/finetune-runs/mai_ko_customvoice17b_full \
   --batch_size 1 \
-  --lr 2e-5 \
+  --lr 2e-6 \
   --num_epochs 3 \
   --speaker_name mai
 ```
@@ -76,10 +79,13 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python voicebox/sft_voicebox_12hz.py \
-  --train_jsonl data/datasets/mai_ko_full/prepared.jsonl \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+QWEN_DEMO_OPTIMIZER=adafactor \
+QWEN_DEMO_LOG_EVERY=25 \
+.venv/bin/python voicebox/sft_voicebox_12hz.py \
+  --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
-  --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_retrain \
+  --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \
   --batch_size 1 \
   --lr 2e-6 \
   --num_epochs 1 \
@@ -92,19 +98,37 @@ QWEN_DEMO_ATTN_IMPL=sdpa .venv/bin/python voicebox/sft_voicebox_12hz.py \
 - `speaker_encoder.*` 유지
 - 외부 `Base` 경로 없이 추가 학습 가능
 
-## smoke 검증 결과
+## full 검증 결과
 
-작은 4샘플 subset으로 아래를 확인했습니다.
+현재 clean MAI dataset `727`개 샘플 기준으로 아래를 확인했습니다.
 
 - `VoiceBox final`에서 추가 파인튜닝 시작 가능
 - 새 checkpoint 생성 가능
 - 새 checkpoint에도 `speaker_encoder.*` 유지
 - `demo_model_family = "voicebox"` 유지
+- WSL/GPU 튕김 없이 1 epoch 완료
+- 추가 학습 후 clone / clone + instruct 생성 가능
 
 산출물 예시:
 
 - [mai_ko_voicebox17b_full/final](../../data/finetune-runs/mai_ko_voicebox17b_full/final)
-- [voicebox_smoke_retrain_20260415c/final](../../data/finetune-runs/voicebox_smoke_retrain_20260415c/final)
+- [mai_ko_voicebox17b_full_extra1/final](../../data/finetune-runs/mai_ko_voicebox17b_full_extra1/final)
+
+## Optimizer 운영
+
+기본 optimizer는 `AdamW`입니다. 다만 1.7B full fine-tuning에서 RTX 5080 16GB 환경은 optimizer state 메모리 피크가 커질 수 있습니다.
+
+현재 검증된 MAI full run은 아래 설정으로 완료했습니다.
+
+```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+QWEN_DEMO_OPTIMIZER=adafactor
+QWEN_DEMO_LOG_EVERY=25
+QWEN_DEMO_GRAD_ACCUM_STEPS=1
+```
+
+`Adafactor`는 품질 향상용 설정이 아니라, 메모리 피크를 낮춰 학습을 완료하기 위한 안정화 선택입니다.
+품질은 반드시 생성 wav, Whisper 전사, speaker similarity, 실제 청취로 따로 판정합니다.
 
 ## 보조 경로: bootstrap
 

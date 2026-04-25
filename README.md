@@ -44,6 +44,8 @@
 - VoiceBox 파인튜닝: [docs/voicebox/02-finetuning.md](docs/voicebox/02-finetuning.md)
 - VoiceBox clone 실험: [docs/voicebox/03-clone-experiment.md](docs/voicebox/03-clone-experiment.md)
 - VoiceBox clone + instruct 실험: [docs/voicebox/04-clone-plus-instruct.md](docs/voicebox/04-clone-plus-instruct.md)
+- 현재 실험 결과: [docs/cookbook/18-current-experiment-results.md](docs/cookbook/18-current-experiment-results.md)
+- 스크립트 진입점 정리: [docs/cookbook/19-script-entrypoints.md](docs/cookbook/19-script-entrypoints.md)
 
 VoiceBox 관련 스크립트는 `voicebox/` 폴더에서 세 단계를 분리합니다.
 
@@ -58,6 +60,9 @@ VoiceBox 관련 스크립트는 `voicebox/` 폴더에서 세 단계를 분리합
 
 - [bootstrap.py](voicebox/bootstrap.py)
   - `CustomVoice + Base 1.7B`를 한 번에 묶는 보조 진입점
+
+중복되어 보이는 `scripts/qwen3_tts_voicebox_*.py` 파일들은 현재 `voicebox/` 구현을 호출하는 호환 래퍼입니다.
+새 훈련 로직은 `voicebox/` 쪽 canonical script에 먼저 반영합니다.
 
 ## 현재 프로젝트 구조
 
@@ -148,6 +153,19 @@ data/datasets/mai_ko_full/
 - 3단계는 외부 `Base` 의존성 없이 `VoiceBox -> VoiceBox` 경로를 재현하기 위한 단계입니다.
 
 상세 설명은 [docs/voicebox/02-finetuning.md](docs/voicebox/02-finetuning.md)에 있습니다.
+
+현재 MAI 한국어 데이터셋 기준으로 아래 단계는 실제로 검증되었습니다.
+
+- plain `CustomVoice` full fine-tuning:
+  `data/finetune-runs/mai_ko_customvoice17b_full/final`
+- `CustomVoice -> VoiceBox` 변환:
+  `data/finetune-runs/mai_ko_voicebox17b_full/final`
+- `VoiceBox -> VoiceBox` 1 epoch 추가 학습:
+  `data/finetune-runs/mai_ko_voicebox17b_full_extra1/final`
+- 추가 학습된 VoiceBox의 clone / clone + instruct 검증:
+  `data/generated/voicebox-clone-tests/20260425-extra1`
+
+상세 수치와 재현 명령은 [docs/cookbook/18-current-experiment-results.md](docs/cookbook/18-current-experiment-results.md)에 있습니다.
 
 ## 모델 역할을 사용자 기준으로 이해하기
 
@@ -258,6 +276,10 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 
 설치 경로와 GPU smoke test는 [docs/cookbook/08-flash-attn-install.md](docs/cookbook/08-flash-attn-install.md)에 정리되어 있습니다.
 
+1.7B full fine-tuning에서 RTX 5080 16GB 기준 `AdamW` optimizer state가 메모리 피크를 크게 만들 수 있어,
+현재 검증된 MAI full run은 `QWEN_DEMO_OPTIMIZER=adafactor`를 사용했습니다. 이 변경은 품질 향상 목적이 아니라
+학습을 끝까지 안정적으로 완료하기 위한 운영 선택입니다.
+
 ## 현재 기준으로 꼭 알아둘 점
 
 - `텍스트 음성 변환`이 메인 TTS 화면입니다.
@@ -272,7 +294,7 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 
 ## 남은 핵심 과제
 
-- `CustomVoice` 파인튜닝 결과를 self-contained checkpoint로 만드는 작업
+- `VoiceBox` 경로를 WEB UI의 모델 설명과 선택 UX에 더 명확히 연결하는 작업
 - `MMAudio`와 `Applio/RVC` 운영 가이드를 더 다듬는 작업
 - 프런트 시각 언어를 더 제품 수준으로 밀어 올리는 작업
 

@@ -26,13 +26,13 @@
 ## 사용 스크립트
 
 - 변환 스크립트:
-  - [make_voicebox_checkpoint.py](../../scripts/make_voicebox_checkpoint.py)
+  - [make_checkpoint.py](../../voicebox/make_checkpoint.py)
 
 ## 예시
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python scripts/make_voicebox_checkpoint.py \
+.venv/bin/python voicebox/make_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final
@@ -51,3 +51,18 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 - `VoiceBox`는 내부 명칭입니다.
 - 추론 호환성을 위해 `tts_model_type`은 여전히 `custom_voice`로 유지합니다.
 - `speaker_encoder`는 반드시 `Base 1.7B`에서 가져옵니다.
+
+## 현재 검증된 결과
+
+```text
+data/finetune-runs/mai_ko_voicebox17b_full/final
+```
+
+확인 결과:
+
+- `tts_model_type = custom_voice`
+- `demo_model_family = voicebox`
+- `speaker_encoder_included = true`
+- `mai` speaker id: `3067`
+- `speaker_encoder.*` tensor count: `76`
+- total tensor count: `480`

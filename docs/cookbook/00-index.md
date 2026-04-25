@@ -26,6 +26,8 @@
 11. [VoiceBox 체크포인트 변환](../voicebox/01-checkpoint-conversion.md)
 12. [VoiceBox clone 실험](../voicebox/03-clone-experiment.md)
 13. [VoiceBox clone + instruct 실험](../voicebox/04-clone-plus-instruct.md)
+14. [현재 실험 결과](./18-current-experiment-results.md)
+15. [스크립트 진입점 정리](./19-script-entrypoints.md)
 
 ## 현재 문서 맵
 
@@ -62,6 +64,10 @@
   음성 품질 검수 절차
 - [10-quality-validation-plan.md](./10-quality-validation-plan.md)
   품질 검수 계획과 기준
+- [18-current-experiment-results.md](./18-current-experiment-results.md)
+  현재 MAI / CustomVoice / VoiceBox 실험 결과와 재현 명령
+- [19-script-entrypoints.md](./19-script-entrypoints.md)
+  canonical `voicebox/` 스크립트와 `scripts/` 호환 래퍼 구분
 
 ### 현재 기능에서 중요한 두 문서
 

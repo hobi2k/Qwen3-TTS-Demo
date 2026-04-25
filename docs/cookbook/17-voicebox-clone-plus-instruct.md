@@ -1,36 +1,45 @@
 # VoiceBox clone + instruct 실험
 
-이 문서는 `VoiceBox` 또는 `CustomVoice` 계열 모델에
-clone-like 조건과 `instruct`를 동시에 넣는 실험 경로를 설명합니다.
+이 문서는 기존 링크 호환용 요약 페이지입니다.
 
-## 목적
+현재 기준 상세 문서는 아래를 봅니다.
 
-질문은 단순합니다.
+- [../voicebox/04-clone-plus-instruct.md](../voicebox/04-clone-plus-instruct.md)
+- [18-current-experiment-results.md](./18-current-experiment-results.md)
 
-- 참조 음성의 스타일/화자 특징을 어느 정도 붙잡으면서
-- `instruct`도 같이 반영할 수 있는가
+## 현재 기준
 
-공식 업스트림은 이 경로를 보장하지 않기 때문에 별도 실험으로 분리합니다.
+VoiceBox clone + instruct는 한 체크포인트 안에서 아래를 같이 실험하는 경로입니다.
 
-## 사용 스크립트
+- 참조 음성에서 speaker embedding 추출
+- target text 생성
+- `instruct` 적용
 
-- 전용 래퍼:
-  - [voicebox_clone_instruct_experiment.py](../../scripts/voicebox_clone_instruct_experiment.py)
-- 실제 low-level 실험:
-  - [customvoice_clone_from_scratch.py](../../test/customvoice_clone_from_scratch.py)
+사용 스크립트:
 
-## 특징
+```text
+voicebox/clone_instruct.py
+voicebox/clone_low_level.py
+```
 
-- 공식 `generate_custom_voice()`만 쓰는 경로가 아님
-- low-level prompt 구성과 `instruct`를 직접 결합함
-- 결과는 기술 검증용으로만 해석해야 함
+현재 검증된 모델:
 
-## 해석 기준
+```text
+data/finetune-runs/mai_ko_voicebox17b_full_extra1/final
+```
 
-- 오디오가 나온다고 해서 공식 지원이라고 볼 수는 없음
-- 참조 화자 유사도와 `instruct` 반응은 별도 검수가 필요
-- 제품 기본 경로는 여전히
-  - `Base` clone
-  - `CustomVoice` instruct
-  - 또는 두 단계를 나눈 hybrid
-  로 보는 편이 안전합니다
+## 현재 결과 요약
+
+- breathy `embedded_encoder_only`: speaker similarity `0.9655`, target text similarity `1.000`
+- breathy `embedded_encoder_with_ref_code`: speaker similarity `0.9688`, target text similarity `1.000`
+- angry `embedded_encoder_only`: speaker similarity `0.9614`, target text similarity `1.000`
+- angry `embedded_encoder_with_ref_code`: speaker similarity `0.9630`, target text similarity `0.923`
+
+현재 안정 후보:
+
+- `embedded_encoder_only`
+
+주의 후보:
+
+- `embedded_encoder_with_ref_code`
+  - 참조 codec 흐름까지 쓰므로 clone 느낌이 강해질 수 있지만, aggressive instruct에서 문장 보존이 흔들릴 수 있습니다.

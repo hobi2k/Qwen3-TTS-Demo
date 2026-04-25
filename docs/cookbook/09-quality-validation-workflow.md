@@ -7,6 +7,7 @@
 - `Base` fine-tune 결과가 원래 clone 계열 품질을 크게 망가뜨리지 않는지
 - `CustomVoice` fine-tune 결과가 instruct 입력에 따라 스타일이 달라지는지
 - `clone prompt + instruct hybrid` 경로가 저장된 스타일 자산과 instruct 제어를 함께 살리는지
+- `VoiceBox`가 embedded speaker encoder만으로 clone / clone + instruct 실험을 수행할 수 있는지
 
 기본 instruct pack은 `aggressive`입니다. 이 pack은 감정 차이를 크게 벌려서,
 CustomVoice와 hybrid의 instruct 준수 여부를 듣기로 판별하기 쉽게 만듭니다.
@@ -44,6 +45,18 @@ CustomVoice와 hybrid의 instruct 준수 여부를 듣기로 판별하기 쉽게
 
 - clone prompt로 스타일 자산을 저장한 뒤 다시 쓸 수 있는지
 - hybrid 경로에서 `Base` clone 성질과 `CustomVoice` instruct 성질이 동시에 유지되는지
+
+### VoiceBox clone / clone + instruct
+
+`VoiceBox`는 `CustomVoice`에 `Base 1.7B` speaker encoder를 포함한 self-contained 실험 경로입니다.
+
+검증 포인트:
+
+- 체크포인트 안에 `speaker_encoder.*`가 실제로 있는지
+- 외부 `Base` 없이 참조 음성에서 embedding을 뽑는지
+- clone 생성 결과가 무음이 아닌지
+- clone+instruct에서 문장 내용이 유지되는지
+- aggressive instruct에서도 문장 보존이 흔들리지 않는 전략이 무엇인지
 
 ## 1.1 Aggressive instruct pack
 
@@ -99,6 +112,50 @@ python scripts/validate_speech_quality.py \
   --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
   --probe-text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
   --suite all
+```
+
+### plain CustomVoice vs VoiceBox 비교
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+source .venv/bin/activate
+python scripts/evaluate_customvoice_voicebox_quality.py \
+  --plain-model data/finetune-runs/mai_ko_customvoice17b_full/final \
+  --voicebox-model data/finetune-runs/mai_ko_voicebox17b_full/final \
+  --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
+  --reference-audio data/datasets/mai_ko_full/audio/00000.wav \
+  --speaker mai \
+  --language Korean \
+  --text "오늘은 정말 힘들었어. 언제쯤 끝날까?"
+```
+
+### VoiceBox clone / clone + instruct
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+source .venv/bin/activate
+python voicebox/clone.py \
+  --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
+  --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
+  --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \
+  --text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
+  --language Korean \
+  --speaker mai \
+  --output-dir data/generated/voicebox-clone-tests/manual-clone \
+  --strategies embedded_encoder_only embedded_encoder_with_ref_code
+```
+
+```bash
+python voicebox/clone_instruct.py \
+  --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
+  --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
+  --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \
+  --text "오늘은 정말 힘들었어. 언제쯤 끝날까?" \
+  --language Korean \
+  --speaker mai \
+  --instruct "Soft breathy Korean female voice, exhausted and close to the microphone, but keep the sentence clear." \
+  --output-dir data/generated/voicebox-clone-tests/manual-clone-instruct \
+  --strategies embedded_encoder_only embedded_encoder_with_ref_code
 ```
 
 ### 자동 선택을 믿지 않고 명시적으로 고정하고 싶다면
@@ -217,6 +274,13 @@ data/generated/quality-validation/20260412-153000/
 - instruct 제어도 들린다
 - clone prompt + instruct를 함께 썼을 때 결과가 아예 무너지지 않는다
 
+### VoiceBox
+
+- `embedded_encoder_only`는 현재 가장 안정적인 clone+instruct 후보입니다.
+- `embedded_encoder_with_ref_code`는 참조 codec 흐름까지 넣어 clone 느낌을 더 강하게 줄 수 있지만,
+  aggressive instruct에서 문장 보존이 흔들릴 수 있습니다.
+- 따라서 제품화 기본값은 `embedded_encoder_only`를 먼저 검토합니다.
+
 ## 7. 청취 평가 순서
 
 결과가 생성되면 아래 순서로 듣는 것을 권장합니다.
@@ -244,5 +308,8 @@ data/generated/quality-validation/20260412-153000/
 - instruct 입력이 실제로 반영되는가
 - 저장된 clone prompt를 다시 써도 스타일이 유지되는가
 - hybrid 경로가 품질을 망치지 않는가
+- VoiceBox가 self-contained clone / clone+instruct 경로로 실제 쓸 수 있는가
 
 이 질문에 대해 자신 있게 답할 수 있을 때만 다음 단계로 넘어가야 합니다.
+
+현재 검증 결과는 [18-current-experiment-results.md](./18-current-experiment-results.md)에 기록합니다.

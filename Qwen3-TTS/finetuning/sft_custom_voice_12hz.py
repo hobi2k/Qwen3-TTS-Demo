@@ -221,7 +221,10 @@ def train() -> None:
     train_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn)
 
     speaker_encoder = resolve_speaker_encoder(qwen3tts, args.speaker_encoder_model_path)
-    optimizer = AdamW(qwen3tts.model.parameters(), lr=args.lr, weight_decay=0.01, foreach=False, fused=False)
+    optimizer_kwargs = {"lr": args.lr, "weight_decay": 0.01}
+    if torch.cuda.is_available():
+        optimizer_kwargs["fused"] = True
+    optimizer = AdamW(qwen3tts.model.parameters(), **optimizer_kwargs)
 
     model, optimizer, train_dataloader = accelerator.prepare(qwen3tts.model, optimizer, train_dataloader)
     speaker_encoder = accelerator.prepare_model(speaker_encoder, evaluation_mode=True)

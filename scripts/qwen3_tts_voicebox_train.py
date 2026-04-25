@@ -1,53 +1,79 @@
 #!/usr/bin/env python3
-"""Run the dedicated VoiceBox fine-tuning pipeline.
+"""Compatibility wrapper for the canonical VoiceBox training scripts.
 
-VoiceBox is the self-contained variant that starts from a CustomVoice-like
-checkpoint and exports a checkpoint that still behaves like `custom_voice`
-for inference, but also embeds the Base 1.7B speaker encoder so it can be
-fine-tuned again without an external Base path.
+This entry point used to cover both bootstrap and retraining cases. It now
+dispatches to the maintained ``voicebox/`` scripts:
+
+* with ``--speaker-encoder-model-path``: ``sft_voicebox_bootstrap_12hz.py``
+* without it: ``sft_voicebox_12hz.py``
 """
 
 from __future__ import annotations
 
-import argparse
+import subprocess
+import sys
+from pathlib import Path
 
-import qwen3_tts_upstream_train as upstream
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RETRAIN_SCRIPT = REPO_ROOT / "voicebox" / "sft_voicebox_12hz.py"
+BOOTSTRAP_SCRIPT = REPO_ROOT / "voicebox" / "sft_voicebox_bootstrap_12hz.py"
+RETRAIN_ALIASES = {
+    "--train-jsonl": "--train_jsonl",
+    "--init-model-path": "--init_model_path",
+    "--init-voicebox-model-path": "--init_model_path",
+    "--output-model-path": "--output_model_path",
+    "--batch-size": "--batch_size",
+    "--num-epochs": "--num_epochs",
+    "--speaker-name": "--speaker_name",
+}
+BOOTSTRAP_ALIASES = {
+    **RETRAIN_ALIASES,
+    "--init-customvoice-model-path": "--init_model_path",
+    "--speaker-encoder-model-path": "--speaker_encoder_model_path",
+    "--base-speaker-encoder-model-path": "--speaker_encoder_model_path",
+}
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for VoiceBox fine-tuning."""
+def uses_external_speaker_encoder(argv: list[str]) -> bool:
+    """Return whether the legacy command is asking for bootstrap training."""
 
-    parser = argparse.ArgumentParser(description="Run self-contained VoiceBox fine-tuning.")
-    parser.add_argument("--train-jsonl", required=True, help="Prepared JSONL path.")
-    parser.add_argument("--init-model-path", required=True, help="VoiceBox or CustomVoice init checkpoint.")
-    parser.add_argument(
-        "--speaker-encoder-model-path",
-        default="",
-        help="Optional Base 1.7B source. Omit this when the init checkpoint already embeds the encoder.",
-    )
-    parser.add_argument("--output-model-path", required=True, help="Run output directory.")
-    parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--lr", type=float, default=2e-6)
-    parser.add_argument("--num-epochs", type=int, default=1)
-    parser.add_argument("--speaker-name", default="speaker_test")
-    return parser.parse_args()
+    flags = {"--speaker-encoder-model-path", "--base-speaker-encoder-model-path", "--speaker_encoder_model_path"}
+    for index, arg in enumerate(argv):
+        if arg in flags:
+            if index + 1 >= len(argv):
+                return True
+            return bool(argv[index + 1]) and not argv[index + 1].startswith("--")
+        for flag in flags:
+            if arg.startswith(f"{flag}="):
+                return bool(arg.split("=", 1)[1])
+    return False
+
+
+def normalize_args(argv: list[str], aliases: dict[str, str]) -> list[str]:
+    """Map legacy option names to the selected canonical CLI."""
+
+    normalized: list[str] = []
+    for arg in argv:
+        if "=" in arg:
+            key, value = arg.split("=", 1)
+            normalized.append(f"{aliases.get(key, key)}={value}")
+        else:
+            normalized.append(aliases.get(arg, arg))
+    return normalized
 
 
 def main() -> None:
-    """Delegate into the demo-side VoiceBox training command."""
+    """Forward execution into the correct canonical VoiceBox trainer."""
 
-    args = parse_args()
-    namespace = argparse.Namespace(
-        train_jsonl=args.train_jsonl,
-        init_model_path=args.init_model_path,
-        speaker_encoder_model_path=args.speaker_encoder_model_path,
-        output_model_path=args.output_model_path,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        num_epochs=args.num_epochs,
-        speaker_name=args.speaker_name,
-    )
-    upstream.train_customvoice_command(namespace)
+    argv = sys.argv[1:]
+    if uses_external_speaker_encoder(argv):
+        script = BOOTSTRAP_SCRIPT
+        aliases = BOOTSTRAP_ALIASES
+    else:
+        script = RETRAIN_SCRIPT
+        aliases = RETRAIN_ALIASES
+    subprocess.run([sys.executable, str(script), *normalize_args(argv, aliases)], check=True, cwd=REPO_ROOT)
 
 
 if __name__ == "__main__":

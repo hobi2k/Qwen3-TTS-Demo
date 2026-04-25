@@ -1,60 +1,40 @@
 #!/usr/bin/env python3
-"""Fine-tune an already self-contained VoiceBox checkpoint.
+"""Compatibility wrapper for ``voicebox/retrain.py``.
 
-This path assumes the init checkpoint already embeds:
-- `speaker_encoder.*`
-- `speaker_encoder_config`
-- `demo_model_family = "voicebox"`
-
-It intentionally does not require an external Base 1.7B path.
+The canonical VoiceBox -> VoiceBox retraining path is now under ``voicebox/``.
+This legacy entry point only translates old flag names and forwards execution.
 """
 
 from __future__ import annotations
 
-import argparse
+import subprocess
+import sys
 from pathlib import Path
 
-import qwen3_tts_upstream_train as upstream
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CANONICAL_SCRIPT = REPO_ROOT / "voicebox" / "retrain.py"
+ARG_ALIASES = {
+    "--train-jsonl": "--train_jsonl",
+    "--init-voicebox-model-path": "--init_model_path",
+    "--init-model-path": "--init_model_path",
+    "--output-model-path": "--output_model_path",
+    "--batch-size": "--batch_size",
+    "--num-epochs": "--num_epochs",
+    "--speaker-name": "--speaker_name",
+}
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for VoiceBox-only retraining."""
+def normalize_args(argv: list[str]) -> list[str]:
+    """Map legacy option names to the canonical retraining CLI."""
 
-    parser = argparse.ArgumentParser(description="Fine-tune an existing VoiceBox checkpoint without external Base.")
-    parser.add_argument("--train-jsonl", required=True, help="Prepared JSONL path.")
-    parser.add_argument("--init-voicebox-model-path", required=True, help="Existing VoiceBox checkpoint.")
-    parser.add_argument("--output-model-path", required=True, help="Run output directory.")
-    parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--lr", type=float, default=2e-6)
-    parser.add_argument("--num-epochs", type=int, default=1)
-    parser.add_argument("--speaker-name", default="speaker_test")
-    return parser.parse_args()
+    return [ARG_ALIASES.get(arg, arg) for arg in argv]
 
 
 def main() -> None:
-    """Run the demo-side VoiceBox-only retraining flow."""
+    """Forward execution into ``voicebox/retrain.py``."""
 
-    args = parse_args()
-    init_path = Path(args.init_voicebox_model_path)
-    if not init_path.is_absolute():
-        init_path = (upstream.REPO_ROOT / init_path).resolve()
-    if not upstream.checkpoint_has_speaker_encoder(init_path):
-        raise SystemExit(
-            f"{init_path} does not embed speaker_encoder weights. "
-            "Use qwen3_tts_voicebox_bootstrap.py first."
-        )
-
-    namespace = argparse.Namespace(
-        train_jsonl=args.train_jsonl,
-        init_model_path=str(init_path),
-        speaker_encoder_model_path="",
-        output_model_path=args.output_model_path,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        num_epochs=args.num_epochs,
-        speaker_name=args.speaker_name,
-    )
-    upstream.train_customvoice_command(namespace)
+    subprocess.run([sys.executable, str(CANONICAL_SCRIPT), *normalize_args(sys.argv[1:])], check=True, cwd=REPO_ROOT)
 
 
 if __name__ == "__main__":

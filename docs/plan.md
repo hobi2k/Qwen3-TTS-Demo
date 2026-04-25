@@ -85,14 +85,28 @@
 즉 `VoiceBox`는 “Base와 CustomVoice를 그냥 합친 새 범용 모델”이 아니라,
 현재 `CustomVoice` 경로를 유지하면서도 학습 자립성을 갖춘 self-contained 확장형을 가리키는 작업명입니다.
 
-현재 단계에서는 이 이름을 내부 설계와 문서에서 먼저 쓰고,
-실제 UI 노출 여부는 구현 안정화 후 다시 판단합니다.
+현재 단계에서는 `VoiceBox`를 내부 설계와 문서에서 명확히 쓰고,
+WEB UI에서는 사용자가 혼동하지 않도록 “speaker encoder 포함 모델”이라는 설명과 함께 노출하는 방향입니다.
+
+현재 검증된 VoiceBox 산출물:
+
+- `data/finetune-runs/mai_ko_voicebox17b_full/final`
+- `data/finetune-runs/mai_ko_voicebox17b_full_extra1/final`
+
+두 번째 체크포인트는 `VoiceBox -> VoiceBox` 1 epoch 추가 학습까지 끝난 결과입니다.
 
 ### 2. CustomVoice self-contained checkpoint
 
-가장 큰 남은 구조 과제입니다.
+가장 큰 구조 과제였던 “speaker encoder를 포함한 self-contained checkpoint”는
+현재 `VoiceBox` 전용 경로로 재현 가능하게 분리되어 있습니다.
 
 현재는 `CustomVoice Fine-Tune` 시 `Base 1.7B`의 `speaker_encoder`를 보조로 빌려 쓰고 있습니다.
+
+현재 결론:
+
+- plain `CustomVoice`는 여전히 `speaker_encoder`를 포함하지 않는 결과로 유지할 수 있다
+- `VoiceBox` 변환 단계에서 `Base 1.7B`의 `speaker_encoder`를 합친다
+- `VoiceBox -> VoiceBox` 추가 학습은 외부 `speaker_encoder_model_path` 없이 가능하다
 
 최종 목표:
 
@@ -160,6 +174,16 @@
 - 4차: 학습 후 추론이 기존 self-contained가 아닌 체크포인트보다 깨지지 않는지 확인
 - 5차: 문서화와 UI 라벨까지 반영
 
+현재 완료된 검증:
+
+- `speaker_encoder.*` 텐서 포함 확인: 완료
+- `VoiceBox -> VoiceBox` 1 epoch 추가 학습: 완료
+- `mai` speaker id 유지: 완료
+- 일반 instruct 추론: 완료
+- low-level clone 생성: 완료
+- low-level clone + instruct 생성: 완료
+- Whisper 전사와 speaker similarity 자동 검수: 완료
+
 8. 완료 기준
 
 - `CustomVoice` FT 체크포인트 하나만 있으면 다시 학습 가능하다
@@ -177,6 +201,8 @@
 
 이 과제는 단순 리팩터링이 아니라, `CustomVoice`를 “실험용 학습 산출물”에서 “독립적으로 이어서 키울 수 있는 모델 형식”으로 올리는 작업으로 본다.
 
+현재 세부 결과는 [cookbook/18-current-experiment-results.md](./cookbook/18-current-experiment-results.md)를 기준으로 본다.
+
 ### 2. FlashAttention 2 운영 유지
 
 Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
@@ -186,7 +212,21 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 - Linux + CUDA: `flash_attention_2`
 - macOS / CPU / 미지원 환경: `sdpa`
 
-### 3. 프런트 visual polish
+현재 검증된 설치 경로는 prebuilt Linux wheel입니다. WSL에서 source build로 `nvcc`/`ninja`를 오래 돌리는 경로는
+시스템 정지 위험이 크므로 기본 절차로 삼지 않습니다.
+
+### 3. Optimizer 운영
+
+1.7B full fine-tuning에서 optimizer state 메모리가 WSL/GPU 안정성에 직접 영향을 줍니다.
+
+현재 정책:
+
+- 기본 구현은 `AdamW`를 유지한다
+- full run이 16GB GPU에서 불안정하면 `QWEN_DEMO_OPTIMIZER=adafactor`를 사용한다
+- optimizer 선택은 품질 판정이 아니라 학습 안정성 기록으로 문서에 남긴다
+- 품질은 생성 wav, Whisper 전사, speaker similarity, 실제 청취로 판단한다
+
+### 4. 프런트 visual polish
 
 정보 구조는 거의 잡혔지만, 시각 완성도는 계속 다듬어야 합니다.
 
@@ -207,6 +247,7 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 - `MMAudio` sound effects
 - 오디오 분리
 - 품질 검수 스크립트와 보고서
+- VoiceBox 변환 / 재학습 / clone / clone + instruct 실험
 
 ## 현재 범위에서 제외되는 것
 
@@ -226,6 +267,18 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 4. 프리셋 기반 생성에서 스타일과 instruct가 같이 유지되는가
 
 이 검수는 문서와 스크립트 기준으로 반복 가능해야 합니다.
+
+현재 추가된 검수 스크립트:
+
+- `scripts/evaluate_customvoice_voicebox_quality.py`
+- `voicebox/clone.py`
+- `voicebox/clone_instruct.py`
+
+현재 기준 대표 결과:
+
+- plain CustomVoice mean speaker similarity: `0.9693`
+- VoiceBox mean speaker similarity: `0.9630`
+- VoiceBox clone+instruct `embedded_encoder_only`: target text similarity `1.000`
 
 ## 저장 구조 원칙
 
@@ -263,3 +316,5 @@ data/datasets/<dataset_id>/
 - 백엔드 구조: [cookbook/02-backend-guide.md](./cookbook/02-backend-guide.md)
 - 프리셋 + instruct: [cookbook/12-preset-plus-instruct.md](./cookbook/12-preset-plus-instruct.md)
 - CustomVoice 파인튜닝: [cookbook/13-customvoice-finetuning.md](./cookbook/13-customvoice-finetuning.md)
+- 현재 실험 결과: [cookbook/18-current-experiment-results.md](./cookbook/18-current-experiment-results.md)
+- 스크립트 진입점 정리: [cookbook/19-script-entrypoints.md](./cookbook/19-script-entrypoints.md)

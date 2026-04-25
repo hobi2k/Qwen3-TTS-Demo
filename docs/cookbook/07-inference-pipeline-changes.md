@@ -18,6 +18,7 @@
 2. `목소리 복제`
 3. `목소리 설계`
 4. `프리셋 기반 생성`
+5. `VoiceBox` 실험 경로
 
 즉 예전처럼 “기능이 어디에 있는지부터 다시 배워야 하는 구조”보다,
 사용자 작업 기준으로 추론을 나눈 상태라고 보는 편이 맞습니다.
@@ -52,6 +53,15 @@
 를 결정합니다.
 
 즉 프런트가 모델별 라우트를 일일이 외우는 구조가 아니라, 모델 메타데이터를 기준으로 화면이 바뀌는 구조입니다.
+
+`VoiceBox` 계열은 아래 메타데이터로 식별합니다.
+
+- `tts_model_type = custom_voice`
+- `demo_model_family = voicebox`
+- `speaker_encoder_included = true`
+
+추론 호환성을 위해 `tts_model_type`은 `custom_voice`로 유지하지만,
+UI와 백엔드는 `demo_model_family`를 보고 speaker encoder 포함 모델임을 구분할 수 있습니다.
 
 ## 3. `/api/generate/model`
 
@@ -125,6 +135,18 @@
 - `Base`는 저장된 스타일 신호를 읽고
 - `CustomVoice`는 새 대사와 instruct를 적용합니다
 
+별도 실험 경로인 `VoiceBox`는 한 체크포인트 안에 speaker encoder를 포함하므로,
+clone-like conditioning과 instruct를 한 모델에서 같이 실험할 수 있습니다.
+
+현재 안정 후보:
+
+- `embedded_encoder_only`
+
+주의 후보:
+
+- `embedded_encoder_with_ref_code`
+  - 참조 codec 흐름까지 넣기 때문에 aggressive instruct에서 문장 보존이 흔들릴 수 있습니다.
+
 ## 8. `스토리 스튜디오`
 
 현재 스토리 스튜디오는 장문 대본 생성 전용 추론 경로입니다.
@@ -153,6 +175,12 @@
 
 즉 학습 결과를 별도 스크립트로만 테스트하는 구조가 아니라, UI 안으로 다시 가져오는 구조입니다.
 
+현재 검증된 학습 결과:
+
+- `data/finetune-runs/mai_ko_customvoice17b_full/final`
+- `data/finetune-runs/mai_ko_voicebox17b_full/final`
+- `data/finetune-runs/mai_ko_voicebox17b_full_extra1/final`
+
 ## 10. 오디오 툴은 추론과 분리합니다
 
 현재 아래 기능은 메인 TTS 추론과 분리된 독립 작업실입니다.
@@ -170,6 +198,7 @@
 - 메인 TTS: `텍스트 음성 변환`
 - 스타일 자산 생성: `목소리 복제`, `목소리 설계`
 - 스타일 재활용: `프리셋 기반 생성`
+- self-contained clone/instruct 실험: `VoiceBox`
 - 장문 생성: `스토리 스튜디오`
 - 오디오 툴: `사운드 효과`, `보이스 체인저`, `오디오 분리`
 

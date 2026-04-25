@@ -180,16 +180,17 @@
 
 이 구조 덕분에 "기존 `CustomVoice` 계열 추론 방식과 더 자연스럽게 이어지는 학습 경로"를 실험할 수 있게 되었습니다.
 
-### 아직 남아 있는 후속 작업
+### 아직 남아 있는 후속 작업과 현재 VoiceBox 해결 경로
 
-현재 구조는 학습 경로를 성립시키는 데에는 성공했지만, 결과 체크포인트가 완전히 self-contained라고 보기는 어렵습니다.
+plain `CustomVoice` 결과 체크포인트는 여전히 self-contained라고 보기는 어렵습니다.
 
-즉 다음 작업이 남아 있습니다.
+그래서 현재 프로젝트는 별도 `VoiceBox` 경로를 추가했습니다.
 
-- fine-tuned `CustomVoice` 결과물에 `speaker_encoder`까지 함께 저장하기
-- 그 결과 체크포인트 하나만으로 추가 `CustomVoice Fine-Tune`을 다시 수행할 수 있게 만들기
+- 1단계: plain `CustomVoice`에 새 화자 추가
+- 2단계: `Base 1.7B`의 `speaker_encoder`를 합쳐 `VoiceBox`로 변환
+- 3단계: `VoiceBox -> VoiceBox` 추가 학습
 
-이 작업은 루트 [TODO.md](../../TODO.md)에 별도 항목으로 정리되어 있습니다.
+이 경로는 [../voicebox/02-finetuning.md](../voicebox/02-finetuning.md)에 별도로 정리되어 있습니다.
 
 ## 5. 학습 모드 선택 개념이 추가되었습니다
 
@@ -279,6 +280,14 @@
 - `CustomVoice Fine-Tune`
   dataset 음색 반영과 말투 지시 유지라는 두 목표를 함께 노리는 경로입니다. 다만 데이터 품질과 전사 정확도에 크게 영향을 받습니다.
 
+현재 MAI 한국어 full run은 clean prepared dataset 기준 `727`개 샘플로 진행했습니다.
+
+```text
+data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
+```
+
+이 데이터셋은 placeholder, 특수 문자, 길이 조건에 맞지 않는 샘플을 제외한 결과입니다.
+
 ## 9. 학습 결과가 추론으로 다시 연결되도록 바뀌었습니다
 
 과거에는 "학습은 했는데, 그 결과를 웹에서 바로 써볼 수 없는" 끊긴 경험이 생기기 쉬웠습니다.  
@@ -338,6 +347,20 @@
 - `CustomVoice` 계열 추론과 더 직접적으로 연결하려는 시도
 - 현재는 `Base`의 `speaker_encoder`를 보조로 사용
 
+### `VoiceBox Fine-Tune`
+
+- plain `CustomVoice` FT 결과에 `Base 1.7B` speaker encoder를 합친 self-contained 경로
+- 결과 체크포인트 안에 `speaker_encoder.*`가 포함됨
+- 외부 `speaker_encoder_model_path` 없이 `VoiceBox -> VoiceBox` 추가 학습 가능
+- 현재 `mai` 화자 기준 1 epoch 추가 학습까지 완료
+
+### Optimizer 운영
+
+- 기본 optimizer는 `AdamW`
+- 1.7B full fine-tuning에서 RTX 5080 16GB 메모리 피크가 문제가 될 때 `Adafactor` 사용
+- 설정은 `QWEN_DEMO_OPTIMIZER=adafactor`
+- `Adafactor`는 품질 보장 장치가 아니라 학습 완료 안정성을 위한 선택
+
 ### 데이터셋 생성
 
 - 학습 샘플 목록을 만드는 단계
@@ -358,5 +381,6 @@
 - 백엔드 구조: [02-backend-guide.md](./02-backend-guide.md)
 - 프런트엔드 구조: [03-frontend-guide.md](./03-frontend-guide.md)
 - 업스트림 개요: [04-qwen3-tts-overview.md](./04-qwen3-tts-overview.md)
+- 현재 실험 결과: [18-current-experiment-results.md](./18-current-experiment-results.md)
 - examples와 파인튜닝 연결: [05-finetuning-and-examples.md](./05-finetuning-and-examples.md)
 - 추론 파이프라인 변경 상세: [07-inference-pipeline-changes.md](./07-inference-pipeline-changes.md)

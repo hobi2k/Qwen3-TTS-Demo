@@ -65,6 +65,15 @@
 
 두 단계만 신경 쓰면 되고, 중간 전처리 파일은 내부적으로 관리됩니다.
 
+현재 MAI 한국어 실험에서는 UI에서 만든 원본 데이터셋을 그대로 쓰지 않고,
+학습 전에 clean prepared JSONL을 만들었습니다.
+
+```text
+data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
+```
+
+이 파일은 특수 문자열, placeholder, 길이 조건에 맞지 않는 샘플을 제외한 `727`개 샘플로 구성됩니다.
+
 ## 4. 데이터셋은 어떻게 준비해야 하는가
 
 ### 4.1 최소 구성
@@ -153,6 +162,20 @@ data/datasets/<dataset_id>/
 - 사용자가 `checkpoint-epoch-0`, `checkpoint-epoch-1`, `checkpoint-epoch-2`를 일일이 고르는 것은 혼란스럽기 때문입니다.
 - 보통 실제 사용자는 “이 run의 최종 결과”만 고르면 충분하기 때문입니다.
 
+현재 검증된 plain CustomVoice 결과:
+
+```text
+data/finetune-runs/mai_ko_customvoice17b_full/final
+```
+
+메타데이터:
+
+- `tts_model_type = custom_voice`
+- `mai` speaker id: `3067`
+- `speaker_encoder.*` 없음
+
+이 결과는 이어서 `VoiceBox` 변환의 입력으로 사용했습니다.
+
 ## 9. instruct 준수는 자동으로 유지되는가
 
 아닙니다. 이건 가장 중요한 주의사항입니다.
@@ -212,10 +235,40 @@ data/datasets/<dataset_id>/
 - `CustomVoice` 파인튜닝은 음색 적응과 연결되기 때문에
 - 학습 과정에서 화자 정보를 다루는 경로를 분명히 이해해야 합니다.
 
-이 부분은 구현 세부가 바뀔 수 있어, 장기적으로는 아래 목표가 별도 TODO로 남아 있습니다.
+현재 기준으로는 아래처럼 구분합니다.
 
-- fine-tuned `CustomVoice`가 self-contained checkpoint가 되게 만들기
-- 이후 추가 파인튜닝도 그 모델 하나만으로 가능하게 만들기
+- plain `CustomVoice` FT:
+  - 학습 중 `Base 1.7B` speaker encoder를 보조로 사용
+  - 결과 체크포인트에는 `speaker_encoder.*`를 넣지 않음
+- `VoiceBox`:
+  - plain `CustomVoice` 결과에 `Base 1.7B` speaker encoder를 합친 self-contained 체크포인트
+  - 이후 추가 파인튜닝도 그 체크포인트 하나로 가능
+
+즉 “CustomVoice 자체를 항상 self-contained로 저장한다”가 아니라,
+현재는 `VoiceBox`라는 별도 모델 패밀리로 분리해 관리합니다.
+
+## 12.1 Optimizer와 안정성
+
+1.7B full fine-tuning에서는 optimizer state가 GPU 메모리 사용량에 큰 영향을 줍니다.
+
+현재 학습 스크립트는 아래 환경 변수를 지원합니다.
+
+```bash
+QWEN_DEMO_OPTIMIZER=adamw
+QWEN_DEMO_OPTIMIZER=adafactor
+QWEN_DEMO_GRAD_ACCUM_STEPS=1
+QWEN_DEMO_LOG_EVERY=25
+```
+
+현재 MAI full run에서 실제로 안정적으로 사용한 조합:
+
+```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+QWEN_DEMO_OPTIMIZER=adafactor
+```
+
+`Adafactor`는 품질을 올리기 위한 선택이 아니라,
+RTX 5080 16GB 환경에서 optimizer state 메모리를 줄여 학습을 끝까지 완료하기 위한 선택입니다.
 
 ## 13. 웹 UI에서는 어떻게 보이는가
 
@@ -246,3 +299,5 @@ data/datasets/<dataset_id>/
 - [11-pristine-upstream-finetune.md](./11-pristine-upstream-finetune.md)
 - [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)
 - [12-preset-plus-instruct.md](./12-preset-plus-instruct.md)
+- [18-current-experiment-results.md](./18-current-experiment-results.md)
+- [../voicebox/02-finetuning.md](../voicebox/02-finetuning.md)
