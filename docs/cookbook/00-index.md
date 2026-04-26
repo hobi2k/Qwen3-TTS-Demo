@@ -104,19 +104,19 @@
 - `목소리 설계`
 - `프리셋 기반 생성`
 - `사운드 효과`
-- `Applio RVC 모델 학습`
-- `Applio 단일 변환`
-- `Applio 배치 변환`
-- `Applio 모델 블렌딩`
-- `오디오 분리`
-  `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다.
-- `데이터셋 만들기`
-- `학습 실행`
-- `VoiceBox 융합`
 - `S2-Pro 텍스트 음성 변환`
 - `S2-Pro 목소리 저장`
 - `S2-Pro 대화 생성`
 - `S2-Pro 다국어 TTS`
+- `오디오 분리`
+  `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다.
+- `Applio RVC 모델 학습`
+- `Applio 단일 변환`
+- `Applio 배치 변환`
+- `Applio 모델 블렌딩`
+- `데이터셋 만들기`
+- `학습 실행`
+- `VoiceBox 융합`
 - `가이드`
 
 핵심 원칙:

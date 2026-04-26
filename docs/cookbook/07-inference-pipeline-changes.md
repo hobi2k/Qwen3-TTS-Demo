@@ -171,11 +171,11 @@ clone-like conditioning과 instruct를 한 모델에서 같이 실험할 수 있
 현재 아래 기능은 메인 TTS 추론과 분리된 독립 작업실입니다.
 
 - `사운드 효과`
+- `오디오 분리`
 - `Applio RVC 모델 학습`
 - `Applio 단일 변환`
 - `Applio 배치 변환`
 - `Applio 모델 블렌딩`
-- `오디오 분리`
 
 특히 `Applio`는 TTS 재합성이 아니라 `Applio / RVC` audio-to-audio 경로라는 점을 명확히 구분합니다.
 
@@ -187,6 +187,6 @@ clone-like conditioning과 instruct를 한 모델에서 같이 실험할 수 있
 - 스타일 자산 생성: `목소리 복제`, `목소리 설계`
 - 스타일 재활용: `프리셋 기반 생성`
 - self-contained clone/instruct 실험: `VoiceBox`
-- 오디오 툴: `사운드 효과`, `Applio`, `오디오 분리`
+- 오디오 툴: `사운드 효과`, `S2-Pro`, `Applio`
 
 즉 지금의 변화는 “기능을 더 많이 붙인 것”보다, 각 기능의 역할을 사용자 작업 흐름에 맞게 다시 나눈 것이라고 보는 편이 정확합니다.

@@ -28,12 +28,11 @@
   VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용합니다.
 - `사운드 효과`
   `MMAudio` 기반 효과음 생성 화면입니다.
-- `Applio`
-  `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
-- `오디오 분리`
-  `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
 - `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS`
   Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다.
+- `Applio`
+  `오디오 분리`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
+  오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리하며, 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 

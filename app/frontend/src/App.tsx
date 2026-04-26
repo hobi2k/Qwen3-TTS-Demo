@@ -1660,25 +1660,6 @@ export default function App() {
             <button className={activeTab === "effects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("effects")} type="button">
               <span>사운드 효과</span>
             </button>
-            <button className={activeTab === "separation" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("separation")} type="button">
-              <span>오디오 분리</span>
-            </button>
-          </div>
-
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">Applio</span>
-            <button className={activeTab === "applio_train" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_train")} type="button">
-              <span>RVC 모델 학습</span>
-            </button>
-            <button className={activeTab === "applio_convert" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_convert")} type="button">
-              <span>단일 변환</span>
-            </button>
-            <button className={activeTab === "applio_batch" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_batch")} type="button">
-              <span>배치 변환</span>
-            </button>
-            <button className={activeTab === "applio_blend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_blend")} type="button">
-              <span>모델 블렌딩</span>
-            </button>
           </div>
 
           <div className="sidebar__section">
@@ -1694,6 +1675,25 @@ export default function App() {
             </button>
             <button className={activeTab === "s2pro_multilingual" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
               <span>다국어 TTS</span>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">Applio</span>
+            <button className={activeTab === "separation" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("separation")} type="button">
+              <span>오디오 분리</span>
+            </button>
+            <button className={activeTab === "applio_train" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_train")} type="button">
+              <span>RVC 모델 학습</span>
+            </button>
+            <button className={activeTab === "applio_convert" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_convert")} type="button">
+              <span>단일 변환</span>
+            </button>
+            <button className={activeTab === "applio_batch" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_batch")} type="button">
+              <span>배치 변환</span>
+            </button>
+            <button className={activeTab === "applio_blend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_blend")} type="button">
+              <span>모델 블렌딩</span>
             </button>
           </div>
 
