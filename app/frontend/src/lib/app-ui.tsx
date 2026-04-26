@@ -108,24 +108,24 @@ export const PRODUCT_PAGES = {
     description: "CustomVoice 결과와 Base encoder를 합쳐 독립 모델로 만듭니다.",
   },
   s2pro_tagged: {
-    label: "태그 생성",
-    title: "S2-Pro 태그 생성",
-    description: "대사 안의 태그로 감정, 호흡, 발화 스타일을 구간별로 제어합니다.",
+    label: "텍스트 음성 변환",
+    title: "S2-Pro 텍스트 음성 변환",
+    description: "저장한 목소리나 참조 음성으로 대사를 만들고, bracket 태그로 감정과 호흡을 구간별로 조절합니다.",
   },
   s2pro_clone: {
-    label: "목소리 복제",
-    title: "S2-Pro 목소리 복제",
-    description: "참조 음성을 저장 가능한 목소리로 등록하고 계속 재사용합니다.",
+    label: "목소리 저장",
+    title: "S2-Pro 목소리 저장",
+    description: "참조 음성을 reusable voice로 저장해 S2-Pro와 Qwen 작업에서 계속 사용합니다.",
   },
   s2pro_multi_speaker: {
-    label: "멀티 스피커",
-    title: "S2-Pro 멀티 스피커",
-    description: "여러 저장 목소리와 화자 태그로 대화형 음성을 생성합니다.",
+    label: "대화 생성",
+    title: "S2-Pro 대화 생성",
+    description: "저장한 목소리와 speaker tag를 사용해 여러 화자가 있는 대사를 만듭니다.",
   },
   s2pro_multilingual: {
-    label: "다국어 생성",
-    title: "S2-Pro 다국어 생성",
-    description: "한 작업 안에서 여러 언어와 태그를 함께 사용합니다.",
+    label: "다국어 TTS",
+    title: "S2-Pro 다국어 TTS",
+    description: "저장한 목소리의 톤을 유지하면서 여러 언어의 문장을 생성합니다.",
   },
   guide: {
     label: "가이드",
@@ -137,26 +137,26 @@ export const PRODUCT_PAGES = {
 export const S2_PRO_MODES = [
   {
     id: "tagged",
-    label: "Tagged TTS",
-    title: "태그 기반 음성 생성",
-    description: "문장 안에 [laugh], [whispers], [professional broadcast tone] 같은 자유형 태그를 넣어 구간별 감정과 말투를 제어합니다.",
+    label: "Voice TTS",
+    title: "저장 목소리로 대사 만들기",
+    description: "저장한 목소리 또는 참조 음성으로 대사를 읽히고, 필요할 때만 [laugh], [whispers] 같은 표현 태그를 넣습니다.",
   },
   {
     id: "clone",
-    label: "Voice Clone",
-    title: "참조 음성 복제",
-    description: "짧은 참조 음성을 기준으로 새 대사를 같은 목소리 톤으로 생성합니다.",
+    label: "Save Voice",
+    title: "목소리 저장",
+    description: "참조 음성을 S2-Pro voice asset으로 저장해 이후 TTS, 대화 생성, 다국어 생성에서 계속 사용합니다.",
   },
   {
     id: "multi_speaker",
-    label: "Multi Speaker",
-    title: "멀티 스피커 대화",
+    label: "Dialogue",
+    title: "대화 생성",
     description: "<|speaker:0|>, <|speaker:1|> 같은 화자 태그로 대화 흐름을 나눕니다.",
   },
   {
     id: "multilingual",
-    label: "Multilingual",
-    title: "다국어 생성",
+    label: "Multilingual TTS",
+    title: "다국어 TTS",
     description: "한국어, 영어, 일본어, 중국어 등 여러 언어를 한 작업 안에서 다룹니다.",
   },
 ] as const satisfies ReadonlyArray<{ id: S2ProMode; label: string; title: string; description: string }>;
@@ -325,12 +325,12 @@ export const S2_PRO_TAGS = S2_PRO_TAG_CATEGORIES.flatMap((category) =>
 );
 
 export const S2_PRO_FEATURES = [
-  "Free-form [tag] control",
-  "Voice cloning",
-  "S2-Pro multi-speaker",
-  "Multi-turn generation",
-  "80+ language TTS",
-  "Streaming/server inference",
+  "Saved voice TTS",
+  "Reusable voice assets",
+  "Inline expression tags",
+  "Dialogue scripts",
+  "Multilingual voices",
+  "Local or API runtime",
 ] as const;
 
 export const GUIDE_SECTIONS = [
@@ -400,22 +400,22 @@ export const GUIDE_SECTIONS = [
     steps: ["먼저 CustomVoice에 새 화자를 학습합니다.", "그 다음 Base 1.7B의 speaker encoder를 포함시켜 독립 VoiceBox 체크포인트를 만듭니다.", "완성된 VoiceBox는 추가 학습, clone, clone+instruct 검증으로 이어갑니다."],
   },
   {
-    title: "S2-Pro 태그 생성",
-    summary: "Fish Speech S2-Pro의 bracket 태그로 감정, 호흡, 발화 스타일을 제어합니다.",
-    steps: ["S2-Pro는 고정 태그 목록만 쓰는 방식이 아니라 `[whisper in small voice]`처럼 자연어 태그도 읽습니다.", "태그 라이브러리에서 기준 태그를 눌러 Text에 삽입하고, 필요한 표현은 직접 bracket 안에 적습니다.", "저장 목소리를 선택하면 clone한 음색으로 태그 기반 생성도 이어갈 수 있습니다."],
+    title: "S2-Pro 텍스트 음성 변환",
+    summary: "저장한 목소리로 대사를 만들고 bracket 태그로 표현을 조절합니다.",
+    steps: ["먼저 S2-Pro 목소리 저장에서 참조 음성을 reusable voice로 만듭니다.", "텍스트 음성 변환에서 저장 목소리를 고르고 실제로 읽을 Text를 입력합니다.", "태그는 기능 이름이 아니라 `[whisper]`, `[laugh]`처럼 대사 중간에 넣는 표현 지시입니다."],
   },
   {
-    title: "S2-Pro 목소리 복제",
+    title: "S2-Pro 목소리 저장",
     summary: "참조 음성을 Fish Speech reference voice로 저장해 계속 재사용합니다.",
-    steps: ["생성 갤러리 또는 업로드된 참조 음성을 고르고 Reference text를 입력합니다.", "목소리를 저장하면 S2-Pro 로컬 서버의 reference id와 앱 레코드가 함께 만들어집니다.", "Qwen clone prompt 생성 옵션을 켜면 같은 참조 음성을 Qwen 복제 흐름에서도 바로 쓸 수 있습니다."],
+    steps: ["생성 갤러리 또는 업로드된 참조 음성을 고르고 Reference text를 입력합니다.", "목소리를 저장하면 S2-Pro에서 계속 선택할 수 있는 voice asset이 만들어집니다.", "Qwen clone prompt 생성 옵션을 켜면 같은 참조 음성을 Qwen 복제 흐름에서도 바로 쓸 수 있습니다."],
   },
   {
-    title: "S2-Pro 멀티 스피커",
+    title: "S2-Pro 대화 생성",
     summary: "저장 목소리와 speaker tag를 조합해 대화형 음성을 만듭니다.",
     steps: ["저장 목소리를 기준 음색으로 선택합니다.", "대사에는 `<|speaker:0|>`, `<|speaker:1|>` 같은 speaker tag를 직접 넣습니다.", "여러 화자를 엄밀하게 고정하는 고급 구성은 Fish Speech runtime의 reference id 관리와 함께 검증합니다."],
   },
   {
-    title: "S2-Pro 다국어 생성",
+    title: "S2-Pro 다국어 TTS",
     summary: "저장 목소리와 언어별 문장을 함께 써서 다국어 음성을 생성합니다.",
     steps: ["Language는 관리용 메타데이터이고 실제 언어는 Text에 적힌 문장과 태그가 결정합니다.", "한국어, 영어, 일본어, 중국어 등을 같은 작업 안에 섞을 수 있습니다.", "저장 목소리를 선택하면 같은 음색으로 다국어 결과를 이어서 확인할 수 있습니다."],
   },

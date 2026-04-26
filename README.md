@@ -32,8 +32,8 @@
   `Applio / RVC` 기반 audio-to-audio 변환 화면입니다.
 - `오디오 분리`
   `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
-- `S2-Pro 태그 생성 / 목소리 복제 / 멀티 스피커 / 다국어 생성`
-  Fish Speech S2-Pro 방식의 기능별 작업실입니다. clone한 목소리는 저장 목소리로 남아 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다.
+- `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS`
+  Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -229,10 +229,10 @@ data/datasets/mai_ko_full/
 
 지원하는 작업 흐름:
 
-- `Tagged TTS`: `[laugh]`, `[breath]`, `[professional broadcast tone]` 같은 자유형 인라인 태그를 대사 안에 넣어 생성
-- `Voice Clone`: 생성 갤러리 또는 업로드된 참조 음성을 기준으로 복제 생성
-- `Multi Speaker`: `<|speaker:0|>`, `<|speaker:1|>` 형태의 화자 태그로 대화 생성
-- `Multilingual`: S2-Pro의 80개 이상 언어 지원 방향에 맞춘 다국어 생성
+- `S2-Pro 텍스트 음성 변환`: 저장 목소리 또는 기본 S2-Pro voice로 대사를 생성하고, `[laugh]`, `[breath]`, `[professional broadcast tone]` 같은 인라인 표현 태그를 대사 안에 넣음
+- `S2-Pro 목소리 저장`: 생성 갤러리 또는 업로드된 참조 음성을 reusable voice asset으로 저장
+- `S2-Pro 대화 생성`: `<|speaker:0|>`, `<|speaker:1|>` 형태의 화자 태그로 대화 생성
+- `S2-Pro 다국어 TTS`: S2-Pro의 80개 이상 언어 지원 방향에 맞춘 다국어 생성
 
 기본은 로컬 Fish Speech입니다. `./scripts/download_models.sh s2pro`로 Fish Speech 코드와 `fishaudio/s2-pro` 모델을 로컬에 받고, `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄운 뒤 웹 UI에서 생성합니다. 필요하면 `FISH_AUDIO_API_KEY`를 `.env`에 넣고 S2-Pro 화면의 `Runtime`을 `Fish Audio API`로 바꿔 hosted API도 사용할 수 있습니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
 

@@ -323,7 +323,7 @@ export default function App() {
   const [s2TagSearch, setS2TagSearch] = useState("");
   const [s2ProForm, setS2ProForm] = useState({
     runtime_source: "local" as "auto" | "local" | "api",
-    output_name: "s2pro-tagged-voice",
+    output_name: "s2pro-voice-tts",
     text: "[breath] 오늘은 조금 천천히 말해볼게. [super happy] 그래도 결국 해냈어!",
     language: "Korean",
     reference_audio_path: "",
@@ -337,7 +337,7 @@ export default function App() {
     max_tokens: "2048",
   });
   const [s2ProVoiceForm, setS2ProVoiceForm] = useState({
-    name: "my-s2pro-voice",
+    name: "새-s2pro-목소리",
     runtime_source: "local" as "auto" | "local" | "api",
     reference_audio_path: "",
     reference_text: "",
@@ -798,7 +798,7 @@ export default function App() {
       ...prev,
       reference_audio_path: asset.path,
       reference_text: asset.transcript_text?.trim() || prev.reference_text,
-      name: prev.name === "my-s2pro-voice" ? basenameFromPath(asset.path).replace(/\.[^.]+$/, "") : prev.name,
+      name: prev.name === "새-s2pro-목소리" ? basenameFromPath(asset.path).replace(/\.[^.]+$/, "") : prev.name,
     }));
     setMessage(`${asset.filename}을 S2-Pro 참조 음성으로 선택했습니다.`);
   }
@@ -1571,16 +1571,16 @@ export default function App() {
           <div className="sidebar__section">
             <span className="sidebar__section-title">S2-Pro</span>
             <button className={activeTab === "s2pro_tagged" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_tagged")} type="button">
-              <span>태그 생성</span>
+              <span>텍스트 음성 변환</span>
             </button>
             <button className={activeTab === "s2pro_clone" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_clone")} type="button">
-              <span>목소리 복제</span>
+              <span>목소리 저장</span>
             </button>
             <button className={activeTab === "s2pro_multi_speaker" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multi_speaker")} type="button">
-              <span>멀티 스피커</span>
+              <span>대화 생성</span>
             </button>
             <button className={activeTab === "s2pro_multilingual" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
-              <span>다국어 생성</span>
+              <span>다국어 TTS</span>
             </button>
           </div>
 
@@ -2415,27 +2415,50 @@ export default function App() {
         <section className="workspace workspace--stacked">
           <section className="s2pro-hero">
             <div>
-              <span className="eyebrow eyebrow--soft">Fish Speech</span>
+              <span className="eyebrow eyebrow--soft">Fish Speech S2-Pro</span>
               <h2>{pageMeta.title}</h2>
-              <p>{pageMeta.description}</p>
+              <p>목소리를 먼저 저장하고, 그 목소리로 대사를 만듭니다. bracket 태그는 “기능 이름”이 아니라 대사 사이에 끼워 넣는 감정·호흡 표현 도구입니다.</p>
+              <div className="s2pro-mode-tabs" aria-label="S2-Pro 작업 선택">
+                {[
+                  ["s2pro_tagged", "텍스트 음성 변환", "저장 목소리로 읽기"],
+                  ["s2pro_clone", "목소리 저장", "참조 음성 등록"],
+                  ["s2pro_multi_speaker", "대화 생성", "화자 태그 대사"],
+                  ["s2pro_multilingual", "다국어 TTS", "언어 섞어 읽기"],
+                ].map(([tab, label, hint]) => (
+                  <button
+                    className={activeTab === tab ? "s2pro-mode-tab is-active" : "s2pro-mode-tab"}
+                    key={tab}
+                    onClick={() => openS2ProTab(tab as Extract<TabKey, "s2pro_tagged" | "s2pro_clone" | "s2pro_multi_speaker" | "s2pro_multilingual">)}
+                    type="button"
+                  >
+                    <strong>{label}</strong>
+                    <span>{hint}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="s2pro-feature-cloud">
-              {S2_PRO_FEATURES.map((feature) => (
-                <span key={feature}>{feature}</span>
-              ))}
-            </div>
-            {s2ProRuntime ? (
-              <p className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
-                {s2ProRuntime.runtime_mode === "api"
-                  ? s2ProRuntime.api_key_configured
-                    ? "Fish Audio API 준비됨"
-                    : "Fish Audio API 키 필요"
-                  : s2ProRuntime.server_running
-                    ? "로컬 S2-Pro 서버 연결됨"
-                    : "로컬 S2-Pro 서버 대기 중"}{" "}
-                · {s2ProRuntime.model}
-              </p>
-            ) : null}
+            <aside className="s2pro-runtime-card">
+              <strong>Runtime</strong>
+              {s2ProRuntime ? (
+                <p className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
+                  {s2ProRuntime.runtime_mode === "api"
+                    ? s2ProRuntime.api_key_configured
+                      ? "Fish Audio API ready"
+                      : "Fish Audio API key required"
+                    : s2ProRuntime.server_running
+                      ? "Local Fish Speech ready"
+                      : "Local Fish Speech offline"}{" "}
+                  · {s2ProRuntime.model}
+                </p>
+              ) : (
+                <p className="runtime-pill">Runtime 확인 중</p>
+              )}
+              <div className="s2pro-feature-cloud">
+                {S2_PRO_FEATURES.map((feature) => (
+                  <span key={feature}>{feature}</span>
+                ))}
+              </div>
+            </aside>
           </section>
 
           <section className="panel s2pro-workspace">
@@ -2443,28 +2466,40 @@ export default function App() {
               <div className="s2pro-form__main">
                 {currentS2ProMode === "tagged" ? (
                   <>
-                    <h3>태그 기반 음성 생성</h3>
-                    <p className="field-hint">S2-Pro는 고정 프리셋만 쓰는 모델이 아니라 bracket 형식의 자연어 태그를 읽습니다. 아래 목록은 공식 문서와 모델 설명에 나온 기준 태그를 S2 방식으로 정리한 것입니다.</p>
-                    <input
-                      className="s2pro-tag-search"
-                      placeholder="Search tags, e.g. whisper, angry, pause"
-                      value={s2TagSearch}
-                      onChange={(event) => setS2TagSearch(event.target.value)}
-                    />
-                    <div className="s2pro-tag-library" aria-label="S2-Pro tag library">
-                      {filteredS2TagCategories.map((category) => (
-                        <section className="s2pro-tag-category" key={category.label}>
-                          <strong>{category.label}</strong>
-                          <div className="tag-cloud">
-                            {category.tags.map((tag) => (
-                              <button className="tag-chip" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
-                                {tag}
-                              </button>
-                            ))}
-                          </div>
-                        </section>
-                      ))}
+                    <div className="s2pro-section-heading">
+                      <span className="step-badge">1</span>
+                      <div>
+                        <h3>저장 목소리로 대사 만들기</h3>
+                        <p>Voice Design이 아니라, 저장된 voice asset을 골라 새 문장을 읽히는 흐름입니다.</p>
+                      </div>
                     </div>
+                    <section className="s2pro-voice-selector">
+                      <label>
+                        Saved voice
+                        <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
+                          <option value="">저장 목소리 없이 기본 S2-Pro로 생성</option>
+                          {s2ProVoices.map((voice) => (
+                            <option key={voice.id} value={voice.id}>
+                              {voice.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {selectedS2Voice ? (
+                        <div className="s2pro-selected-voice s2pro-selected-voice--wide">
+                          <strong>{selectedS2Voice.name}</strong>
+                          <span>{selectedS2Voice.reference_text || "저장된 참조 문장 없음"}</span>
+                          <audio controls src={selectedS2Voice.reference_audio_url} />
+                        </div>
+                      ) : (
+                        <div className="s2pro-empty-voice">
+                          <strong>목소리 저장을 먼저 하면 여기서 계속 재사용할 수 있습니다.</strong>
+                          <button className="secondary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
+                            목소리 저장으로 이동
+                          </button>
+                        </div>
+                      )}
+                    </section>
                     <label>
                       Text
                       <textarea
@@ -2473,38 +2508,69 @@ export default function App() {
                         onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
                       />
                     </label>
+                    <details className="s2pro-tag-drawer">
+                      <summary>
+                        <span>Expression tags</span>
+                        <small>[breath], [laugh], [whisper] 같은 표현을 Text에 넣습니다.</small>
+                      </summary>
+                      <input
+                        className="s2pro-tag-search"
+                        placeholder="Search tags, e.g. whisper, angry, pause"
+                        value={s2TagSearch}
+                        onChange={(event) => setS2TagSearch(event.target.value)}
+                      />
+                      <div className="s2pro-tag-library" aria-label="S2-Pro expression tag library">
+                        {filteredS2TagCategories.map((category) => (
+                          <section className="s2pro-tag-category" key={category.label}>
+                            <strong>{category.label}</strong>
+                            <div className="tag-cloud">
+                              {category.tags.map((tag) => (
+                                <button className="tag-chip" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
+                                  {tag}
+                                </button>
+                              ))}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    </details>
                   </>
                 ) : null}
 
                 {currentS2ProMode === "clone" ? (
                   <>
-                    <h3>목소리 저장</h3>
-                    <p className="field-hint">참조 음성을 Fish Speech reference voice로 등록합니다. 저장한 뒤에는 S2-Pro 모든 탭에서 계속 선택할 수 있고, Qwen 복제 화면에도 바로 넘길 수 있습니다.</p>
+                    <div className="s2pro-section-heading">
+                      <span className="step-badge">1</span>
+                      <div>
+                        <h3>참조 음성을 reusable voice로 저장</h3>
+                        <p>짧은 참조 음성과 전사문을 저장하면 S2-Pro TTS, 대화 생성, 다국어 TTS에서 계속 선택할 수 있습니다.</p>
+                      </div>
+                    </div>
                     <div className="s2pro-voice-form">
-                      <label>
-                        Voice name
-                        <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
-                      </label>
-                      <label>
-                        Runtime
-                        <select
-                          value={s2ProVoiceForm.runtime_source}
-                          onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
-                        >
-                          <option value="local">Local Fish Speech</option>
-                          <option value="api">Fish Audio API</option>
-                        </select>
-                      </label>
                       <div className="dataset-source-grid">
                         <section className="status-card">
-                          <strong>참조 음성</strong>
+                          <strong>참조 음성 선택</strong>
                           <ServerAudioPicker assets={audioAssets} selectedPath={s2ProVoiceForm.reference_audio_path} onSelect={handleSelectS2ProReference} />
                           {s2ProVoiceForm.reference_audio_path ? (
                             <audio controls src={fileUrlFromPath(s2ProVoiceForm.reference_audio_path)} />
                           ) : null}
                         </section>
                         <section className="status-card">
-                          <strong>Reference text</strong>
+                          <strong>저장 정보</strong>
+                          <label>
+                            Voice name
+                            <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
+                          </label>
+                          <label>
+                            Runtime
+                            <select
+                              value={s2ProVoiceForm.runtime_source}
+                              onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
+                            >
+                              <option value="local">Local Fish Speech</option>
+                              <option value="api">Fish Audio API</option>
+                            </select>
+                          </label>
                           <textarea
                             placeholder="Reference audio transcript"
                             value={s2ProVoiceForm.reference_text}
@@ -2524,7 +2590,13 @@ export default function App() {
                         목소리 저장
                       </button>
                     </div>
-                    <h3>저장 목소리로 생성</h3>
+                    <div className="s2pro-section-heading">
+                      <span className="step-badge">2</span>
+                      <div>
+                        <h3>저장된 목소리</h3>
+                        <p>여기서 선택한 목소리는 S2-Pro TTS와 Qwen 복제 흐름으로 바로 이어집니다.</p>
+                      </div>
+                    </div>
                     <div className="s2pro-voice-grid">
                       {s2ProVoices.map((voice) => (
                         <article className={selectedS2VoiceId === voice.id ? "s2pro-voice-card is-selected" : "s2pro-voice-card"} key={voice.id}>
@@ -2550,21 +2622,8 @@ export default function App() {
                         </article>
                       ))}
                     </div>
-                    <div className="dataset-source-grid">
-                      <section className="status-card">
-                        <strong>이번 생성에 사용할 목소리</strong>
-                        <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
-                          <option value="">저장 목소리 없이 참조 음성 직접 사용</option>
-                          {s2ProVoices.map((voice) => (
-                            <option key={voice.id} value={voice.id}>
-                              {voice.name}
-                            </option>
-                          ))}
-                        </select>
-                      </section>
-                    </div>
                     <label>
-                      Text
+                      저장 목소리 테스트 대사
                       <textarea
                         className="s2pro-textarea"
                         value={s2ProForm.clone_text}
@@ -2576,8 +2635,13 @@ export default function App() {
 
                 {currentS2ProMode === "multi_speaker" ? (
                   <>
-                    <h3>멀티 스피커 대화</h3>
-                    <p className="field-hint">Fish Speech는 참조 음성의 화자 정보를 기반으로 speaker tag를 읽습니다. 저장 목소리를 골라 기준 음색을 고정하고, 대사 안에는 speaker tag를 직접 넣습니다.</p>
+                    <div className="s2pro-section-heading">
+                      <span className="step-badge">1</span>
+                      <div>
+                        <h3>저장 목소리로 대화 만들기</h3>
+                        <p>대사 안에 speaker tag를 넣어 장면을 나눕니다. 목소리 자산이 없으면 먼저 목소리를 저장하세요.</p>
+                      </div>
+                    </div>
                     <label>
                       Saved voice
                       <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
@@ -2602,8 +2666,13 @@ export default function App() {
 
                 {currentS2ProMode === "multilingual" ? (
                   <>
-                    <h3>다국어 생성</h3>
-                    <p className="field-hint">저장 목소리를 유지한 채 여러 언어 문장을 섞어 생성합니다. 언어 선택은 메타데이터이고, 실제 언어 전환은 Text에 들어간 문장과 태그가 결정합니다.</p>
+                    <div className="s2pro-section-heading">
+                      <span className="step-badge">1</span>
+                      <div>
+                        <h3>저장 목소리로 다국어 문장 읽기</h3>
+                        <p>같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.</p>
+                      </div>
+                    </div>
                     <label>
                       Saved voice
                       <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
@@ -2628,6 +2697,10 @@ export default function App() {
               </div>
 
               <aside className="s2pro-form__side">
+                <div className="s2pro-side-title">
+                  <strong>Generation settings</strong>
+                  <span>{selectedS2Voice ? selectedS2Voice.name : "기본 S2-Pro voice"}</span>
+                </div>
                 <label>
                   Runtime
                   <select
@@ -2648,7 +2721,7 @@ export default function App() {
                   <LanguageSelect value={s2ProForm.language} onChange={(language) => setS2ProForm({ ...s2ProForm, language })} />
                 </label>
                 <label>
-                  Instruction
+                  Style instruction
                   <textarea
                     value={s2ProForm.instruction}
                     onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
