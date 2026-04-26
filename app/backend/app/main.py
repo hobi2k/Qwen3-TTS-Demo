@@ -2394,13 +2394,28 @@ def s2pro_text_with_instruction(text: str, instruction: str) -> str:
     return f"[{clean_instruction}] {clean_text}".strip()
 
 
+def normalize_s2pro_runtime_source(value: str = "auto") -> str:
+    """Normalize UI runtime selection to `auto`, `local`, or `api`."""
+
+    normalized = (value or "auto").strip().lower()
+    if normalized in {"api", "fish_audio_api", "fish-audio-api", "hosted"}:
+        return "api"
+    if normalized in {"local", "local_fish_speech_server", "fish-speech", "self-hosted"}:
+        return "local"
+    return "auto"
+
+
 def list_s2pro_voice_records() -> List[S2ProVoiceRecord]:
     """Return saved S2-Pro voices with local Fish reference presence attached."""
 
-    fish_reference_ids = set(list_s2_pro_references())
+    fish_reference_ids = set(list_s2_pro_references(runtime_source="local"))
     records: List[S2ProVoiceRecord] = []
     for record in storage.list_json_records(storage.s2pro_voices_dir):
-        record["fish_reference_present"] = str(record.get("reference_id", "")) in fish_reference_ids
+        runtime_source = normalize_s2pro_runtime_source(str(record.get("runtime_source") or "local"))
+        record["runtime_source"] = runtime_source if runtime_source != "auto" else "local"
+        record["fish_reference_present"] = (
+            bool(record.get("reference_id")) if record["runtime_source"] == "api" else str(record.get("reference_id", "")) in fish_reference_ids
+        )
         try:
             records.append(S2ProVoiceRecord(**record))
         except Exception:
@@ -2430,6 +2445,7 @@ def s2_pro_capabilities() -> S2ProRuntimeResponse:
             "multi_speaker",
             "multilingual_tts",
             "local_http_runtime",
+            "hosted_fish_audio_api",
         ],
     )
 
@@ -2443,10 +2459,11 @@ def s2_pro_voices() -> List[S2ProVoiceRecord]:
 
 @app.post("/api/s2-pro/voices", response_model=S2ProVoiceRecord)
 def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
-    """Register a local Fish Speech reference voice and save it as an app asset."""
+    """Register a reusable S2-Pro voice and save it as an app asset."""
 
     reference_audio_path = resolve_audio_absolute_path(payload.reference_audio_path)
     reference_audio_rel = storage.relpath(reference_audio_path)
+    runtime_source = normalize_s2pro_runtime_source(payload.runtime_source)
     created_at = utc_now()
     voice_id = storage.new_id("s2voice")
     created_moment = parse_created_at(created_at)
@@ -2458,8 +2475,9 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
         raise HTTPException(status_code=503, detail="Qwen clone prompt를 만들 실제 Qwen 런타임이 준비되지 않았습니다.")
 
     # Avoid colliding with an existing local Fish reference id while keeping the
-    # user-facing model name stable in the app record.
-    existing_references = set(list_s2_pro_references())
+    # user-facing model name stable in the app record. Hosted Fish Audio returns
+    # its own immutable model id, so the requested reference id is only a title.
+    existing_references = set(list_s2_pro_references(runtime_source="local")) if runtime_source != "api" else set()
     unique_reference_id = reference_id
     suffix = 2
     while unique_reference_id in existing_references:
@@ -2467,13 +2485,16 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
         suffix += 1
 
     try:
-        register_s2_pro_reference(
+        registration = register_s2_pro_reference(
             reference_id=unique_reference_id,
             audio_path=reference_audio_path,
             reference_text=payload.reference_text,
+            runtime_source=runtime_source,
         )
     except FishSpeechError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if runtime_source == "api":
+        unique_reference_id = str(registration.get("reference_id") or unique_reference_id)
 
     qwen_clone_prompt_id: Optional[str] = None
     qwen_clone_prompt_path: Optional[str] = None
@@ -2484,7 +2505,7 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
             reference_audio_path=reference_audio_rel,
             reference_text=payload.reference_text,
             x_vector_only_mode=False,
-            meta={"s2_pro_voice_id": voice_id, "s2_pro_reference_id": unique_reference_id},
+            meta={"s2_pro_voice_id": voice_id, "s2_pro_reference_id": unique_reference_id, "s2_pro_runtime_source": runtime_source},
         )
         qwen_clone_prompt_id = qwen_prompt.id
         qwen_clone_prompt_path = qwen_prompt.prompt_path
@@ -2499,6 +2520,7 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
         "language": payload.language,
         "created_at": created_at,
         "notes": payload.notes,
+        "runtime_source": runtime_source if runtime_source != "auto" else "local",
         "qwen_clone_prompt_id": qwen_clone_prompt_id,
         "qwen_clone_prompt_path": qwen_clone_prompt_path,
         "fish_reference_present": True,
@@ -2518,9 +2540,10 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
 
 @app.post("/api/s2-pro/generate", response_model=GenerationResponse)
 def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
-    """Generate audio through the local Fish Speech S2-Pro server and save it."""
+    """Generate audio through a local or hosted S2-Pro runtime and save it."""
 
     output_format = audio_tool_format_or_422(payload.output_format)
+    runtime_source = normalize_s2pro_runtime_source(payload.runtime_source)
     reference_audio_path: Optional[Path] = None
     reference_audio_rel = ""
     if payload.reference_audio_path:
@@ -2528,13 +2551,30 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
         reference_audio_rel = storage.relpath(reference_audio_path)
 
     reference_id = payload.reference_id
+    selected_voice_runtime_source: Optional[str] = None
     if reference_id:
         try:
-            reference_id = get_s2pro_voice_record(reference_id).reference_id
+            voice_record = get_s2pro_voice_record(reference_id)
+            reference_id = voice_record.reference_id
+            selected_voice_runtime_source = normalize_s2pro_runtime_source(voice_record.runtime_source)
         except HTTPException:
             # Fish Speech also accepts raw reference ids; keep that path for
             # users who already registered voices in the local Fish runtime.
             reference_id = payload.reference_id
+    if runtime_source == "auto" and selected_voice_runtime_source:
+        runtime_source = selected_voice_runtime_source
+
+    resolved_reference_ids: List[str] = []
+    for item in payload.reference_ids:
+        if not item:
+            continue
+        try:
+            voice_record = get_s2pro_voice_record(item)
+            resolved_reference_ids.append(voice_record.reference_id)
+            if runtime_source == "auto":
+                runtime_source = normalize_s2pro_runtime_source(voice_record.runtime_source)
+        except HTTPException:
+            resolved_reference_ids.append(item)
 
     final_text = s2pro_text_with_instruction(payload.text, payload.instruction)
     output_path = generated_audio_path("s2-pro", requested_output_name(payload) or final_text, output_format)
@@ -2545,7 +2585,7 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
             reference_audio_path=reference_audio_path,
             reference_text=payload.reference_text or "",
             reference_id=reference_id,
-            reference_ids=payload.reference_ids,
+            reference_ids=resolved_reference_ids,
             temperature=payload.temperature,
             top_p=payload.top_p,
             max_new_tokens=payload.max_new_tokens,
@@ -2560,6 +2600,7 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
             min_chunk_length=payload.min_chunk_length,
             condition_on_previous_chunks=payload.condition_on_previous_chunks,
             early_stop_threshold=payload.early_stop_threshold,
+            runtime_source=runtime_source,
         )
     except FishSpeechError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -2580,6 +2621,7 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
             "final_text": final_text,
             "s2_pro_mode": payload.mode,
             "s2_pro_reference_id": reference_id,
+            "s2_pro_runtime_source": runtime_source,
         },
     )
     save_generation_record(record)

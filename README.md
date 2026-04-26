@@ -234,7 +234,7 @@ data/datasets/mai_ko_full/
 - `Multi Speaker`: `<|speaker:0|>`, `<|speaker:1|>` 형태의 화자 태그로 대화 생성
 - `Multilingual`: S2-Pro의 80개 이상 언어 지원 방향에 맞춘 다국어 생성
 
-Hosted API 키는 쓰지 않습니다. `./scripts/download_models.sh s2pro`로 Fish Speech 코드와 `fishaudio/s2-pro` 모델을 로컬에 받고, `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄운 뒤 웹 UI에서 생성합니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
+기본은 로컬 Fish Speech입니다. `./scripts/download_models.sh s2pro`로 Fish Speech 코드와 `fishaudio/s2-pro` 모델을 로컬에 받고, `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄운 뒤 웹 UI에서 생성합니다. 필요하면 `FISH_AUDIO_API_KEY`를 `.env`에 넣고 S2-Pro 화면의 `Runtime`을 `Fish Audio API`로 바꿔 hosted API도 사용할 수 있습니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
 
 ## 빠른 시작
 

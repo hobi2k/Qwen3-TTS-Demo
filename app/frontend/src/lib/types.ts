@@ -296,11 +296,15 @@ export interface S2ProRuntimeResponse {
   model_ready: boolean;
   missing_model_files: string[];
   server_error: string;
+  runtime_mode: "local" | "api";
+  api_key_configured: boolean;
+  available_runtimes: Array<"local" | "api">;
   features: string[];
 }
 
 export interface S2ProGenerateRequest {
   mode: "tagged" | "clone" | "multi_speaker" | "multilingual";
+  runtime_source?: "auto" | "local" | "api";
   text: string;
   language: string;
   output_name?: string;
@@ -335,6 +339,7 @@ export interface S2ProVoiceRecord {
   language: string;
   created_at: string;
   notes: string;
+  runtime_source: "local" | "api";
   qwen_clone_prompt_id?: string | null;
   qwen_clone_prompt_path?: string | null;
   fish_reference_present: boolean;
@@ -342,6 +347,7 @@ export interface S2ProVoiceRecord {
 
 export interface S2ProVoiceCreateRequest {
   name: string;
+  runtime_source?: "auto" | "local" | "api";
   reference_audio_path: string;
   reference_text: string;
   language: string;

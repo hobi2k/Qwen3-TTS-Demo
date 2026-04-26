@@ -156,7 +156,7 @@ class VoiceBoxCloneRequest(GenerationRequestBase):
 
 
 class S2ProRuntimeResponse(BaseModel):
-    """로컬 Fish Speech S2-Pro 런타임 상태 응답."""
+    """Fish Speech local / Fish Audio API S2-Pro 런타임 상태 응답."""
 
     available: bool
     server_running: bool
@@ -172,13 +172,17 @@ class S2ProRuntimeResponse(BaseModel):
     model_ready: bool
     missing_model_files: List[str] = Field(default_factory=list)
     server_error: str = ""
+    runtime_mode: str = "local"
+    api_key_configured: bool = False
+    available_runtimes: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
 
 
 class S2ProGenerateRequest(BaseModel):
-    """Fish Speech S2-Pro 로컬 런타임 생성 요청."""
+    """Fish Speech local / Fish Audio API S2-Pro 생성 요청."""
 
     mode: str = "tagged"
+    runtime_source: str = "auto"
     text: str = Field(..., min_length=1)
     language: str = "Auto"
     output_name: Optional[str] = None
@@ -207,6 +211,7 @@ class S2ProVoiceCreateRequest(BaseModel):
     """S2-Pro에서 계속 재사용할 reference voice 생성 요청."""
 
     name: str = Field(..., min_length=1)
+    runtime_source: str = "auto"
     reference_audio_path: str = Field(..., min_length=1)
     reference_text: str = Field(..., min_length=1)
     language: str = "Auto"
@@ -227,6 +232,7 @@ class S2ProVoiceRecord(BaseModel):
     language: str
     created_at: str
     notes: str = ""
+    runtime_source: str = "local"
     qwen_clone_prompt_id: Optional[str] = None
     qwen_clone_prompt_path: Optional[str] = None
     fish_reference_present: bool = False

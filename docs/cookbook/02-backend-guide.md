@@ -269,21 +269,21 @@ data/datasets/<dataset_id>/
 
 ### `/api/s2-pro/*`
 
-S2-Pro는 Qwen 런타임이 아니라 로컬 Fish Speech HTTP 서버를 사용합니다.
+S2-Pro는 Qwen 런타임이 아니라 Fish Speech 계열 런타임을 사용합니다. 기본은 로컬 Fish Speech HTTP 서버이고, 선택적으로 hosted Fish Audio API도 사용할 수 있습니다.
 
 - `GET /api/s2-pro/capabilities`
-  Fish Speech 소스, S2-Pro 모델 파일, 로컬 서버 연결 상태를 반환합니다.
+  Fish Speech 소스, S2-Pro 모델 파일, 로컬 서버/API 설정 상태를 반환합니다.
 - `GET /api/s2-pro/voices`
   앱에 저장된 Fish Speech reference voice 목록을 반환합니다.
 - `POST /api/s2-pro/voices`
-  참조 음성을 Fish Speech `/v1/references/add`에 등록하고 `data/s2-pro-voices/`에 앱 레코드를 저장합니다.
+  참조 음성을 로컬 Fish Speech `/v1/references/add` 또는 Fish Audio `/model`에 등록하고 `data/s2-pro-voices/`에 앱 레코드를 저장합니다.
 - `POST /api/s2-pro/generate`
-  tagged TTS, voice clone, multi speaker, multilingual 요청을 Fish Speech `/v1/tts`에 전달하고 결과를 생성 갤러리에 저장합니다.
+  tagged TTS, voice clone, multi speaker, multilingual 요청을 로컬/API `/v1/tts`에 전달하고 결과를 생성 갤러리에 저장합니다.
 
 중요한 점:
 
-- Hosted API 키를 요구하지 않습니다.
-- Fish Speech 서버가 꺼져 있으면 가짜 결과를 만들지 않고 503을 반환합니다.
+- Hosted API는 선택 사항이며 `FISH_AUDIO_API_KEY`가 있을 때만 동작합니다.
+- 선택한 런타임이 준비되지 않았으면 가짜 결과를 만들지 않고 503을 반환합니다.
 - 저장 목소리는 S2-Pro reference id와 Qwen에서 재사용할 참조 음성 경로를 함께 갖습니다.
 
 ## 학습 래퍼 원칙

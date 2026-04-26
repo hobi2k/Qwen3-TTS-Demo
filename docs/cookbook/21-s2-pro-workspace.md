@@ -82,17 +82,28 @@ UI 동작:
 ## 백엔드 API
 
 - `GET /api/s2-pro/capabilities`
-  - Fish Speech 코드, S2-Pro 모델 파일, 로컬 서버 연결 상태를 확인합니다.
+  - Fish Speech 코드, S2-Pro 모델 파일, 로컬 서버/API 설정 상태를 확인합니다.
 - `GET /api/s2-pro/voices`
   - 앱이 저장한 S2-Pro reference voice 목록을 반환합니다.
 - `POST /api/s2-pro/voices`
-  - 참조 음성을 Fish Speech `/v1/references/add`에 등록하고 앱 레코드를 저장합니다.
+  - 참조 음성을 로컬 Fish Speech `/v1/references/add` 또는 hosted Fish Audio `/model`에 등록하고 앱 레코드를 저장합니다.
 - `POST /api/s2-pro/generate`
-  - tagged TTS, voice clone, multi speaker, multilingual 생성 요청을 Fish Speech `/v1/tts`로 전달하고 결과를 생성 갤러리에 저장합니다.
+  - tagged TTS, voice clone, multi speaker, multilingual 생성 요청을 선택한 `/v1/tts` 런타임으로 전달하고 결과를 생성 갤러리에 저장합니다.
+
+## 런타임 선택
+
+S2-Pro는 두 가지 방식으로 실행할 수 있습니다.
+
+- `Local Fish Speech`
+  로컬 GPU에서 Fish Speech 서버를 띄우고 생성합니다. 기본값이며 API 키가 필요 없습니다.
+- `Fish Audio API`
+  hosted Fish Audio API를 사용합니다. API 키는 `.env`에만 저장하고 프런트에는 노출하지 않습니다.
+
+UI의 `Runtime` 선택 값은 각 생성 요청과 voice clone 요청에 함께 전달됩니다. 저장 목소리 레코드도 어떤 런타임에서 만든 목소리인지 `runtime_source`로 기록합니다.
 
 ## 로컬 런타임 연결
 
-S2-Pro는 Hosted API 키를 쓰지 않습니다. 이 프로젝트는 Fish Speech 저장소와 `fishaudio/s2-pro` 모델을 로컬로 내려받고, 로컬 HTTP 서버에만 요청합니다.
+로컬 모드는 Fish Speech 저장소와 `fishaudio/s2-pro` 모델을 로컬로 내려받고, 로컬 HTTP 서버에 요청합니다.
 
 필수 파일:
 
@@ -125,9 +136,30 @@ FISH_SPEECH_SERVER_URL=http://127.0.0.1:8080
 FISH_SPEECH_TIMEOUT_SEC=180
 ```
 
+## Fish Audio API 연결
+
+Hosted API를 쓰려면 백엔드 `.env`에 다음 값을 넣습니다.
+
+```env
+S2_PRO_RUNTIME=api
+FISH_AUDIO_API_KEY=...
+FISH_AUDIO_API_URL=https://api.fish.audio
+FISH_AUDIO_MODEL=s2-pro
+FISH_AUDIO_TIMEOUT_SEC=180
+```
+
+`S2_PRO_RUNTIME`을 비워 두면 기본은 로컬입니다. 이 경우에도 UI에서 `Runtime`을 `Fish Audio API`로 고르면 해당 요청만 API 경로를 사용합니다.
+
+API 모드 동작:
+
+- voice clone 저장은 Fish Audio `/model`에 private TTS model을 만들고 반환된 model id를 `reference_id`로 저장합니다.
+- TTS 생성은 Fish Audio `/v1/tts`에 `model: s2-pro` 헤더와 함께 요청합니다.
+- 참조 음성을 직접 넣는 one-shot clone은 msgpack body로 `references`를 전달합니다.
+
 원칙:
 
-- Hosted Fish Audio API 키를 요구하지 않습니다.
-- 로컬 서버가 꺼져 있으면 503을 반환합니다.
+- 로컬 모드는 hosted API 키를 요구하지 않습니다.
+- API 모드는 `FISH_AUDIO_API_KEY`가 없으면 503을 반환합니다.
+- 선택한 런타임이 준비되지 않았으면 503을 반환합니다.
 - 준비되지 않은 상태에서 가짜 음성을 만들지 않습니다.
 - Qwen 모델로 S2-Pro 결과를 흉내 내지 않습니다.

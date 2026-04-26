@@ -141,6 +141,10 @@ S2-Pro만 준비하려면:
 - `FISH_SPEECH_MODEL_DIR`
 - `FISH_SPEECH_SERVER_URL`
 - `FISH_SPEECH_MODEL`
+- `S2_PRO_RUNTIME`
+- `FISH_AUDIO_API_KEY`
+- `FISH_AUDIO_API_URL`
+- `FISH_AUDIO_MODEL`
 
 현재 기준 원칙:
 
@@ -148,9 +152,9 @@ S2-Pro만 준비하려면:
 - `QWEN_DEMO_CUSTOM_MODEL`, `QWEN_DEMO_BASE_MODEL` 등을 비워 두면 `data/models/*`를 자동으로 찾습니다.
 - 개발 머신마다 다른 경로를 `.env`에 박아두지 않는 쪽이 맞습니다.
 
-## 4-1. S2-Pro 로컬 서버 실행
+## 4-1. S2-Pro 런타임 실행
 
-S2-Pro는 API 키가 아니라 로컬 Fish Speech 서버를 사용합니다.
+S2-Pro 기본값은 로컬 Fish Speech 서버입니다. 이 경로는 API 비용 없이 로컬 GPU로 생성합니다.
 
 ```bash
 ./scripts/download_models.sh s2pro
@@ -166,6 +170,17 @@ http://127.0.0.1:8080/v1/tts
 ```
 
 웹 UI는 `/api/s2-pro/capabilities`에서 로컬 코드, 모델 파일, 서버 연결 상태를 확인하고 `/api/s2-pro/generate`로 생성 결과를 생성 갤러리에 저장합니다.
+
+Hosted Fish Audio API를 쓰고 싶으면 백엔드 `.env`에 아래 값을 넣고, S2-Pro 화면에서 `Runtime`을 `Fish Audio API`로 선택합니다. API 키는 프런트로 보내지 않고 백엔드에서만 사용합니다.
+
+```env
+S2_PRO_RUNTIME=api
+FISH_AUDIO_API_KEY=...
+FISH_AUDIO_API_URL=https://api.fish.audio
+FISH_AUDIO_MODEL=s2-pro
+```
+
+로컬과 API를 화면에서 번갈아 쓰려면 `S2_PRO_RUNTIME`은 비워 두고, 각 생성 폼의 `Runtime`만 선택해도 됩니다.
 
 ## 5. 프런트 빌드
 

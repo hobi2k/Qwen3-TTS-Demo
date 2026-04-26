@@ -322,6 +322,7 @@ export default function App() {
   const [selectedS2VoiceId, setSelectedS2VoiceId] = useState("");
   const [s2TagSearch, setS2TagSearch] = useState("");
   const [s2ProForm, setS2ProForm] = useState({
+    runtime_source: "local" as "auto" | "local" | "api",
     output_name: "s2pro-tagged-voice",
     text: "[breath] 오늘은 조금 천천히 말해볼게. [super happy] 그래도 결국 해냈어!",
     language: "Korean",
@@ -337,6 +338,7 @@ export default function App() {
   });
   const [s2ProVoiceForm, setS2ProVoiceForm] = useState({
     name: "my-s2pro-voice",
+    runtime_source: "local" as "auto" | "local" | "api",
     reference_audio_path: "",
     reference_text: "",
     language: "Korean",
@@ -828,6 +830,7 @@ export default function App() {
     runAction(async () => {
       const voice = await api.createS2ProVoice({
         name: s2ProVoiceForm.name,
+        runtime_source: s2ProVoiceForm.runtime_source,
         reference_audio_path: s2ProVoiceForm.reference_audio_path,
         reference_text: s2ProVoiceForm.reference_text,
         language: s2ProVoiceForm.language,
@@ -852,6 +855,7 @@ export default function App() {
     runAction(async () => {
       const response = await api.generateS2Pro({
         mode: currentS2ProMode,
+        runtime_source: s2ProForm.runtime_source,
         text: textByMode,
         language: s2ProForm.language,
         output_name: s2ProForm.output_name,
@@ -868,7 +872,7 @@ export default function App() {
       });
       setLastS2ProRecord(response.record);
       await refreshAll();
-      setMessage("S2-Pro 로컬 생성이 완료되어 생성 갤러리에 저장했습니다.");
+      setMessage("S2-Pro 생성이 완료되어 생성 갤러리에 저장했습니다.");
     });
   }
 
@@ -2422,7 +2426,14 @@ export default function App() {
             </div>
             {s2ProRuntime ? (
               <p className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
-                {s2ProRuntime.server_running ? "로컬 S2-Pro 서버 연결됨" : "로컬 S2-Pro 서버 대기 중"} · {s2ProRuntime.model}
+                {s2ProRuntime.runtime_mode === "api"
+                  ? s2ProRuntime.api_key_configured
+                    ? "Fish Audio API 준비됨"
+                    : "Fish Audio API 키 필요"
+                  : s2ProRuntime.server_running
+                    ? "로컬 S2-Pro 서버 연결됨"
+                    : "로컬 S2-Pro 서버 대기 중"}{" "}
+                · {s2ProRuntime.model}
               </p>
             ) : null}
           </section>
@@ -2474,6 +2485,16 @@ export default function App() {
                         Voice name
                         <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
                       </label>
+                      <label>
+                        Runtime
+                        <select
+                          value={s2ProVoiceForm.runtime_source}
+                          onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
+                        >
+                          <option value="local">Local Fish Speech</option>
+                          <option value="api">Fish Audio API</option>
+                        </select>
+                      </label>
                       <div className="dataset-source-grid">
                         <section className="status-card">
                           <strong>참조 음성</strong>
@@ -2509,7 +2530,13 @@ export default function App() {
                         <article className={selectedS2VoiceId === voice.id ? "s2pro-voice-card is-selected" : "s2pro-voice-card"} key={voice.id}>
                           <button onClick={() => setSelectedS2VoiceId(voice.id)} type="button">
                             <strong>{voice.name}</strong>
-                            <span>{voice.fish_reference_present ? "S2-Pro ready" : "Fish server 재등록 필요"}</span>
+                            <span>
+                              {voice.runtime_source === "api"
+                                ? "Fish Audio API voice"
+                                : voice.fish_reference_present
+                                  ? "Local Fish Speech ready"
+                                  : "Fish server 재등록 필요"}
+                            </span>
                           </button>
                           <audio controls src={voice.reference_audio_url} />
                           <div className="voice-card-actions">
@@ -2601,6 +2628,17 @@ export default function App() {
               </div>
 
               <aside className="s2pro-form__side">
+                <label>
+                  Runtime
+                  <select
+                    value={s2ProForm.runtime_source}
+                    onChange={(event) => setS2ProForm({ ...s2ProForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
+                  >
+                    <option value="local">Local Fish Speech</option>
+                    <option value="api">Fish Audio API</option>
+                    <option value="auto">Auto from selected voice</option>
+                  </select>
+                </label>
                 <label>
                   Output name
                   <input value={s2ProForm.output_name} onChange={(event) => setS2ProForm({ ...s2ProForm, output_name: event.target.value })} />
