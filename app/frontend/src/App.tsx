@@ -341,6 +341,8 @@ export default function App() {
     notes: "",
     create_qwen_prompt: true,
   });
+  const [s2ProCloneSource, setS2ProCloneSource] = useState<"gallery" | "upload">("gallery");
+  const [s2ProUploadedRef, setS2ProUploadedRef] = useState<UploadResponse | null>(null);
   const [lastS2ProRecord, setLastS2ProRecord] = useState<GenerationRecord | null>(null);
   const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
   const [soundEffectForm, setSoundEffectForm] = useState({
@@ -812,6 +814,33 @@ export default function App() {
       name: prev.name === "새-s2pro-목소리" ? basenameFromPath(asset.path).replace(/\.[^.]+$/, "") : prev.name,
     }));
     setMessage(`${asset.filename}을 S2-Pro 참조 음성으로 선택했습니다.`);
+  }
+
+  async function handleUploadS2ProReference(file: File) {
+    await runAction(async () => {
+      const result = await api.uploadAudio(file);
+      setS2ProUploadedRef(result);
+      setS2ProCloneSource("upload");
+      setS2ProVoiceForm((prev) => ({
+        ...prev,
+        reference_audio_path: result.path,
+        name: prev.name === "새-s2pro-목소리" ? basenameFromPath(result.path).replace(/\.[^.]+$/, "") : prev.name,
+      }));
+      await refreshAll();
+      setMessage(`${result.filename}을 S2-Pro 참조 음성으로 불러왔습니다.`);
+    });
+  }
+
+  async function handleTranscribeS2ProReference() {
+    if (!s2ProVoiceForm.reference_audio_path) {
+      setMessage("먼저 S2-Pro 참조 음성을 선택하거나 업로드하세요.");
+      return;
+    }
+    await runAction(async () => {
+      const result = await api.transcribeAudio(s2ProVoiceForm.reference_audio_path);
+      setS2ProVoiceForm((prev) => ({ ...prev, reference_text: result.text }));
+      setMessage(result.simulation ? "전사 placeholder가 채워졌습니다. 실제 문장으로 수정하세요." : "S2-Pro 참조 음성을 전사했습니다.");
+    });
   }
 
   function useS2VoiceInQwen(voice: S2ProVoiceRecord, target: "tts" | "clone") {
@@ -2646,40 +2675,84 @@ export default function App() {
                     <div className="s2pro-section-heading">
                       <span className="step-badge">1</span>
                       <div>
-                        <h3>참조 음성을 reusable voice로 저장</h3>
-                        <p>짧은 참조 음성과 전사문을 저장하면 S2-Pro TTS, 대화 생성, 다국어 TTS에서 계속 선택할 수 있습니다.</p>
+                        <h3>목소리 저장</h3>
+                        <p>생성 갤러리 음성이나 새 업로드 파일을 저장 목소리로 만들고, 이후 S2-Pro와 Qwen에서 재사용합니다.</p>
                       </div>
                     </div>
-                    <div className="s2pro-voice-form">
-                      <div className="dataset-source-grid">
-                        <section className="status-card">
-                          <strong>참조 음성 선택</strong>
-                          <ServerAudioPicker assets={audioAssets} selectedPath={s2ProVoiceForm.reference_audio_path} onSelect={handleSelectS2ProReference} />
-                          {s2ProVoiceForm.reference_audio_path ? (
-                            <audio controls src={fileUrlFromPath(s2ProVoiceForm.reference_audio_path)} />
+                    <div className="s2pro-clone-builder">
+                      <div className="s2pro-source-switch" aria-label="S2-Pro 목소리 저장 입력 방식">
+                        <button className={s2ProCloneSource === "gallery" ? "is-active" : ""} onClick={() => setS2ProCloneSource("gallery")} type="button">
+                          생성 갤러리에서 선택
+                        </button>
+                        <button className={s2ProCloneSource === "upload" ? "is-active" : ""} onClick={() => setS2ProCloneSource("upload")} type="button">
+                          새 파일 업로드
+                        </button>
+                      </div>
+
+                      {s2ProCloneSource === "gallery" ? (
+                        <section className="s2pro-source-panel">
+                          <div className="s2pro-source-panel__head">
+                            <strong>생성한 음성 선택</strong>
+                            <span>목소리 설계, Qwen, S2-Pro에서 만든 결과를 바로 목소리 자산으로 저장합니다.</span>
+                          </div>
+                          <ServerAudioPicker assets={generatedAudioAssets} selectedPath={s2ProVoiceForm.reference_audio_path} onSelect={handleSelectS2ProReference} />
+                        </section>
+                      ) : (
+                        <section className="s2pro-source-panel s2pro-upload-panel">
+                          <label className="s2pro-upload-drop">
+                            <span>참조 음성 업로드</span>
+                            <strong>WAV, MP3, FLAC 파일을 선택하세요</strong>
+                            <input
+                              accept="audio/*"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  void handleUploadS2ProReference(file);
+                                }
+                              }}
+                              type="file"
+                            />
+                          </label>
+                          {s2ProUploadedRef ? (
+                            <div className="s2pro-selected-reference">
+                              <strong>{s2ProUploadedRef.filename}</strong>
+                              <audio controls src={s2ProUploadedRef.url} />
+                            </div>
                           ) : null}
                         </section>
-                        <section className="status-card">
-                          <strong>저장 정보</strong>
-                          <label>
-                            Voice name
-                            <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
-                          </label>
-                          <label>
-                            Runtime
-                            <select
-                              value={s2ProVoiceForm.runtime_source}
-                              onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
-                            >
-                              <option value="local">Local Fish Speech</option>
-                              <option value="api">Fish Audio API</option>
-                            </select>
-                          </label>
+                      )}
+
+                      <section className="s2pro-voice-meta">
+                        <div className="s2pro-selected-reference">
+                          <strong>{s2ProVoiceForm.reference_audio_path ? basenameFromPath(s2ProVoiceForm.reference_audio_path) : "선택된 참조 음성이 없습니다"}</strong>
+                          {s2ProVoiceForm.reference_audio_path ? <audio controls src={fileUrlFromPath(s2ProVoiceForm.reference_audio_path)} /> : null}
+                        </div>
+                        <label>
+                          Voice name
+                          <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
+                        </label>
+                        <label>
+                          Runtime
+                          <select
+                            value={s2ProVoiceForm.runtime_source}
+                            onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
+                          >
+                            <option value="local">Local Fish Speech</option>
+                            <option value="api">Fish Audio API</option>
+                          </select>
+                        </label>
+                        <label className="s2pro-reference-transcript">
+                          Reference transcript
                           <textarea
-                            placeholder="Reference audio transcript"
+                            placeholder="비워두지 말고 실제 참조 음성의 대사를 넣으세요."
                             value={s2ProVoiceForm.reference_text}
                             onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, reference_text: event.target.value })}
                           />
+                        </label>
+                        <div className="button-row">
+                          <button className="secondary-button" disabled={!s2ProVoiceForm.reference_audio_path} onClick={handleTranscribeS2ProReference} type="button">
+                            Whisper 전사
+                          </button>
                           <label className="inline-check">
                             <input
                               checked={s2ProVoiceForm.create_qwen_prompt}
@@ -2688,11 +2761,11 @@ export default function App() {
                             />
                             Qwen clone prompt도 함께 생성
                           </label>
-                        </section>
-                      </div>
-                      <button className="primary-button" onClick={() => handleCreateS2ProVoice()} type="button">
-                        목소리 저장
-                      </button>
+                          <button className="primary-button" disabled={!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim()} onClick={() => handleCreateS2ProVoice()} type="button">
+                            목소리 저장
+                          </button>
+                        </div>
+                      </section>
                     </div>
                     <div className="s2pro-section-heading">
                       <span className="step-badge">2</span>
