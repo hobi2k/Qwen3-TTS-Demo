@@ -65,6 +65,15 @@ data/s2-pro-voices/
 
 S2-Pro 서버는 `/v1/references/add`로 reference voice를 저장하고, 앱은 `/api/s2-pro/voices`로 그 목록을 관리합니다.
 
+웹 UI의 `나의 목소리들`에서는 S2-Pro 저장 목소리를 “목소리 프로젝트”로 보여줍니다.
+각 프로젝트는 아래 자산을 한 줄에서 확인하고 다음 작업으로 넘길 수 있어야 합니다.
+
+- 참조 음성
+- 참조 텍스트
+- 연결된 S2-Pro 생성 결과 수
+- 연결된 Qwen clone prompt / 프리셋 여부
+- Qwen 복제, S2-Pro TTS, 데이터셋 구성으로 보내는 액션
+
 ## Qwen 브릿지
 
 clone한 S2-Pro 목소리는 S2-Pro 안에서만 쓰지 않습니다.

@@ -147,10 +147,6 @@ function displayModelName(model: ModelInfo): string {
     .trim();
 }
 
-function trainedVoiceTitle(model: ModelInfo): string {
-  return displayModelName(model);
-}
-
 function s2ProTabToMode(tab: TabKey): S2ProMode {
   if (tab === "s2pro_clone") return "clone";
   if (tab === "s2pro_multi_speaker") return "multi_speaker";
@@ -183,6 +179,7 @@ function guessMatchingCustomVoiceModel(
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const [voiceGalleryView, setVoiceGalleryView] = useState<"mine" | "stock" | "collections">("mine");
   const [activeGuideTitle, setActiveGuideTitle] = useState<string>(GUIDE_SECTIONS[0]?.title || "");
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
   const [ttsSideView, setTtsSideView] = useState<"settings" | "history">("settings");
@@ -647,7 +644,6 @@ export default function App() {
   const lastCreatedDataset = datasets.find((dataset) => dataset.id === lastCreatedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
-  const finetunedModels = latestFineTunedModels;
   const audioToolCapabilityMap = new Map(audioToolCapabilities.map((capability) => [capability.key, capability]));
   const audioAssetByPath = new Map(audioAssets.map((asset) => [asset.path, asset]));
   const assetTextByPath = new Map(
@@ -660,6 +656,22 @@ export default function App() {
   const selectedGuideSection = GUIDE_SECTIONS.find((section) => section.title === activeGuideTitle) ?? GUIDE_SECTIONS[0];
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
+  const s2VoiceProjects = s2ProVoices.map((voice) => {
+    const relatedHistory = history.filter((record) => {
+      const metaReferenceId = String(record.meta?.reference_id || record.meta?.s2_reference_id || record.meta?.voice_id || "");
+      return (
+        record.source_ref_audio_path === voice.reference_audio_path ||
+        metaReferenceId === voice.id ||
+        metaReferenceId === voice.reference_id
+      );
+    });
+    const relatedPresets = presets.filter(
+      (preset) =>
+        preset.reference_audio_path === voice.reference_audio_path ||
+        (!!voice.qwen_clone_prompt_path && preset.clone_prompt_path === voice.qwen_clone_prompt_path),
+    );
+    return { voice, relatedHistory, relatedPresets };
+  });
   const filteredS2TagCategories = S2_PRO_TAG_CATEGORIES.map((category) => ({
     ...category,
     tags: category.tags.filter((tag) => {
@@ -1654,46 +1666,134 @@ export default function App() {
           {message ? <div className="message-banner">{message}</div> : null}
       {activeTab === "voices" ? (
         <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <section className="panel">
-              <h2>저장된 스타일</h2>
-              <p>복제나 설계에서 저장한 스타일을 다시 불러와 생성에 씁니다.</p>
-              <div className="preset-list">
-                {presets.length ? presets.map((preset) => (
-                  <article className="preset-card" key={preset.id}>
-                    <strong>{preset.name}</strong>
-                    <span>{formatDate(preset.created_at)}</span>
-                    <p>{preset.reference_text}</p>
-                    <div className="button-row">
-                      <button className="secondary-button" onClick={() => { setSelectedPresetId(preset.id); setSelectedHybridPresetId(preset.id); setActiveTab("projects"); }} type="button">
-                        생성에 사용
-                      </button>
-                    </div>
-                  </article>
-                )) : <p className="field-hint">아직 저장된 스타일이 없습니다.</p>}
+          <section className="voice-gallery-shell">
+            <div className="voice-gallery-toolbar">
+              <div>
+                <h2>목소리 프로젝트</h2>
+                <p>저장한 목소리별로 참조 음성, Qwen 프리셋, 생성 결과, 데이터셋 연결을 한곳에서 관리합니다.</p>
               </div>
-            </section>
+              <div className="voice-gallery-tabs" aria-label="목소리 보기 필터">
+                <button className={voiceGalleryView === "mine" ? "is-active" : ""} onClick={() => setVoiceGalleryView("mine")} type="button">
+                  나의 목소리들
+                </button>
+                <button className={voiceGalleryView === "stock" ? "is-active" : ""} onClick={() => setVoiceGalleryView("stock")} type="button">
+                  기본 음성
+                </button>
+                <button className={voiceGalleryView === "collections" ? "is-active" : ""} onClick={() => setVoiceGalleryView("collections")} type="button">
+                  컬렉션
+                </button>
+              </div>
+            </div>
 
-            <section className="panel">
-              <h2>모델</h2>
-              <p>바로 선택해서 쓸 수 있는 학습 결과만 보여줍니다.</p>
-              <div className="preset-list">
-                {finetunedModels.length ? finetunedModels.map((model) => (
-                  <article className="voice-list-item" key={model.key}>
-                    <div className="voice-list-item__mark" aria-hidden="true">
-                      <MiniWaveform dense />
+            <div className="voice-project-list">
+              {voiceGalleryView === "mine" && (s2VoiceProjects.length ? s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
+                <article className="voice-project-row" key={voice.id}>
+                  <div className="voice-project-avatar" aria-hidden="true">
+                    <MiniWaveform dense />
+                  </div>
+                  <div className="voice-project-main">
+                    <div className="voice-project-title">
+                      <strong>{voice.name}</strong>
+                      <span>{voice.language} · {formatDate(voice.created_at)}</span>
                     </div>
-                    <div>
-                      <strong>{trainedVoiceTitle(model)}</strong>
+                    <p>{voice.reference_text || "참조 문장이 아직 없습니다."}</p>
+                    <div className="voice-project-assets">
+                      <span>참조 음성 1개</span>
+                      <span>생성 결과 {relatedHistory.length}개</span>
+                      <span>Qwen 프리셋 {relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)}개</span>
+                      <span>{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</span>
                     </div>
-                    <button className="secondary-button" onClick={() => { setInferenceForm((prev) => ({ ...prev, model_id: model.model_id })); setActiveTab("tts"); }} type="button">
-                      사용하기
+                    <audio controls src={voice.reference_audio_url} />
+                  </div>
+                  <div className="voice-project-actions">
+                    <button className="secondary-button" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
+                      S2-Pro에서 사용
                     </button>
-                  </article>
-                )) : <p className="field-hint">아직 표시할 모델이 없습니다.</p>}
-              </div>
-            </section>
-          </div>
+                    <button className="secondary-button" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
+                      Qwen 복제로 보내기
+                    </button>
+                    <button
+                      className="secondary-button"
+                      onClick={() => {
+                        setDatasetForm((prev) => ({ ...prev, ref_audio_path: voice.reference_audio_path, speaker_name: voice.name || prev.speaker_name }));
+                        mergeDatasetSamples([{ audio_path: voice.reference_audio_path, text: voice.reference_text }]);
+                        setActiveTab("dataset");
+                      }}
+                      type="button"
+                    >
+                      데이터셋에 사용
+                    </button>
+                  </div>
+                </article>
+              )) : (
+                <div className="voice-project-empty">
+                  <strong>아직 저장된 S2-Pro 목소리가 없습니다.</strong>
+                  <p>목소리 저장에서 참조 음성을 등록하면 여기서 목소리별 프로젝트로 관리됩니다.</p>
+                  <button className="primary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
+                    목소리 저장하기
+                  </button>
+                </div>
+              ))}
+              {voiceGalleryView === "stock" ? speakers.slice(0, 12).map((speaker) => (
+                <article className="voice-project-row" key={speaker.speaker}>
+                  <div className="voice-project-avatar" aria-hidden="true">
+                    <MiniWaveform dense />
+                  </div>
+                  <div className="voice-project-main">
+                    <div className="voice-project-title">
+                      <strong>{speaker.speaker}</strong>
+                      <span>{speaker.nativeLanguage}</span>
+                    </div>
+                    <p>{speaker.description}</p>
+                  </div>
+                  <div className="voice-project-actions">
+                    <button
+                      className="secondary-button"
+                      onClick={() => {
+                        setInferenceForm((prev) => ({ ...prev, speaker: speaker.speaker }));
+                        setActiveTab("tts");
+                      }}
+                      type="button"
+                    >
+                      TTS에서 사용
+                    </button>
+                  </div>
+                </article>
+              )) : null}
+              {voiceGalleryView === "collections" ? presets.map((preset) => (
+                <article className="voice-project-row" key={preset.id}>
+                  <div className="voice-project-avatar" aria-hidden="true">
+                    <MiniWaveform dense />
+                  </div>
+                  <div className="voice-project-main">
+                    <div className="voice-project-title">
+                      <strong>{preset.name}</strong>
+                      <span>{preset.language} · {formatDate(preset.created_at)}</span>
+                    </div>
+                    <p>{preset.reference_text}</p>
+                    <div className="voice-project-assets">
+                      <span>프리셋</span>
+                      <span>{preset.source_type}</span>
+                    </div>
+                  </div>
+                  <div className="voice-project-actions">
+                    <button
+                      className="secondary-button"
+                      onClick={() => {
+                        setSelectedPresetId(preset.id);
+                        setSelectedHybridPresetId(preset.id);
+                        setActiveTab("projects");
+                      }}
+                      type="button"
+                    >
+                      프리셋으로 생성
+                    </button>
+                  </div>
+                </article>
+              )) : null}
+            </div>
+          </section>
+
         </section>
       ) : null}
 
@@ -2508,32 +2608,50 @@ export default function App() {
                         onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
                       />
                     </label>
-                    <details className="s2pro-tag-drawer">
-                      <summary>
-                        <span>Expression tags</span>
-                        <small>[breath], [laugh], [whisper] 같은 표현을 Text에 넣습니다.</small>
-                      </summary>
-                      <input
-                        className="s2pro-tag-search"
-                        placeholder="Search tags, e.g. whisper, angry, pause"
-                        value={s2TagSearch}
-                        onChange={(event) => setS2TagSearch(event.target.value)}
-                      />
-                      <div className="s2pro-tag-library" aria-label="S2-Pro expression tag library">
-                        {filteredS2TagCategories.map((category) => (
-                          <section className="s2pro-tag-category" key={category.label}>
-                            <strong>{category.label}</strong>
-                            <div className="tag-cloud">
-                              {category.tags.map((tag) => (
-                                <button className="tag-chip" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
-                                  {tag}
-                                </button>
-                              ))}
-                            </div>
-                          </section>
-                        ))}
-                      </div>
-                    </details>
+                    <div className="s2pro-composer-dock">
+                      <details className="tag-popover s2pro-tag-popover">
+                        <summary>태그</summary>
+                        <div className="tag-popover__panel s2pro-tag-popover__panel">
+                          <p>S2-Pro는 bracket 태그를 대사 안에서 표현 지시로 읽습니다. 필요한 태그를 눌러 Text에 넣으세요.</p>
+                          <input
+                            className="s2pro-tag-search"
+                            placeholder="Search tags, e.g. whisper, angry, pause"
+                            value={s2TagSearch}
+                            onChange={(event) => setS2TagSearch(event.target.value)}
+                          />
+                          <div className="s2pro-tag-library" aria-label="S2-Pro expression tag library">
+                            {filteredS2TagCategories.map((category) => (
+                              <section className="s2pro-tag-category" key={category.label}>
+                                <strong>{category.label}</strong>
+                                <div className="tag-cloud">
+                                  {category.tags.map((tag) => (
+                                    <button className="tag-chip" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
+                                      {tag}
+                                    </button>
+                                  ))}
+                                </div>
+                              </section>
+                            ))}
+                          </div>
+                        </div>
+                      </details>
+                      <span className="credit-indicator">{selectedS2Voice ? selectedS2Voice.name : "기본 S2-Pro voice"}</span>
+                      <span className="byte-counter">{new Blob([s2ProForm.text]).size} / 500 바이트</span>
+                      <button className="primary-button" type="submit">
+                        음성 생성
+                      </button>
+                    </div>
+                    <div className="s2pro-inline-actions">
+                      <button className="secondary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
+                        새 목소리 저장
+                      </button>
+                      <button className="secondary-button" onClick={() => setS2ProForm((prev) => ({ ...prev, text: `${prev.text.trim()} [breath]` }))} type="button">
+                        [breath] 넣기
+                      </button>
+                      <button className="secondary-button" onClick={() => setS2ProForm((prev) => ({ ...prev, text: `${prev.text.trim()} [laugh]` }))} type="button">
+                        [laugh] 넣기
+                      </button>
+                    </div>
                   </>
                 ) : null}
 
