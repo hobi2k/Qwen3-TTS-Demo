@@ -73,8 +73,8 @@ VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리
 - [sft_voicebox_bootstrap_12hz.py](Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py)
   - `CustomVoice + Base 1.7B`를 한 번에 묶는 보조 진입점
 
-`voicebox/`와 `scripts/qwen3_tts_voicebox_*.py` 파일들은 예전 명령어를 깨지 않기 위한 호환 래퍼입니다.
-새 훈련 로직은 `Qwen3-TTS/finetuning`, 변환 로직은 `Qwen3-TTS/fusion`, 추론 로직은 `Qwen3-TTS/inference` 쪽 canonical script에 먼저 반영합니다.
+예전 명령어 유지를 위한 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 래퍼는 제거했습니다.
+새 훈련 로직은 `Qwen3-TTS/finetuning`, 변환 로직은 `Qwen3-TTS/fusion`, 추론 로직은 `Qwen3-TTS/inference` 쪽 canonical script에만 반영합니다.
 
 ## 현재 프로젝트 구조
 
@@ -86,7 +86,7 @@ Qwen3-TTS-Demo/
     MMAudio/                 # tracked source
   app/
     backend/                 # FastAPI API server
-    frontend/                # React + TypeScript + Vite
+    frontend/                # Next.js + TypeScript
   data/
     models/                  # downloaded Qwen/Whisper models
     rvc-models/              # local RVC model assets, gitignored

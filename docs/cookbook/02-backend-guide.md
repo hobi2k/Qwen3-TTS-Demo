@@ -72,7 +72,7 @@
 - `/_next/*`
   Next.js static export 산출물
 - `/assets/*`
-  legacy Vite 빌드 산출물 fallback
+  이전 빌드 산출물 호환 fallback
 - `/`
   빌드된 `index.html`
 

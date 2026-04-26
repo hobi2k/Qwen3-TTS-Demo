@@ -276,7 +276,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 - `Qwen3-TTS/inference/voicebox/clone.py`
 - `Qwen3-TTS/inference/voicebox/clone_instruct.py`
 
-`scripts/qwen3_tts_voicebox_*.py`와 `scripts/make_voicebox_checkpoint.py` 등은
-오래된 명령을 유지하기 위한 호환 래퍼입니다.
+예전 명령을 유지하기 위한 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 래퍼는 제거했습니다.
+재현 명령은 위 canonical script를 직접 호출합니다.
 
-자세한 매핑은 [19-script-entrypoints.md](./19-script-entrypoints.md)를 봅니다.
+현재 유지되는 진입점 목록은 [19-script-entrypoints.md](./19-script-entrypoints.md)를 봅니다.

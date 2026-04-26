@@ -457,9 +457,8 @@ app.mount("/files", StaticFiles(directory=storage.data_dir), name="files")
 def frontend_build_dir() -> Path:
     """Return the active built frontend directory.
 
-    Next.js static export writes to ``out``. The legacy Vite build wrote to
-    ``dist``. Keeping the fallback lets older local builds still serve while
-    the project standard moves to Next.
+    Next.js static export writes to ``out``. A ``dist`` fallback is kept only
+    for older local build artifacts while the project standard is Next.js.
     """
 
     if NEXT_FRONTEND_OUT_DIR.exists():

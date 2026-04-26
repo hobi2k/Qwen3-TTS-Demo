@@ -1,17 +1,20 @@
 # Script Entrypoints
 
-이 문서는 중복되어 보이는 훈련/VoiceBox 스크립트의 책임을 정리합니다.
+이 문서는 현재 저장소에서 실제로 유지보수하는 실행 진입점만 정리합니다.
 
-현재 원칙은 단순합니다.
+예전에는 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 파일이 canonical script를 감싸는 호환 래퍼로 남아 있었습니다. 지금은 중복 경로가 오히려 유지보수를 흐리므로 제거했습니다.
 
-- 실제 구현은 `Qwen3-TTS` 안의 역할별 폴더에 둡니다.
-- `scripts/qwen3_tts_voicebox_*.py` 계열은 호환 래퍼입니다.
-- 새 기능이나 버그 수정은 먼저 `Qwen3-TTS/finetuning`, `Qwen3-TTS/fusion`, `Qwen3-TTS/inference`의 canonical script에 반영합니다.
-- 오래된 명령을 깨지 않기 위해 `scripts/` 래퍼는 인자 이름을 변환해 canonical script로 넘깁니다.
+원칙은 단순합니다.
+
+- VoiceBox 학습 코드는 `Qwen3-TTS/finetuning`에 둡니다.
+- VoiceBox 체크포인트 변환과 업로드 코드는 `Qwen3-TTS/fusion`에 둡니다.
+- VoiceBox 추론 코드는 `Qwen3-TTS/inference/voicebox`에 둡니다.
+- 일반 유틸리티와 평가 스크립트만 `scripts/`에 둡니다.
+- 새 기능을 만들 때 `scripts/`나 최상위 폴더에 얇은 래퍼를 추가하지 않습니다.
 
 ## Canonical VoiceBox Scripts
 
-| 책임 | canonical script |
+| 책임 | 실행 파일 |
 | --- | --- |
 | plain CustomVoice fine-tuning | `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py` |
 | shared training implementation | `Qwen3-TTS/finetuning/voicebox_training_common.py` |
@@ -19,9 +22,6 @@
 | VoiceBox -> VoiceBox retraining | `Qwen3-TTS/finetuning/sft_voicebox_12hz.py` |
 | CustomVoice -> VoiceBox conversion | `Qwen3-TTS/fusion/make_voicebox_checkpoint.py` |
 | Hugging Face upload | `Qwen3-TTS/fusion/upload_voicebox_to_hub.py` |
-| Private asset manifest/upload | `scripts/prepare_private_hf_assets.py` |
-| S2-Pro local model/download profile | `scripts/download_models.sh s2pro` |
-| S2-Pro local Fish Speech server | `scripts/serve_s2_pro.sh` |
 | non-VoiceBox clone prompt + instruct | `Qwen3-TTS/inference/hybrid_clone_instruct.py` |
 | VoiceBox normal instruct inference | `Qwen3-TTS/inference/voicebox/infer_instruct.py` |
 | VoiceBox clone experiment | `Qwen3-TTS/inference/voicebox/clone.py` |
@@ -29,67 +29,9 @@
 | shared low-level VoiceBox clone logic | `Qwen3-TTS/inference/voicebox/clone_low_level.py` |
 | shared VoiceBox loader/runtime | `Qwen3-TTS/inference/voicebox/runtime.py` |
 
-## Compatibility VoiceBox Folder
-
-## S2-Pro Runtime Scripts
-
-S2-Pro is not a Qwen/VoiceBox training path. It uses local Fish Speech assets:
-
-- source checkout: `vendor/fish-speech`
-- model directory: `data/models/fish-speech/s2-pro`
-- isolated runtime venv: `.venv-fish-speech`
-
-Do not install Fish Speech into the main `.venv`. Fish Speech upstream pins `torch==2.8.0`, which can change the Torch version and break the Qwen/flash-attn runtime. Use `scripts/serve_s2_pro.sh`; it creates and uses the isolated runtime environment, installs the requested torch-family build first, then installs Fish Speech without letting its torch pin downgrade the environment.
-
-```bash
-./scripts/download_models.sh s2pro
-./scripts/serve_s2_pro.sh
-```
-
-Default local S2-Pro torch line:
-
-```bash
-FISH_SPEECH_TORCH_VERSION=2.11.0
-FISH_SPEECH_TORCH_PROFILE=cu130
-```
-
-The installer behind the server script is `scripts/install_fish_speech_runtime.py`.
-
-`voicebox/` remains as a compatibility layer only. The files there forward to the canonical scripts above so old shell history and old docs do not break, but new implementation work should not happen there.
-
-## Compatibility Wrappers
-
-These files remain under `scripts/` for old shell history, old docs, and external callers.
-They should not hold independent training logic.
-
-| compatibility wrapper | forwards to |
-| --- | --- |
-| `scripts/qwen3_tts_customvoice_train.py` | `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py` |
-| `scripts/qwen3_tts_voicebox_bootstrap.py` | `Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py` |
-| `scripts/qwen3_tts_voicebox_train.py` | dispatches to bootstrap or retrain |
-| `scripts/qwen3_tts_voicebox_retrain.py` | `Qwen3-TTS/finetuning/sft_voicebox_12hz.py` |
-| `scripts/make_voicebox_checkpoint.py` | `Qwen3-TTS/fusion/make_voicebox_checkpoint.py` |
-| `scripts/upload_voicebox_to_hub.py` | `Qwen3-TTS/fusion/upload_voicebox_to_hub.py` |
-| `scripts/voicebox_clone_experiment.py` | `Qwen3-TTS/inference/voicebox/clone.py` |
-| `scripts/voicebox_clone_instruct_experiment.py` | `Qwen3-TTS/inference/voicebox/clone_instruct.py` |
-| `scripts/voicebox_runtime.py` | re-exports `Qwen3-TTS/inference/voicebox/runtime.py` |
-
-## `qwen3_tts_voicebox_train.py` Dispatch Rule
-
-`scripts/qwen3_tts_voicebox_train.py` used to be ambiguous. It now dispatches by arguments:
-
-- If `--speaker-encoder-model-path` or `--base-speaker-encoder-model-path` is provided:
-  - forwards to `Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py`
-  - use this for plain CustomVoice + Base encoder bootstrap
-- If no external speaker encoder path is provided:
-  - forwards to `Qwen3-TTS/finetuning/sft_voicebox_12hz.py`
-  - use this for existing VoiceBox -> VoiceBox retraining
-
-This keeps older commands working while making the actual implementation path explicit.
-
 ## Current Training Code Path
 
-The current verified MAI training flow is:
+현재 검증된 MAI 학습 흐름은 아래 세 단계입니다.
 
 ```bash
 # 1. plain CustomVoice
@@ -102,24 +44,64 @@ The current verified MAI training flow is:
 .venv/bin/python Qwen3-TTS/finetuning/sft_voicebox_12hz.py ...
 ```
 
-The current full-run dataset is:
+현재 full-run 데이터셋은 아래 파일입니다.
 
 ```text
 data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
 ```
 
-The current stable full-run optimizer setting is:
+현재 1.7B full-run에서 안정적으로 완료된 optimizer 설정은 아래입니다.
 
 ```bash
 QWEN_DEMO_OPTIMIZER=adafactor
 ```
 
-Use `Adafactor` as a memory-stability option for 1.7B full runs on 16GB GPUs,
-not as a quality guarantee.
+`Adafactor`는 품질 보장용이 아니라 16GB GPU에서 optimizer state 메모리 피크를 낮추기 위한 운영 옵션입니다. 품질은 생성 wav, Whisper 전사, speaker similarity, 실제 청취로 따로 확인합니다.
+
+## S2-Pro Runtime Scripts
+
+S2-Pro는 Qwen/VoiceBox 학습 경로가 아닙니다. 로컬 Fish Speech 자산을 별도 런타임으로 사용합니다.
+
+- source checkout: `vendor/fish-speech`
+- model directory: `data/models/fish-speech/s2-pro`
+- isolated runtime venv: `.venv-fish-speech`
+
+Fish Speech는 메인 Qwen `.venv`에 설치하지 않습니다. Fish Speech upstream은 torch 버전 pin을 포함할 수 있으므로, Qwen/flash-attn 런타임과 섞이면 Torch/CUDA 구성이 흔들릴 수 있습니다. `scripts/serve_s2_pro.sh`는 독립 `.venv-fish-speech`를 만들고, 선택한 torch-family build를 먼저 설치한 뒤 Fish Speech를 설치합니다.
+
+```bash
+./scripts/download_models.sh s2pro
+./scripts/serve_s2_pro.sh
+```
+
+기본 로컬 S2-Pro torch 라인:
+
+```bash
+FISH_SPEECH_TORCH_VERSION=2.11.0
+FISH_SPEECH_TORCH_PROFILE=cu130
+```
+
+런타임 설치 구현은 아래 파일입니다.
+
+```text
+scripts/install_fish_speech_runtime.py
+```
+
+## Remaining Scripts
+
+`scripts/`에는 현재 아래 성격의 파일만 남깁니다.
+
+- 모델 다운로드와 환경 준비
+- 데이터셋 import / prepare
+- 품질 평가와 검증
+- 외부 런타임 설치와 실행
+- 개인 Hugging Face asset manifest 준비
+
+현재 `scripts/`의 VoiceBox 관련 파일은 평가용 `evaluate_customvoice_voicebox_quality.py`만 남깁니다. 학습, 변환, 추론 자체는 `Qwen3-TTS` 내부 canonical script를 직접 사용합니다.
 
 ## What Not To Do
 
-- Do not duplicate training loops into `scripts/qwen3_tts_voicebox_*.py`.
-- Do not update only a compatibility wrapper and forget the canonical `Qwen3-TTS` script.
-- Do not add new VoiceBox behavior under `scripts/` unless it is only a thin wrapper.
-- Do not use `scripts/voicebox_runtime.py` for new code. Use `Qwen3-TTS/inference/voicebox/runtime.py` instead.
+- 최상위 `voicebox/` 폴더를 다시 만들지 않습니다.
+- `scripts/qwen3_tts_voicebox_*.py` 같은 호환 래퍼를 다시 추가하지 않습니다.
+- 학습 루프를 `scripts/`에 복제하지 않습니다.
+- 새 VoiceBox 기능을 만들 때 canonical script가 아닌 별도 우회 경로부터 만들지 않습니다.
+- 문서에는 삭제된 래퍼 명령을 재현 경로로 남기지 않습니다.

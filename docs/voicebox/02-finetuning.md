@@ -19,15 +19,15 @@
 
 - 1단계 plain `CustomVoice` 학습:
   - [sft_custom_voice_12hz.py](../../Qwen3-TTS/finetuning/sft_custom_voice_12hz.py)
-  - [train_customvoice.py](../../voicebox/train_customvoice.py) 호환 래퍼
 - 2단계 `CustomVoice -> VoiceBox` 변환:
   - [make_voicebox_checkpoint.py](../../Qwen3-TTS/fusion/make_voicebox_checkpoint.py)
 - 3단계 `VoiceBox -> VoiceBox` 재학습:
   - [sft_voicebox_12hz.py](../../Qwen3-TTS/finetuning/sft_voicebox_12hz.py)
-  - [retrain.py](../../voicebox/retrain.py) 호환 래퍼
 - 보조 경로:
   - [sft_voicebox_bootstrap_12hz.py](../../Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py)
-  - [bootstrap.py](../../voicebox/bootstrap.py) 호환 래퍼
+
+최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 호환 래퍼는 제거했습니다.
+VoiceBox 작업은 위 canonical script를 직접 실행합니다.
 
 ## 1. plain `CustomVoice`에 새 화자 추가 학습
 

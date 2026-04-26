@@ -69,7 +69,7 @@
 - [18-current-experiment-results.md](./18-current-experiment-results.md)
   현재 MAI / CustomVoice / VoiceBox 실험 결과와 재현 명령
 - [19-script-entrypoints.md](./19-script-entrypoints.md)
-  `Qwen3-TTS` 역할별 canonical 스크립트와 `scripts/`, `voicebox/` 호환 래퍼 구분
+  `Qwen3-TTS` 역할별 canonical 스크립트 기준
 - [20-private-hf-assets.md](./20-private-hf-assets.md)
   모델과 오디오 도구 자산을 개인 Hugging Face repo로 모으는 업로드/다운로드 기준
 - [21-s2-pro-workspace.md](./21-s2-pro-workspace.md)
