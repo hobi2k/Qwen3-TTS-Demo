@@ -239,6 +239,7 @@ class Storage:
         label: str,
         extension: str,
         created_at: Optional[datetime] = None,
+        include_time: bool = True,
     ) -> Path:
         """사람이 읽을 수 있는 카테고리/날짜/slug 기반 출력 파일 경로를 만든다.
 
@@ -248,6 +249,7 @@ class Storage:
             label: 파일명에 반영할 설명문.
             extension: 확장자.
             created_at: 기준 시각.
+            include_time: 파일명 앞에 생성 시각을 붙일지 여부.
 
         Returns:
             충돌을 피해 생성된 출력 파일 경로.
@@ -257,7 +259,7 @@ class Storage:
         directory = self.dated_child_dir(root, category, created_at=moment)
         slug = self.slugify(label, default=category)
         ext = extension.lstrip(".") or "wav"
-        base_name = f"{moment.strftime('%H%M%S')}_{slug}"
+        base_name = f"{moment.strftime('%H%M%S')}_{slug}" if include_time else slug
         candidate = directory / f"{base_name}.{ext}"
         index = 2
         while candidate.exists():

@@ -1,6 +1,7 @@
 """FastAPI application for the Qwen3-TTS demo backend."""
 
 import json
+import hashlib
 import os
 import pickle
 import re
@@ -50,9 +51,10 @@ from .schemas import (
     HealthResponse,
     HybridCloneInstructRequest,
     ModelInfo,
+    VoiceBoxCloneRequest,
+    VoiceBoxFusionRequest,
     VoiceChangerModelInfo,
     SoundEffectRequest,
-    StoryStudioRequest,
     PrepareDatasetRequest,
     PresetGenerateRequest,
     AudioTranslateRequest,
@@ -75,7 +77,7 @@ APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
 FRONTEND_DIST_DIR = REPO_ROOT / "app" / "frontend" / "dist"
-UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS" / "finetuning"
+UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS"
 DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
 load_dotenv(BACKEND_DIR / ".env")
 
@@ -214,9 +216,11 @@ def infer_finetune_run_record(run_dir: Path) -> Optional[FineTuneRun]:
     custom_speakers = [name for name in speaker_map.keys() if name.lower() not in stock_names]
     speaker_name = custom_speakers[-1] if custom_speakers else (next(reversed(speaker_map.keys())) if speaker_map else "speaker")
     training_mode = str(config.get("tts_model_type") or "base").strip().lower() or "base"
+    if model_family is None:
+        model_family = "custom_voice" if training_mode == "custom_voice" else training_mode
     created_at = utc_now_from_stat(checkpoint_dir)
     if model_family == "voicebox":
-        summary_label = "VoiceBox 학습 모델"
+        summary_label = "보이스박스 학습 모델"
     else:
         summary_label = "CustomVoice 학습 모델" if training_mode == "custom_voice" else "Base 학습 모델"
 
@@ -270,6 +274,8 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
 
         tts_model_type = str(config.get("tts_model_type") or "").strip().lower()
         model_family = str(config.get("demo_model_family") or "").strip().lower() or None
+        if model_family is None and tts_model_type:
+            model_family = "custom_voice" if tts_model_type == "custom_voice" else tts_model_type
         speaker_encoder_included = bool(config.get("speaker_encoder_included"))
         talker_config = config.get("talker_config", {}) or {}
         speaker_map = talker_config.get("spk_id", {}) or {}
@@ -295,13 +301,12 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
 
         run_name = checkpoint_dir.parent.name
         checkpoint_name = checkpoint_dir.name
-        label_prefix = "VoiceBox" if model_family == "voicebox" else "학습된"
-        label = f"{label_prefix} {run_name}" if model_family == "voicebox" else f"학습된 {run_name}"
-        notes = f"최종 체크포인트: {storage.relpath(checkpoint_dir)}"
+        label = run_name
+        notes = f"바로 추론에 사용할 수 있는 최종 모델입니다."
         if custom_names:
-            notes = f"{notes} · new speaker: {', '.join(custom_names)}"
+            notes = f"{notes} 목소리: {', '.join(custom_names)}"
         if speaker_encoder_included:
-            notes = f"{notes} · embedded speaker encoder"
+            notes = f"{notes} 복제 실험에 필요한 정보가 모델 안에 포함되어 있습니다."
         recommended = run_name in {"mai_ko_base17b_full", "mai_ko_customvoice17b_full"}
 
         infos.append(
@@ -336,12 +341,13 @@ def build_model_catalog() -> List[ModelInfo]:
             label="CustomVoice 0.6B",
             model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-CustomVoice", default_model_id("custom_voice")),
             supports_instruction=True,
-            notes="로컬 데모에서 가장 먼저 테스트할 현실적인 기본 모델",
+            notes="짧은 문장으로 빠르게 들어보기 좋은 기본 목소리 모델",
             recommended=True,
             inference_mode="custom_voice",
             source="stock",
             available_speakers=stock_speaker_names(),
             default_speaker="Sohee",
+            model_family="custom_voice",
         ),
         ModelInfo(
             key="custom_voice_1_7b",
@@ -349,11 +355,12 @@ def build_model_catalog() -> List[ModelInfo]:
             label="CustomVoice 1.7B",
             model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
             supports_instruction=True,
-            notes="더 무거운 고품질 CustomVoice",
+            notes="말투 지시를 우선 확인할 때 쓰는 고품질 목소리 모델",
             inference_mode="custom_voice",
             source="stock",
             available_speakers=stock_speaker_names(),
             default_speaker="Sohee",
+            model_family="custom_voice",
         ),
         ModelInfo(
             key="voice_design_1_7b",
@@ -361,10 +368,11 @@ def build_model_catalog() -> List[ModelInfo]:
             label="VoiceDesign 1.7B",
             model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-VoiceDesign", default_model_id("voice_design")),
             supports_instruction=True,
-            notes="설명문 기반 새 목소리 설계용",
+            notes="설명만으로 새 목소리 방향을 만드는 모델",
             recommended=True,
             inference_mode="voice_design",
             source="stock",
+            model_family="voice_design",
         ),
         ModelInfo(
             key="base_clone_0_6b",
@@ -372,10 +380,11 @@ def build_model_catalog() -> List[ModelInfo]:
             label="Base 0.6B",
             model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-Base", default_model_id("base_clone")),
             supports_instruction=False,
-            notes="clone prompt 재사용과 CPU 환경 데모를 고려한 기본 모델",
+            notes="참조 음성으로 목소리 스타일을 잡아볼 때 쓰는 가벼운 모델",
             recommended=True,
             inference_mode="voice_clone",
             source="stock",
+            model_family="base",
         ),
         ModelInfo(
             key="base_clone_1_7b",
@@ -383,9 +392,10 @@ def build_model_catalog() -> List[ModelInfo]:
             label="Base 1.7B",
             model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
             supports_instruction=False,
-            notes="고품질 Base clone과 파인튜닝용",
+            notes="목소리 복제와 학습 기준으로 쓰는 고품질 기본 모델",
             inference_mode="voice_clone",
             source="stock",
+            model_family="base",
         ),
         ModelInfo(
             key="tokenizer_12hz",
@@ -393,7 +403,7 @@ def build_model_catalog() -> List[ModelInfo]:
             label="Tokenizer 12Hz",
             model_id=model_path_or_repo("Qwen3-TTS-Tokenizer-12Hz", default_model_id("tokenizer")),
             supports_instruction=False,
-            notes="prepare_data와 tokenizer 처리용",
+            notes="학습 데이터 준비에 필요한 음성 토큰 처리 모델",
             source="stock",
         ),
     ]
@@ -412,6 +422,8 @@ def resolve_finetune_entrypoint(training_mode: str) -> str:
     normalized = (training_mode or "base").strip().lower()
     if normalized == "custom_voice":
         return "finetuning/sft_custom_voice_12hz.py"
+    if normalized == "voicebox":
+        return "finetuning/sft_voicebox_12hz.py"
     return "finetuning/sft_12hz.py"
 
 app = FastAPI(title="Qwen3-TTS Demo API")
@@ -473,7 +485,7 @@ def readable_label(value: str, default: str) -> str:
     return normalized[:72] if normalized else default
 
 
-def generated_audio_path(category: str, label: str, extension: str = "wav") -> Path:
+def generated_audio_path(category: str, label: str, extension: str = "wav", exact_name: bool = False) -> Path:
     """사람이 읽을 수 있는 생성 오디오 경로를 만든다."""
 
     return storage.named_output_path(
@@ -482,6 +494,7 @@ def generated_audio_path(category: str, label: str, extension: str = "wav") -> P
         label=readable_label(label, category),
         extension=extension,
         created_at=utc_now_datetime(),
+        include_time=not exact_name,
     )
 
 
@@ -810,10 +823,44 @@ def write_dataset_jsonl(dataset_path: Path, ref_audio_path: str, samples: List[A
 def resolve_repo_audio_path(audio_path: str) -> str:
     """프로젝트 내부 상대 오디오 경로를 절대 경로로 정규화한다."""
 
-    candidate = Path(audio_path.strip())
+    raw_path = audio_path.strip().replace("\\", "/")
+    windows_drive_match = re.match(r"^([A-Za-z]):/(.*)$", raw_path)
+    if windows_drive_match:
+        drive, rest = windows_drive_match.groups()
+        wsl_path = Path(f"/mnt/{drive.lower()}/{rest}")
+        if wsl_path.exists():
+            return str(wsl_path)
+
+    candidate = Path(raw_path)
     if candidate.is_absolute():
         return str(candidate)
     return str((REPO_ROOT / candidate).resolve())
+
+
+def samples_from_audio_folder(folder_path: str) -> List[Dict[str, str]]:
+    """오디오 폴더를 스캔해 데이터셋 샘플 목록으로 변환한다."""
+
+    folder = Path(resolve_repo_audio_path(folder_path))
+    if not folder.exists() or not folder.is_dir():
+        raise HTTPException(status_code=400, detail=f"Sample folder not found: {folder_path}")
+
+    audio_extensions = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".opus"}
+    text_roots = [
+        folder,
+        folder.parent / "text",
+        folder.parent / "texts",
+        folder.parent / "transcripts",
+    ]
+    samples: List[Dict[str, str]] = []
+    for audio_path in sorted(path for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in audio_extensions):
+        text = ""
+        for text_root in text_roots:
+            candidate = text_root / f"{audio_path.stem}.txt"
+            if candidate.exists():
+                text = candidate.read_text(encoding="utf-8").strip()
+                break
+        samples.append({"audio_path": str(audio_path), "text": text})
+    return samples
 
 
 def copy_audio_into_dataset(dataset_dir: Path, source_audio_path: str, filename: str) -> str:
@@ -1072,56 +1119,10 @@ def generation_options_from_payload(payload: Any) -> Dict[str, Any]:
     return options
 
 
-def split_story_script(script: str, split_mode: str) -> List[str]:
-    """장시간 대본을 합성 가능한 세그먼트 목록으로 나눈다.
+def requested_output_name(payload: Any) -> str:
+    """사용자가 지정한 생성 파일 이름을 안전하게 정리한다."""
 
-    Args:
-        script: 사용자가 입력한 전체 대본.
-        split_mode: `line` 또는 `paragraph`.
-
-    Returns:
-        비어 있지 않은 대본 세그먼트 목록.
-    """
-
-    normalized = script.replace("\r\n", "\n").strip()
-    if not normalized:
-        return []
-
-    if split_mode == "paragraph":
-        parts = [part.strip() for part in re.split(r"\n\s*\n", normalized) if part.strip()]
-    else:
-        parts = [part.strip() for part in normalized.split("\n") if part.strip()]
-    return parts
-
-
-def concatenate_audio_segments(segment_paths: List[Path], output_path: Path, pause_ms: int) -> None:
-    """여러 세그먼트 오디오를 짧은 무음 간격과 함께 하나로 합친다.
-
-    Args:
-        segment_paths: 이어 붙일 오디오 파일 경로 목록.
-        output_path: 최종 출력 파일 경로.
-        pause_ms: 세그먼트 사이에 넣을 무음 길이.
-    """
-
-    if not segment_paths:
-        raise ValueError("At least one segment is required.")
-
-    combined: List[np.ndarray] = []
-    target_sr: Optional[int] = None
-    for index, path in enumerate(segment_paths):
-        waveform, sample_rate = sf.read(str(path), dtype="float32")
-        if waveform.ndim > 1:
-            waveform = waveform.mean(axis=1)
-        if target_sr is None:
-            target_sr = sample_rate
-        elif sample_rate != target_sr:
-            waveform = librosa.resample(np.asarray(waveform, dtype=np.float32), orig_sr=sample_rate, target_sr=target_sr)
-        combined.append(np.asarray(waveform, dtype=np.float32))
-        if pause_ms > 0 and index < len(segment_paths) - 1:
-            silence = np.zeros(int(target_sr * (pause_ms / 1000.0)), dtype=np.float32)
-            combined.append(silence)
-
-    sf.write(str(output_path), np.concatenate(combined), int(target_sr or 24000))
+    return readable_label(str(getattr(payload, "output_name", "") or "").strip(), "")
 
 
 def list_server_audio_assets() -> List[AudioAsset]:
@@ -1204,7 +1205,7 @@ def list_generation_records() -> List[GenerationRecord]:
 
         items.append(
             GenerationRecord(
-                id=f"file_{path.stem}",
+                id=f"file_{hashlib.sha1(rel_path.encode('utf-8')).hexdigest()[:12]}",
                 mode=mode_guess,
                 input_text=stem_text or path.stem,
                 language="Auto",
@@ -1790,6 +1791,18 @@ def run_upstream_command(command: List[str]) -> subprocess.CompletedProcess[str]
     )
 
 
+def resolve_model_path_for_cli(model_path: str) -> str:
+    """CLI 스크립트에 넘길 모델 경로를 절대 경로로 정규화한다."""
+
+    candidate = Path(model_path.strip())
+    if candidate.is_absolute():
+        return str(candidate)
+    repo_candidate = REPO_ROOT / candidate
+    if repo_candidate.exists():
+        return str(repo_candidate.resolve())
+    return model_path
+
+
 @app.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """백엔드 상태와 런타임 모드를 반환한다.
@@ -2012,6 +2025,10 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
             intensity=payload.intensity,
             seed=payload.seed,
             output_path=output_path,
+            model_profile=payload.model_profile,
+            steps=payload.steps,
+            cfg_scale=payload.cfg_scale,
+            negative_prompt=payload.negative_prompt,
         )
     except MMAudioError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -2022,9 +2039,13 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
         audio_path=output_path,
         meta={
             "tool_kind": "sound_effect",
+            "model_profile": payload.model_profile,
             "duration_sec": payload.duration_sec,
             "intensity": payload.intensity,
             "seed": payload.seed,
+            "steps": payload.steps,
+            "cfg_scale": payload.cfg_scale,
+            "negative_prompt": payload.negative_prompt,
             **engine_meta,
         },
     )
@@ -2276,6 +2297,7 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
             speaker=payload.speaker,
             instruct=payload.instruct,
             model_id=payload.model_id or default_model_id("custom_voice"),
+            output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
         )
     )
@@ -2288,7 +2310,7 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
         audio_path=audio_path,
         speaker=payload.speaker,
         instruction=payload.instruct,
-        meta=meta,
+        meta={**meta, "display_name": requested_output_name(payload) or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
@@ -2311,85 +2333,19 @@ def generate_voice_design(payload: VoiceDesignRequest) -> GenerationResponse:
             language=payload.language,
             instruct=payload.instruct,
             model_id=payload.model_id or default_model_id("voice_design"),
+            output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
         )
     )
     record_id = storage.new_id("gen")
     record = build_generation_record(
         record_id=record_id,
-        mode="story_studio",
+        mode="voice_design",
         text=payload.text,
         language=payload.language,
         audio_path=audio_path,
         instruction=payload.instruct,
-        meta=meta,
-    )
-    save_generation_record(record)
-    return GenerationResponse(record=GenerationRecord(**record))
-
-
-@app.post("/api/generate/story-studio", response_model=GenerationResponse)
-def generate_story_studio(payload: StoryStudioRequest) -> GenerationResponse:
-    """장시간 대본을 세그먼트 단위로 합성한 뒤 하나의 오디오로 묶는다.
-
-    Args:
-        payload: 장면 지시와 긴 대본을 포함한 요청.
-
-    Returns:
-        세그먼트 합성 결과를 합친 생성 이력 응답.
-    """
-
-    segments = split_story_script(payload.text, payload.split_mode)
-    if not segments:
-        raise HTTPException(status_code=400, detail="Story script is empty.")
-
-    segment_paths: List[Path] = []
-    segment_meta: List[Dict[str, Any]] = []
-    options = generation_options_from_payload(payload)
-    for segment in segments:
-        if payload.generation_mode == "custom_voice":
-            audio_path, _, meta = run_generation_or_http(
-                lambda segment_text=segment: engine.generate_custom_voice(
-                    text=segment_text,
-                    language=payload.language,
-                    speaker=payload.speaker or stock_speaker_names()[0],
-                    instruct=payload.instruct,
-                    model_id=payload.model_id or default_model_id("custom_voice"),
-                    **options,
-                )
-            )
-        else:
-            audio_path, _, meta = run_generation_or_http(
-                lambda segment_text=segment: engine.generate_voice_design(
-                    text=segment_text,
-                    language=payload.language,
-                    instruct=payload.instruct,
-                    model_id=payload.model_id or default_model_id("voice_design"),
-                    **options,
-                )
-            )
-        segment_paths.append(audio_path)
-        segment_meta.append({"text": segment, **meta})
-
-    output_path = generated_audio_path("story-studio", segments[0], "wav")
-    concatenate_audio_segments(segment_paths, output_path, payload.pause_ms)
-    record_id = storage.new_id("gen")
-    record = build_generation_record(
-        record_id=record_id,
-        mode="voice_design",
-        text=payload.text,
-        language=payload.language,
-        audio_path=output_path,
-        speaker=payload.speaker or "",
-        instruction=payload.instruct,
-        meta={
-            "story_studio": True,
-            "generation_mode": payload.generation_mode,
-            "split_mode": payload.split_mode,
-            "pause_ms": payload.pause_ms,
-            "segment_count": len(segments),
-            "segments": segment_meta,
-        },
+        meta={**meta, "display_name": requested_output_name(payload) or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
@@ -2437,6 +2393,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
             ref_text=ref_text,
             voice_clone_prompt_path=voice_clone_prompt_path,
             x_vector_only_mode=payload.x_vector_only_mode,
+            output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
         )
     )
@@ -2450,7 +2407,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
         preset_id=payload.preset_id or "",
         source_ref_audio_path=ref_audio_path,
         source_ref_text=ref_text,
-        meta=meta,
+        meta={**meta, "display_name": requested_output_name(payload) or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
@@ -2481,6 +2438,7 @@ def generate_with_selected_model(payload: UniversalInferenceRequest) -> Generati
                 model_id=payload.model_id,
                 text=payload.text,
                 language=payload.language,
+                output_name=payload.output_name,
                 speaker=speaker,
                 instruct=payload.instruct,
                 **generation_options_from_payload(payload),
@@ -2496,6 +2454,7 @@ def generate_with_selected_model(payload: UniversalInferenceRequest) -> Generati
                 model_id=payload.model_id,
                 text=payload.text,
                 language=payload.language,
+                output_name=payload.output_name,
                 instruct=instruct,
                 **generation_options_from_payload(payload),
             )
@@ -2512,6 +2471,7 @@ def generate_with_selected_model(payload: UniversalInferenceRequest) -> Generati
                 model_id=payload.model_id,
                 text=payload.text,
                 language=payload.language,
+                output_name=payload.output_name,
                 ref_audio_path=ref_audio_path or None,
                 ref_text=ref_text or None,
                 voice_clone_prompt_path=voice_clone_prompt_path or None,
@@ -2541,6 +2501,7 @@ def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> Gener
             ref_audio_path=payload.ref_audio_path,
             ref_text=ref_text,
             x_vector_only_mode=payload.x_vector_only_mode,
+            output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
         )
     )
@@ -2554,10 +2515,159 @@ def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> Gener
         instruction=payload.instruct,
         source_ref_audio_path=payload.ref_audio_path,
         source_ref_text=ref_text,
-        meta=meta,
+        meta={**meta, "display_name": requested_output_name(payload) or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.post("/api/voicebox/fusion", response_model=FineTuneRun)
+def create_voicebox_fusion(payload: VoiceBoxFusionRequest) -> FineTuneRun:
+    """CustomVoice checkpoint와 Base speaker encoder를 합쳐 VoiceBox checkpoint를 만든다."""
+
+    run_id = storage.new_id("voicebox")
+    run_name = storage.slugify(payload.output_name, default=run_id)
+    run_dir = storage.finetune_runs_dir / run_name
+    output_checkpoint = run_dir / "final"
+    log_path = run_dir / "fusion.log"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        "python3",
+        "fusion/make_voicebox_checkpoint.py",
+        "--input-checkpoint",
+        resolve_model_path_for_cli(payload.input_checkpoint_path),
+        "--speaker-encoder-source",
+        resolve_model_path_for_cli(payload.speaker_encoder_source_path),
+        "--output-checkpoint",
+        str(output_checkpoint),
+    ]
+    result = run_upstream_command(command)
+    log_path.write_text((result.stdout or "") + "\n" + (result.stderr or ""), encoding="utf-8")
+    status = "completed" if result.returncode == 0 else "failed"
+    if status != "completed":
+        raise HTTPException(status_code=500, detail=f"VoiceBox fusion failed. See {storage.relpath(log_path)}")
+
+    created_at = utc_now()
+    record = {
+        "id": run_id,
+        "dataset_id": "fusion",
+        "training_mode": "voicebox",
+        "init_model_path": payload.input_checkpoint_path,
+        "speaker_encoder_model_path": payload.speaker_encoder_source_path,
+        "output_model_path": storage.relpath(run_dir),
+        "batch_size": 0,
+        "lr": 0.0,
+        "num_epochs": 0,
+        "speaker_name": "",
+        "status": status,
+        "created_at": created_at,
+        "finished_at": utc_now(),
+        "log_path": storage.relpath(log_path),
+        "command": command,
+        "final_checkpoint_path": storage.relpath(output_checkpoint),
+        "selectable_model_path": storage.relpath(output_checkpoint),
+        "is_selectable": True,
+        "stage_label": "완료",
+        "summary_label": payload.output_name,
+        "model_family": "voicebox",
+        "speaker_encoder_included": True,
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.finetune_runs_dir,
+            category="voicebox",
+            label=payload.output_name,
+            record_id=run_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
+    return FineTuneRun(**record)
+
+
+def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, fallback_strategy: str) -> GenerationResponse:
+    """VoiceBox 단일 모델로 clone 계열 추론을 실행하고 생성 이력으로 등록한다."""
+
+    ref_text = resolve_reference_text(payload.ref_audio_path, payload.ref_text)
+    strategy = (payload.strategy or fallback_strategy).strip() or fallback_strategy
+    record_id = storage.new_id("gen")
+    output_dir = storage.generated_dir / "voicebox" / record_id
+    command = [
+        "python3",
+        "inference/voicebox/clone_low_level.py",
+        "--model-path",
+        resolve_model_path_for_cli(payload.model_id),
+        "--ref-audio",
+        str(resolve_audio_absolute_path(payload.ref_audio_path)),
+        "--ref-text",
+        ref_text,
+        "--text",
+        payload.text,
+        "--language",
+        payload.language,
+        "--instruct",
+        payload.instruct,
+        "--speaker",
+        payload.speaker,
+        "--output-dir",
+        str(output_dir),
+        "--strategies",
+        strategy,
+    ]
+    result = run_upstream_command(command)
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"VoiceBox inference failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
+        )
+
+    summary_path = output_dir / "summary.json"
+    if not summary_path.exists():
+        raise HTTPException(status_code=500, detail="VoiceBox inference did not write summary.json.")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    result_item = next((item for item in summary.get("results", []) if item.get("name") == strategy and item.get("ok")), None)
+    if not result_item or not result_item.get("output_path"):
+        raise HTTPException(status_code=500, detail=f"VoiceBox strategy did not produce audio: {strategy}")
+
+    source_audio = Path(result_item["output_path"])
+    final_audio = generated_audio_path(mode, requested_output_name(payload) or payload.text, "wav")
+    shutil.copyfile(source_audio, final_audio)
+    record = build_generation_record(
+        record_id=record_id,
+        mode=mode,
+        text=payload.text,
+        language=payload.language,
+        audio_path=final_audio,
+        speaker=payload.speaker,
+        instruction=payload.instruct,
+        source_ref_audio_path=payload.ref_audio_path,
+        source_ref_text=ref_text,
+        meta={
+            "display_name": requested_output_name(payload) or None,
+            "model_id": payload.model_id,
+            "strategy": strategy,
+            "summary_path": storage.relpath(summary_path),
+        },
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.post("/api/generate/voicebox-clone", response_model=GenerationResponse)
+def generate_voicebox_clone(payload: VoiceBoxCloneRequest) -> GenerationResponse:
+    """VoiceBox 하나만 사용해 참조 음성의 음색을 복제한다."""
+
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="embedded_encoder_only")
+
+
+@app.post("/api/generate/voicebox-clone-instruct", response_model=GenerationResponse)
+def generate_voicebox_clone_instruct(payload: VoiceBoxCloneRequest) -> GenerationResponse:
+    """VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용한다."""
+
+    if not payload.strategy:
+        payload.strategy = "embedded_encoder_with_ref_code"
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone_instruct", fallback_strategy="embedded_encoder_with_ref_code")
 
 
 @app.post("/api/clone-prompts/from-generated-sample", response_model=ClonePromptRecord)
@@ -2684,8 +2794,10 @@ def generate_from_preset(preset_id: str, payload: PresetGenerateRequest) -> Gene
 
     preset = get_preset_record(preset_id)
     request = VoiceCloneRequest(
+        model_id=payload.model_id or preset.get("base_model"),
         text=payload.text,
         language=payload.language or preset["language"],
+        output_name=payload.output_name,
         preset_id=preset_id,
         seed=payload.seed,
         non_streaming_mode=payload.non_streaming_mode,
@@ -2715,20 +2827,26 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
         저장된 데이터셋 메타데이터.
     """
 
-    if not payload.samples:
+    incoming_samples: List[Any] = list(payload.samples)
+    if payload.sample_folder_path and payload.sample_folder_path.strip():
+        incoming_samples.extend(samples_from_audio_folder(payload.sample_folder_path))
+
+    if not incoming_samples:
         raise HTTPException(status_code=400, detail="At least one sample is required.")
 
     normalized_samples = []
-    for sample in payload.samples:
-        if not sample.audio_path.strip():
+    for sample in incoming_samples:
+        audio_path = str(getattr(sample, "audio_path", "") if not isinstance(sample, dict) else sample.get("audio_path", "")).strip()
+        sample_text = getattr(sample, "text", None) if not isinstance(sample, dict) else sample.get("text")
+        if not audio_path:
             continue
 
         # 데이터셋 빌더는 음성만 먼저 모아두는 흐름이 많아서,
         # 텍스트가 비어 있으면 각 샘플을 자동 전사해 raw JSONL을 완성한다.
-        transcript = resolve_reference_text(sample.audio_path, sample.text)
+        transcript = resolve_reference_text(audio_path, sample_text)
         normalized_samples.append(
             {
-                "audio_path": sample.audio_path.strip(),
+                "audio_path": audio_path,
                 "text": transcript,
             }
         )

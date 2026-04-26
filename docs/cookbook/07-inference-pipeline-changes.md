@@ -147,22 +147,7 @@ clone-like conditioning과 instruct를 한 모델에서 같이 실험할 수 있
 - `embedded_encoder_with_ref_code`
   - 참조 codec 흐름까지 넣기 때문에 aggressive instruct에서 문장 보존이 흔들릴 수 있습니다.
 
-## 8. `스토리 스튜디오`
-
-현재 스토리 스튜디오는 장문 대본 생성 전용 추론 경로입니다.
-
-이 화면의 목적은:
-
-- 긴 텍스트를 한 번에 읽게 하기
-
-입니다.
-
-즉:
-
-- 장면 번호를 읽게 하는 기능이 아님
-- 멀티 화자 데이터 생성 기능과도 다름
-
-## 9. 학습 결과 모델을 바로 다시 쓰는 구조
+## 8. 학습 결과 모델을 바로 다시 쓰는 구조
 
 현재 추론 파이프라인의 중요한 특징은 학습과 추론이 한 워크플로우로 이어진다는 점입니다.
 
@@ -181,7 +166,7 @@ clone-like conditioning과 instruct를 한 모델에서 같이 실험할 수 있
 - `data/finetune-runs/mai_ko_voicebox17b_full/final`
 - `data/finetune-runs/mai_ko_voicebox17b_full_extra1/final`
 
-## 10. 오디오 툴은 추론과 분리합니다
+## 9. 오디오 툴은 추론과 분리합니다
 
 현재 아래 기능은 메인 TTS 추론과 분리된 독립 작업실입니다.
 
@@ -199,7 +184,6 @@ clone-like conditioning과 instruct를 한 모델에서 같이 실험할 수 있
 - 스타일 자산 생성: `목소리 복제`, `목소리 설계`
 - 스타일 재활용: `프리셋 기반 생성`
 - self-contained clone/instruct 실험: `VoiceBox`
-- 장문 생성: `스토리 스튜디오`
 - 오디오 툴: `사운드 효과`, `보이스 체인저`, `오디오 분리`
 
 즉 지금의 변화는 “기능을 더 많이 붙인 것”보다, 각 기능의 역할을 사용자 작업 흐름에 맞게 다시 나눈 것이라고 보는 편이 정확합니다.

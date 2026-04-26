@@ -19,7 +19,6 @@
 
 - 1단계 plain `CustomVoice` 학습:
   - [sft_custom_voice_12hz.py](../../Qwen3-TTS/finetuning/sft_custom_voice_12hz.py)
-  - [sft_custom_voice_12hz_legacy.py](../../Qwen3-TTS/finetuning/sft_custom_voice_12hz_legacy.py) 이전 구현 보존본
   - [train_customvoice.py](../../voicebox/train_customvoice.py) 호환 래퍼
 - 2단계 `CustomVoice -> VoiceBox` 변환:
   - [make_voicebox_checkpoint.py](../../Qwen3-TTS/fusion/make_voicebox_checkpoint.py)

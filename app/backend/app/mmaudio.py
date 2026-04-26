@@ -14,6 +14,9 @@ class MMAudioError(RuntimeError):
     """Raised when the external MMAudio runtime cannot complete."""
 
 
+NSFW_MMAUDIO_FILENAME = "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors"
+
+
 def resolve_mmaudio_repo_root(repo_root: Path) -> Optional[Path]:
     configured = (os.getenv("MMAUDIO_REPO_ROOT") or "").strip()
     candidates: List[Path] = [Path(configured).expanduser()] if configured else []
@@ -90,26 +93,60 @@ class MMAudioSoundEffectEngine:
             return "MMAudio 추론 스크립트를 찾지 못했습니다. MMAUDIO_INFER_SCRIPT를 지정하세요."
         return f"MMAudio script ready: {script.name}"
 
-    def _build_command(self, *, prompt: str, duration_sec: float, seed: Optional[int], output_path: Path) -> Tuple[List[str], Path]:
-        if not self.mmaudio_root:
+    def _build_command(
+        self,
+        *,
+        prompt: str,
+        duration_sec: float,
+        seed: Optional[int],
+        output_path: Path,
+        model_profile: str,
+        steps: Optional[int],
+        cfg_scale: Optional[float],
+        negative_prompt: str,
+    ) -> Tuple[List[str], Path]:
+        profile = (model_profile or "mmaudio").strip().lower()
+        profile_root = self.mmaudio_root
+        if not profile_root:
             raise MMAudioError("MMAudio repository not found.")
 
-        template = (os.getenv("MMAUDIO_COMMAND_TEMPLATE") or "").strip()
+        template_name = "MMAUDIO_NSFW_COMMAND_TEMPLATE" if profile == "mmaudio_nsfw" else "MMAUDIO_COMMAND_TEMPLATE"
+        template = (os.getenv(template_name) or os.getenv("MMAUDIO_COMMAND_TEMPLATE") or "").strip()
         if template:
+            model_path = ""
+            if profile == "mmaudio_nsfw":
+                nsfw_model = self.project_root / "data" / "mmaudio" / "nsfw" / NSFW_MMAUDIO_FILENAME
+                if not nsfw_model.exists():
+                    raise MMAudioError(f"NSFW MMAudio model not found: {nsfw_model}")
+                model_path = str(nsfw_model)
             command = [
                 token.format(
                     prompt=prompt,
                     duration=duration_sec,
                     seed="" if seed is None else seed,
                     output=str(output_path),
-                    repo=str(self.mmaudio_root),
+                    repo=str(profile_root),
+                    model=model_path,
                     python=self.python_executable,
+                    profile=profile,
+                    steps="" if steps is None else steps,
+                    cfg_scale="" if cfg_scale is None else cfg_scale,
+                    negative_prompt=negative_prompt,
                 )
                 for token in shlex.split(template)
             ]
-            return command, self.mmaudio_root
+            return command, profile_root
 
-        script = resolve_infer_script(self.project_root, self.mmaudio_root)
+        if profile == "mmaudio_nsfw":
+            nsfw_model = self.project_root / "data" / "mmaudio" / "nsfw" / NSFW_MMAUDIO_FILENAME
+            if not nsfw_model.exists():
+                raise MMAudioError(f"NSFW MMAudio model not found: {nsfw_model}")
+            raise MMAudioError(
+                "MMAudio NSFW generation requires MMAUDIO_NSFW_COMMAND_TEMPLATE because "
+                "the bundled MMAudio demo entrypoint does not accept an arbitrary safetensors checkpoint."
+            )
+
+        script = resolve_infer_script(self.project_root, profile_root)
         if script is None:
             raise MMAudioError("MMAudio infer script not found. Set MMAUDIO_INFER_SCRIPT or MMAUDIO_COMMAND_TEMPLATE.")
 
@@ -125,14 +162,35 @@ class MMAudioSoundEffectEngine:
         ]
         if seed is not None:
             command.extend(["--seed", str(int(seed))])
-        return command, self.mmaudio_root
+        return command, profile_root
 
-    def generate(self, *, prompt: str, duration_sec: float, intensity: float, seed: Optional[int], output_path: Path) -> Tuple[Path, Dict[str, object]]:
+    def generate(
+        self,
+        *,
+        prompt: str,
+        duration_sec: float,
+        intensity: float,
+        seed: Optional[int],
+        output_path: Path,
+        model_profile: str = "mmaudio",
+        steps: Optional[int] = None,
+        cfg_scale: Optional[float] = None,
+        negative_prompt: str = "",
+    ) -> Tuple[Path, Dict[str, object]]:
         if not self.is_available():
             raise MMAudioError(self.availability_notes())
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        command, cwd = self._build_command(prompt=prompt, duration_sec=duration_sec, seed=seed, output_path=output_path)
+        command, cwd = self._build_command(
+            prompt=prompt,
+            duration_sec=duration_sec,
+            seed=seed,
+            output_path=output_path,
+            model_profile=model_profile,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            negative_prompt=negative_prompt,
+        )
         completed = subprocess.run(command, cwd=str(cwd), capture_output=True, text=True, check=False)
         if completed.returncode != 0:
             raise MMAudioError(
@@ -144,10 +202,14 @@ class MMAudioSoundEffectEngine:
 
         return output_path, {
             "engine": "mmaudio",
+            "model_profile": model_profile,
             "prompt": prompt,
             "duration_sec": duration_sec,
             "intensity": intensity,
             "seed": seed,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "negative_prompt": negative_prompt,
             "cwd": str(cwd),
             "command": command,
         }

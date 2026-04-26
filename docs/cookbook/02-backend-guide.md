@@ -123,6 +123,9 @@
 
 - `MMAudio`가 준비되지 않으면 capability를 `available=false`로 내립니다.
 - 가짜 procedural fallback은 현재 기준 경로에서 사용하지 않습니다.
+- 일반 효과음은 기본 `MMAudio` 경로를 사용합니다.
+- NSFW 효과음은 `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors` 파일을 전용 모델로 봅니다.
+- NSFW 모델은 기본 `MMAudio` demo entrypoint가 임의 safetensors를 직접 받지 않기 때문에 `MMAUDIO_NSFW_COMMAND_TEMPLATE`를 지정해야 실행됩니다.
 
 ### 오디오 분리
 
@@ -165,8 +168,10 @@
 - `POST /api/generate/custom-voice`
 - `POST /api/generate/voice-design`
 - `POST /api/generate/voice-clone`
-- `POST /api/generate/story-studio`
 - `POST /api/generate/hybrid-clone-instruct`
+- `POST /api/voicebox/fusion`
+- `POST /api/generate/voicebox-clone`
+- `POST /api/generate/voicebox-clone-instruct`
 
 ### clone prompt / preset
 

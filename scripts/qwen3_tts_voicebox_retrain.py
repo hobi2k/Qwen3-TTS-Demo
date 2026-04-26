@@ -2,7 +2,7 @@
 """Compatibility wrapper for VoiceBox -> VoiceBox retraining.
 
 The canonical VoiceBox -> VoiceBox retraining path is under ``Qwen3-TTS/finetuning``.
-This legacy entry point only translates old flag names and forwards execution.
+This compatibility entry point only translates older flag names and forwards execution.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ ARG_ALIASES = {
 
 
 def normalize_args(argv: list[str]) -> list[str]:
-    """Map legacy option names to the canonical retraining CLI."""
+    """Map older option aliases to the canonical retraining CLI."""
 
     return [ARG_ALIASES.get(arg, arg) for arg in argv]
 

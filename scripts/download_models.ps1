@@ -175,5 +175,19 @@ if ($env:MMAUDIO_CONFIG_URL) {
     }
 }
 
+$MMAudioNsfwModelUrl = if ($env:MMAUDIO_NSFW_MODEL_URL) { $env:MMAUDIO_NSFW_MODEL_URL } else { "https://huggingface.co/phazei/NSFW_MMaudio/resolve/main/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" }
+if (($Profile -eq "all") -and $MMAudioNsfwModelUrl) {
+    $NsfwFilename = if ($env:MMAUDIO_NSFW_MODEL_FILENAME) { $env:MMAUDIO_NSFW_MODEL_FILENAME } else { "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" }
+    $NsfwDir = Join-Path $MMAudioModelsDir "nsfw"
+    New-Item -ItemType Directory -Force -Path $NsfwDir | Out-Null
+    $TargetNsfwModel = Join-Path $NsfwDir $NsfwFilename
+    if (-not (Test-Path $TargetNsfwModel)) {
+        Write-Host "Downloading MMAudio NSFW model -> $TargetNsfwModel"
+        Invoke-WebRequest -Uri $MMAudioNsfwModelUrl -OutFile $TargetNsfwModel
+    }
+    else {
+        Write-Host "MMAudio NSFW model already present: $TargetNsfwModel"
+    }
+}
 Write-Host "Suggested next step:"
 Write-Host "  cd app\backend; ..\..\.venv\Scripts\Activate.ps1; uvicorn app.main:app --reload"

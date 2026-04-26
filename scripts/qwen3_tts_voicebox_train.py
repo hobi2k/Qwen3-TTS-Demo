@@ -36,7 +36,7 @@ BOOTSTRAP_ALIASES = {
 
 
 def uses_external_speaker_encoder(argv: list[str]) -> bool:
-    """Return whether the legacy command is asking for bootstrap training."""
+    """Return whether the command is asking for bootstrap training."""
 
     flags = {"--speaker-encoder-model-path", "--base-speaker-encoder-model-path", "--speaker_encoder_model_path"}
     for index, arg in enumerate(argv):
@@ -51,7 +51,7 @@ def uses_external_speaker_encoder(argv: list[str]) -> bool:
 
 
 def normalize_args(argv: list[str], aliases: dict[str, str]) -> list[str]:
-    """Map legacy option names to the selected canonical CLI."""
+    """Map older option aliases to the selected canonical CLI."""
 
     normalized: list[str] = []
     for arg in argv:

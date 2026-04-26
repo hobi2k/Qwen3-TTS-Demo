@@ -121,14 +121,16 @@ class QwenDemoEngine:
         if bool(self._torch.cuda.is_available()):
             self._torch.cuda.manual_seed_all(seed)
 
-    def _generated_audio_path(self, category: str, label: str) -> Path:
+    def _generated_audio_path(self, category: str, label: str, output_name: str = "") -> Path:
         """읽기 쉬운 생성 오디오 경로를 만든다."""
 
+        preferred_name = (output_name or "").strip()
         return self.storage.named_output_path(
             root=self.storage.generated_dir,
             category=category,
-            label=label or category,
+            label=preferred_name or label or category,
             extension="wav",
+            include_time=not bool(preferred_name),
         )
 
     def resolve_device(self) -> str:
@@ -483,6 +485,7 @@ class QwenDemoEngine:
         speaker: str,
         instruct: str,
         model_id: str,
+        output_name: str = "",
         seed: Optional[int] = None,
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
@@ -499,7 +502,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self._generated_audio_path("tts-custom", f"{speaker} {text[:48]}")
+        output_path = self._generated_audio_path("tts-custom", f"{speaker} {text[:48]}", output_name)
 
         if self.simulation_mode or not self._qwen_available:
             sample_rate = self._fake_wave(text, output_path, f"custom:{speaker}:{instruct}")
@@ -532,6 +535,7 @@ class QwenDemoEngine:
         language: str,
         instruct: str,
         model_id: str,
+        output_name: str = "",
         seed: Optional[int] = None,
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
@@ -547,7 +551,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self._generated_audio_path("voice-design", text[:48] or instruct[:48])
+        output_path = self._generated_audio_path("voice-design", text[:48] or instruct[:48], output_name)
 
         if self.simulation_mode or not self._qwen_available:
             sample_rate = self._fake_wave(text, output_path, f"design:{instruct}")
@@ -582,6 +586,7 @@ class QwenDemoEngine:
         ref_text: str = "",
         voice_clone_prompt_path: str = "",
         x_vector_only_mode: bool = False,
+        output_name: str = "",
         seed: Optional[int] = None,
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
@@ -600,7 +605,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self._generated_audio_path("voice-clone", text[:48])
+        output_path = self._generated_audio_path("voice-clone", text[:48], output_name)
 
         if self.simulation_mode or not self._qwen_available:
             seed_hint = voice_clone_prompt_path or ref_audio_path or ref_text
@@ -658,6 +663,7 @@ class QwenDemoEngine:
         ref_audio_path: str,
         ref_text: str = "",
         x_vector_only_mode: bool = False,
+        output_name: str = "",
         seed: Optional[int] = None,
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
@@ -678,7 +684,7 @@ class QwenDemoEngine:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
         """
 
-        output_path = self._generated_audio_path("hybrid-clone-instruct", text[:48])
+        output_path = self._generated_audio_path("hybrid-clone-instruct", text[:48], output_name)
 
         if self.simulation_mode or not self._qwen_available:
             seed_hint = f"{base_model_id}:{custom_model_id}:{ref_audio_path}:{instruct}"

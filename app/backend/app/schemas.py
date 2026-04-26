@@ -71,6 +71,7 @@ class GenerationRequestBase(BaseModel):
 
     text: str = Field(..., min_length=1)
     language: str = "Auto"
+    output_name: Optional[str] = None
     seed: Optional[int] = None
     non_streaming_mode: Optional[bool] = None
     do_sample: Optional[bool] = None
@@ -99,17 +100,6 @@ class VoiceDesignRequest(GenerationRequestBase):
 
     model_id: Optional[str] = None
     instruct: str = Field(..., min_length=1)
-
-
-class StoryStudioRequest(GenerationRequestBase):
-    """장시간 대본을 여러 세그먼트로 나눠 합성하는 요청 스키마다."""
-
-    model_id: Optional[str] = None
-    instruct: str = Field(..., min_length=1)
-    speaker: Optional[str] = None
-    generation_mode: str = "voice_design"
-    split_mode: str = "line"
-    pause_ms: int = Field(350, ge=0, le=3000)
 
 
 class VoiceCloneRequest(GenerationRequestBase):
@@ -144,6 +134,25 @@ class HybridCloneInstructRequest(GenerationRequestBase):
     ref_audio_path: str = Field(..., min_length=1)
     ref_text: Optional[str] = None
     x_vector_only_mode: bool = False
+
+
+class VoiceBoxFusionRequest(BaseModel):
+    """Plain CustomVoice checkpoint를 VoiceBox checkpoint로 변환하는 요청."""
+
+    input_checkpoint_path: str = Field(..., min_length=1)
+    speaker_encoder_source_path: str = Field(..., min_length=1)
+    output_name: str = Field(..., min_length=1)
+
+
+class VoiceBoxCloneRequest(GenerationRequestBase):
+    """VoiceBox 단일 모델로 clone 또는 clone+instruct를 실행하는 요청."""
+
+    model_id: str = Field(..., min_length=1)
+    ref_audio_path: str = Field(..., min_length=1)
+    ref_text: Optional[str] = None
+    instruct: str = ""
+    speaker: str = "mai"
+    strategy: str = ""
 
 
 class GenerationRecord(BaseModel):
@@ -232,8 +241,10 @@ class CharacterPreset(BaseModel):
 class PresetGenerateRequest(BaseModel):
     """프리셋 기반 음성 생성 요청 스키마다."""
 
+    model_id: Optional[str] = None
     text: str = Field(..., min_length=1)
     language: str = "Auto"
+    output_name: Optional[str] = None
     seed: Optional[int] = None
     non_streaming_mode: Optional[bool] = None
     do_sample: Optional[bool] = None
@@ -276,9 +287,13 @@ class SoundEffectRequest(BaseModel):
     """텍스트 설명에서 로컬 procedural 효과음을 생성하는 요청 스키마다."""
 
     prompt: str = Field(..., min_length=1)
+    model_profile: str = "mmaudio"
     duration_sec: float = Field(4.0, ge=0.5, le=15.0)
     intensity: float = Field(0.8, ge=0.1, le=1.5)
     seed: Optional[int] = None
+    steps: Optional[int] = Field(None, ge=1, le=200)
+    cfg_scale: Optional[float] = Field(None, ge=0.1, le=20.0)
+    negative_prompt: str = ""
 
 
 class VoiceChangerRequest(BaseModel):
@@ -413,6 +428,7 @@ class FineTuneDatasetCreateRequest(BaseModel):
     speaker_name: str = Field(..., min_length=1)
     ref_audio_path: str
     samples: List[DatasetSampleInput]
+    sample_folder_path: Optional[str] = None
 
 
 class FineTuneDataset(BaseModel):

@@ -75,6 +75,8 @@ Windows PowerShell:
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
 - `whisper-large-v3`
 - 기본 RVC `.pth + .index`
+- NSFW용 MMAudio 모델:
+  `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
 
 가볍게만 준비하려면:
 
@@ -103,6 +105,8 @@ Windows PowerShell:
 - `APPLIO_RVC_INDEX_URL`
 - `MMAUDIO_MODEL_URL`
 - `MMAUDIO_CONFIG_URL`
+- `MMAUDIO_NSFW_MODEL_URL`
+- `MMAUDIO_NSFW_COMMAND_TEMPLATE`
 
 현재 기준 원칙:
 
@@ -150,7 +154,7 @@ http://127.0.0.1:8190/
 
 ```bash
 cd app/frontend
-VITE_API_TARGET=http://127.0.0.1:8190 npm run dev
+VITE_API_TARGET=http://127.0.0.1:<BACKEND_PORT> npm run dev
 ```
 
 이 경우 브라우저는 보통 `http://127.0.0.1:5173/`를 열고, API는 `8190`으로 프록시합니다.
@@ -185,8 +189,6 @@ curl http://127.0.0.1:8190/
   설명문으로 스타일을 만들 수 있는지
 - `프리셋 기반 생성`
   저장 프리셋 반복 생성과 말투 지시 적용이 가능한지
-- `스토리 스튜디오`
-  긴 대본 생성 흐름인지
 - `생성 갤러리`
   생성 결과가 이 탭에만 모이고, 삭제 후 즉시 목록에서 사라지는지
 - `데이터셋 만들기`
@@ -207,7 +209,6 @@ curl http://127.0.0.1:8190/
 - `나의 목소리들`은 저장 프리셋과 최종 학습 모델만 보여줍니다.
 - `목소리 복제`와 `목소리 설계`는 프리셋 생성용 탭입니다.
 - `프리셋 기반 생성`은 저장 스타일의 반복 생성용 탭입니다.
-- `스토리 스튜디오`는 장문 전용 작업실입니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 
 ## 11. Base와 CustomVoice 이해하기

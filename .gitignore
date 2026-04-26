@@ -205,6 +205,9 @@ data/models/
 data/models/**
 data/generated/**
 data/audio-tools/**
+data/mmaudio/**
+!data/mmaudio/
+!data/mmaudio/.gitkeep
 data/rvc-models/**
 !data/rvc-models/.gitkeep
 data/uploads/*

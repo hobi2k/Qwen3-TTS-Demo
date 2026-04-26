@@ -163,5 +163,17 @@ if [[ -n "${MMAUDIO_CONFIG_URL:-}" ]]; then
   fi
 fi
 
+MMAUDIO_NSFW_MODEL_URL="${MMAUDIO_NSFW_MODEL_URL:-https://huggingface.co/phazei/NSFW_MMaudio/resolve/main/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors}"
+if [[ "${PROFILE}" == "all" && -n "${MMAUDIO_NSFW_MODEL_URL:-}" ]]; then
+  TARGET_NSFW_MODEL="${MMAUDIO_MODELS_DIR}/nsfw/${MMAUDIO_NSFW_MODEL_FILENAME:-mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors}"
+  mkdir -p "$(dirname "${TARGET_NSFW_MODEL}")"
+  if [[ ! -f "${TARGET_NSFW_MODEL}" ]]; then
+    echo "Downloading MMAudio NSFW model -> ${TARGET_NSFW_MODEL}"
+    curl -L "${MMAUDIO_NSFW_MODEL_URL}" -o "${TARGET_NSFW_MODEL}"
+  else
+    echo "MMAudio NSFW model already present: ${TARGET_NSFW_MODEL}"
+  fi
+fi
+
 echo "Suggested next step:"
 echo "  cd ${BACKEND_DIR} && source ../../.venv/bin/activate && uvicorn app.main:app --reload"

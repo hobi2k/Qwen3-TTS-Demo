@@ -29,7 +29,7 @@ ARG_ALIASES = {
 
 
 def normalize_args(argv: list[str]) -> list[str]:
-    """Map legacy option names to the canonical bootstrap CLI."""
+    """Map older option aliases to the canonical bootstrap CLI."""
 
     return [ARG_ALIASES.get(arg, arg) for arg in argv]
 

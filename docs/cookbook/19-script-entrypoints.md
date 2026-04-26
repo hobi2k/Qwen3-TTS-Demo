@@ -14,7 +14,6 @@
 | 책임 | canonical script |
 | --- | --- |
 | plain CustomVoice fine-tuning | `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py` |
-| previous CustomVoice implementation snapshot | `Qwen3-TTS/finetuning/sft_custom_voice_12hz_legacy.py` |
 | shared training implementation | `Qwen3-TTS/finetuning/voicebox_training_common.py` |
 | VoiceBox bootstrap training | `Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py` |
 | VoiceBox -> VoiceBox retraining | `Qwen3-TTS/finetuning/sft_voicebox_12hz.py` |

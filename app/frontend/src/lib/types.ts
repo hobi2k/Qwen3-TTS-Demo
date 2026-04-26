@@ -21,6 +21,8 @@ export interface ModelInfo {
   source: string;
   available_speakers: string[];
   default_speaker?: string | null;
+  model_family?: string | null;
+  speaker_encoder_included?: boolean;
 }
 
 export interface SpeakerInfo {
@@ -84,6 +86,7 @@ export interface ClonePromptRecord {
 }
 
 export interface GenerationRequestExtras {
+  output_name?: string;
   model_id?: string;
   seed?: number;
   non_streaming_mode?: boolean;
@@ -237,6 +240,7 @@ export interface CreateDatasetRequest {
   speaker_name: string;
   ref_audio_path: string;
   samples: DatasetSampleInput[];
+  sample_folder_path?: string;
 }
 
 export interface PrepareDatasetRequest {
@@ -259,6 +263,24 @@ export interface CreateFineTuneRunRequest {
   simulate_only: boolean;
 }
 
+export interface VoiceBoxFusionRequest {
+  input_checkpoint_path: string;
+  speaker_encoder_source_path: string;
+  output_name: string;
+}
+
+export interface VoiceBoxCloneRequest extends GenerationRequestExtras {
+  model_id: string;
+  output_name?: string;
+  text: string;
+  language: string;
+  ref_audio_path: string;
+  ref_text?: string;
+  instruct?: string;
+  speaker: string;
+  strategy?: string;
+}
+
 export interface CustomVoiceRequest extends GenerationRequestExtras {
   text: string;
   language: string;
@@ -270,17 +292,6 @@ export interface VoiceDesignRequest extends GenerationRequestExtras {
   text: string;
   language: string;
   instruct: string;
-}
-
-export interface StoryStudioRequest extends GenerationRequestExtras {
-  text: string;
-  language: string;
-  instruct: string;
-  model_id?: string;
-  speaker?: string;
-  generation_mode: string;
-  split_mode: string;
-  pause_ms: number;
 }
 
 export interface UniversalInferenceRequest extends GenerationRequestExtras {
@@ -307,15 +318,20 @@ export interface HybridCloneInstructRequest extends GenerationRequestExtras {
 }
 
 export interface GenerateFromPresetRequest extends GenerationRequestExtras {
+  model_id?: string;
   text: string;
   language: string;
 }
 
 export interface SoundEffectRequest {
   prompt: string;
+  model_profile: string;
   duration_sec: number;
   intensity: number;
   seed?: number;
+  steps?: number;
+  cfg_scale?: number;
+  negative_prompt?: string;
 }
 
 export interface VoiceChangerRequest {

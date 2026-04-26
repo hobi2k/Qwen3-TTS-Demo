@@ -8,17 +8,16 @@ export type TabKey =
   | "clone"
   | "design"
   | "projects"
-  | "story"
   | "effects"
   | "changer"
   | "separation"
   | "dataset"
   | "training"
-  | "voicebox";
+  | "voicebox_fusion";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
 export type CharacterBuilderSource = "design" | "upload";
-export type FineTuneMode = "base" | "custom_voice";
+export type FineTuneMode = "base" | "custom_voice" | "voicebox";
 
 export type GenerationControlsForm = {
   seed: string;
@@ -85,12 +84,7 @@ export const PRODUCT_PAGES = {
   projects: {
     label: "프리셋 기반 생성",
     title: "프리셋 기반 생성",
-    description: "저장한 스타일 위에 영어 스타일 지시를 더해 결과를 만듭니다.",
-  },
-  story: {
-    label: "스토리 스튜디오",
-    title: "스토리 스튜디오",
-    description: "긴 대본과 장면용 목소리를 함께 다룹니다.",
+    description: "저장한 목소리 스타일에 새 말투를 더해 결과를 만듭니다.",
   },
   dataset: {
     label: "데이터셋 만들기",
@@ -102,10 +96,10 @@ export const PRODUCT_PAGES = {
     title: "학습 실행",
     description: "준비된 데이터셋으로 실제 학습을 실행합니다.",
   },
-  voicebox: {
-    label: "VoiceBox Lab",
-    title: "VoiceBox Lab",
-    description: "CustomVoice와 Base speaker encoder를 결합한 self-contained 모델 흐름을 관리합니다.",
+  voicebox_fusion: {
+    label: "VoiceBox 융합",
+    title: "VoiceBox 융합",
+    description: "CustomVoice 결과와 Base encoder를 합쳐 독립 모델로 만듭니다.",
   },
 } as const;
 
@@ -163,15 +157,47 @@ export const HYBRID_RECIPES = [
   },
 ] as const;
 
+export const VOICEBOX_STEPS = [
+  {
+    title: "목소리 학습",
+    description: "데이터셋의 음색을 모델에 먼저 익힙니다.",
+  },
+  {
+    title: "독립 모델 만들기",
+    description: "복제에 필요한 기준 정보를 모델 안에 함께 담습니다.",
+  },
+  {
+    title: "추가 학습",
+    description: "완성된 모델 하나만으로 학습을 이어갈 수 있게 확인합니다.",
+  },
+  {
+    title: "품질 확인",
+    description: "목소리 유사도, 자연스러움, 말투 지시 반영을 비교합니다.",
+  },
+] as const;
+
+export const VOICEBOX_ACTIONS = [
+  { label: "데이터셋 만들기", tab: "dataset" },
+  { label: "학습 실행", tab: "training" },
+  { label: "VoiceBox 융합", tab: "voicebox_fusion" },
+  { label: "목소리 복제", tab: "clone" },
+  { label: "프리셋 기반 생성", tab: "projects" },
+] as const satisfies ReadonlyArray<{ label: string; tab: TabKey }>;
+
 export const SOUND_EFFECT_LIBRARY = [
-  { id: "river", title: "강물", subtitle: "넓게 흐르는 물소리와 가까운 물 튐", duration: "0:30", prompt: "Wide river flow, nearby splashes, calm current" },
-  { id: "thunder", title: "천둥", subtitle: "가까운 번개와 낮게 울리는 잔향", duration: "0:18", prompt: "Close thunder strike, low rumble, lingering air resonance" },
-  { id: "gunshot", title: "총성", subtitle: "짧고 날카로운 근거리 충격음", duration: "0:02", prompt: "Short close-range gunshot, sharp transient, dry impact" },
-  { id: "explosion", title: "폭발", subtitle: "유리 파편이 섞인 무거운 폭발음", duration: "0:04", prompt: "Heavy explosion with glass debris, dense low-end impact" },
-  { id: "rain", title: "폭우", subtitle: "차갑고 촘촘한 빗줄기가 길게 쏟아짐", duration: "0:30", prompt: "Heavy cold rain, dense rainfall, low wind, continuous texture" },
-  { id: "applause", title: "박수", subtitle: "밝은 실내에서 터지는 환호와 박수", duration: "0:09", prompt: "Indoor applause, short cheers, bright room reflections" },
-  { id: "wind", title: "강풍", subtitle: "낮게 울리는 거센 바람과 진동", duration: "0:30", prompt: "Violent storm wind, low air rumble, window vibration" },
-  { id: "running", title: "달리는 발소리", subtitle: "마른 바닥을 빠르게 치는 일정한 발걸음", duration: "0:30", prompt: "Fast running footsteps on dry floor, steady rhythm" },
+  { id: "river", title: "강물", subtitle: "넓게 흐르는 물소리와 가까운 물 튐", duration: "0:30", profile: "mmaudio", prompt: "Wide river flow, nearby splashes, calm current, natural stereo ambience, seamless tail, no music, no speech" },
+  { id: "thunder", title: "천둥", subtitle: "가까운 번개와 낮게 울리는 잔향", duration: "0:18", profile: "mmaudio", prompt: "Close thunder strike, deep low rumble, humid air resonance, distant rain bed, cinematic natural decay, no music" },
+  { id: "gunshot", title: "총성", subtitle: "짧고 날카로운 근거리 충격음", duration: "0:02", profile: "mmaudio", prompt: "Short close-range gunshot, sharp transient, dry impact, quick room slapback, no voices, no music" },
+  { id: "explosion", title: "폭발", subtitle: "유리 파편이 섞인 무거운 폭발음", duration: "0:04", profile: "mmaudio", prompt: "Heavy explosion with glass debris, dense low-end impact, fast pressure wave, falling fragments, cinematic tail" },
+  { id: "rain", title: "폭우", subtitle: "차갑고 촘촘한 빗줄기가 길게 쏟아짐", duration: "0:30", profile: "mmaudio", prompt: "Heavy cold rain on metal roof, dense rainfall texture, low wind, distant thunder bed, loopable ambience, no speech" },
+  { id: "applause", title: "박수", subtitle: "밝은 실내에서 터지는 환호와 박수", duration: "0:09", profile: "mmaudio", prompt: "Indoor applause, short cheers, bright room reflections, natural crowd spacing, clean ending, no music" },
+  { id: "wind", title: "강풍", subtitle: "낮게 울리는 거센 바람과 진동", duration: "0:30", profile: "mmaudio", prompt: "Violent storm wind, low air rumble, window vibration, distant debris movement, wide stereo field, no speech" },
+  { id: "running", title: "달리는 발소리", subtitle: "마른 바닥을 빠르게 치는 일정한 발걸음", duration: "0:30", profile: "mmaudio", prompt: "Fast running footsteps on dry wooden floor, steady rhythm, cloth rustle, close foley detail, no speech, no music" },
+  { id: "adult-room", title: "밀실 분위기", subtitle: "가까운 숨, 천 움직임, 낮은 실내 잔향", duration: "0:12", profile: "mmaudio_nsfw", prompt: "Adults-only intimate room ambience, close breath texture, soft sheet rustle, warm low room tone, subtle movement, no spoken words, no music" },
+  { id: "silk-bed", title: "침구 마찰음", subtitle: "부드러운 침구 마찰과 가까운 움직임", duration: "0:10", profile: "mmaudio_nsfw", prompt: "Adults-only silk bedding foley, close fabric friction, gentle mattress creak, warm quiet bedroom ambience, detailed soft transients, no speech" },
+  { id: "latex", title: "라텍스 클로즈업", subtitle: "마찰감 있는 소재 움직임과 가까운 공간감", duration: "0:08", profile: "mmaudio_nsfw", prompt: "Adults-only latex clothing movement, close microphone texture, elastic creaks, subtle skin friction, cinematic room ambience, no words" },
+  { id: "breathy-room", title: "숨소리 긴장감", subtitle: "숨이 강조된 긴장감 있는 근접 분위기", duration: "0:10", profile: "mmaudio_nsfw", prompt: "Adults-only breathy close-up ambience, tense intimate silence, soft fabric rustle, subtle body movement, controlled dynamics, no dialogue" },
+  { id: "shower-room", title: "스팀 샤워룸", subtitle: "습한 공간감과 물방울, 가까운 숨결", duration: "0:12", profile: "mmaudio_nsfw", prompt: "Adults-only steamy shower room ambience, water droplets on tile, close breath texture, wet skin movement, soft reverb, no speech, no music" },
 ] as const;
 
 export const LANGUAGE_OPTIONS = [
@@ -220,11 +246,31 @@ export function basenameFromPath(value: string): string {
   return parts[parts.length - 1] || value;
 }
 
+function metaString(record: GenerationRecord, key: string): string {
+  const value = record.meta?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function looksInternalLabel(value: string): boolean {
+  return /^(embedded_encoder|checkpoint|epoch-|gen_|audio_|clone_|upload_|202\d{5}|mai_ko_|voicebox17b)/i.test(value.trim());
+}
+
 export function getAudioDownloadName(record: GenerationRecord): string {
+  const displayName = metaString(record, "display_name");
+  if (displayName) {
+    const sourceName = basenameFromPath(record.output_audio_path || record.output_audio_url);
+    const extension = sourceName.includes(".") ? sourceName.split(".").pop() || "wav" : "wav";
+    const safeName = displayName
+      .replace(/[^\w\s가-힣-]+/g, " ")
+      .replace(/\s+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return `${safeName || displayName}.${extension}`;
+  }
+
   const sourceName = basenameFromPath(record.output_audio_path || record.output_audio_url);
   const hasExtension = /\.[a-z0-9]+$/i.test(sourceName);
   const looksOpaque = /^(audio|gen|sfx|voicechanger|convert|harmonic|percussive)_[a-f0-9]{8,}/i.test(sourceName);
-  if (hasExtension && !looksOpaque) {
+  if (hasExtension && !looksOpaque && !looksInternalLabel(sourceName)) {
     return sourceName;
   }
 
@@ -248,10 +294,12 @@ export function getDatasetSourceLabel(value: string): string {
 export function getModeLabel(mode: string): string {
   const labels: Record<string, string> = {
     custom_voice: "텍스트 음성 변환",
-    voice_design: "스토리 스튜디오",
-    story_studio: "스토리 스튜디오",
+    voice_design: "목소리 설계",
+    story_studio: "이전 장문 생성",
     voice_clone: "목소리 복제",
-    hybrid_clone_instruct: "하이브리드",
+    hybrid_clone_instruct: "프리셋+말투",
+    voicebox_clone: "VoiceBox 복제",
+    voicebox_clone_instruct: "VoiceBox 지시 생성",
     sound_effect: "사운드 효과",
     voice_changer: "보이스 체인저",
     audio_converter: "오디오 변환",
@@ -262,12 +310,15 @@ export function getModeLabel(mode: string): string {
 }
 
 export function getModelDisplayLabel(model: ModelInfo): string {
+  const cleanLabel = model.label
+    .replace(/^(보이스박스|학습된)\s+/g, "")
+    .replace(/^(VoiceBox|Fine-tuned)\s+/gi, "")
+    .trim();
   if (model.source === "stock") {
-    return model.label;
+    return cleanLabel;
   }
-  const speaker = model.default_speaker ? ` · ${model.default_speaker}` : "";
-  const checkpoint = model.label.includes("/") ? model.label.split("/").pop()?.trim() || model.label : model.label;
-  return `${checkpoint}${speaker}`;
+  const checkpoint = cleanLabel.includes("/") ? cleanLabel.split("/").pop()?.trim() || cleanLabel : cleanLabel;
+  return checkpoint;
 }
 
 export function getAudioToolJobLabel(kind: string): string {
@@ -292,8 +343,13 @@ export function getPresetSourceLabel(sourceType: string): string {
 }
 
 export function getRecordDisplayTitle(record: GenerationRecord): string {
+  const displayName = metaString(record, "display_name");
+  if (displayName) {
+    return displayName.length > 40 ? `${displayName.slice(0, 40)}…` : displayName;
+  }
+
   const text = record.input_text?.trim();
-  if (text) {
+  if (text && !looksInternalLabel(text)) {
     const cleaned = text.replace(/\s+/g, " ").trim();
     return cleaned.length > 34 ? `${cleaned.slice(0, 34)}…` : cleaned;
   }
@@ -430,63 +486,62 @@ export function GenerationControlsEditor({
   onChange: (next: GenerationControlsForm) => void;
 }) {
   return (
-    <details className="advanced-controls">
-      <summary>Advanced Controls</summary>
+    <div className="advanced-controls">
       <div className="advanced-controls__grid">
         <label>
-          seed
+          Seed
           <input value={value.seed} onChange={(event) => onChange({ ...value, seed: event.target.value })} />
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={value.non_streaming_mode} onChange={(event) => onChange({ ...value, non_streaming_mode: event.target.checked })} />
-          non_streaming_mode
+          Non-streaming mode
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={value.do_sample} onChange={(event) => onChange({ ...value, do_sample: event.target.checked })} />
-          do_sample
+          Sampling
         </label>
         <label>
-          top_k
+          Top K
           <input value={value.top_k} onChange={(event) => onChange({ ...value, top_k: event.target.value })} />
         </label>
         <label>
-          top_p
+          Top P
           <input value={value.top_p} onChange={(event) => onChange({ ...value, top_p: event.target.value })} />
         </label>
         <label>
-          temperature
+          Temperature
           <input value={value.temperature} onChange={(event) => onChange({ ...value, temperature: event.target.value })} />
         </label>
         <label>
-          repetition_penalty
+          Repetition penalty
           <input value={value.repetition_penalty} onChange={(event) => onChange({ ...value, repetition_penalty: event.target.value })} />
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={value.subtalker_dosample} onChange={(event) => onChange({ ...value, subtalker_dosample: event.target.checked })} />
-          subtalker_dosample
+          Subtalker sampling
         </label>
         <label>
-          subtalker_top_k
+          Subtalker Top K
           <input value={value.subtalker_top_k} onChange={(event) => onChange({ ...value, subtalker_top_k: event.target.value })} />
         </label>
         <label>
-          subtalker_top_p
+          Subtalker Top P
           <input value={value.subtalker_top_p} onChange={(event) => onChange({ ...value, subtalker_top_p: event.target.value })} />
         </label>
         <label>
-          subtalker_temperature
+          Subtalker temperature
           <input value={value.subtalker_temperature} onChange={(event) => onChange({ ...value, subtalker_temperature: event.target.value })} />
         </label>
         <label>
-          max_new_tokens
+          Max new tokens
           <input value={value.max_new_tokens} onChange={(event) => onChange({ ...value, max_new_tokens: event.target.value })} />
         </label>
       </div>
       <label>
-        extra_generate_kwargs
+        Extra generate kwargs
         <textarea className="json-textarea" value={value.extra_generate_kwargs} onChange={(event) => onChange({ ...value, extra_generate_kwargs: event.target.value })} />
       </label>
-    </details>
+    </div>
   );
 }
 

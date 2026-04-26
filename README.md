@@ -12,8 +12,6 @@
   설명문으로 새 목소리를 만들고 프리셋으로 저장합니다.
 - `프리셋 기반 생성`
   저장한 프리셋을 기준으로 반복 생성하거나, 프리셋 위에 말투 지시를 덧입혀 생성합니다.
-- `스토리 스튜디오`
-  긴 대본을 한 번에 자연스럽게 생성하는 장문 전용 작업실입니다.
 - `나의 목소리들`
   저장한 프리셋과 최종 학습 모델만 관리하는 화면입니다.
 - `생성 갤러리`
@@ -21,7 +19,13 @@
 - `데이터셋 만들기`
   학습용 오디오와 텍스트를 정리해 `data/datasets/<dataset_id>/` 구조로 저장합니다.
 - `학습 실행`
-  준비된 데이터셋으로 `Base 1.7B` 또는 `CustomVoice 1.7B` 학습을 실행합니다.
+  준비된 데이터셋으로 `Base`, `CustomVoice`, `VoiceBox` 학습을 실행합니다.
+- `VoiceBox 융합`
+  CustomVoice 학습 결과와 Base speaker encoder를 합쳐 독립 모델을 만듭니다.
+- `VoiceBox Clone`
+  VoiceBox 하나만 사용해 참조 음성의 음색을 복제합니다.
+- `Clone + Instruct`
+  VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용합니다.
 - `사운드 효과`
   `MMAudio` 기반 효과음 생성 화면입니다.
 - `보이스 체인저`
@@ -245,7 +249,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8190
 
 ```bash
 cd app/frontend
-VITE_API_TARGET=http://127.0.0.1:8190 npm run dev
+VITE_API_TARGET=http://127.0.0.1:<BACKEND_PORT> npm run dev
 ```
 
 ## 백엔드 준비와 모델 다운로드
@@ -268,6 +272,10 @@ VITE_API_TARGET=http://127.0.0.1:8190 npm run dev
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
 - `whisper-large-v3`
 - 기본 RVC `.pth + .index` 자산
+- `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
+
+NSFW용 MMAudio는 일반 `MMAudio` 모델과 별개로 다룹니다.
+다운로드 스크립트가 기본으로 받으며, 실제 추론에 연결하려면 `MMAUDIO_NSFW_COMMAND_TEMPLATE`가 필요합니다.
 
 ## FlashAttention 2
 
@@ -287,7 +295,6 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 - `텍스트 음성 변환`이 메인 TTS 화면입니다.
 - `목소리 복제`와 `목소리 설계`는 다른 작업입니다.
 - `프리셋 기반 생성`은 저장된 스타일의 반복 생성용 화면입니다.
-- `스토리 스튜디오`는 긴 대본을 한 번에 생성하는 장문용 작업실입니다.
 - `보이스 체인저`는 TTS 재합성이 아니라 `Applio / RVC` 기반 audio-to-audio 변환을 전제로 합니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 - `app/backend/.env`는 절대경로를 기본값으로 쓰지 않습니다.
@@ -296,7 +303,7 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 
 ## 남은 핵심 과제
 
-- `VoiceBox Lab` 화면에서 실제 실행 버튼과 진행 상태를 더 촘촘히 연결하는 작업
+- `보이스박스` 화면에서 실제 실행 버튼과 진행 상태를 더 촘촘히 연결하는 작업
 - `MMAudio`와 `Applio/RVC` 운영 가이드를 더 다듬는 작업
 - 프런트 시각 언어를 더 제품 수준으로 밀어 올리는 작업
 

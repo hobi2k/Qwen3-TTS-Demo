@@ -27,30 +27,90 @@ import type {
   PrepareDatasetRequest,
   SoundEffectRequest,
   SpeakerInfo,
-  StoryStudioRequest,
   UploadResponse,
   UniversalInferenceRequest,
+  VoiceBoxCloneRequest,
+  VoiceBoxFusionRequest,
   VoiceChangerRequest,
   VoiceChangerModelInfo,
   VoiceDesignRequest,
 } from "./types";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    let detail = `${response.status} ${response.statusText}`;
+function apiCandidates(path: string): string[] {
+  const configuredBase = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+  const candidates = [path];
 
+  if (configuredBase) {
+    candidates.push(`${configuredBase}${path}`);
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+function friendlyError(status: number, detail: string): string {
+  if (status === 404 && detail.toLowerCase() === "not found") {
+    return "서버 API를 찾지 못했습니다. 백엔드가 켜져 있는지 확인해 주세요.";
+  }
+  return detail;
+}
+
+function isJsonResponse(response: Response): boolean {
+  const contentType = response.headers.get("content-type") || "";
+  return contentType.toLowerCase().includes("application/json");
+}
+
+async function readResponseDetail(response: Response): Promise<string> {
+  const fallback = `${response.status} ${response.statusText}`;
+
+  if (isJsonResponse(response)) {
     try {
       const payload = (await response.json()) as { detail?: string };
-      detail = payload.detail || detail;
+      return payload.detail || fallback;
     } catch {
-      // 서버가 JSON이 아닌 응답을 내려도 기본 상태 메시지로 오류를 전달한다.
+      return response.statusText || fallback;
     }
+  }
 
-    throw new Error(detail);
+  const body = await response.text();
+  const trimmed = body.trim().toLowerCase();
+  if (trimmed.startsWith("<!doctype") || trimmed.startsWith("<html")) {
+    return "프런트가 백엔드 API 대신 화면 HTML을 받았습니다. 개발 서버 프록시와 백엔드 포트를 확인해 주세요.";
+  }
+
+  return response.statusText || fallback;
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  if (!isJsonResponse(response)) {
+    throw new Error(await readResponseDetail(response));
   }
 
   return (await response.json()) as T;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let lastError = "서버 API에 연결하지 못했습니다.";
+
+  for (const url of apiCandidates(path)) {
+    try {
+      const response = await fetch(url, init);
+      if (!response.ok) {
+        const detail = await readResponseDetail(response);
+        lastError = friendlyError(response.status, detail);
+        if (response.status === 404 && path.startsWith("/api/")) {
+          continue;
+        }
+        throw new Error(lastError);
+      }
+
+      return await readJson<T>(response);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : lastError;
+      lastError = message === "Failed to fetch" ? "서버 API에 연결하지 못했습니다. 백엔드가 켜져 있는지 확인해 주세요." : message;
+    }
+  }
+
+  throw new Error(lastError);
 }
 
 export const api = {
@@ -128,14 +188,6 @@ export const api = {
 
   generateVoiceDesign(payload: VoiceDesignRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/generate/voice-design", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  },
-
-  generateStoryStudio(payload: StoryStudioRequest): Promise<GenerationResponse> {
-    return request<GenerationResponse>("/api/generate/story-studio", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -226,6 +278,30 @@ export const api = {
 
   createFineTuneRun(payload: CreateFineTuneRunRequest): Promise<FineTuneRun> {
     return request<FineTuneRun>("/api/finetune-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createVoiceBoxFusion(payload: VoiceBoxFusionRequest): Promise<FineTuneRun> {
+    return request<FineTuneRun>("/api/voicebox/fusion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateVoiceBoxClone(payload: VoiceBoxCloneRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/generate/voicebox-clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateVoiceBoxCloneInstruct(payload: VoiceBoxCloneRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/generate/voicebox-clone-instruct", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
