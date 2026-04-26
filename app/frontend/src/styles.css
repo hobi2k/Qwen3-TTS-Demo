@@ -1639,7 +1639,6 @@ label {
   overflow: auto;
 }
 
-.s2pro-hero,
 .guide-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
@@ -1655,21 +1654,18 @@ label {
   box-shadow: 0 24px 70px rgba(26, 36, 34, 0.07);
 }
 
-.s2pro-hero h2,
 .guide-hero h2 {
   margin: 0.4rem 0;
   font-size: clamp(2rem, 3vw, 3.3rem);
   letter-spacing: -0.055em;
 }
 
-.s2pro-feature-cloud,
 .tag-cloud {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.s2pro-feature-cloud span,
 .tag-chip {
   border: 1px solid rgba(25, 45, 42, 0.12);
   border-radius: 999px;
@@ -1712,6 +1708,15 @@ label {
   gap: 18px;
   border: 0;
   background: transparent;
+}
+
+.s2pro-mode-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid rgba(25, 45, 42, 0.1);
 }
 
 .s2pro-form {
@@ -1871,36 +1876,24 @@ label {
   color: #194b38;
 }
 
-.s2pro-runtime-card {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 28px;
-  border: 1px solid rgba(18, 34, 31, 0.1);
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
 .s2pro-mode-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 22px;
-  padding: 6px;
-  border-radius: 24px;
-  background: rgba(17, 25, 26, 0.06);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
 }
 
 .s2pro-mode-tab {
   display: grid;
   gap: 3px;
-  min-height: 66px;
-  border: 0;
-  border-radius: 19px;
+  min-height: 54px;
+  min-width: 176px;
+  border: 1px solid rgba(25, 45, 42, 0.1);
+  border-radius: 16px;
   background: transparent;
   color: #5c6865;
-  padding: 0.75rem 0.9rem;
+  padding: 0.65rem 0.85rem;
   text-align: left;
   transition: transform 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
@@ -2859,8 +2852,8 @@ label {
 
   .voice-changer-layout,
   .rvc-train-hero,
-  .s2pro-hero,
   .guide-hero,
+  .s2pro-mode-strip,
   .s2pro-form {
     grid-template-columns: 1fr;
   }

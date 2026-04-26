@@ -29,7 +29,6 @@ import {
   RecipeBar,
   serializeGenerationControls,
   ServerAudioPicker,
-  S2_PRO_FEATURES,
   S2_PRO_TAG_CATEGORIES,
   S2ProMode,
   SOUND_EFFECT_LIBRARY,
@@ -2513,55 +2512,42 @@ export default function App() {
 
       {isS2ProTab(activeTab) ? (
         <section className="workspace workspace--stacked">
-          <section className="s2pro-hero">
-            <div>
-              <span className="eyebrow eyebrow--soft">Fish Speech S2-Pro</span>
-              <h2>{pageMeta.title}</h2>
-              <p>목소리를 먼저 저장하고, 그 목소리로 대사를 만듭니다. bracket 태그는 “기능 이름”이 아니라 대사 사이에 끼워 넣는 감정·호흡 표현 도구입니다.</p>
-              <div className="s2pro-mode-tabs" aria-label="S2-Pro 작업 선택">
-                {[
-                  ["s2pro_tagged", "텍스트 음성 변환", "저장 목소리로 읽기"],
-                  ["s2pro_clone", "목소리 저장", "참조 음성 등록"],
-                  ["s2pro_multi_speaker", "대화 생성", "화자 태그 대사"],
-                  ["s2pro_multilingual", "다국어 TTS", "언어 섞어 읽기"],
-                ].map(([tab, label, hint]) => (
-                  <button
-                    className={activeTab === tab ? "s2pro-mode-tab is-active" : "s2pro-mode-tab"}
-                    key={tab}
-                    onClick={() => openS2ProTab(tab as Extract<TabKey, "s2pro_tagged" | "s2pro_clone" | "s2pro_multi_speaker" | "s2pro_multilingual">)}
-                    type="button"
-                  >
-                    <strong>{label}</strong>
-                    <span>{hint}</span>
-                  </button>
-                ))}
-              </div>
+          <section className="s2pro-mode-strip">
+            <div className="s2pro-mode-tabs" aria-label="S2-Pro 작업 선택">
+              {[
+                ["s2pro_tagged", "텍스트 음성 변환", "저장 목소리로 읽기"],
+                ["s2pro_clone", "목소리 저장", "참조 음성 등록"],
+                ["s2pro_multi_speaker", "대화 생성", "화자 태그 대사"],
+                ["s2pro_multilingual", "다국어 TTS", "언어 섞어 읽기"],
+              ].map(([tab, label, hint]) => (
+                <button
+                  className={activeTab === tab ? "s2pro-mode-tab is-active" : "s2pro-mode-tab"}
+                  key={tab}
+                  onClick={() => openS2ProTab(tab as Extract<TabKey, "s2pro_tagged" | "s2pro_clone" | "s2pro_multi_speaker" | "s2pro_multilingual">)}
+                  type="button"
+                >
+                  <strong>{label}</strong>
+                  <span>{hint}</span>
+                </button>
+              ))}
             </div>
-            <aside className="s2pro-runtime-card">
-              <strong>Runtime</strong>
-              {s2ProRuntime ? (
-                <p className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
-                  {s2ProRuntime.runtime_mode === "api"
-                    ? s2ProRuntime.api_key_configured
-                      ? "Fish Audio API ready"
-                      : "Fish Audio API key required"
-                    : s2ProRuntime.server_running
-                      ? "Local Fish Speech ready"
-                      : "Local Fish Speech offline"}{" "}
-                  · {s2ProRuntime.model}
-                </p>
-              ) : (
-                <p className="runtime-pill">Runtime 확인 중</p>
-              )}
-              <div className="s2pro-feature-cloud">
-                {S2_PRO_FEATURES.map((feature) => (
-                  <span key={feature}>{feature}</span>
-                ))}
-              </div>
-            </aside>
+            {s2ProRuntime ? (
+              <span className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
+                {s2ProRuntime.runtime_mode === "api"
+                  ? s2ProRuntime.api_key_configured
+                    ? "Fish Audio API"
+                    : "API key required"
+                  : s2ProRuntime.server_running
+                    ? "Local Fish Speech"
+                    : "Local offline"}{" "}
+                · {s2ProRuntime.model}
+              </span>
+            ) : (
+              <span className="runtime-pill">Runtime 확인 중</span>
+            )}
           </section>
 
-          <section className="panel s2pro-workspace">
+          <section className="s2pro-workspace">
             <form className="s2pro-form" onSubmit={handleS2ProSubmit}>
               <div className="s2pro-form__main">
                 {currentS2ProMode === "tagged" ? (
