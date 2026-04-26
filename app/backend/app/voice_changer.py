@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -105,6 +106,162 @@ class ApplioVoiceChanger:
         """Return whether an Applio checkout is available locally."""
 
         return (self.applio_root / "core.py").exists()
+
+    def train_rvc_model(
+        self,
+        *,
+        model_name: str,
+        dataset_path: str,
+        sample_rate: int,
+        total_epoch: int,
+        batch_size: int,
+        cpu_cores: int,
+        gpu: str,
+        f0_method: str,
+        embedder_model: str,
+        cut_preprocess: str,
+        noise_reduction: bool,
+        clean_strength: float,
+        chunk_len: float,
+        overlap_len: float,
+        index_algorithm: str,
+        checkpointing: bool,
+    ) -> Dict[str, Any]:
+        """Create an Applio/RVC voice model from a folder of target-voice audio.
+
+        The training flow mirrors Applio's own CLI: preprocess audio, extract pitch
+        and content features, then train and generate a retrieval index. This keeps
+        the demo backend thin while still exposing a complete RVC workflow.
+        """
+
+        if not self.is_available():
+            raise VoiceChangerError(f"Applio repository not found at {self.applio_root}")
+
+        safe_model_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", model_name.strip()).strip("-_.")
+        if not safe_model_name:
+            raise VoiceChangerError("RVC model name is required.")
+
+        source_dataset = Path(dataset_path).expanduser()
+        if not source_dataset.is_absolute():
+            source_dataset = (self.project_root / source_dataset).resolve()
+        if not source_dataset.exists() or not source_dataset.is_dir():
+            raise VoiceChangerError(f"RVC training folder not found: {source_dataset}")
+
+        if not any(source_dataset.rglob("*.wav")):
+            raise VoiceChangerError("RVC training folder must contain at least one .wav file.")
+
+        commands = [
+            [
+                self.python_executable,
+                str((self.applio_root / "core.py").resolve()),
+                "preprocess",
+                "--model_name",
+                safe_model_name,
+                "--dataset_path",
+                str(source_dataset),
+                "--sample_rate",
+                str(sample_rate),
+                "--cpu_cores",
+                str(cpu_cores),
+                "--cut_preprocess",
+                cut_preprocess,
+                "--process_effects",
+                "False",
+                "--noise_reduction",
+                "True" if noise_reduction else "False",
+                "--noise_reduction_strength",
+                str(clean_strength),
+                "--chunk_len",
+                str(chunk_len),
+                "--overlap_len",
+                str(overlap_len),
+                "--normalization_mode",
+                "pre",
+            ],
+            [
+                self.python_executable,
+                str((self.applio_root / "core.py").resolve()),
+                "extract",
+                "--model_name",
+                safe_model_name,
+                "--f0_method",
+                f0_method,
+                "--cpu_cores",
+                str(cpu_cores),
+                "--gpu",
+                gpu,
+                "--sample_rate",
+                str(sample_rate),
+                "--embedder_model",
+                embedder_model,
+                "--include_mutes",
+                "2",
+            ],
+            [
+                self.python_executable,
+                str((self.applio_root / "core.py").resolve()),
+                "train",
+                "--model_name",
+                safe_model_name,
+                "--save_every_epoch",
+                str(max(1, total_epoch)),
+                "--save_only_latest",
+                "True",
+                "--save_every_weights",
+                "True",
+                "--total_epoch",
+                str(total_epoch),
+                "--sample_rate",
+                str(sample_rate),
+                "--batch_size",
+                str(batch_size),
+                "--gpu",
+                gpu,
+                "--pretrained",
+                "True",
+                "--overtraining_detector",
+                "True",
+                "--overtraining_threshold",
+                "50",
+                "--cleanup",
+                "False",
+                "--cache_data_in_gpu",
+                "False",
+                "--index_algorithm",
+                index_algorithm,
+                "--vocoder",
+                "HiFi-GAN",
+                "--checkpointing",
+                "True" if checkpointing else "False",
+            ],
+        ]
+
+        completed_steps: List[Dict[str, Any]] = []
+        for command in commands:
+            completed = subprocess.run(
+                command,
+                cwd=str(self.applio_root),
+                text=True,
+                check=False,
+            )
+            completed_steps.append({"step": command[3], "returncode": completed.returncode})
+            if completed.returncode != 0:
+                raise VoiceChangerError(f"Applio RVC {command[3]} step failed for model {safe_model_name}.")
+
+        model_dir = self.applio_root / "logs" / safe_model_name
+        model_candidates = sorted(model_dir.rglob("*.pth")) + sorted((self.applio_root / "assets" / "weights").rglob(f"{safe_model_name}*.pth"))
+        index_candidates = sorted(model_dir.rglob("*.index"))
+
+        return {
+            "engine": "applio_rvc",
+            "strategy": "train_target_voice_model_then_convert",
+            "model_name": safe_model_name,
+            "dataset_path": str(source_dataset),
+            "model_dir": str(model_dir),
+            "model_path": str(model_candidates[-1].resolve()) if model_candidates else None,
+            "index_path": str(index_candidates[-1].resolve()) if index_candidates else None,
+            "steps": completed_steps,
+        }
 
     def transform(
         self,

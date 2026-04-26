@@ -131,7 +131,18 @@
 
 오디오 분리 API는 별도 작업 라우트로 유지합니다.
 
-이 기능은 TTS와 분리된 오디오 툴로 취급합니다.
+현재 구현은 librosa HPSS가 아니라 `audio-separator` 기반 Stem Separator입니다.
+
+기본값:
+
+- 패키지: `audio-separator>=0.44.1,<0.45.0`
+- 기본 보컬 분리 모델: `vocals_mel_band_roformer.ckpt`
+- RVC용 보컬 추출 프리셋: `vocal_rvc`
+- 다중 stem 옵션: `htdemucs_ft.yaml`
+- 모델 캐시: `data/stem-separator-models/`
+- 최소 입력 길이: 10초
+
+이 기능은 TTS와 분리된 오디오 툴로 취급합니다. 결과는 보컬, 반주, 드럼, 베이스 같은 stem asset으로 저장되고 생성 갤러리/작업 이력에서 다시 쓸 수 있습니다.
 
 ## 스키마 계층
 
@@ -253,6 +264,25 @@ data/datasets/<dataset_id>/
   Applio + RVC 모델 자산 준비 여부
 - `audio_separation`
   분리 기능 준비 여부
+
+### `/api/s2-pro/*`
+
+S2-Pro는 Qwen 런타임이 아니라 로컬 Fish Speech HTTP 서버를 사용합니다.
+
+- `GET /api/s2-pro/capabilities`
+  Fish Speech 소스, S2-Pro 모델 파일, 로컬 서버 연결 상태를 반환합니다.
+- `GET /api/s2-pro/voices`
+  앱에 저장된 Fish Speech reference voice 목록을 반환합니다.
+- `POST /api/s2-pro/voices`
+  참조 음성을 Fish Speech `/v1/references/add`에 등록하고 `data/s2-pro-voices/`에 앱 레코드를 저장합니다.
+- `POST /api/s2-pro/generate`
+  tagged TTS, voice clone, multi speaker, multilingual 요청을 Fish Speech `/v1/tts`에 전달하고 결과를 생성 갤러리에 저장합니다.
+
+중요한 점:
+
+- Hosted API 키를 요구하지 않습니다.
+- Fish Speech 서버가 꺼져 있으면 가짜 결과를 만들지 않고 503을 반환합니다.
+- 저장 목소리는 S2-Pro reference id와 Qwen에서 재사용할 참조 음성 경로를 함께 갖습니다.
 
 ## 학습 래퍼 원칙
 

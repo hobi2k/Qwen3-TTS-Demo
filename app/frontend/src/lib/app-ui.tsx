@@ -13,11 +13,17 @@ export type TabKey =
   | "separation"
   | "dataset"
   | "training"
-  | "voicebox_fusion";
+  | "voicebox_fusion"
+  | "s2pro_tagged"
+  | "s2pro_clone"
+  | "s2pro_multi_speaker"
+  | "s2pro_multilingual"
+  | "guide";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
 export type CharacterBuilderSource = "design" | "upload";
 export type FineTuneMode = "base" | "custom_voice" | "voicebox";
+export type S2ProMode = "tagged" | "clone" | "multi_speaker" | "multilingual";
 
 export type GenerationControlsForm = {
   seed: string;
@@ -101,7 +107,319 @@ export const PRODUCT_PAGES = {
     title: "VoiceBox 융합",
     description: "CustomVoice 결과와 Base encoder를 합쳐 독립 모델로 만듭니다.",
   },
+  s2pro_tagged: {
+    label: "태그 생성",
+    title: "S2-Pro 태그 생성",
+    description: "대사 안의 태그로 감정, 호흡, 발화 스타일을 구간별로 제어합니다.",
+  },
+  s2pro_clone: {
+    label: "목소리 복제",
+    title: "S2-Pro 목소리 복제",
+    description: "참조 음성을 저장 가능한 목소리로 등록하고 계속 재사용합니다.",
+  },
+  s2pro_multi_speaker: {
+    label: "멀티 스피커",
+    title: "S2-Pro 멀티 스피커",
+    description: "여러 저장 목소리와 화자 태그로 대화형 음성을 생성합니다.",
+  },
+  s2pro_multilingual: {
+    label: "다국어 생성",
+    title: "S2-Pro 다국어 생성",
+    description: "한 작업 안에서 여러 언어와 태그를 함께 사용합니다.",
+  },
+  guide: {
+    label: "가이드",
+    title: "가이드",
+    description: "이 프로그램의 탭별 사용법과 작업 순서를 한곳에서 확인합니다.",
+  },
 } as const;
+
+export const S2_PRO_MODES = [
+  {
+    id: "tagged",
+    label: "Tagged TTS",
+    title: "태그 기반 음성 생성",
+    description: "문장 안에 [laugh], [whispers], [professional broadcast tone] 같은 자유형 태그를 넣어 구간별 감정과 말투를 제어합니다.",
+  },
+  {
+    id: "clone",
+    label: "Voice Clone",
+    title: "참조 음성 복제",
+    description: "짧은 참조 음성을 기준으로 새 대사를 같은 목소리 톤으로 생성합니다.",
+  },
+  {
+    id: "multi_speaker",
+    label: "Multi Speaker",
+    title: "멀티 스피커 대화",
+    description: "<|speaker:0|>, <|speaker:1|> 같은 화자 태그로 대화 흐름을 나눕니다.",
+  },
+  {
+    id: "multilingual",
+    label: "Multilingual",
+    title: "다국어 생성",
+    description: "한국어, 영어, 일본어, 중국어 등 여러 언어를 한 작업 안에서 다룹니다.",
+  },
+] as const satisfies ReadonlyArray<{ id: S2ProMode; label: string; title: string; description: string }>;
+
+export const S2_PRO_TAG_CATEGORIES = [
+  {
+    label: "Emotion",
+    tags: [
+      "[happy]",
+      "[super happy]",
+      "[sad]",
+      "[angry]",
+      "[furious]",
+      "[excited]",
+      "[nervous]",
+      "[calm]",
+      "[serious]",
+      "[satisfied]",
+      "[delighted]",
+      "[scared]",
+      "[worried]",
+      "[upset]",
+      "[frustrated]",
+      "[depressed]",
+      "[empathetic]",
+      "[disgusted]",
+      "[moved]",
+      "[proud]",
+      "[relaxed]",
+      "[grateful]",
+      "[curious]",
+      "[sarcastic]",
+      "[fearful]",
+      "[confident]",
+      "[tired]",
+      "[crying]",
+      "[amused]",
+      "[disappointed]",
+      "[surprised]",
+      "[relieved]",
+      "[embarrassed]",
+      "[playful]",
+      "[melancholic]",
+      "[cold]",
+      "[shaken]",
+      "[disdainful]",
+      "[unhappy]",
+      "[anxious]",
+      "[hysterical]",
+      "[indifferent]",
+      "[uncertain]",
+      "[doubtful]",
+      "[confused]",
+      "[regretful]",
+      "[guilty]",
+      "[ashamed]",
+      "[jealous]",
+      "[envious]",
+      "[hopeful]",
+      "[optimistic]",
+      "[pessimistic]",
+      "[nostalgic]",
+      "[lonely]",
+      "[bored]",
+      "[contemptuous]",
+      "[sympathetic]",
+      "[compassionate]",
+      "[determined]",
+      "[resigned]",
+      "[shocked]",
+    ],
+  },
+  {
+    label: "Vocal action",
+    tags: [
+      "[laugh]",
+      "[laughing]",
+      "[chuckle]",
+      "[giggle]",
+      "[sigh]",
+      "[breath]",
+      "[breathy]",
+      "[inhale]",
+      "[exhale]",
+      "[gasp]",
+      "[gasping]",
+      "[sob]",
+      "[sobbing]",
+      "[crying loudly]",
+      "[whisper]",
+      "[whispers]",
+      "[whispering]",
+      "[murmur]",
+      "[shout]",
+      "[shouting]",
+      "[yell]",
+      "[scream]",
+      "[screaming]",
+      "[cough]",
+      "[clears throat]",
+      "[clearing throat]",
+      "[moan]",
+      "[moaning]",
+      "[groaning]",
+      "[panting]",
+      "[yawning]",
+      "[snoring]",
+      "[tsk]",
+      "[singing]",
+      "[interrupting]",
+      "[audience laughter]",
+      "[audience laughing]",
+      "[background laughter]",
+      "[crowd laughing]",
+      "[pause]",
+      "[short pause]",
+      "[long pause]",
+      "[break]",
+      "[long-break]",
+      "[emphasis]",
+    ],
+  },
+  {
+    label: "Performance",
+    tags: [
+      "[professional broadcast tone]",
+      "[news anchor]",
+      "[narration]",
+      "[storytelling]",
+      "[documentary]",
+      "[radio host]",
+      "[ASMR]",
+      "[soft spoken]",
+      "[soft tone]",
+      "[dramatic]",
+      "[romantic]",
+      "[villain]",
+      "[heroine]",
+      "[late night]",
+      "[in a hurry tone]",
+      "[fast]",
+      "[slow]",
+      "[low voice]",
+      "[loud]",
+      "[volume up]",
+      "[volume down]",
+      "[low volume]",
+      "[pitch up]",
+      "[with strong accent]",
+      "[echo]",
+      "[high pitch]",
+      "[telephone]",
+      "[robotic]",
+      "[laughing tone]",
+      "[excited tone]",
+    ],
+  },
+  {
+    label: "Language cue",
+    tags: ["[Korean]", "[English]", "[Japanese]", "[Chinese]", "[Cantonese]", "[American English]", "[Seoul dialect]"],
+  },
+] as const;
+
+export const S2_PRO_TAGS = S2_PRO_TAG_CATEGORIES.flatMap((category) =>
+  category.tags.map((tag) => ({ label: tag, prompt: tag, category: category.label })),
+);
+
+export const S2_PRO_FEATURES = [
+  "Free-form [tag] control",
+  "Voice cloning",
+  "S2-Pro multi-speaker",
+  "Multi-turn generation",
+  "80+ language TTS",
+  "Streaming/server inference",
+] as const;
+
+export const GUIDE_SECTIONS = [
+  {
+    title: "홈",
+    summary: "자주 쓰는 작업으로 바로 이동하는 시작 화면입니다.",
+    steps: ["목소리 설계, 목소리 복제, 텍스트 음성 변환, 프리셋 기반 생성을 빠르게 시작합니다.", "생성 결과는 생성 갤러리에서만 관리합니다."],
+  },
+  {
+    title: "나의 목소리들",
+    summary: "저장한 스타일과 바로 사용할 수 있는 모델만 모아 봅니다.",
+    steps: ["모델은 사용자가 알아볼 수 있는 모델명 중심으로 표시합니다.", "저장된 스타일은 프리셋 기반 생성이나 데이터셋 구성으로 이어갈 수 있습니다."],
+  },
+  {
+    title: "생성 갤러리",
+    summary: "생성된 오디오를 듣고 내려받고 삭제하는 전용 공간입니다.",
+    steps: ["개별 선택, 전체 선택, 선택 해제로 관리합니다.", "선택한 음성은 데이터셋 기준 음성이나 샘플로 보낼 수 있습니다."],
+  },
+  {
+    title: "목소리 설계",
+    summary: "목소리 설명과 대사를 넣어 새 목소리 방향을 만듭니다.",
+    steps: ["Voice description은 영어로 적으면 모델이 안정적으로 해석합니다.", "Text에는 실제로 읽을 대사를 넣습니다.", "결과가 마음에 들면 목소리 복제나 데이터셋 구성으로 넘깁니다."],
+  },
+  {
+    title: "텍스트 음성 변환",
+    summary: "모델을 직접 골라 짧은 대사를 빠르게 확인합니다.",
+    steps: ["CustomVoice 계열은 speaker를 선택하고, Base/clone 계열은 참조 음성 또는 프리셋을 사용합니다.", "Seed, top_p, top_k 같은 값은 Advanced controls에서만 조절합니다."],
+  },
+  {
+    title: "목소리 복제",
+    summary: "참조 음성에서 스타일을 저장하거나 VoiceBox로 바로 복제합니다.",
+    steps: ["Base 모델은 clone prompt를 만들기 위한 스타일 분석에 사용합니다.", "VoiceBox 모델은 speaker encoder를 포함한 경우 같은 화면에서 직접 복제할 수 있습니다.", "참조 텍스트는 비워두면 서버 전사를 사용할 수 있습니다."],
+  },
+  {
+    title: "프리셋 기반 생성",
+    summary: "저장한 스타일을 새 대사에 재사용합니다.",
+    steps: ["Base Preset은 Base가 스타일 신호를 읽어 생성합니다.", "Base + Instruction은 Base 스타일과 CustomVoice 지시 모델을 함께 씁니다.", "VoiceBox 모드는 모델 하나로 프리셋과 지시를 처리하는 흐름입니다."],
+  },
+  {
+    title: "사운드 효과",
+    summary: "MMAudio 계열 모델로 효과음을 만듭니다.",
+    steps: ["프롬프트는 영어로 작성합니다.", "일반 MMAudio와 NSFW용 MMAudio 프로필을 선택할 수 있습니다.", "길이, 강도, steps, CFG는 결과 질감과 생성 시간을 바꿉니다."],
+  },
+  {
+    title: "오디오 분리",
+    summary: "음악이나 음성을 보컬/반주 등으로 분리합니다.",
+    steps: ["현재는 Stem Separator 계열 프로필을 사용합니다.", "분리한 보컬은 보이스 체인저나 RVC 학습 데이터로 이어서 사용할 수 있습니다."],
+  },
+  {
+    title: "보이스 체인저",
+    summary: "RVC 모델을 학습한 뒤 원본 보컬의 음색을 바꿉니다.",
+    steps: ["RVC 학습 탭에서 바꿀 목소리 모델을 먼저 만듭니다.", "변환 탭에서 원본 보컬과 RVC 목소리 모델을 선택합니다.", "pitch, index rate, protect 값은 원본 보존과 변환 강도를 조절합니다."],
+  },
+  {
+    title: "데이터셋 만들기",
+    summary: "기준 음성과 학습 샘플을 한 데이터셋 폴더로 정리합니다.",
+    steps: ["생성 갤러리에서 고르거나, 기준 음성 경로와 샘플 폴더 경로를 입력합니다.", "텍스트가 비어 있으면 Whisper 전사로 채울 수 있습니다.", "최소 20개 이상, 가능하면 50개 이상의 다양한 문장을 권장합니다."],
+  },
+  {
+    title: "학습 실행",
+    summary: "준비된 데이터셋으로 Base, CustomVoice, VoiceBox 학습을 실행합니다.",
+    steps: ["데이터셋을 선택한 뒤 학습 방식과 초기 모델을 확인합니다.", "품질 확인용이라면 마지막 체크포인트 하나만 남기는 흐름을 권장합니다.", "훈련 중에는 다른 대형 GPU 작업을 동시에 실행하지 않는 것이 안전합니다."],
+  },
+  {
+    title: "VoiceBox 융합",
+    summary: "CustomVoice 학습 결과와 Base speaker encoder를 결합합니다.",
+    steps: ["먼저 CustomVoice에 새 화자를 학습합니다.", "그 다음 Base 1.7B의 speaker encoder를 포함시켜 독립 VoiceBox 체크포인트를 만듭니다.", "완성된 VoiceBox는 추가 학습, clone, clone+instruct 검증으로 이어갑니다."],
+  },
+  {
+    title: "S2-Pro 태그 생성",
+    summary: "Fish Speech S2-Pro의 bracket 태그로 감정, 호흡, 발화 스타일을 제어합니다.",
+    steps: ["S2-Pro는 고정 태그 목록만 쓰는 방식이 아니라 `[whisper in small voice]`처럼 자연어 태그도 읽습니다.", "태그 라이브러리에서 기준 태그를 눌러 Text에 삽입하고, 필요한 표현은 직접 bracket 안에 적습니다.", "저장 목소리를 선택하면 clone한 음색으로 태그 기반 생성도 이어갈 수 있습니다."],
+  },
+  {
+    title: "S2-Pro 목소리 복제",
+    summary: "참조 음성을 Fish Speech reference voice로 저장해 계속 재사용합니다.",
+    steps: ["생성 갤러리 또는 업로드된 참조 음성을 고르고 Reference text를 입력합니다.", "목소리를 저장하면 S2-Pro 로컬 서버의 reference id와 앱 레코드가 함께 만들어집니다.", "Qwen clone prompt 생성 옵션을 켜면 같은 참조 음성을 Qwen 복제 흐름에서도 바로 쓸 수 있습니다."],
+  },
+  {
+    title: "S2-Pro 멀티 스피커",
+    summary: "저장 목소리와 speaker tag를 조합해 대화형 음성을 만듭니다.",
+    steps: ["저장 목소리를 기준 음색으로 선택합니다.", "대사에는 `<|speaker:0|>`, `<|speaker:1|>` 같은 speaker tag를 직접 넣습니다.", "여러 화자를 엄밀하게 고정하는 고급 구성은 Fish Speech runtime의 reference id 관리와 함께 검증합니다."],
+  },
+  {
+    title: "S2-Pro 다국어 생성",
+    summary: "저장 목소리와 언어별 문장을 함께 써서 다국어 음성을 생성합니다.",
+    steps: ["Language는 관리용 메타데이터이고 실제 언어는 Text에 적힌 문장과 태그가 결정합니다.", "한국어, 영어, 일본어, 중국어 등을 같은 작업 안에 섞을 수 있습니다.", "저장 목소리를 선택하면 같은 음색으로 다국어 결과를 이어서 확인할 수 있습니다."],
+  },
+] as const;
 
 export const CUSTOM_RECIPES = [
   {

@@ -8,6 +8,7 @@ VENV_DIR="${ROOT_DIR}/.venv"
 VENDOR_DIR="${ROOT_DIR}/vendor"
 MMAUDIO_REPO_URL_DEFAULT="https://github.com/hkchengrex/MMAudio.git"
 APPLIO_REPO_URL_DEFAULT="https://github.com/IAHispano/Applio.git"
+FISH_SPEECH_REPO_URL_DEFAULT="https://github.com/fishaudio/fish-speech.git"
 FLASH_ATTN_WHEEL_URL="https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 if [[ -n "${QWEN_DEMO_PYTHON:-}" ]]; then
@@ -115,13 +116,17 @@ install_optional_repo_requirements() {
 
 MMAUDIO_REPO_ROOT="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
 APPLIO_REPO_ROOT="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
+FISH_SPEECH_REPO_ROOT="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
 MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-${MMAUDIO_REPO_URL_DEFAULT}}"
 APPLIO_REPO_URL="${APPLIO_REPO_URL:-${APPLIO_REPO_URL_DEFAULT}}"
+FISH_SPEECH_REPO_URL="${FISH_SPEECH_REPO_URL:-${FISH_SPEECH_REPO_URL_DEFAULT}}"
 
 clone_repo_if_missing "${MMAUDIO_REPO_URL}" "${MMAUDIO_REPO_ROOT}"
 clone_repo_if_missing "${APPLIO_REPO_URL}" "${APPLIO_REPO_ROOT}"
+clone_repo_if_missing "${FISH_SPEECH_REPO_URL}" "${FISH_SPEECH_REPO_ROOT}"
 install_optional_repo_requirements "${MMAUDIO_REPO_ROOT}"
 install_optional_repo_requirements "${APPLIO_REPO_ROOT}"
+echo "Fish Speech is cloned only. S2-Pro uses a separate .venv-fish-speech runtime to avoid changing Qwen torch/flash-attn."
 
 python - <<'PY'
 import importlib.util
@@ -145,5 +150,7 @@ echo "Backend setup complete."
 echo "Next steps:"
 echo "  1. Edit ${BACKEND_DIR}/.env if needed"
 echo "  2. Run ./scripts/download_models.sh"
+echo "     For S2-Pro only: ./scripts/download_models.sh s2pro"
+echo "     Then start local S2-Pro server: ./scripts/serve_s2_pro.sh"
 echo "  3. Start backend with:"
 echo "     cd ${BACKEND_DIR} && source ../../.venv/bin/activate && uvicorn app.main:app --reload"

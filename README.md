@@ -1,6 +1,6 @@
 # Qwen3-TTS-Demo
 
-`Qwen3-TTS`, `Applio`, `MMAudio`를 하나의 로컬 작업실로 묶은 음성 데모 애플리케이션입니다.
+`Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`를 하나의 로컬 작업실로 묶은 음성 데모 애플리케이션입니다.
 
 현재 구조는 “기능을 나열하는 데모”가 아니라, 사용자가 실제로 아래 작업을 구분해서 쓸 수 있는 제품형 흐름을 기준으로 정리되어 있습니다.
 
@@ -31,7 +31,11 @@
 - `보이스 체인저`
   `Applio / RVC` 기반 audio-to-audio 변환 화면입니다.
 - `오디오 분리`
-  오디오를 분리해서 결과를 확인하는 작업 화면입니다.
+  `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
+- `S2-Pro 태그 생성 / 목소리 복제 / 멀티 스피커 / 다국어 생성`
+  Fish Speech S2-Pro 방식의 기능별 작업실입니다. clone한 목소리는 저장 목소리로 남아 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다.
+- `가이드`
+  앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
 ## 문서 허브
 
@@ -50,6 +54,8 @@
 - VoiceBox clone + instruct 실험: [docs/voicebox/04-clone-plus-instruct.md](docs/voicebox/04-clone-plus-instruct.md)
 - 현재 실험 결과: [docs/cookbook/18-current-experiment-results.md](docs/cookbook/18-current-experiment-results.md)
 - 스크립트 진입점 정리: [docs/cookbook/19-script-entrypoints.md](docs/cookbook/19-script-entrypoints.md)
+- 개인 Hugging Face 자산 mirror: [docs/cookbook/20-private-hf-assets.md](docs/cookbook/20-private-hf-assets.md)
+- S2-Pro 작업실: [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)
 
 VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리합니다.
 
@@ -87,6 +93,7 @@ Qwen3-TTS-Demo/
     uploads/                 # uploaded source audio
     generated/               # generated audio + metadata
     audio-tools/             # sound effect / changer / separation metadata
+    s2-pro-voices/           # saved Fish Speech reference voice records
     clone-prompts/           # saved clone prompt assets
     presets/                 # saved presets
     datasets/                # canonical dataset folders
@@ -137,7 +144,17 @@ data/datasets/mai_ko_full/
 - run 내부에는 epoch 산출물이 남을 수 있습니다.
 - UI에서는 각 학습 run의 대표 최종 모델만 다시 선택하도록 정리합니다.
 
-### 4. 기본 화면은 사용자 기준으로 설명합니다
+### 4. 사이드바는 제품군 기준으로 나눕니다
+
+현재 사이드바는 아래처럼 나눕니다.
+
+- `홈`: 홈, 나의 목소리들, 생성 갤러리
+- `Qwen`: Qwen3-TTS 기반 생성, 프리셋, 오디오 작업
+- `S2-Pro`: Fish Speech S2-Pro 전용 작업실
+- `Qwen 학습`: 데이터셋 만들기, 학습 실행, VoiceBox 융합
+- `도움말`: 가이드
+
+### 5. 기본 화면은 사용자 기준으로 설명합니다
 
 `seed`, `top_k`, `top_p`, `temperature`, `subtalker` 같은 내부/연구용 파라미터는 기본 화면에 드러내지 않습니다.
 
@@ -206,6 +223,19 @@ data/datasets/mai_ko_full/
 
 상세 설명은 [docs/cookbook/12-preset-plus-instruct.md](docs/cookbook/12-preset-plus-instruct.md)에 정리했습니다.
 
+## S2-Pro 작업실
+
+`S2-Pro` 탭은 Fish Speech / Fish Audio 쪽 사용 방식에 맞춰 태그 기반 음성 생성을 별도 제품군으로 분리한 화면입니다.
+
+지원하는 작업 흐름:
+
+- `Tagged TTS`: `[laugh]`, `[breath]`, `[professional broadcast tone]` 같은 자유형 인라인 태그를 대사 안에 넣어 생성
+- `Voice Clone`: 생성 갤러리 또는 업로드된 참조 음성을 기준으로 복제 생성
+- `Multi Speaker`: `<|speaker:0|>`, `<|speaker:1|>` 형태의 화자 태그로 대화 생성
+- `Multilingual`: S2-Pro의 80개 이상 언어 지원 방향에 맞춘 다국어 생성
+
+Hosted API 키는 쓰지 않습니다. `./scripts/download_models.sh s2pro`로 Fish Speech 코드와 `fishaudio/s2-pro` 모델을 로컬에 받고, `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄운 뒤 웹 UI에서 생성합니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
+
 ## 빠른 시작
 
 macOS / Linux:
@@ -273,9 +303,14 @@ VITE_API_TARGET=http://127.0.0.1:<BACKEND_PORT> npm run dev
 - `whisper-large-v3`
 - 기본 RVC `.pth + .index` 자산
 - `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
+- Stem Separator `vocals_mel_band_roformer.ckpt`
 
 NSFW용 MMAudio는 일반 `MMAudio` 모델과 별개로 다룹니다.
 다운로드 스크립트가 기본으로 받으며, 실제 추론에 연결하려면 `MMAUDIO_NSFW_COMMAND_TEMPLATE`가 필요합니다.
+
+개인 Hugging Face repo에 자산을 모아 두려면 `PRIVATE_ASSET_REPO_ID`를 설정합니다.
+업로드 준비 manifest는 [docs/manifests/private-hf-assets.json](docs/manifests/private-hf-assets.json)이며,
+생성/업로드 스크립트는 [prepare_private_hf_assets.py](scripts/prepare_private_hf_assets.py)입니다.
 
 ## FlashAttention 2
 

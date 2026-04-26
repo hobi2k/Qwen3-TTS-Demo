@@ -19,6 +19,9 @@
 | VoiceBox -> VoiceBox retraining | `Qwen3-TTS/finetuning/sft_voicebox_12hz.py` |
 | CustomVoice -> VoiceBox conversion | `Qwen3-TTS/fusion/make_voicebox_checkpoint.py` |
 | Hugging Face upload | `Qwen3-TTS/fusion/upload_voicebox_to_hub.py` |
+| Private asset manifest/upload | `scripts/prepare_private_hf_assets.py` |
+| S2-Pro local model/download profile | `scripts/download_models.sh s2pro` |
+| S2-Pro local Fish Speech server | `scripts/serve_s2_pro.sh` |
 | non-VoiceBox clone prompt + instruct | `Qwen3-TTS/inference/hybrid_clone_instruct.py` |
 | VoiceBox normal instruct inference | `Qwen3-TTS/inference/voicebox/infer_instruct.py` |
 | VoiceBox clone experiment | `Qwen3-TTS/inference/voicebox/clone.py` |
@@ -27,6 +30,21 @@
 | shared VoiceBox loader/runtime | `Qwen3-TTS/inference/voicebox/runtime.py` |
 
 ## Compatibility VoiceBox Folder
+
+## S2-Pro Runtime Scripts
+
+S2-Pro is not a Qwen/VoiceBox training path. It uses local Fish Speech assets:
+
+- source checkout: `vendor/fish-speech`
+- model directory: `data/models/fish-speech/s2-pro`
+- isolated runtime venv: `.venv-fish-speech`
+
+Do not install Fish Speech into the main `.venv`. Fish Speech dependencies can change the Torch version, which breaks the Qwen/flash-attn runtime. Use `scripts/serve_s2_pro.sh`; it creates and uses the isolated runtime environment.
+
+```bash
+./scripts/download_models.sh s2pro
+./scripts/serve_s2_pro.sh
+```
 
 `voicebox/` remains as a compatibility layer only. The files there forward to the canonical scripts above so old shell history and old docs do not break, but new implementation work should not happen there.
 

@@ -25,6 +25,12 @@ import type {
   HybridCloneInstructRequest,
   ModelInfo,
   PrepareDatasetRequest,
+  RvcTrainingRequest,
+  RvcTrainingResponse,
+  S2ProGenerateRequest,
+  S2ProRuntimeResponse,
+  S2ProVoiceCreateRequest,
+  S2ProVoiceRecord,
   SoundEffectRequest,
   SpeakerInfo,
   UploadResponse,
@@ -308,6 +314,30 @@ export const api = {
     });
   },
 
+  s2ProCapabilities(): Promise<S2ProRuntimeResponse> {
+    return request<S2ProRuntimeResponse>("/api/s2-pro/capabilities");
+  },
+
+  s2ProVoices(): Promise<S2ProVoiceRecord[]> {
+    return request<S2ProVoiceRecord[]>("/api/s2-pro/voices");
+  },
+
+  createS2ProVoice(payload: S2ProVoiceCreateRequest): Promise<S2ProVoiceRecord> {
+    return request<S2ProVoiceRecord>("/api/s2-pro/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateS2Pro(payload: S2ProGenerateRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/s2-pro/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
   generateSoundEffect(payload: SoundEffectRequest): Promise<AudioToolResponse> {
     return request<AudioToolResponse>("/api/audio-tools/sound-effects", {
       method: "POST",
@@ -318,6 +348,14 @@ export const api = {
 
   changeVoice(payload: VoiceChangerRequest): Promise<AudioToolResponse> {
     return request<AudioToolResponse>("/api/audio-tools/voice-changer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  trainRvcModel(payload: RvcTrainingRequest): Promise<RvcTrainingResponse> {
+    return request<RvcTrainingResponse>("/api/audio-tools/rvc-train", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

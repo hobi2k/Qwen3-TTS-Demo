@@ -21,6 +21,13 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
+from .fish_speech import (
+    FishSpeechError,
+    fish_speech_status,
+    generate_s2_pro_audio,
+    list_s2_pro_references,
+    register_s2_pro_reference,
+)
 from .qwen import QwenDemoEngine
 from .schemas import (
     AudioAsset,
@@ -51,6 +58,12 @@ from .schemas import (
     HealthResponse,
     HybridCloneInstructRequest,
     ModelInfo,
+    RvcTrainingRequest,
+    RvcTrainingResponse,
+    S2ProGenerateRequest,
+    S2ProRuntimeResponse,
+    S2ProVoiceCreateRequest,
+    S2ProVoiceRecord,
     VoiceBoxCloneRequest,
     VoiceBoxFusionRequest,
     VoiceChangerModelInfo,
@@ -64,6 +77,7 @@ from .schemas import (
     VoiceDesignRequest,
 )
 from .storage import Storage, utc_now
+from .stem_separator import DEFAULT_VOCAL_MODEL, StemSeparatorEngine, StemSeparatorError
 from .voice_changer import (
     ApplioVoiceChanger,
     VoiceChangerError,
@@ -85,6 +99,7 @@ storage = Storage(REPO_ROOT)
 engine = QwenDemoEngine(storage)
 voice_changer = ApplioVoiceChanger(REPO_ROOT)
 mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
+stem_separator_engine = StemSeparatorEngine(REPO_ROOT)
 
 
 def default_model_id(category: str) -> str:
@@ -1649,8 +1664,9 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
         AudioToolCapability(
             key="audio_separation",
             label="오디오 분리",
-            description="librosa HPSS로 harmonic/percussive stems를 분리합니다.",
-            available=True,
+            description=f"audio-separator/UVR 계열 stem 모델로 보컬과 반주를 분리합니다. 기본 모델: {DEFAULT_VOCAL_MODEL}.",
+            available=stem_separator_engine.is_available(),
+            notes=stem_separator_engine.availability_notes(),
         ),
     ]
 
@@ -1758,6 +1774,27 @@ def asset_stem(value: str) -> str:
     """경로에서 확장자를 제외한 파일명만 꺼낸다."""
 
     return Path(basename_for_asset(value)).stem
+
+
+def readable_stem_label(path: Path) -> str:
+    """Stem separator 출력 파일명을 화면용 라벨로 정리한다."""
+
+    stem = path.stem.replace("_", " ").replace("-", " ").strip().lower()
+    if "vocal" in stem:
+        return "vocals"
+    if "instrumental" in stem or "inst" in stem:
+        return "instrumental"
+    if "drum" in stem:
+        return "drums"
+    if "bass" in stem:
+        return "bass"
+    if "other" in stem:
+        return "other"
+    if "guitar" in stem:
+        return "guitar"
+    if "piano" in stem:
+        return "piano"
+    return path.stem
 
 
 def utc_now_from_stat(path: Path) -> str:
@@ -2006,6 +2043,53 @@ def audio_tool_voice_models() -> List[VoiceChangerModelInfo]:
     return list_voice_changer_models()
 
 
+@app.post("/api/audio-tools/rvc-train", response_model=RvcTrainingResponse)
+def train_rvc_voice_model(payload: RvcTrainingRequest) -> RvcTrainingResponse:
+    """Applio/RVC 목소리 모델을 데이터 폴더에서 학습한다.
+
+    이 엔드포인트는 보이스 체인저의 '모델 만들기' 단계다. 결과로 생성된
+    `.pth`와 `.index`는 같은 화면의 변환 탭에서 바로 선택할 수 있다.
+    """
+    if not voice_changer.is_available():
+        raise HTTPException(status_code=400, detail="Applio repository is not available for RVC training.")
+
+    if payload.sample_rate not in {32000, 40000, 48000}:
+        raise HTTPException(status_code=400, detail="RVC sample rate must be 32000, 40000, or 48000.")
+
+    try:
+        meta = voice_changer.train_rvc_model(
+            model_name=payload.model_name,
+            dataset_path=resolve_repo_audio_path(payload.dataset_path),
+            sample_rate=payload.sample_rate,
+            total_epoch=payload.total_epoch,
+            batch_size=payload.batch_size,
+            cpu_cores=payload.cpu_cores,
+            gpu=payload.gpu,
+            f0_method=payload.f0_method,
+            embedder_model=payload.embedder_model,
+            cut_preprocess=payload.cut_preprocess,
+            noise_reduction=payload.noise_reduction,
+            clean_strength=payload.clean_strength,
+            chunk_len=payload.chunk_len,
+            overlap_len=payload.overlap_len,
+            index_algorithm=payload.index_algorithm,
+            checkpointing=payload.checkpointing,
+        )
+    except VoiceChangerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"RVC training failed: {exc}") from exc
+
+    return RvcTrainingResponse(
+        status="completed",
+        message="RVC voice model trained. You can now use it in the conversion tab.",
+        model_name=str(meta.get("model_name") or payload.model_name),
+        model_path=meta.get("model_path"),
+        index_path=meta.get("index_path"),
+        meta=meta,
+    )
+
+
 @app.get("/api/audio-tools/jobs", response_model=List[AudioToolJob])
 def audio_tool_jobs() -> List[AudioToolJob]:
     """최근 오디오 도구 작업 이력을 반환한다."""
@@ -2172,54 +2256,53 @@ def convert_audio(payload: AudioConvertRequest) -> AudioToolResponse:
 
 @app.post("/api/audio-tools/separate", response_model=AudioToolResponse)
 def separate_audio(payload: AudioSeparationRequest) -> AudioToolResponse:
-    """librosa HPSS로 harmonic/percussive를 분리한다."""
+    """AI stem separator 모델로 보컬/반주 또는 다중 stem을 분리한다."""
 
     source_path = resolve_audio_absolute_path(payload.audio_path)
-    waveform, sample_rate = librosa.load(str(source_path), sr=None, mono=True)
-    harmonic, percussive = librosa.effects.hpss(waveform)
     base_label = asset_stem(payload.audio_path) or "source"
-    harmonic_path = generated_audio_path("audio-separation", f"{base_label} harmonic", "wav")
-    percussive_path = generated_audio_path("audio-separation", f"{base_label} percussive", "wav")
-    sf.write(str(harmonic_path), harmonic, sample_rate)
-    sf.write(str(percussive_path), percussive, sample_rate)
-    assets = [
-        create_audio_tool_asset(harmonic_path, "harmonic stem"),
-        create_audio_tool_asset(percussive_path, "percussive stem"),
-    ]
+    extension = audio_tool_format_or_422(payload.output_format)
+    created_at = utc_now_datetime()
+    run_output_dir = storage.dated_child_dir(storage.generated_dir, "audio-separation", created_at=created_at) / (
+        f"{created_at.strftime('%H%M%S')}_{storage.slugify(f'{base_label} stems', default='stems')}"
+    )
+    run_output_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        stem_paths, meta = stem_separator_engine.separate(
+            input_audio_path=source_path,
+            output_dir=run_output_dir,
+            model_profile=payload.model_profile,
+            output_format=extension,
+        )
+    except StemSeparatorError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Stem separation failed: {exc}") from exc
+
+    assets = [create_audio_tool_asset(path, readable_stem_label(path)) for path in stem_paths]
+    primary_path = stem_paths[0]
     record = write_audio_tool_generation_record(
         mode="audio_separation",
-        text=f"{base_label} harmonic",
+        text=f"{base_label} stems",
         language="N/A",
-        audio_path=harmonic_path,
+        audio_path=primary_path,
         meta={
             "tool_kind": "audio_separation",
             "source_audio_path": payload.audio_path,
-            "stem_role": "harmonic",
-            "paired_artifact_path": storage.relpath(percussive_path),
-        },
-    )
-    write_audio_tool_generation_record(
-        mode="audio_separation",
-        text=f"{base_label} percussive",
-        language="N/A",
-        audio_path=percussive_path,
-        meta={
-            "tool_kind": "audio_separation",
-            "source_audio_path": payload.audio_path,
-            "stem_role": "percussive",
-            "paired_artifact_path": storage.relpath(harmonic_path),
+            "stems": [storage.relpath(path) for path in stem_paths],
+            **meta,
         },
     )
     save_audio_tool_job(
         kind="audio_separation",
         input_summary=f"{base_label} split",
-        message="HPSS separation completed.",
+        message="Stem separation completed.",
         assets=assets,
     )
     return AudioToolResponse(
         kind="audio_separation",
         status="completed",
-        message="HPSS separation completed.",
+        message="Stem separation completed.",
         assets=assets,
         record=record,
     )
@@ -2277,6 +2360,210 @@ def translate_audio(payload: AudioTranslateRequest) -> AudioToolResponse:
         translated_text=translated_text or None,
         record=record,
     )
+
+
+def s2pro_text_with_instruction(text: str, instruction: str) -> str:
+    """Apply S2-Pro inline instructions while keeping speech text explicit."""
+
+    clean_text = text.strip()
+    clean_instruction = instruction.strip()
+    if not clean_instruction:
+        return clean_text
+    if clean_instruction.startswith("[") or "[" in clean_instruction:
+        return f"{clean_instruction} {clean_text}".strip()
+    return f"[{clean_instruction}] {clean_text}".strip()
+
+
+def list_s2pro_voice_records() -> List[S2ProVoiceRecord]:
+    """Return saved S2-Pro voices with local Fish reference presence attached."""
+
+    fish_reference_ids = set(list_s2_pro_references())
+    records: List[S2ProVoiceRecord] = []
+    for record in storage.list_json_records(storage.s2pro_voices_dir):
+        record["fish_reference_present"] = str(record.get("reference_id", "")) in fish_reference_ids
+        try:
+            records.append(S2ProVoiceRecord(**record))
+        except Exception:
+            continue
+    return records
+
+
+def get_s2pro_voice_record(voice_id: str) -> S2ProVoiceRecord:
+    """Load one saved S2-Pro voice by internal id or Fish reference id."""
+
+    for record in list_s2pro_voice_records():
+        if record.id == voice_id or record.reference_id == voice_id:
+            return record
+    raise HTTPException(status_code=404, detail="S2-Pro voice not found.")
+
+
+@app.get("/api/s2-pro/capabilities", response_model=S2ProRuntimeResponse)
+def s2_pro_capabilities() -> S2ProRuntimeResponse:
+    """Return local S2-Pro runtime readiness and supported feature groups."""
+
+    status = fish_speech_status(check_server=True)
+    return S2ProRuntimeResponse(
+        **status,
+        features=[
+            "tagged_tts",
+            "voice_clone",
+            "multi_speaker",
+            "multilingual_tts",
+            "local_http_runtime",
+        ],
+    )
+
+
+@app.get("/api/s2-pro/voices", response_model=List[S2ProVoiceRecord])
+def s2_pro_voices() -> List[S2ProVoiceRecord]:
+    """List S2-Pro voices saved for repeat generation."""
+
+    return list_s2pro_voice_records()
+
+
+@app.post("/api/s2-pro/voices", response_model=S2ProVoiceRecord)
+def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
+    """Register a local Fish Speech reference voice and save it as an app asset."""
+
+    reference_audio_path = resolve_audio_absolute_path(payload.reference_audio_path)
+    reference_audio_rel = storage.relpath(reference_audio_path)
+    created_at = utc_now()
+    voice_id = storage.new_id("s2voice")
+    created_moment = parse_created_at(created_at)
+    reference_id = storage.slugify(payload.name, default="s2pro-voice", max_length=64)
+    if not reference_id:
+        reference_id = voice_id
+
+    if payload.create_qwen_prompt and (engine.simulation_mode or not engine.qwen_tts_available):
+        raise HTTPException(status_code=503, detail="Qwen clone prompt를 만들 실제 Qwen 런타임이 준비되지 않았습니다.")
+
+    # Avoid colliding with an existing local Fish reference id while keeping the
+    # user-facing model name stable in the app record.
+    existing_references = set(list_s2_pro_references())
+    unique_reference_id = reference_id
+    suffix = 2
+    while unique_reference_id in existing_references:
+        unique_reference_id = f"{reference_id}-{suffix}"
+        suffix += 1
+
+    try:
+        register_s2_pro_reference(
+            reference_id=unique_reference_id,
+            audio_path=reference_audio_path,
+            reference_text=payload.reference_text,
+        )
+    except FishSpeechError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    qwen_clone_prompt_id: Optional[str] = None
+    qwen_clone_prompt_path: Optional[str] = None
+    if payload.create_qwen_prompt:
+        qwen_prompt = create_clone_prompt_record(
+            source_type="s2-pro-voice",
+            model_id=payload.qwen_model_id or "base-1.7b",
+            reference_audio_path=reference_audio_rel,
+            reference_text=payload.reference_text,
+            x_vector_only_mode=False,
+            meta={"s2_pro_voice_id": voice_id, "s2_pro_reference_id": unique_reference_id},
+        )
+        qwen_clone_prompt_id = qwen_prompt.id
+        qwen_clone_prompt_path = qwen_prompt.prompt_path
+
+    record = {
+        "id": voice_id,
+        "name": payload.name.strip(),
+        "reference_id": unique_reference_id,
+        "reference_audio_path": reference_audio_rel,
+        "reference_audio_url": audio_url_for(reference_audio_rel),
+        "reference_text": payload.reference_text.strip(),
+        "language": payload.language,
+        "created_at": created_at,
+        "notes": payload.notes,
+        "qwen_clone_prompt_id": qwen_clone_prompt_id,
+        "qwen_clone_prompt_path": qwen_clone_prompt_path,
+        "fish_reference_present": True,
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.s2pro_voices_dir,
+            category="voices",
+            label=payload.name,
+            record_id=voice_id,
+            created_at=created_moment,
+        ),
+        record,
+    )
+    return S2ProVoiceRecord(**record)
+
+
+@app.post("/api/s2-pro/generate", response_model=GenerationResponse)
+def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
+    """Generate audio through the local Fish Speech S2-Pro server and save it."""
+
+    output_format = audio_tool_format_or_422(payload.output_format)
+    reference_audio_path: Optional[Path] = None
+    reference_audio_rel = ""
+    if payload.reference_audio_path:
+        reference_audio_path = resolve_audio_absolute_path(payload.reference_audio_path)
+        reference_audio_rel = storage.relpath(reference_audio_path)
+
+    reference_id = payload.reference_id
+    if reference_id:
+        try:
+            reference_id = get_s2pro_voice_record(reference_id).reference_id
+        except HTTPException:
+            # Fish Speech also accepts raw reference ids; keep that path for
+            # users who already registered voices in the local Fish runtime.
+            reference_id = payload.reference_id
+
+    final_text = s2pro_text_with_instruction(payload.text, payload.instruction)
+    output_path = generated_audio_path("s2-pro", requested_output_name(payload) or final_text, output_format)
+    try:
+        meta = generate_s2_pro_audio(
+            text=final_text,
+            output_path=output_path,
+            reference_audio_path=reference_audio_path,
+            reference_text=payload.reference_text or "",
+            reference_id=reference_id,
+            reference_ids=payload.reference_ids,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            max_new_tokens=payload.max_new_tokens,
+            chunk_length=payload.chunk_length,
+            output_format=output_format,
+            sample_rate=payload.sample_rate,
+            speed=payload.speed,
+            volume=payload.volume,
+            normalize=payload.normalize,
+            latency=payload.latency,
+            repetition_penalty=payload.repetition_penalty,
+            min_chunk_length=payload.min_chunk_length,
+            condition_on_previous_chunks=payload.condition_on_previous_chunks,
+            early_stop_threshold=payload.early_stop_threshold,
+        )
+    except FishSpeechError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    record_id = storage.new_id("gen")
+    record = build_generation_record(
+        record_id=record_id,
+        mode=f"s2_pro_{payload.mode}",
+        text=payload.text,
+        language=payload.language,
+        audio_path=output_path,
+        instruction=payload.instruction,
+        source_ref_audio_path=reference_audio_rel,
+        source_ref_text=payload.reference_text or "",
+        meta={
+            **meta,
+            "display_name": requested_output_name(payload) or None,
+            "final_text": final_text,
+            "s2_pro_mode": payload.mode,
+            "s2_pro_reference_id": reference_id,
+        },
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
 
 
 @app.post("/api/generate/custom-voice", response_model=GenerationResponse)

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "core")]
+    [ValidateSet("all", "core", "s2pro")]
     [string]$Profile = "all"
 )
 
@@ -12,6 +12,9 @@ $ModelsDir = Join-Path $RootDir "data\models"
 $VendorDir = Join-Path $RootDir "vendor"
 $RvcDir = Join-Path $RootDir "data\rvc-models"
 $MMAudioModelsDir = Join-Path $RootDir "data\mmaudio"
+$StemSeparatorModelsDir = Join-Path $RootDir "data\stem-separator-models"
+$FishSpeechDir = if ($env:FISH_SPEECH_REPO_ROOT) { $env:FISH_SPEECH_REPO_ROOT } else { Join-Path $VendorDir "fish-speech" }
+$FishSpeechModelDir = if ($env:FISH_SPEECH_MODEL_DIR) { $env:FISH_SPEECH_MODEL_DIR } else { Join-Path $RootDir "data\models\fish-speech\s2-pro" }
 
 if (-not (Test-Path $VenvDir)) {
     throw "Virtual environment not found. Run .\scripts\setup_backend.ps1 first."
@@ -21,6 +24,8 @@ New-Item -ItemType Directory -Force -Path $ModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $VendorDir | Out-Null
 New-Item -ItemType Directory -Force -Path $RvcDir | Out-Null
 New-Item -ItemType Directory -Force -Path $MMAudioModelsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $StemSeparatorModelsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $FishSpeechModelDir | Out-Null
 
 $ActivatePath = Join-Path $VenvDir "Scripts\Activate.ps1"
 . $ActivatePath
@@ -37,6 +42,38 @@ if (Test-Path $EnvPath) {
 }
 
 $env:HF_HUB_ENABLE_HF_TRANSFER = if ($env:HF_HUB_ENABLE_HF_TRANSFER) { $env:HF_HUB_ENABLE_HF_TRANSFER } else { "1" }
+$PrivateAssetRepoId = $env:PRIVATE_ASSET_REPO_ID
+$PrivateAssetRevision = if ($env:PRIVATE_ASSET_REVISION) { $env:PRIVATE_ASSET_REVISION } else { "main" }
+
+function Download-PrivateAsset {
+    param(
+        [string]$RepoPath,
+        [string]$TargetPath
+    )
+
+    if (-not $PrivateAssetRepoId) {
+        return $false
+    }
+    if (Test-Path $TargetPath) {
+        Write-Host "Private asset already present: $TargetPath"
+        return $true
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $TargetPath) | Out-Null
+    python -c @"
+import shutil
+import sys
+from pathlib import Path
+from huggingface_hub import hf_hub_download
+
+repo_id, revision, filename, target = sys.argv[1:5]
+cached = hf_hub_download(repo_id=repo_id, filename=filename, revision=revision, repo_type='model')
+target_path = Path(target)
+target_path.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(cached, target_path)
+print(f'Downloaded private asset {repo_id}/{filename} -> {target_path}')
+"@ $PrivateAssetRepoId $PrivateAssetRevision $RepoPath $TargetPath
+    return ($LASTEXITCODE -eq 0)
+}
 
 python -c @"
 from pathlib import Path
@@ -46,6 +83,7 @@ models_dir = Path(r'''$ModelsDir''')
 profile = r'''$Profile'''
 
 profiles = {
+    's2pro': [],
     'core': [
         ('Qwen/Qwen3-TTS-Tokenizer-12Hz', 'Qwen3-TTS-Tokenizer-12Hz'),
         ('Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice', 'Qwen3-TTS-12Hz-0.6B-CustomVoice'),
@@ -81,6 +119,37 @@ Write-Host ""
 Write-Host "Downloaded model profile: $Profile"
 Write-Host "Models stored in: $ModelsDir"
 
+if (($Profile -eq "all") -or ($Profile -eq "s2pro")) {
+    $FishSpeechRepoUrl = if ($env:FISH_SPEECH_REPO_URL) { $env:FISH_SPEECH_REPO_URL } else { "https://github.com/fishaudio/fish-speech.git" }
+    if (-not (Test-Path (Join-Path $FishSpeechDir ".git"))) {
+        Write-Host "Cloning Fish Speech -> $FishSpeechDir"
+        git clone $FishSpeechRepoUrl $FishSpeechDir
+    }
+    else {
+        Write-Host "Fish Speech already present at $FishSpeechDir"
+    }
+
+    python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+target_dir = Path(r'''$FishSpeechModelDir''')
+print(f'Downloading fishaudio/s2-pro -> {target_dir}')
+snapshot_download(
+    repo_id='fishaudio/s2-pro',
+    local_dir=str(target_dir),
+    local_dir_use_symlinks=False,
+    resume_download=True,
+)
+print('Fish Speech S2-Pro model download completed.')
+"@
+}
+
+if ($Profile -eq "s2pro") {
+    Write-Host "S2-Pro-only profile completed."
+    exit 0
+}
+
 $ApplioDir = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Join-Path $VendorDir "Applio" }
 $MMAudioDir = if ($env:MMAUDIO_REPO_ROOT) { $env:MMAUDIO_REPO_ROOT } else { Join-Path $VendorDir "MMAudio" }
 $ApplioRepoUrl = if ($env:APPLIO_REPO_URL) { $env:APPLIO_REPO_URL } else { "https://github.com/IAHispano/Applio.git" }
@@ -113,11 +182,18 @@ $RvcModelFilename = $env:APPLIO_RVC_MODEL_FILENAME
 $RvcIndexFilename = $env:APPLIO_RVC_INDEX_FILENAME
 
 if ((-not $RvcModelUrl) -and (-not $RvcIndexUrl) -and ($SkipDefaultRvc -ne "1")) {
-    Write-Host "No explicit Applio/RVC model URLs provided. Downloading the default demo voice-conversion pair."
-    $RvcModelUrl = $DefaultRvcModelUrl
-    $RvcIndexUrl = $DefaultRvcIndexUrl
     $RvcModelFilename = $DefaultRvcModelFilename
     $RvcIndexFilename = $DefaultRvcIndexFilename
+    $PrivateRvcModel = Download-PrivateAsset -RepoPath "rvc-models/$RvcModelFilename" -TargetPath (Join-Path $RvcDir $RvcModelFilename)
+    $PrivateRvcIndex = Download-PrivateAsset -RepoPath "rvc-models/$RvcIndexFilename" -TargetPath (Join-Path $RvcDir $RvcIndexFilename)
+    if ($PrivateRvcModel -and $PrivateRvcIndex) {
+        Write-Host "Downloaded Applio/RVC assets from private asset repo."
+    }
+    else {
+        Write-Host "No explicit Applio/RVC model URLs provided. Downloading the default demo voice-conversion pair."
+        $RvcModelUrl = $DefaultRvcModelUrl
+        $RvcIndexUrl = $DefaultRvcIndexUrl
+    }
 }
 
 if ($RvcModelUrl) {
@@ -182,11 +258,36 @@ if (($Profile -eq "all") -and $MMAudioNsfwModelUrl) {
     New-Item -ItemType Directory -Force -Path $NsfwDir | Out-Null
     $TargetNsfwModel = Join-Path $NsfwDir $NsfwFilename
     if (-not (Test-Path $TargetNsfwModel)) {
-        Write-Host "Downloading MMAudio NSFW model -> $TargetNsfwModel"
-        Invoke-WebRequest -Uri $MMAudioNsfwModelUrl -OutFile $TargetNsfwModel
+        if (Download-PrivateAsset -RepoPath "mmaudio/nsfw/$NsfwFilename" -TargetPath $TargetNsfwModel) {
+            Write-Host "Downloaded MMAudio NSFW model from private asset repo."
+        }
+        else {
+            Write-Host "Downloading MMAudio NSFW model -> $TargetNsfwModel"
+            Invoke-WebRequest -Uri $MMAudioNsfwModelUrl -OutFile $TargetNsfwModel
+        }
     }
     else {
         Write-Host "MMAudio NSFW model already present: $TargetNsfwModel"
+    }
+}
+
+$StemSeparatorModelFilename = if ($env:STEM_SEPARATOR_MODEL_FILENAME) { $env:STEM_SEPARATOR_MODEL_FILENAME } else { "vocals_mel_band_roformer.ckpt" }
+if ($Profile -eq "all") {
+    $StemTarget = Join-Path $StemSeparatorModelsDir $StemSeparatorModelFilename
+    $StemYaml = $StemSeparatorModelFilename -replace '\.ckpt$', '.yaml'
+    if (Download-PrivateAsset -RepoPath "stem-separator-models/$StemSeparatorModelFilename" -TargetPath $StemTarget) {
+        Download-PrivateAsset -RepoPath "stem-separator-models/$StemYaml" -TargetPath (Join-Path $StemSeparatorModelsDir $StemYaml) | Out-Null
+        Write-Host "Downloaded Stem Separator model from private asset repo."
+    }
+    else {
+        python -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('audio_separator') else 1)"
+        if ($LASTEXITCODE -eq 0) {
+        Write-Host "Downloading Stem Separator model -> $(Join-Path $StemSeparatorModelsDir $StemSeparatorModelFilename)"
+        audio-separator --download_model_only --model_filename $StemSeparatorModelFilename --model_file_dir $StemSeparatorModelsDir
+        }
+        else {
+            Write-Host "audio-separator is not installed. Run .\scripts\setup_backend.ps1, then rerun this script to fetch the Stem Separator model."
+        }
     }
 }
 Write-Host "Suggested next step:"

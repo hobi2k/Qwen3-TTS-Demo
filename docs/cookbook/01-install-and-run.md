@@ -14,6 +14,9 @@
 - 권장 시스템 패키지: `ffmpeg`, `sox`
 - 실모델 다운로드가 가능한 네트워크
 
+오디오 분리는 `audio-separator`를 사용합니다. 모델 파일은 최초 분리 실행 시
+`data/stem-separator-models/` 아래로 자동 다운로드되며, 이 폴더는 git에 올리지 않습니다.
+
 ## 1. Clone
 
 ```bash
@@ -41,7 +44,7 @@ Windows PowerShell:
 - `ensurepip`로 `pip` 복구
 - `uv sync`
 - `uv pip install hf_transfer certifi`
-- `vendor/Applio`, `vendor/MMAudio` 준비
+- `vendor/Applio`, `vendor/MMAudio`, `vendor/fish-speech` 준비
 - `app/backend/.env` 생성
 - 시스템 의존성 점검
 
@@ -74,14 +77,41 @@ Windows PowerShell:
 - `Qwen3-TTS-12Hz-0.6B/1.7B-CustomVoice`
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
 - `whisper-large-v3`
+- Fish Speech S2-Pro:
+  `data/models/fish-speech/s2-pro`
 - 기본 RVC `.pth + .index`
 - NSFW용 MMAudio 모델:
   `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
+- Stem Separator 모델:
+  `data/stem-separator-models/vocals_mel_band_roformer.ckpt`
+
+개인 Hugging Face mirror를 먼저 사용하려면:
+
+```bash
+export PRIVATE_ASSET_REPO_ID=<your-hf-username>/qwen3-tts-demo-assets
+export PRIVATE_ASSET_REVISION=main
+./scripts/download_models.sh
+```
+
+Qwen/Whisper 모델까지 개인 mirror에서 받으려면:
+
+```bash
+export QWEN_USE_PRIVATE_ASSET_REPO=1
+./scripts/download_models.sh
+```
+
+업로드 준비와 repo layout은 [20-private-hf-assets.md](./20-private-hf-assets.md)를 기준으로 합니다.
 
 가볍게만 준비하려면:
 
 ```bash
 ./scripts/download_models.sh core
+```
+
+S2-Pro만 준비하려면:
+
+```bash
+./scripts/download_models.sh s2pro
 ```
 
 ## 4. `.env` 확인
@@ -107,12 +137,35 @@ Windows PowerShell:
 - `MMAUDIO_CONFIG_URL`
 - `MMAUDIO_NSFW_MODEL_URL`
 - `MMAUDIO_NSFW_COMMAND_TEMPLATE`
+- `FISH_SPEECH_REPO_ROOT`
+- `FISH_SPEECH_MODEL_DIR`
+- `FISH_SPEECH_SERVER_URL`
+- `FISH_SPEECH_MODEL`
 
 현재 기준 원칙:
 
 - 절대경로를 기본값으로 쓰지 않습니다.
 - `QWEN_DEMO_CUSTOM_MODEL`, `QWEN_DEMO_BASE_MODEL` 등을 비워 두면 `data/models/*`를 자동으로 찾습니다.
 - 개발 머신마다 다른 경로를 `.env`에 박아두지 않는 쪽이 맞습니다.
+
+## 4-1. S2-Pro 로컬 서버 실행
+
+S2-Pro는 API 키가 아니라 로컬 Fish Speech 서버를 사용합니다.
+
+```bash
+./scripts/download_models.sh s2pro
+./scripts/serve_s2_pro.sh
+```
+
+`serve_s2_pro.sh`는 `.venv-fish-speech`를 별도로 만들어 Fish Speech를 설치합니다. 메인 `.venv`에 Fish Speech를 직접 설치하면 Torch와 flash-attn 조합이 바뀔 수 있으므로 분리합니다.
+
+기본 서버 주소:
+
+```text
+http://127.0.0.1:8080/v1/tts
+```
+
+웹 UI는 `/api/s2-pro/capabilities`에서 로컬 코드, 모델 파일, 서버 연결 상태를 확인하고 `/api/s2-pro/generate`로 생성 결과를 생성 갤러리에 저장합니다.
 
 ## 5. 프런트 빌드
 

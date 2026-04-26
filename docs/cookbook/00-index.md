@@ -28,6 +28,8 @@
 13. [VoiceBox clone + instruct 실험](../voicebox/04-clone-plus-instruct.md)
 14. [현재 실험 결과](./18-current-experiment-results.md)
 15. [스크립트 진입점 정리](./19-script-entrypoints.md)
+16. [개인 Hugging Face 자산 mirror](./20-private-hf-assets.md)
+17. [S2-Pro 작업실](./21-s2-pro-workspace.md)
 
 ## 현재 문서 맵
 
@@ -68,6 +70,10 @@
   현재 MAI / CustomVoice / VoiceBox 실험 결과와 재현 명령
 - [19-script-entrypoints.md](./19-script-entrypoints.md)
   `Qwen3-TTS` 역할별 canonical 스크립트와 `scripts/`, `voicebox/` 호환 래퍼 구분
+- [20-private-hf-assets.md](./20-private-hf-assets.md)
+  모델과 오디오 도구 자산을 개인 Hugging Face repo로 모으는 업로드/다운로드 기준
+- [21-s2-pro-workspace.md](./21-s2-pro-workspace.md)
+  Fish Speech S2-Pro 탭의 태그 기반 생성, 복제, 멀티 스피커, 다국어 입력 구조
 
 ### 현재 기능에서 중요한 두 문서
 
@@ -100,11 +106,15 @@
 - `사운드 효과`
 - `보이스 체인저`
 - `오디오 분리`
+  `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다.
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
-- `VoiceBox Clone`
-- `Clone + Instruct`
+- `S2-Pro 태그 생성`
+- `S2-Pro 목소리 복제`
+- `S2-Pro 멀티 스피커`
+- `S2-Pro 다국어 생성`
+- `가이드`
 
 핵심 원칙:
 
@@ -114,6 +124,14 @@
 - `목소리 복제`와 `목소리 설계`는 분리합니다.
 - `프리셋 기반 생성`은 저장된 스타일의 반복 생성용 화면입니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
+- `S2-Pro`는 Qwen 모델 선택 화면에 끼워 넣지 않고 Fish Speech 전용 기능별 탭으로 분리합니다.
+- `가이드`는 한 페이지 카드 묶음이 아니라 문서 목록과 본문으로 나뉜 document 화면입니다.
+
+오디오 분리 기준:
+
+- 기존 HPSS가 아니라 model-backed Stem Separator를 사용합니다.
+- 기본 보컬 분리 모델은 `vocals_mel_band_roformer.ckpt`입니다.
+- 보이스 체인저용 보컬 추출은 `vocal_rvc` 프리셋을 선택합니다.
 
 ## 빠른 링크
 

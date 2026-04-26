@@ -8,6 +8,7 @@ import {
   createGenerationControls,
   CUSTOM_RECIPES,
   DESIGN_RECIPES,
+  fileUrlFromPath,
   FineTuneMode,
   getAudioDownloadName,
   formatDate,
@@ -15,6 +16,7 @@ import {
   GenerationControlsForm,
   getModeLabel,
   getRecordDisplayTitle,
+  GUIDE_SECTIONS,
   HYBRID_RECIPES,
   LanguageSelect,
   MiniWaveform,
@@ -25,6 +27,9 @@ import {
   RecipeBar,
   serializeGenerationControls,
   ServerAudioPicker,
+  S2_PRO_FEATURES,
+  S2_PRO_TAG_CATEGORIES,
+  S2ProMode,
   SOUND_EFFECT_LIBRARY,
   SpotlightCard,
   TabKey,
@@ -42,6 +47,8 @@ import type {
   GenerationRecord,
   HealthResponse,
   ModelInfo,
+  S2ProRuntimeResponse,
+  S2ProVoiceRecord,
   SpeakerInfo,
   UploadResponse,
   VoiceChangerModelInfo,
@@ -142,6 +149,17 @@ function trainedVoiceTitle(model: ModelInfo): string {
   return displayModelName(model);
 }
 
+function s2ProTabToMode(tab: TabKey): S2ProMode {
+  if (tab === "s2pro_clone") return "clone";
+  if (tab === "s2pro_multi_speaker") return "multi_speaker";
+  if (tab === "s2pro_multilingual") return "multilingual";
+  return "tagged";
+}
+
+function isS2ProTab(tab: TabKey): boolean {
+  return tab === "s2pro_tagged" || tab === "s2pro_clone" || tab === "s2pro_multi_speaker" || tab === "s2pro_multilingual";
+}
+
 function gallerySelectionKey(record: GenerationRecord): string {
   return `${record.id}::${record.output_audio_path}`;
 }
@@ -163,6 +181,9 @@ function guessMatchingCustomVoiceModel(
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const [activeGuideTitle, setActiveGuideTitle] = useState<string>(GUIDE_SECTIONS[0]?.title || "");
+  const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
+  const [ttsSideView, setTtsSideView] = useState<"settings" | "history">("settings");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [speakers, setSpeakers] = useState<SpeakerInfo[]>([]);
@@ -293,6 +314,34 @@ export default function App() {
   const [lastHybridRecord, setLastHybridRecord] = useState<GenerationRecord | null>(null);
   const [audioToolCapabilities, setAudioToolCapabilities] = useState<AudioToolCapability[]>([]);
   const [voiceChangerModels, setVoiceChangerModels] = useState<VoiceChangerModelInfo[]>([]);
+  const [s2ProRuntime, setS2ProRuntime] = useState<S2ProRuntimeResponse | null>(null);
+  const [s2ProMode, setS2ProMode] = useState<S2ProMode>("tagged");
+  const [s2ProVoices, setS2ProVoices] = useState<S2ProVoiceRecord[]>([]);
+  const [selectedS2VoiceId, setSelectedS2VoiceId] = useState("");
+  const [s2TagSearch, setS2TagSearch] = useState("");
+  const [s2ProForm, setS2ProForm] = useState({
+    output_name: "s2pro-tagged-voice",
+    text: "[breath] 오늘은 조금 천천히 말해볼게. [super happy] 그래도 결국 해냈어!",
+    language: "Korean",
+    reference_audio_path: "",
+    reference_text: "",
+    speaker_script:
+      "<|speaker:0|> [calm] 오늘 회의는 여기서 정리하겠습니다.\n<|speaker:1|> [excited] 좋아요, 다음 단계로 바로 넘어가죠.",
+    clone_text: "[whispers] 이 목소리로 아주 가까이서 말하는 느낌을 확인해볼게.",
+    instruction: "[professional broadcast tone] Keep articulation clean and stable.",
+    temperature: "0.7",
+    top_p: "0.8",
+    max_tokens: "2048",
+  });
+  const [s2ProVoiceForm, setS2ProVoiceForm] = useState({
+    name: "my-s2pro-voice",
+    reference_audio_path: "",
+    reference_text: "",
+    language: "Korean",
+    notes: "",
+    create_qwen_prompt: true,
+  });
+  const [lastS2ProRecord, setLastS2ProRecord] = useState<GenerationRecord | null>(null);
   const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
   const [soundEffectForm, setSoundEffectForm] = useState({
     model_profile: "mmaudio",
@@ -319,11 +368,36 @@ export default function App() {
     clean_strength: "0.7",
     embedder_model: "contentvec",
   });
+  const [voiceChangerWorkflow, setVoiceChangerWorkflow] = useState<"train" | "convert">("convert");
+  const [rvcTrainForm, setRvcTrainForm] = useState({
+    model_name: "my-rvc-voice",
+    dataset_path: "",
+    sample_rate: "40000",
+    total_epoch: "100",
+    batch_size: "4",
+    cpu_cores: "4",
+    gpu: "0",
+    f0_method: "rmvpe",
+    embedder_model: "contentvec",
+    cut_preprocess: "Automatic",
+    noise_reduction: true,
+    clean_strength: "0.7",
+    chunk_len: "3.0",
+    overlap_len: "0.3",
+    index_algorithm: "Auto",
+    checkpointing: true,
+  });
+  const [lastRvcTrainingResult, setLastRvcTrainingResult] = useState<string>("");
   const [audioConvertForm, setAudioConvertForm] = useState({
     audio_path: "",
     output_format: "wav",
     sample_rate: "24000",
     mono: true,
+  });
+  const [audioSeparationForm, setAudioSeparationForm] = useState({
+    audio_path: "",
+    model_profile: "roformer_vocals",
+    output_format: "wav",
   });
   const [audioToolUpload, setAudioToolUpload] = useState<UploadResponse | null>(null);
   const [lastAudioToolResult, setLastAudioToolResult] = useState<AudioToolResponse | null>(null);
@@ -340,6 +414,13 @@ export default function App() {
     setRuns(data.finetune_runs);
     setAudioToolCapabilities(data.audio_tool_capabilities || []);
     setVoiceChangerModels(data.voice_changer_models || []);
+    try {
+      setS2ProRuntime(await api.s2ProCapabilities());
+      setS2ProVoices(await api.s2ProVoices());
+    } catch {
+      setS2ProRuntime(null);
+      setS2ProVoices([]);
+    }
   }
 
   useEffect(() => {
@@ -572,8 +653,20 @@ export default function App() {
   const voiceChangerAvailable = audioToolCapabilityMap.get("voice_changer")?.available ?? true;
   const audioSeparationAvailable = audioToolCapabilityMap.get("audio_separation")?.available ?? true;
   const pageMeta = PRODUCT_PAGES[activeTab];
+  const selectedGuideSection = GUIDE_SECTIONS.find((section) => section.title === activeGuideTitle) ?? GUIDE_SECTIONS[0];
+  const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
+  const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
+  const filteredS2TagCategories = S2_PRO_TAG_CATEGORIES.map((category) => ({
+    ...category,
+    tags: category.tags.filter((tag) => {
+      const query = s2TagSearch.trim().toLowerCase();
+      return !query || `${category.label} ${tag}`.toLowerCase().includes(query);
+    }),
+  })).filter((category) => category.tags.length > 0);
   const cloneModelOptions = [...baseModels, ...voiceBoxModels];
   const selectedCloneModelId = cloneEngine === "voicebox" ? voiceBoxCloneForm.model_id : selectedBaseModelId;
+  const selectedVoiceChangerModel = voiceChangerModels.find((item) => item.id === voiceChangerForm.selected_model_id) ?? null;
+  const selectedVoiceChangerAsset = voiceChangerForm.audio_path ? audioAssetByPath.get(voiceChangerForm.audio_path) ?? null : null;
   const selectedDatasetReferenceAsset = datasetForm.ref_audio_path ? audioAssetByPath.get(datasetForm.ref_audio_path) ?? null : null;
   const selectedDatasetSampleAssets = datasetSamples
     .filter((sample) => sample.audio_path.trim())
@@ -672,6 +765,111 @@ export default function App() {
     }));
   }
 
+  function openS2ProTab(tab: Extract<TabKey, "s2pro_tagged" | "s2pro_clone" | "s2pro_multi_speaker" | "s2pro_multilingual">) {
+    setS2ProMode(s2ProTabToMode(tab));
+    setActiveTab(tab);
+  }
+
+  function applyS2ProTag(prompt: string) {
+    setS2ProForm((prev) => ({
+      ...prev,
+      text: prev.text.trim() ? `${prev.text.trim()} ${prompt}` : prompt,
+    }));
+  }
+
+  function applyTtsTag(tag: string) {
+    setInferenceForm((prev) => ({
+      ...prev,
+      text: prev.text.trim() ? `${prev.text.trim()} ${tag}` : tag,
+    }));
+  }
+
+  function handleSelectS2ProReference(asset: AudioAsset) {
+    setS2ProForm((prev) => ({
+      ...prev,
+      reference_audio_path: asset.path,
+      reference_text: asset.transcript_text?.trim() || prev.reference_text,
+    }));
+    setS2ProVoiceForm((prev) => ({
+      ...prev,
+      reference_audio_path: asset.path,
+      reference_text: asset.transcript_text?.trim() || prev.reference_text,
+      name: prev.name === "my-s2pro-voice" ? basenameFromPath(asset.path).replace(/\.[^.]+$/, "") : prev.name,
+    }));
+    setMessage(`${asset.filename}을 S2-Pro 참조 음성으로 선택했습니다.`);
+  }
+
+  function useS2VoiceInQwen(voice: S2ProVoiceRecord, target: "tts" | "clone") {
+    if (target === "clone") {
+      setUploadedRef({
+        id: voice.id,
+        filename: basenameFromPath(voice.reference_audio_path),
+        path: voice.reference_audio_path,
+        url: voice.reference_audio_url,
+      });
+      setUploadRefText(voice.reference_text);
+      setActiveTab("clone");
+    } else {
+      setInferenceForm((prev) => ({
+        ...prev,
+        ref_audio_path: voice.reference_audio_path,
+        ref_text: voice.reference_text,
+        output_name: voice.name,
+      }));
+      setActiveTab("tts");
+    }
+    setMessage(`${voice.name}을 Qwen 작업에 연결했습니다.`);
+  }
+
+  function handleCreateS2ProVoice(event?: FormEvent) {
+    event?.preventDefault();
+    runAction(async () => {
+      const voice = await api.createS2ProVoice({
+        name: s2ProVoiceForm.name,
+        reference_audio_path: s2ProVoiceForm.reference_audio_path,
+        reference_text: s2ProVoiceForm.reference_text,
+        language: s2ProVoiceForm.language,
+        notes: s2ProVoiceForm.notes,
+        create_qwen_prompt: s2ProVoiceForm.create_qwen_prompt,
+        qwen_model_id: selectedBaseModelId,
+      });
+      setSelectedS2VoiceId(voice.id);
+      await refreshAll();
+      setMessage(`${voice.name}을 S2-Pro 목소리로 저장했습니다.`);
+    });
+  }
+
+  function handleS2ProSubmit(event: FormEvent) {
+    event.preventDefault();
+    const textByMode =
+      currentS2ProMode === "clone"
+        ? s2ProForm.clone_text
+        : currentS2ProMode === "multi_speaker"
+          ? s2ProForm.speaker_script
+          : s2ProForm.text;
+    runAction(async () => {
+      const response = await api.generateS2Pro({
+        mode: currentS2ProMode,
+        text: textByMode,
+        language: s2ProForm.language,
+        output_name: s2ProForm.output_name,
+        instruction: s2ProForm.instruction,
+        reference_audio_path: currentS2ProMode === "clone" && !selectedS2Voice ? s2ProForm.reference_audio_path || undefined : undefined,
+        reference_text: currentS2ProMode === "clone" && !selectedS2Voice ? s2ProForm.reference_text || undefined : undefined,
+        reference_id: selectedS2Voice?.id || undefined,
+        reference_ids: currentS2ProMode === "multi_speaker" && selectedS2Voice ? [selectedS2Voice.id] : undefined,
+        temperature: Number(s2ProForm.temperature || "0.7"),
+        top_p: Number(s2ProForm.top_p || "0.8"),
+        max_new_tokens: Number(s2ProForm.max_tokens || "2048"),
+        output_format: "wav",
+        sample_rate: 44100,
+      });
+      setLastS2ProRecord(response.record);
+      await refreshAll();
+      setMessage("S2-Pro 로컬 생성이 완료되어 생성 갤러리에 저장했습니다.");
+    });
+  }
+
   function applySoundEffectRecipe(item: { prompt: string; profile?: string; duration?: string }) {
     const seconds = item.duration?.includes(":")
       ? Number(item.duration.split(":").pop() || "4")
@@ -740,6 +938,7 @@ export default function App() {
       setAudioToolUpload(result);
       setVoiceChangerForm((prev) => ({ ...prev, audio_path: result.path }));
       setAudioConvertForm((prev) => ({ ...prev, audio_path: result.path }));
+      setAudioSeparationForm((prev) => ({ ...prev, audio_path: result.path }));
       setMessage(`${result.filename} 파일을 불러왔습니다.`);
     });
   }
@@ -748,6 +947,7 @@ export default function App() {
     setAudioToolUpload(null);
     setVoiceChangerForm((prev) => ({ ...prev, audio_path: asset.path }));
     setAudioConvertForm((prev) => ({ ...prev, audio_path: asset.path }));
+    setAudioSeparationForm((prev) => ({ ...prev, audio_path: asset.path }));
     setMessage(`${asset.filename} 파일을 작업 입력으로 선택했습니다.`);
   }
 
@@ -815,9 +1015,41 @@ export default function App() {
     });
   }
 
-  async function handleAudioSeparation(audioPath: string) {
+  async function handleRvcTrainSubmit(event: FormEvent) {
+    event.preventDefault();
     await runAction(async () => {
-      const result = await api.separateAudio({ audio_path: audioPath });
+      const result = await api.trainRvcModel({
+        model_name: rvcTrainForm.model_name,
+        dataset_path: rvcTrainForm.dataset_path,
+        sample_rate: Number(rvcTrainForm.sample_rate || "40000"),
+        total_epoch: Number(rvcTrainForm.total_epoch || "100"),
+        batch_size: Number(rvcTrainForm.batch_size || "4"),
+        cpu_cores: Number(rvcTrainForm.cpu_cores || "4"),
+        gpu: rvcTrainForm.gpu,
+        f0_method: rvcTrainForm.f0_method,
+        embedder_model: rvcTrainForm.embedder_model,
+        cut_preprocess: rvcTrainForm.cut_preprocess,
+        noise_reduction: rvcTrainForm.noise_reduction,
+        clean_strength: Number(rvcTrainForm.clean_strength || "0.7"),
+        chunk_len: Number(rvcTrainForm.chunk_len || "3.0"),
+        overlap_len: Number(rvcTrainForm.overlap_len || "0.3"),
+        index_algorithm: rvcTrainForm.index_algorithm,
+        checkpointing: rvcTrainForm.checkpointing,
+      });
+      setLastRvcTrainingResult(`${result.model_name} 모델 학습이 끝났습니다.`);
+      await refreshAll();
+      setVoiceChangerWorkflow("convert");
+      setMessage("RVC 모델을 만들었습니다. 변환 탭에서 바로 선택할 수 있습니다.");
+    });
+  }
+
+  async function handleAudioSeparation() {
+    await runAction(async () => {
+      const result = await api.separateAudio({
+        audio_path: audioSeparationForm.audio_path,
+        model_profile: audioSeparationForm.model_profile,
+        output_format: audioSeparationForm.output_format,
+      });
       setLastAudioToolResult(result);
       await refreshAll();
       setMessage("오디오 분리를 완료했습니다.");
@@ -1306,7 +1538,7 @@ export default function App() {
           </div>
 
           <div className="sidebar__section">
-            <span className="sidebar__section-title">제품</span>
+            <span className="sidebar__section-title">Qwen</span>
             <button className={activeTab === "design" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("design")} type="button">
               <span>목소리 설계</span>
             </button>
@@ -1331,7 +1563,23 @@ export default function App() {
           </div>
 
           <div className="sidebar__section">
-            <span className="sidebar__section-title">학습</span>
+            <span className="sidebar__section-title">S2-Pro</span>
+            <button className={activeTab === "s2pro_tagged" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_tagged")} type="button">
+              <span>태그 생성</span>
+            </button>
+            <button className={activeTab === "s2pro_clone" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_clone")} type="button">
+              <span>목소리 복제</span>
+            </button>
+            <button className={activeTab === "s2pro_multi_speaker" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multi_speaker")} type="button">
+              <span>멀티 스피커</span>
+            </button>
+            <button className={activeTab === "s2pro_multilingual" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
+              <span>다국어 생성</span>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">Qwen 학습</span>
             <button className={activeTab === "dataset" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("dataset")} type="button">
               <span>데이터셋 만들기</span>
             </button>
@@ -1340,6 +1588,13 @@ export default function App() {
             </button>
             <button className={activeTab === "voicebox_fusion" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("voicebox_fusion")} type="button">
               <span>VoiceBox 융합</span>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">도움말</span>
+            <button className={activeTab === "guide" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("guide")} type="button">
+              <span>가이드</span>
             </button>
           </div>
         </aside>
@@ -1493,81 +1748,145 @@ export default function App() {
 
       {activeTab === "tts" ? (
         <section className="workspace workspace--stacked">
-          <form className="panel inference-panel" onSubmit={handleModelInferenceSubmit}>
-            <h2>텍스트 음성 변환</h2>
-            <RecipeBar title="빠른 테스트 문장" items={CUSTOM_RECIPES} onApply={applyCustomRecipe} />
-            <div className="field-row">
-              <label>
-                모델
-                <select value={inferenceForm.model_id} onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}>
-                  <option value="">선택하세요</option>
-                  {ttsModels.map((model) => (
-                    <option key={model.key} value={model.model_id}>
-                      {displayModelName(model)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                언어
-                <LanguageSelect value={inferenceForm.language} onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))} />
-              </label>
-              <label>
-                파일 이름
-                <input
-                  placeholder="예: mai-지친-대사"
-                  value={inferenceForm.output_name}
-                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, output_name: event.target.value }))}
+          <form className={ttsSettingsOpen ? "fish-tts-shell" : "fish-tts-shell is-panel-closed"} onSubmit={handleModelInferenceSubmit}>
+            <section className="fish-tts-editor">
+              <div className="fish-editor-card">
+                <div className="fish-editor-card__top">
+                  <span className="drag-handle" aria-hidden="true">⋮⋮</span>
+                  <span className="voice-pill">
+                    <span className="voice-pill__avatar">{(inferenceForm.speaker || selectedInferenceModel?.label || "V").slice(0, 1)}</span>
+                    <span>{inferenceForm.speaker || (selectedInferenceModel ? displayModelName(selectedInferenceModel) : "목소리 선택")}</span>
+                  </span>
+                  <button className="icon-button" onClick={() => setTtsSettingsOpen((open) => !open)} type="button">
+                    {ttsSettingsOpen ? "설정 접기" : "설정 열기"}
+                  </button>
+                </div>
+                <textarea
+                  className="fish-editor-textarea"
+                  placeholder="[laugh]와 같은 오디오 태그를 사용하여 텍스트를 입력하고 표현력 있는 음성으로 변환..."
+                  value={inferenceForm.text}
+                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))}
                 />
-              </label>
-              {selectedInferenceModel?.available_speakers?.length ? (
-                <label>
-                  목소리
-                  <select value={inferenceForm.speaker} onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}>
-                    {selectedInferenceModel.available_speakers.map((speaker) => (
-                      <option key={speaker} value={speaker}>
-                        {speaker}
-                      </option>
-                    ))}
-                  </select>
+              </div>
+
+              {selectedInferenceModel?.supports_instruction ? (
+                <label className="fish-instruction-strip">
+                  Instruction
+                  <textarea
+                    placeholder="Keep the tone breathy, unstable, and emotionally heightened."
+                    value={inferenceForm.instruct}
+                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                  />
                 </label>
               ) : null}
-            </div>
-            <label>
-              대사
-              <textarea value={inferenceForm.text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))} />
-            </label>
-            {selectedInferenceModel?.supports_instruction ? (
-              <label>
-                말투 지시
-                <textarea
-                  placeholder="원하는 감정이나 말투를 짧게 적어주세요."
-                  value={inferenceForm.instruct}
-                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
-                />
-              </label>
+
+              <div className="fish-composer-dock">
+                <details className="tag-popover">
+                  <summary>태그</summary>
+                  <div className="tag-popover__panel">
+                    <p>S2 방식의 bracket tag를 대사에 삽입합니다. 필요한 표현은 직접 `[natural language tag]`로 써도 됩니다.</p>
+                    {S2_PRO_TAG_CATEGORIES.slice(0, 3).map((category) => (
+                      <section key={category.label}>
+                        <strong>{category.label}</strong>
+                        <div className="tag-cloud">
+                          {category.tags.slice(0, 18).map((tag) => (
+                            <button className="tag-chip" key={tag} onClick={() => applyTtsTag(tag)} type="button">
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                </details>
+                <span className="credit-indicator">로컬 생성</span>
+                <span className="byte-counter">{new Blob([inferenceForm.text]).size} / 500 바이트</span>
+                <button className="primary-button" disabled={loading || !selectedInferenceModel} type="submit">
+                  음성 생성
+                </button>
+              </div>
+            </section>
+
+            {ttsSettingsOpen ? (
+              <aside className="studio-side-panel">
+                <div className="studio-side-tabs">
+                  <button className={ttsSideView === "settings" ? "is-active" : ""} onClick={() => setTtsSideView("settings")} type="button">
+                    설정
+                  </button>
+                  <button className={ttsSideView === "history" ? "is-active" : ""} onClick={() => setTtsSideView("history")} type="button">
+                    역사
+                  </button>
+                </div>
+
+                {ttsSideView === "settings" ? (
+                  <div className="studio-settings-stack">
+                    <label>
+                      TTS 모델
+                      <select value={inferenceForm.model_id} onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}>
+                        <option value="">선택하세요</option>
+                        {ttsModels.map((model) => (
+                          <option key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedInferenceModel?.available_speakers?.length ? (
+                      <label>
+                        목소리
+                        <select value={inferenceForm.speaker} onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}>
+                          {selectedInferenceModel.available_speakers.map((speaker) => (
+                            <option key={speaker} value={speaker}>
+                              {speaker}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    <label>
+                      언어
+                      <LanguageSelect value={inferenceForm.language} onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))} />
+                    </label>
+                    <label>
+                      파일 이름
+                      <input
+                        placeholder="예: mai-지친-대사"
+                        value={inferenceForm.output_name}
+                        onChange={(event) => setInferenceForm((prev) => ({ ...prev, output_name: event.target.value }))}
+                      />
+                    </label>
+                    {selectedInferenceMode === "voice_clone" ? (
+                      <details className="advanced-inline">
+                        <summary>Reference voice</summary>
+                        <label>
+                          참조 음성 경로
+                          <input value={inferenceForm.ref_audio_path} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
+                        </label>
+                        <label>
+                          참조 음성 문장
+                          <textarea value={inferenceForm.ref_text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
+                        </label>
+                        <ServerAudioPicker assets={generatedAudioAssets} selectedPath={inferenceForm.ref_audio_path} onSelect={handleSelectInferenceAsset} />
+                      </details>
+                    ) : null}
+                    <details className="advanced-inline">
+                      <summary>Advanced controls</summary>
+                      <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
+                    </details>
+                  </div>
+                ) : (
+                  <div className="studio-history-stack">
+                    {history.slice(0, 6).map((record) => (
+                      <article className="studio-history-item" key={gallerySelectionKey(record)}>
+                        <strong>{getRecordDisplayTitle(record)}</strong>
+                        <audio controls src={record.output_audio_url} />
+                      </article>
+                    ))}
+                    {!history.length ? <p className="field-hint">아직 생성 이력이 없습니다.</p> : null}
+                  </div>
+                )}
+              </aside>
             ) : null}
-            {selectedInferenceMode === "voice_clone" ? (
-              <details className="advanced-inline">
-                <summary>참조 음성</summary>
-                <label>
-                  참조 음성 경로
-                  <input value={inferenceForm.ref_audio_path} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
-                </label>
-                <label>
-                  참조 음성 문장
-                  <textarea value={inferenceForm.ref_text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
-                </label>
-                <ServerAudioPicker assets={generatedAudioAssets} selectedPath={inferenceForm.ref_audio_path} onSelect={handleSelectInferenceAsset} />
-              </details>
-            ) : null}
-            <details className="advanced-inline">
-              <summary>Advanced controls</summary>
-              <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
-            </details>
-            <button className="primary-button" disabled={loading || !selectedInferenceModel} type="submit">
-              음성 생성
-            </button>
           </form>
           {lastInferenceRecord ? (
             <section className="panel">
@@ -2086,6 +2405,252 @@ export default function App() {
         </section>
       ) : null}
 
+      {isS2ProTab(activeTab) ? (
+        <section className="workspace workspace--stacked">
+          <section className="s2pro-hero">
+            <div>
+              <span className="eyebrow eyebrow--soft">Fish Speech</span>
+              <h2>{pageMeta.title}</h2>
+              <p>{pageMeta.description}</p>
+            </div>
+            <div className="s2pro-feature-cloud">
+              {S2_PRO_FEATURES.map((feature) => (
+                <span key={feature}>{feature}</span>
+              ))}
+            </div>
+            {s2ProRuntime ? (
+              <p className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
+                {s2ProRuntime.server_running ? "로컬 S2-Pro 서버 연결됨" : "로컬 S2-Pro 서버 대기 중"} · {s2ProRuntime.model}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="panel s2pro-workspace">
+            <form className="s2pro-form" onSubmit={handleS2ProSubmit}>
+              <div className="s2pro-form__main">
+                {currentS2ProMode === "tagged" ? (
+                  <>
+                    <h3>태그 기반 음성 생성</h3>
+                    <p className="field-hint">S2-Pro는 고정 프리셋만 쓰는 모델이 아니라 bracket 형식의 자연어 태그를 읽습니다. 아래 목록은 공식 문서와 모델 설명에 나온 기준 태그를 S2 방식으로 정리한 것입니다.</p>
+                    <input
+                      className="s2pro-tag-search"
+                      placeholder="Search tags, e.g. whisper, angry, pause"
+                      value={s2TagSearch}
+                      onChange={(event) => setS2TagSearch(event.target.value)}
+                    />
+                    <div className="s2pro-tag-library" aria-label="S2-Pro tag library">
+                      {filteredS2TagCategories.map((category) => (
+                        <section className="s2pro-tag-category" key={category.label}>
+                          <strong>{category.label}</strong>
+                          <div className="tag-cloud">
+                            {category.tags.map((tag) => (
+                              <button className="tag-chip" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                    <label>
+                      Text
+                      <textarea
+                        className="s2pro-textarea"
+                        value={s2ProForm.text}
+                        onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
+                      />
+                    </label>
+                  </>
+                ) : null}
+
+                {currentS2ProMode === "clone" ? (
+                  <>
+                    <h3>목소리 저장</h3>
+                    <p className="field-hint">참조 음성을 Fish Speech reference voice로 등록합니다. 저장한 뒤에는 S2-Pro 모든 탭에서 계속 선택할 수 있고, Qwen 복제 화면에도 바로 넘길 수 있습니다.</p>
+                    <div className="s2pro-voice-form">
+                      <label>
+                        Voice name
+                        <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
+                      </label>
+                      <div className="dataset-source-grid">
+                        <section className="status-card">
+                          <strong>참조 음성</strong>
+                          <ServerAudioPicker assets={audioAssets} selectedPath={s2ProVoiceForm.reference_audio_path} onSelect={handleSelectS2ProReference} />
+                          {s2ProVoiceForm.reference_audio_path ? (
+                            <audio controls src={fileUrlFromPath(s2ProVoiceForm.reference_audio_path)} />
+                          ) : null}
+                        </section>
+                        <section className="status-card">
+                          <strong>Reference text</strong>
+                          <textarea
+                            placeholder="Reference audio transcript"
+                            value={s2ProVoiceForm.reference_text}
+                            onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, reference_text: event.target.value })}
+                          />
+                          <label className="inline-check">
+                            <input
+                              checked={s2ProVoiceForm.create_qwen_prompt}
+                              onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: event.target.checked })}
+                              type="checkbox"
+                            />
+                            Qwen clone prompt도 함께 생성
+                          </label>
+                        </section>
+                      </div>
+                      <button className="primary-button" onClick={() => handleCreateS2ProVoice()} type="button">
+                        목소리 저장
+                      </button>
+                    </div>
+                    <h3>저장 목소리로 생성</h3>
+                    <div className="s2pro-voice-grid">
+                      {s2ProVoices.map((voice) => (
+                        <article className={selectedS2VoiceId === voice.id ? "s2pro-voice-card is-selected" : "s2pro-voice-card"} key={voice.id}>
+                          <button onClick={() => setSelectedS2VoiceId(voice.id)} type="button">
+                            <strong>{voice.name}</strong>
+                            <span>{voice.fish_reference_present ? "S2-Pro ready" : "Fish server 재등록 필요"}</span>
+                          </button>
+                          <audio controls src={voice.reference_audio_url} />
+                          <div className="voice-card-actions">
+                            <button onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
+                              Qwen 복제로 보내기
+                            </button>
+                            <button onClick={() => useS2VoiceInQwen(voice, "tts")} type="button">
+                              Qwen TTS로 보내기
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="dataset-source-grid">
+                      <section className="status-card">
+                        <strong>이번 생성에 사용할 목소리</strong>
+                        <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
+                          <option value="">저장 목소리 없이 참조 음성 직접 사용</option>
+                          {s2ProVoices.map((voice) => (
+                            <option key={voice.id} value={voice.id}>
+                              {voice.name}
+                            </option>
+                          ))}
+                        </select>
+                      </section>
+                    </div>
+                    <label>
+                      Text
+                      <textarea
+                        className="s2pro-textarea"
+                        value={s2ProForm.clone_text}
+                        onChange={(event) => setS2ProForm({ ...s2ProForm, clone_text: event.target.value })}
+                      />
+                    </label>
+                  </>
+                ) : null}
+
+                {currentS2ProMode === "multi_speaker" ? (
+                  <>
+                    <h3>멀티 스피커 대화</h3>
+                    <p className="field-hint">Fish Speech는 참조 음성의 화자 정보를 기반으로 speaker tag를 읽습니다. 저장 목소리를 골라 기준 음색을 고정하고, 대사 안에는 speaker tag를 직접 넣습니다.</p>
+                    <label>
+                      Saved voice
+                      <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
+                        <option value="">저장 목소리 선택</option>
+                        {s2ProVoices.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Speaker script
+                      <textarea
+                        className="s2pro-textarea s2pro-textarea--tall"
+                        value={s2ProForm.speaker_script}
+                        onChange={(event) => setS2ProForm({ ...s2ProForm, speaker_script: event.target.value })}
+                      />
+                    </label>
+                  </>
+                ) : null}
+
+                {currentS2ProMode === "multilingual" ? (
+                  <>
+                    <h3>다국어 생성</h3>
+                    <p className="field-hint">저장 목소리를 유지한 채 여러 언어 문장을 섞어 생성합니다. 언어 선택은 메타데이터이고, 실제 언어 전환은 Text에 들어간 문장과 태그가 결정합니다.</p>
+                    <label>
+                      Saved voice
+                      <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
+                        <option value="">저장 목소리 없이 생성</option>
+                        {s2ProVoices.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Text
+                      <textarea
+                        className="s2pro-textarea"
+                        value={s2ProForm.text}
+                        onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+
+              <aside className="s2pro-form__side">
+                <label>
+                  Output name
+                  <input value={s2ProForm.output_name} onChange={(event) => setS2ProForm({ ...s2ProForm, output_name: event.target.value })} />
+                </label>
+                <label>
+                  Language
+                  <LanguageSelect value={s2ProForm.language} onChange={(language) => setS2ProForm({ ...s2ProForm, language })} />
+                </label>
+                <label>
+                  Instruction
+                  <textarea
+                    value={s2ProForm.instruction}
+                    onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
+                  />
+                </label>
+                <details className="advanced-inline">
+                  <summary>Advanced controls</summary>
+                  <div className="field-row">
+                    <label>
+                      Temperature
+                      <input value={s2ProForm.temperature} onChange={(event) => setS2ProForm({ ...s2ProForm, temperature: event.target.value })} />
+                    </label>
+                    <label>
+                      Top P
+                      <input value={s2ProForm.top_p} onChange={(event) => setS2ProForm({ ...s2ProForm, top_p: event.target.value })} />
+                    </label>
+                    <label>
+                      Max tokens
+                      <input value={s2ProForm.max_tokens} onChange={(event) => setS2ProForm({ ...s2ProForm, max_tokens: event.target.value })} />
+                    </label>
+                  </div>
+                </details>
+                <button className="primary-button" type="submit">
+                  S2-Pro 생성
+                </button>
+                {selectedS2Voice ? (
+                  <div className="s2pro-selected-voice">
+                    <strong>{selectedS2Voice.name}</strong>
+                    <span>{selectedS2Voice.reference_id}</span>
+                  </div>
+                ) : null}
+              </aside>
+            </form>
+            {lastS2ProRecord ? (
+              <div className="result-stack">
+                <AudioCard title="S2-Pro 생성 결과" subtitle={lastS2ProRecord.mode} record={lastS2ProRecord} />
+              </div>
+            ) : null}
+          </section>
+        </section>
+      ) : null}
+
       {activeTab === "effects" ? (
         <section className="workspace workspace--stacked">
           <section className="sound-effects-shell">
@@ -2217,40 +2782,187 @@ export default function App() {
 
       {activeTab === "changer" ? (
         <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <section className="panel">
-              <h2>원본 오디오 선택</h2>
-              <p className="field-hint">파일을 업로드하거나 서버에 저장된 오디오를 골라서 변환합니다.</p>
-              <label className="upload-field">
-                새 파일 업로드
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleAudioToolUpload(file);
-                    }
-                  }}
-                />
-              </label>
-              {audioToolUpload ? (
-                <div className="source-summary">
-                  <span className="meta-label">업로드한 파일</span>
-                  <strong>{audioToolUpload.filename}</strong>
-                </div>
-              ) : null}
-              <ServerAudioPicker assets={audioAssets} selectedPath={voiceChangerForm.audio_path} onSelect={handleSelectAudioToolAsset} />
-            </section>
+          <div className="subtab-row subtab-row--wide">
+            <button className={voiceChangerWorkflow === "train" ? "subtab is-active" : "subtab"} type="button" onClick={() => setVoiceChangerWorkflow("train")}>
+              RVC 모델 훈련
+            </button>
+            <button className={voiceChangerWorkflow === "convert" ? "subtab is-active" : "subtab"} type="button" onClick={() => setVoiceChangerWorkflow("convert")}>
+              목소리 변환
+            </button>
+          </div>
 
-            <form className="panel" onSubmit={handleVoiceChangerSubmit}>
-              <h2>보이스 체인저</h2>
-              {!voiceChangerAvailable ? <p className="field-hint">보이스 체인저 모델이 아직 준비되지 않았습니다. 모델 다운로드 도구로 RVC 모델을 먼저 받아주세요.</p> : null}
+          {voiceChangerWorkflow === "train" ? (
+            <form className="panel voice-changer-panel" onSubmit={handleRvcTrainSubmit}>
+              <div className="section-heading">
+                <span className="step-badge">1</span>
+                <div>
+                  <h2>목표 목소리 모델 만들기</h2>
+                  <p>Applio/RVC는 참고 음성 하나를 바로 쓰는 방식이 아니라, 목표 목소리 데이터로 모델을 만든 뒤 변환에 사용합니다.</p>
+                </div>
+              </div>
+              <div className="rvc-train-hero">
+                <div>
+                  <strong>준비물</strong>
+                  <p>목표 목소리만 깨끗하게 들어 있는 WAV 폴더를 넣으세요. 같은 화자 음성 10분 이상을 권장합니다.</p>
+                </div>
+                <div>
+                  <strong>결과물</strong>
+                  <p>학습이 끝나면 `.pth` 모델과 `.index`가 생기고, 변환 탭의 목소리 목록에 나타납니다.</p>
+                </div>
+              </div>
               <div className="field-row">
                 <label>
-                  변환할 목소리
+                  모델 이름
+                  <input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, model_name: event.target.value })} />
+                  <span className="field-caption">예: mai-rvc, narrator-clean. 화면에는 이 이름으로 표시됩니다.</span>
+                </label>
+                <label>
+                  목표 목소리 폴더
+                  <input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
+                  <span className="field-caption">이 폴더 안의 WAV 파일들이 RVC 모델의 목표 음색이 됩니다.</span>
+                </label>
+              </div>
+              <div className="field-row">
+                <label>
+                  샘플레이트
+                  <select value={rvcTrainForm.sample_rate} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, sample_rate: event.target.value })}>
+                    <option value="40000">40k - 일반 권장</option>
+                    <option value="48000">48k - 고음질</option>
+                    <option value="32000">32k - 가벼움</option>
+                  </select>
+                </label>
+                <label>
+                  학습 에포크
+                  <input value={rvcTrainForm.total_epoch} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, total_epoch: event.target.value })} />
+                </label>
+                <label>
+                  배치 크기
+                  <input value={rvcTrainForm.batch_size} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, batch_size: event.target.value })} />
+                </label>
+              </div>
+              <details className="advanced-controls">
+                <summary>Advanced controls</summary>
+                <div className="field-row">
+                  <label>
+                    F0 method
+                    <select value={rvcTrainForm.f0_method} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, f0_method: event.target.value })}>
+                      <option value="rmvpe">rmvpe</option>
+                      <option value="fcpe">fcpe</option>
+                      <option value="crepe">crepe</option>
+                    </select>
+                  </label>
+                  <label>
+                    Content embedder
+                    <select value={rvcTrainForm.embedder_model} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, embedder_model: event.target.value })}>
+                      <option value="contentvec">contentvec</option>
+                      <option value="korean-hubert-base">korean-hubert-base</option>
+                      <option value="spin">spin</option>
+                      <option value="spin-v2">spin-v2</option>
+                    </select>
+                  </label>
+                  <label>
+                    CPU cores
+                    <input value={rvcTrainForm.cpu_cores} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cpu_cores: event.target.value })} />
+                  </label>
+                  <label>
+                    GPU
+                    <input value={rvcTrainForm.gpu} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, gpu: event.target.value })} />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    Cut mode
+                    <select value={rvcTrainForm.cut_preprocess} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cut_preprocess: event.target.value })}>
+                      <option value="Automatic">Automatic</option>
+                      <option value="Simple">Simple</option>
+                      <option value="Skip">Skip</option>
+                    </select>
+                  </label>
+                  <label>
+                    Chunk length
+                    <input value={rvcTrainForm.chunk_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, chunk_len: event.target.value })} />
+                  </label>
+                  <label>
+                    Overlap
+                    <input value={rvcTrainForm.overlap_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, overlap_len: event.target.value })} />
+                  </label>
+                  <label>
+                    Index
+                    <select value={rvcTrainForm.index_algorithm} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, index_algorithm: event.target.value })}>
+                      <option value="Auto">Auto</option>
+                      <option value="Faiss">Faiss</option>
+                      <option value="KMeans">KMeans</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={rvcTrainForm.noise_reduction} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, noise_reduction: event.target.checked })} />
+                    Noise reduction
+                  </label>
+                  <label>
+                    Clean strength
+                    <input value={rvcTrainForm.clean_strength} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, clean_strength: event.target.value })} />
+                  </label>
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={rvcTrainForm.checkpointing} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, checkpointing: event.target.checked })} />
+                    Memory-efficient training
+                  </label>
+                </div>
+              </details>
+              {lastRvcTrainingResult ? <p className="field-hint">{lastRvcTrainingResult}</p> : null}
+              <button className="primary-button" disabled={loading || !rvcTrainForm.model_name || !rvcTrainForm.dataset_path} type="submit">
+                RVC 모델 만들기
+              </button>
+            </form>
+          ) : (
+            <div className="voice-changer-layout">
+              <section className="panel voice-changer-source">
+                <div className="section-heading">
+                  <span className="step-badge">1</span>
+                  <div>
+                    <h2>변환할 원본 오디오</h2>
+                    <p>말소리나 분리된 보컬을 넣고, 오른쪽에서 학습된 RVC 목소리를 선택합니다.</p>
+                  </div>
+                </div>
+                <label className="upload-field upload-field--compact">
+                  새 음성 업로드
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void handleAudioToolUpload(file);
+                      }
+                    }}
+                  />
+                </label>
+                {voiceChangerForm.audio_path ? (
+                  <div className="selected-source-card">
+                    <span className="meta-label">선택한 원본</span>
+                    <strong>{selectedVoiceChangerAsset?.filename || audioToolUpload?.filename || basenameFromPath(voiceChangerForm.audio_path)}</strong>
+                    <audio controls src={fileUrlFromPath(voiceChangerForm.audio_path)} />
+                  </div>
+                ) : (
+                  <p className="field-hint">업로드하거나 아래 목록에서 변환할 원본 음성을 선택하세요.</p>
+                )}
+                <ServerAudioPicker assets={audioAssets} selectedPath={voiceChangerForm.audio_path} onSelect={handleSelectAudioToolAsset} />
+              </section>
+
+              <form className="panel voice-changer-panel" onSubmit={handleVoiceChangerSubmit}>
+                <div className="section-heading">
+                  <span className="step-badge">2</span>
+                  <div>
+                    <h2>학습된 목소리로 변환</h2>
+                    <p>훈련 탭에서 만든 RVC 모델이나 다운로드한 RVC 모델을 선택합니다.</p>
+                  </div>
+                </div>
+                {!voiceChangerAvailable ? <p className="field-hint">사용 가능한 RVC 목소리 모델이 없습니다. 모델 다운로드나 RVC 학습을 먼저 실행해 주세요.</p> : null}
+                <label>
+                  바꿀 목소리
                   <select value={voiceChangerForm.selected_model_id} onChange={(event) => handleSelectVoiceChangerModel(event.target.value)}>
-                    <option value="">선택하세요</option>
+                    <option value="">목소리 선택</option>
                     {voiceChangerModels.map((model) => (
                       <option key={model.id} value={model.id}>
                         {model.label}
@@ -2258,68 +2970,74 @@ export default function App() {
                     ))}
                   </select>
                 </label>
-                <label>
-                  목소리 높낮이
-                  <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
-                </label>
-              </div>
-              {voiceChangerForm.selected_model_id ? (
-                <div className="source-summary">
-                  <span className="meta-label">선택한 모델</span>
-                  <strong>{basenameFromPath(voiceChangerForm.model_path)}</strong>
-                  {voiceChangerForm.index_path ? <span>{basenameFromPath(voiceChangerForm.index_path)}</span> : null}
+                {selectedVoiceChangerModel ? (
+                  <div className="voice-model-summary">
+                    <span className="voice-model-summary__avatar" aria-hidden="true" />
+                    <div>
+                      <span className="meta-label">선택한 목소리</span>
+                      <strong>{selectedVoiceChangerModel.label}</strong>
+                      <p>RVC 모델과 검색 인덱스를 사용해 원본 음성의 음색을 바꿉니다.</p>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="field-row">
+                  <label>
+                    음정 추적 방식
+                    <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
+                      <option value="rmvpe">RMVPE - 기본 권장</option>
+                      <option value="fcpe">FCPE - 빠른 처리</option>
+                      <option value="crepe">CREPE - 선율 민감</option>
+                    </select>
+                  </label>
+                  <label>
+                    음색 반영 강도
+                    <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
+                  </label>
+                  <label>
+                    발음 보존
+                    <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
+                  </label>
                 </div>
-              ) : null}
-              <div className="field-row">
-                <label>
-                  피치 추출 방식
-                  <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
-                    <option value="rmvpe">rmvpe</option>
-                    <option value="fcpe">fcpe</option>
-                    <option value="crepe">crepe</option>
-                  </select>
-                </label>
-                <label>
-                  음색 반영 강도
-                  <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
-                </label>
-                <label>
-                  원본 보존 비율
-                  <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
-                </label>
-              </div>
-              <div className="field-row">
-                <label>
-                  후처리 강도
-                  <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
-                </label>
-                <label>
-                  음색 추출기
-                  <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
-                    <option value="contentvec">contentvec</option>
-                    <option value="hubert">hubert</option>
-                  </select>
-                </label>
-              </div>
-              <div className="field-row">
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={voiceChangerForm.split_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, split_audio: event.target.checked })} />
-                  긴 오디오 분할 처리
-                </label>
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={voiceChangerForm.f0_autotune} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_autotune: event.target.checked })} />
-                  오토튠
-                </label>
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={voiceChangerForm.clean_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_audio: event.target.checked })} />
-                  후처리 정리
-                </label>
-              </div>
-              <button className="primary-button" disabled={loading || !voiceChangerAvailable || !voiceChangerForm.audio_path || !voiceChangerForm.model_path} type="submit">
-                목소리 바꾸기
-              </button>
-            </form>
-          </div>
+                <details className="advanced-controls voice-changer-advanced">
+                  <summary>Advanced controls</summary>
+                  <div className="field-row">
+                    <label>
+                      Pitch shift
+                      <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
+                    </label>
+                    <label>
+                      Clean strength
+                      <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
+                    </label>
+                    <label>
+                      Content embedder
+                      <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
+                        <option value="contentvec">contentvec</option>
+                        <option value="hubert">hubert</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="field-row">
+                    <label className="checkbox-row">
+                      <input type="checkbox" checked={voiceChangerForm.split_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, split_audio: event.target.checked })} />
+                      Split long audio
+                    </label>
+                    <label className="checkbox-row">
+                      <input type="checkbox" checked={voiceChangerForm.f0_autotune} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_autotune: event.target.checked })} />
+                      F0 autotune
+                    </label>
+                    <label className="checkbox-row">
+                      <input type="checkbox" checked={voiceChangerForm.clean_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_audio: event.target.checked })} />
+                      Clean output audio
+                    </label>
+                  </div>
+                </details>
+                <button className="primary-button" disabled={loading || !voiceChangerAvailable || !voiceChangerForm.audio_path || !voiceChangerForm.model_path} type="submit">
+                  목소리 바꾸기
+                </button>
+              </form>
+            </div>
+          )}
 
           {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
             <section className="panel">
@@ -2355,17 +3073,39 @@ export default function App() {
                   <strong>{audioToolUpload.filename}</strong>
                 </div>
               ) : null}
-              <ServerAudioPicker assets={audioAssets} selectedPath={audioConvertForm.audio_path} onSelect={handleSelectAudioToolAsset} />
+              <ServerAudioPicker assets={audioAssets} selectedPath={audioSeparationForm.audio_path} onSelect={handleSelectAudioToolAsset} />
             </section>
 
             <form className="panel" onSubmit={(event) => {
               event.preventDefault();
-              void handleAudioSeparation(audioConvertForm.audio_path);
+              void handleAudioSeparation();
             }}>
               <h2>오디오 분리</h2>
-              <p>선택한 오디오를 두 갈래로 나눠 다시 확인합니다.</p>
+              <p>AI stem separator로 보컬과 반주를 분리합니다. 안정적인 분리를 위해 10초 이상의 오디오를 사용하세요.</p>
               {!audioSeparationAvailable ? <p className="field-hint">현재 이 기능은 비활성 상태입니다.</p> : null}
-              <button className="primary-button" disabled={loading || !audioConvertForm.audio_path || !audioSeparationAvailable} type="submit">
+              <div className="field-row">
+                <label>
+                  분리 모델
+                  <select value={audioSeparationForm.model_profile} onChange={(event) => setAudioSeparationForm({ ...audioSeparationForm, model_profile: event.target.value })}>
+                    <option value="roformer_vocals">Roformer vocals - 최신 보컬 분리</option>
+                    <option value="vocal_rvc">RVC vocal preset - 보이스 체인저용 보컬 추출</option>
+                    <option value="demucs_4stem">Demucs 4-stem - 보컬/드럼/베이스/기타</option>
+                  </select>
+                </label>
+                <label>
+                  출력 형식
+                  <select value={audioSeparationForm.output_format} onChange={(event) => setAudioSeparationForm({ ...audioSeparationForm, output_format: event.target.value })}>
+                    <option value="wav">WAV</option>
+                    <option value="flac">FLAC</option>
+                    <option value="ogg">OGG</option>
+                  </select>
+                </label>
+              </div>
+              <article className="status-card">
+                <strong>현재 기본 모델</strong>
+                <p>audio-separator 0.44.1 모델 목록에서 보컬 분리 상위로 확인한 `vocals_mel_band_roformer.ckpt`를 기본으로 사용합니다. 모델 파일은 최초 실행 시 자동으로 내려받습니다.</p>
+              </article>
+              <button className="primary-button" disabled={loading || !audioSeparationForm.audio_path || !audioSeparationAvailable} type="submit">
                 분리 실행
               </button>
             </form>
@@ -2717,6 +3457,42 @@ export default function App() {
                 <p className="field-hint">아직 사용할 수 있는 VoiceBox 모델이 없습니다.</p>
               ) : null}
             </div>
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === "guide" ? (
+        <section className="workspace workspace--stacked">
+          <section className="guide-hero">
+            <div>
+              <span className="eyebrow eyebrow--soft">사용 가이드</span>
+              <h2>작업별로 무엇을 어디서 하는지 정리했습니다</h2>
+              <p>Qwen 생성, Qwen 학습, VoiceBox, S2-Pro, 오디오 도구를 처음 쓰는 사람도 순서대로 따라갈 수 있게 묶었습니다.</p>
+            </div>
+          </section>
+          <section className="guide-doc-shell">
+            <nav className="guide-doc-nav" aria-label="Guide documents">
+              {GUIDE_SECTIONS.map((section) => (
+                <button
+                  className={selectedGuideSection.title === section.title ? "guide-doc-link is-active" : "guide-doc-link"}
+                  key={section.title}
+                  onClick={() => setActiveGuideTitle(section.title)}
+                  type="button"
+                >
+                  {section.title}
+                </button>
+              ))}
+            </nav>
+            <article className="guide-doc-page">
+              <span className="eyebrow eyebrow--soft">Guide</span>
+              <h3>{selectedGuideSection.title}</h3>
+              <p>{selectedGuideSection.summary}</p>
+              <ol>
+                {selectedGuideSection.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </article>
           </section>
         </section>
       ) : null}

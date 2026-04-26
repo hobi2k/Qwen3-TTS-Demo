@@ -281,6 +281,75 @@ export interface VoiceBoxCloneRequest extends GenerationRequestExtras {
   strategy?: string;
 }
 
+export interface S2ProRuntimeResponse {
+  available: boolean;
+  server_running: boolean;
+  source: string;
+  endpoint_url: string;
+  server_url: string;
+  model: string;
+  repo_root: string;
+  model_dir: string;
+  api_server_path: string;
+  codec_path: string;
+  repo_ready: boolean;
+  model_ready: boolean;
+  missing_model_files: string[];
+  server_error: string;
+  features: string[];
+}
+
+export interface S2ProGenerateRequest {
+  mode: "tagged" | "clone" | "multi_speaker" | "multilingual";
+  text: string;
+  language: string;
+  output_name?: string;
+  instruction?: string;
+  reference_audio_path?: string;
+  reference_text?: string;
+  reference_id?: string;
+  reference_ids?: string[];
+  temperature?: number;
+  top_p?: number;
+  max_new_tokens?: number;
+  chunk_length?: number;
+  output_format?: string;
+  sample_rate?: number | null;
+  speed?: number;
+  volume?: number;
+  normalize?: boolean;
+  latency?: string;
+  repetition_penalty?: number;
+  min_chunk_length?: number;
+  condition_on_previous_chunks?: boolean;
+  early_stop_threshold?: number;
+}
+
+export interface S2ProVoiceRecord {
+  id: string;
+  name: string;
+  reference_id: string;
+  reference_audio_path: string;
+  reference_audio_url: string;
+  reference_text: string;
+  language: string;
+  created_at: string;
+  notes: string;
+  qwen_clone_prompt_id?: string | null;
+  qwen_clone_prompt_path?: string | null;
+  fish_reference_present: boolean;
+}
+
+export interface S2ProVoiceCreateRequest {
+  name: string;
+  reference_audio_path: string;
+  reference_text: string;
+  language: string;
+  notes?: string;
+  create_qwen_prompt?: boolean;
+  qwen_model_id?: string;
+}
+
 export interface CustomVoiceRequest extends GenerationRequestExtras {
   text: string;
   language: string;
@@ -349,6 +418,34 @@ export interface VoiceChangerRequest {
   embedder_model: string;
 }
 
+export interface RvcTrainingRequest {
+  model_name: string;
+  dataset_path: string;
+  sample_rate: number;
+  total_epoch: number;
+  batch_size: number;
+  cpu_cores: number;
+  gpu: string;
+  f0_method: string;
+  embedder_model: string;
+  cut_preprocess: string;
+  noise_reduction: boolean;
+  clean_strength: number;
+  chunk_len: number;
+  overlap_len: number;
+  index_algorithm: string;
+  checkpointing: boolean;
+}
+
+export interface RvcTrainingResponse {
+  status: string;
+  message: string;
+  model_name: string;
+  model_path?: string | null;
+  index_path?: string | null;
+  meta: Record<string, unknown>;
+}
+
 export interface AudioConvertRequest {
   audio_path: string;
   output_format: string;
@@ -358,6 +455,8 @@ export interface AudioConvertRequest {
 
 export interface AudioSeparationRequest {
   audio_path: string;
+  model_profile: string;
+  output_format: string;
 }
 
 export interface AudioTranslateRequest {

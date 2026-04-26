@@ -155,6 +155,83 @@ class VoiceBoxCloneRequest(GenerationRequestBase):
     strategy: str = ""
 
 
+class S2ProRuntimeResponse(BaseModel):
+    """로컬 Fish Speech S2-Pro 런타임 상태 응답."""
+
+    available: bool
+    server_running: bool
+    source: str
+    endpoint_url: str
+    server_url: str
+    model: str
+    repo_root: str
+    model_dir: str
+    api_server_path: str
+    codec_path: str
+    repo_ready: bool
+    model_ready: bool
+    missing_model_files: List[str] = Field(default_factory=list)
+    server_error: str = ""
+    features: List[str] = Field(default_factory=list)
+
+
+class S2ProGenerateRequest(BaseModel):
+    """Fish Speech S2-Pro 로컬 런타임 생성 요청."""
+
+    mode: str = "tagged"
+    text: str = Field(..., min_length=1)
+    language: str = "Auto"
+    output_name: Optional[str] = None
+    instruction: str = ""
+    reference_audio_path: Optional[str] = None
+    reference_text: Optional[str] = None
+    reference_id: Optional[str] = None
+    reference_ids: List[str] = Field(default_factory=list)
+    temperature: float = 0.7
+    top_p: float = 0.8
+    max_new_tokens: int = 2048
+    chunk_length: int = 300
+    output_format: str = "wav"
+    sample_rate: Optional[int] = 44100
+    speed: float = 1.0
+    volume: float = 0.0
+    normalize: bool = True
+    latency: str = "normal"
+    repetition_penalty: float = 1.2
+    min_chunk_length: int = 50
+    condition_on_previous_chunks: bool = True
+    early_stop_threshold: float = 1.0
+
+
+class S2ProVoiceCreateRequest(BaseModel):
+    """S2-Pro에서 계속 재사용할 reference voice 생성 요청."""
+
+    name: str = Field(..., min_length=1)
+    reference_audio_path: str = Field(..., min_length=1)
+    reference_text: str = Field(..., min_length=1)
+    language: str = "Auto"
+    notes: str = ""
+    create_qwen_prompt: bool = False
+    qwen_model_id: Optional[str] = None
+
+
+class S2ProVoiceRecord(BaseModel):
+    """S2-Pro persistent reference voice와 Qwen 브릿지 정보를 담는 레코드."""
+
+    id: str
+    name: str
+    reference_id: str
+    reference_audio_path: str
+    reference_audio_url: str
+    reference_text: str
+    language: str
+    created_at: str
+    notes: str = ""
+    qwen_clone_prompt_id: Optional[str] = None
+    qwen_clone_prompt_path: Optional[str] = None
+    fish_reference_present: bool = False
+
+
 class GenerationRecord(BaseModel):
     """생성 이력 저장 및 응답에 사용하는 레코드 스키마다."""
 
@@ -313,6 +390,38 @@ class VoiceChangerRequest(BaseModel):
     embedder_model: str = "contentvec"
 
 
+class RvcTrainingRequest(BaseModel):
+    """Applio/RVC 목소리 모델 학습 요청 스키마다."""
+
+    model_name: str = Field(..., min_length=1, max_length=80)
+    dataset_path: str = Field(..., min_length=1)
+    sample_rate: int = Field(40000)
+    total_epoch: int = Field(100, ge=1, le=10000)
+    batch_size: int = Field(4, ge=1, le=50)
+    cpu_cores: int = Field(4, ge=1, le=64)
+    gpu: str = "0"
+    f0_method: str = "rmvpe"
+    embedder_model: str = "contentvec"
+    cut_preprocess: str = "Automatic"
+    noise_reduction: bool = True
+    clean_strength: float = Field(0.7, ge=0.0, le=1.0)
+    chunk_len: float = Field(3.0, ge=0.5, le=5.0)
+    overlap_len: float = Field(0.3, ge=0.0, le=0.4)
+    index_algorithm: str = "Auto"
+    checkpointing: bool = True
+
+
+class RvcTrainingResponse(BaseModel):
+    """Applio/RVC 학습 시작 또는 완료 결과."""
+
+    status: str
+    message: str
+    model_name: str
+    model_path: Optional[str] = None
+    index_path: Optional[str] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AudioConvertRequest(BaseModel):
     """오디오 포맷/샘플레이트 변환 요청 스키마다."""
 
@@ -323,9 +432,11 @@ class AudioConvertRequest(BaseModel):
 
 
 class AudioSeparationRequest(BaseModel):
-    """로컬 HPSS 기반 오디오 분리 요청 스키마다."""
+    """AI stem separator 기반 오디오 분리 요청 스키마다."""
 
     audio_path: str = Field(..., min_length=1)
+    model_profile: str = "roformer_vocals"
+    output_format: str = "wav"
 
 
 class AudioTranslateRequest(BaseModel):

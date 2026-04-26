@@ -197,10 +197,13 @@ app/frontend/tsconfig.tsbuildinfo
 .pycache/
 .uv-cache/
 .venv/
+.venv-fish-speech/
 app/backend/.venv*/
 .cache/
 models/
 models/**
+!vendor/fish-speech/fish_speech/models/
+!vendor/fish-speech/fish_speech/models/**
 data/models/
 data/models/**
 data/generated/**
@@ -210,6 +213,8 @@ data/mmaudio/**
 !data/mmaudio/.gitkeep
 data/rvc-models/**
 !data/rvc-models/.gitkeep
+data/stem-separator-models/**
+!data/stem-separator-models/.gitkeep
 data/uploads/*
 !data/uploads/.gitkeep
 data/clone-prompts/**

@@ -1,0 +1,147 @@
+{
+  "schema": "qwen3-tts-demo-private-assets-v1",
+  "target_repo_id": "${PRIVATE_ASSET_REPO_ID}",
+  "target_repo_type": "model",
+  "download_env": {
+    "PRIVATE_ASSET_REPO_ID": "<your-hf-username>/<private-model-assets-repo>",
+    "PRIVATE_ASSET_REVISION": "main",
+    "QWEN_USE_PRIVATE_ASSET_REPO": "1"
+  },
+  "layout": {
+    "models": "models/<model-dir>/...",
+    "fish_speech_s2_pro": "fish-speech/s2-pro/...",
+    "rvc": "rvc-models/<model>.pth and <model>.index",
+    "mmaudio": "mmaudio/nsfw/<checkpoint>.safetensors",
+    "stem_separator": "stem-separator-models/<model>.ckpt and <model>.yaml"
+  },
+  "total_files": 18,
+  "total_size_bytes": 14210883442,
+  "assets": [
+    {
+      "local_path": "data/rvc-models/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index",
+      "repo_path": "rvc-models/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index",
+      "size_bytes": 170866219,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/rvc-models/yui-mix-pro-hq-40k.pth",
+      "repo_path": "rvc-models/yui-mix-pro-hq-40k.pth",
+      "size_bytes": 55229202,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors",
+      "repo_path": "mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors",
+      "size_bytes": 2060050528,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/stem-separator-models/vocals_mel_band_roformer.ckpt",
+      "repo_path": "stem-separator-models/vocals_mel_band_roformer.ckpt",
+      "size_bytes": 913106900,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/stem-separator-models/vocals_mel_band_roformer.yaml",
+      "repo_path": "stem-separator-models/vocals_mel_band_roformer.yaml",
+      "size_bytes": 944,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/.gitattributes",
+      "repo_path": "fish-speech/s2-pro/.gitattributes",
+      "size_bytes": 1619,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/LICENSE.md",
+      "repo_path": "fish-speech/s2-pro/LICENSE.md",
+      "size_bytes": 10360,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/README.md",
+      "repo_path": "fish-speech/s2-pro/README.md",
+      "size_bytes": 5117,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/chat_template.jinja",
+      "repo_path": "fish-speech/s2-pro/chat_template.jinja",
+      "size_bytes": 4116,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/codec.pth",
+      "repo_path": "fish-speech/s2-pro/codec.pth",
+      "size_bytes": 1871099728,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/config.json",
+      "repo_path": "fish-speech/s2-pro/config.json",
+      "size_bytes": 1863,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/model-00001-of-00002.safetensors",
+      "repo_path": "fish-speech/s2-pro/model-00001-of-00002.safetensors",
+      "size_bytes": 4986872984,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/model-00002-of-00002.safetensors",
+      "repo_path": "fish-speech/s2-pro/model-00002-of-00002.safetensors",
+      "size_bytes": 4136876104,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/model.safetensors.index.json",
+      "repo_path": "fish-speech/s2-pro/model.safetensors.index.json",
+      "size_bytes": 32686,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/overview.png",
+      "repo_path": "fish-speech/s2-pro/overview.png",
+      "size_bytes": 3544504,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/special_tokens_map.json",
+      "repo_path": "fish-speech/s2-pro/special_tokens_map.json",
+      "size_bytes": 101864,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/tokenizer.json",
+      "repo_path": "fish-speech/s2-pro/tokenizer.json",
+      "size_bytes": 12217872,
+      "category": "auxiliary",
+      "exists": true
+    },
+    {
+      "local_path": "data/models/fish-speech/s2-pro/tokenizer_config.json",
+      "repo_path": "fish-speech/s2-pro/tokenizer_config.json",
+      "size_bytes": 860832,
+      "category": "auxiliary",
+      "exists": true
+    }
+  ]
+}

@@ -43,6 +43,7 @@ class Storage:
         self.datasets_dir = self.data_dir / "datasets"
         self.finetune_runs_dir = self.data_dir / "finetune-runs"
         self.audio_tools_dir = self.data_dir / "audio-tools"
+        self.s2pro_voices_dir = self.data_dir / "s2-pro-voices"
         self.ensure_dirs()
 
     def ensure_dirs(self) -> None:
@@ -57,6 +58,7 @@ class Storage:
             self.datasets_dir,
             self.finetune_runs_dir,
             self.audio_tools_dir,
+            self.s2pro_voices_dir,
         ]:
             directory.mkdir(parents=True, exist_ok=True)
 

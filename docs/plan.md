@@ -26,11 +26,11 @@
 - `사운드 효과`
 - `보이스 체인저`
 - `오디오 분리`
+- `S2-Pro`
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
-- `VoiceBox Clone`
-- `Clone + Instruct`
+- `가이드`
 
 이 구조를 기준으로 앞으로의 계획도 정리합니다.
 
@@ -45,6 +45,7 @@
 5. 저장 프리셋 위에 `instruct`를 덧입혀 생성하기
 6. 오디오 툴을 독립 기능으로 사용하기
 7. 데이터셋을 만들고 파인튜닝을 실행하기
+8. Fish Speech S2-Pro 계열 태그 기반 생성을 별도 작업실로 제공하기
 
 ## 현재 구조에서 중요한 구분
 
@@ -69,6 +70,17 @@
 
 - `나의 목소리들`에서 관리
 - 저장 프리셋과 최종 학습 모델 중심
+
+### 5. S2-Pro
+
+- Qwen 모델 선택 흐름과 분리
+- 태그 기반 TTS, 참조 음성 복제, 멀티 스피커, 다국어 입력 중심
+- Fish Speech 런타임 연결이 필요한 별도 제품군
+
+### 6. 가이드
+
+- 사용자가 탭별 목적을 앱 안에서 확인
+- 모델 선택 이유, 데이터셋 흐름, 학습 흐름을 문서형 화면으로 제공
 
 ## 현재 우선 과제
 
@@ -246,9 +258,10 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 - `Base` / `CustomVoice` fine-tuning 실행
 - `Applio / RVC` voice changer
 - `MMAudio` sound effects
-- 오디오 분리
+- `audio-separator` 기반 Stem Separator 오디오 분리
 - 품질 검수 스크립트와 보고서
 - VoiceBox 변환 / 재학습 / clone / clone + instruct 실험
+- 개인 Hugging Face 자산 mirror 준비
 
 ## 현재 범위에서 제외되는 것
 
