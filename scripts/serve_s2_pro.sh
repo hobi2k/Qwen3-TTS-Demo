@@ -12,6 +12,8 @@ FISH_SPEECH_COMPILE="${FISH_SPEECH_COMPILE:-0}"
 FISH_SPEECH_HALF="${FISH_SPEECH_HALF:-1}"
 FISH_SPEECH_WORKERS="${FISH_SPEECH_WORKERS:-1}"
 FISH_SPEECH_DECODER_CONFIG="${FISH_SPEECH_DECODER_CONFIG:-modded_dac_vq}"
+FISH_SPEECH_TORCH_VERSION="${FISH_SPEECH_TORCH_VERSION:-2.11.0}"
+FISH_SPEECH_TORCH_PROFILE="${FISH_SPEECH_TORCH_PROFILE:-cu130}"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required but not installed." >&2
@@ -36,9 +38,32 @@ if [[ ! -d "${FISH_SPEECH_VENV}" ]]; then
 fi
 
 source "${FISH_SPEECH_VENV}/bin/activate"
-if ! python -c "import pyrootutils" >/dev/null 2>&1; then
-  echo "Installing Fish Speech into isolated runtime environment."
-  uv pip install -e "${FISH_SPEECH_REPO_ROOT}"
+
+if ! python - "${FISH_SPEECH_TORCH_VERSION}" "${FISH_SPEECH_TORCH_PROFILE}" <<'PY' >/dev/null 2>&1
+import sys
+
+expected_version = sys.argv[1]
+expected_profile = sys.argv[2].lower()
+
+try:
+    import pyrootutils  # noqa: F401
+    import torch
+except Exception:
+    raise SystemExit(1)
+
+if expected_profile not in {"current", "none", "skip"} and not torch.__version__.startswith(expected_version):
+    raise SystemExit(1)
+if expected_profile.startswith("cu"):
+    expected_cuda = expected_profile.removeprefix("cu")
+    if not torch.version.cuda or torch.version.cuda.replace(".", "") != expected_cuda:
+        raise SystemExit(1)
+PY
+then
+  echo "Installing Fish Speech runtime with torch ${FISH_SPEECH_TORCH_VERSION}+${FISH_SPEECH_TORCH_PROFILE}."
+  python "${ROOT_DIR}/scripts/install_fish_speech_runtime.py" \
+    --repo-root "${FISH_SPEECH_REPO_ROOT}" \
+    --torch-version "${FISH_SPEECH_TORCH_VERSION}" \
+    --torch-profile "${FISH_SPEECH_TORCH_PROFILE}"
 fi
 
 cd "${FISH_SPEECH_REPO_ROOT}"

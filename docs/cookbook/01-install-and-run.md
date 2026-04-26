@@ -141,6 +141,8 @@ S2-Pro만 준비하려면:
 - `FISH_SPEECH_MODEL_DIR`
 - `FISH_SPEECH_SERVER_URL`
 - `FISH_SPEECH_MODEL`
+- `FISH_SPEECH_TORCH_VERSION`
+- `FISH_SPEECH_TORCH_PROFILE`
 - `S2_PRO_RUNTIME`
 - `FISH_AUDIO_API_KEY`
 - `FISH_AUDIO_API_URL`
@@ -161,7 +163,16 @@ S2-Pro 기본값은 로컬 Fish Speech 서버입니다. 이 경로는 API 비용
 ./scripts/serve_s2_pro.sh
 ```
 
-`serve_s2_pro.sh`는 `.venv-fish-speech`를 별도로 만들어 Fish Speech를 설치합니다. 메인 `.venv`에 Fish Speech를 직접 설치하면 Torch와 flash-attn 조합이 바뀔 수 있으므로 분리합니다.
+`serve_s2_pro.sh`는 `.venv-fish-speech`를 별도로 만들어 Fish Speech를 설치합니다. Fish Speech 원본은 `torch==2.8.0`을 고정하지만, 이 프로젝트의 스크립트는 torch-family 패키지를 별도로 관리해서 기본값을 `torch 2.11.0 + cu130`으로 맞춥니다. 메인 `.venv`에 Fish Speech를 직접 설치하면 Torch와 flash-attn 조합이 바뀔 수 있으므로 분리합니다.
+
+S2-Pro 로컬 런타임의 torch/CUDA 기본값:
+
+```env
+FISH_SPEECH_TORCH_VERSION=2.11.0
+FISH_SPEECH_TORCH_PROFILE=cu130
+```
+
+다른 환경에서는 `FISH_SPEECH_TORCH_PROFILE=cu129`, `cu128`, `cpu`, `current` 중 하나로 바꿉니다. `current`는 torch 설치를 건드리지 않고 현재 venv에 들어 있는 torch를 그대로 씁니다.
 
 기본 서버 주소:
 

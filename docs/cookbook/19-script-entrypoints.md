@@ -39,12 +39,21 @@ S2-Pro is not a Qwen/VoiceBox training path. It uses local Fish Speech assets:
 - model directory: `data/models/fish-speech/s2-pro`
 - isolated runtime venv: `.venv-fish-speech`
 
-Do not install Fish Speech into the main `.venv`. Fish Speech dependencies can change the Torch version, which breaks the Qwen/flash-attn runtime. Use `scripts/serve_s2_pro.sh`; it creates and uses the isolated runtime environment.
+Do not install Fish Speech into the main `.venv`. Fish Speech upstream pins `torch==2.8.0`, which can change the Torch version and break the Qwen/flash-attn runtime. Use `scripts/serve_s2_pro.sh`; it creates and uses the isolated runtime environment, installs the requested torch-family build first, then installs Fish Speech without letting its torch pin downgrade the environment.
 
 ```bash
 ./scripts/download_models.sh s2pro
 ./scripts/serve_s2_pro.sh
 ```
+
+Default local S2-Pro torch line:
+
+```bash
+FISH_SPEECH_TORCH_VERSION=2.11.0
+FISH_SPEECH_TORCH_PROFILE=cu130
+```
+
+The installer behind the server script is `scripts/install_fish_speech_runtime.py`.
 
 `voicebox/` remains as a compatibility layer only. The files there forward to the canonical scripts above so old shell history and old docs do not break, but new implementation work should not happen there.
 

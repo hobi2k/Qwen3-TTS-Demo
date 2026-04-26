@@ -124,7 +124,7 @@ UI의 `Runtime` 선택 값은 각 생성 요청과 voice clone 요청에 함께 
 ./scripts/serve_s2_pro.sh
 ```
 
-`serve_s2_pro.sh`는 메인 `.venv`를 쓰지 않고 `.venv-fish-speech`를 별도로 만듭니다. Fish Speech 의존성과 Qwen/flash-attn 환경을 섞지 않기 위해서입니다.
+`serve_s2_pro.sh`는 메인 `.venv`를 쓰지 않고 `.venv-fish-speech`를 별도로 만듭니다. Fish Speech 의존성과 Qwen/flash-attn 환경을 섞지 않기 위해서입니다. 다만 torch/CUDA 라인은 Qwen 쪽과 맞춰 기본적으로 `torch 2.11.0 + cu130`을 설치합니다.
 
 환경변수:
 
@@ -134,7 +134,17 @@ FISH_SPEECH_MODEL_DIR=data/models/fish-speech/s2-pro
 FISH_SPEECH_MODEL=s2-pro
 FISH_SPEECH_SERVER_URL=http://127.0.0.1:8080
 FISH_SPEECH_TIMEOUT_SEC=180
+FISH_SPEECH_TORCH_VERSION=2.11.0
+FISH_SPEECH_TORCH_PROFILE=cu130
 ```
+
+Fish Speech 원본 `pyproject.toml`은 `torch==2.8.0`을 고정합니다. 이 프로젝트는 `scripts/install_fish_speech_runtime.py`로 다음 순서로 설치해 cu130 환경을 유지합니다.
+
+1. `torch==2.11.0+cu130`, `torchaudio==2.11.0+cu130`을 먼저 설치합니다.
+2. Fish Speech의 일반 의존성을 설치하되 `torch`, `torchaudio`, `torchvision` pin은 제외합니다.
+3. Fish Speech 패키지는 `uv pip install --no-deps -e vendor/fish-speech`로 설치합니다.
+
+다른 CUDA wheel을 쓰려면 `FISH_SPEECH_TORCH_PROFILE`을 `cu129`, `cu128`, `cpu`, `current`로 바꿉니다. `current`는 이미 설치된 torch를 유지해야 할 때만 사용합니다.
 
 ## Fish Audio API 연결
 
