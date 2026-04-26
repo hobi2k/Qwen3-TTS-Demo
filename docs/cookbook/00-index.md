@@ -9,7 +9,7 @@
 
 - `app/frontend`는 먼저 `npm run build`
 - `FastAPI`가 `/api/*`와 빌드된 프런트 페이지를 함께 제공
-- `vite dev`는 선택적 개발 모드
+- `next dev`는 선택적 개발 모드
 
 ## 추천 읽기 순서
 

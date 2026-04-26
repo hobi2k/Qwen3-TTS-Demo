@@ -115,7 +115,7 @@ select:focus {
 
 .brand-mark {
   display: inline-flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 2px;
   height: 16px;
 }
@@ -1794,7 +1794,7 @@ label {
 
 .audio-asset-card__header {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
@@ -2154,7 +2154,7 @@ label {
 
 .sound-effects-top {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
 }
@@ -2318,7 +2318,7 @@ label {
 
 .mini-waveform {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 3px;
   min-width: 360px;
   height: 30px;

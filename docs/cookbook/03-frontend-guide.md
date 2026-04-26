@@ -4,7 +4,7 @@
 
 기준은 “내부 구현이 아니라 사용자가 어떤 작업을 어떤 화면에서 처리하는가”입니다.
 
-현재 기본 운영은 `vite dev`가 아니라, 백엔드가 빌드된 프런트까지 함께 서빙하는 구조입니다.
+현재 프런트엔드는 `Next.js App Router` 기준입니다. 기본 운영은 `next dev`가 아니라, `next build`로 만든 정적 export를 백엔드가 함께 서빙하는 구조입니다.
 즉 프런트 구조 설명은 유지하되, 실행 방식은 `build -> backend serve` 기준으로 이해하면 됩니다.
 
 ## 핵심 원칙
@@ -16,7 +16,8 @@
 
 ## 핵심 파일
 
-- [main.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/main.tsx)
+- [layout.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/app/layout.tsx)
+- [page.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/app/page.tsx)
 - [App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
 - [app-ui.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/app-ui.tsx)
 - [api.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts)
@@ -26,11 +27,11 @@
 ## 실행 기준
 
 - 기본:
-  `npm run build` 후 FastAPI가 정적 프런트까지 함께 제공
+  `npm run build` 후 FastAPI가 `app/frontend/out`의 정적 프런트까지 함께 제공
 - 선택:
-  `VITE_API_TARGET=http://127.0.0.1:<BACKEND_PORT> npm run dev`
+  `BACKEND_PORT=<BACKEND_PORT> npm run dev`
 
-즉 `vite dev`는 개발 편의용이고, 제품형 실행 흐름의 기준은 아닙니다.
+즉 `next dev`는 개발 편의용이고, 제품형 실행 흐름의 기준은 아닙니다.
 
 ## 현재 페이지 구조
 

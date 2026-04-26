@@ -201,16 +201,16 @@ uvicorn app.main:app --host 127.0.0.1 --port 8190
 http://127.0.0.1:8190/
 ```
 
-## 7. 선택 사항: `vite dev`
+## 7. 선택 사항: `next dev`
 
 프런트 HMR이 필요할 때만 별도 개발 서버를 씁니다.
 
 ```bash
 cd app/frontend
-VITE_API_TARGET=http://127.0.0.1:<BACKEND_PORT> npm run dev
+BACKEND_PORT=<BACKEND_PORT> npm run dev
 ```
 
-이 경우 브라우저는 보통 `http://127.0.0.1:5173/`를 열고, API는 `8190`으로 프록시합니다.
+이 경우 브라우저는 보통 `http://127.0.0.1:5173/`를 엽니다. `npm run dev`는 `NEXT_PUBLIC_API_BASE_URL`이 없으면 `BACKEND_PORT` 기준으로 API 주소를 잡습니다.
 
 ## 8. 기본 확인
 

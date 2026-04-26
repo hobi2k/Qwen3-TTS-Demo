@@ -43,7 +43,7 @@ import type {
 } from "./types";
 
 function apiCandidates(path: string): string[] {
-  const configuredBase = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+  const configuredBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
   const candidates = [path];
 
   if (configuredBase) {

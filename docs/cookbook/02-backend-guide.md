@@ -69,12 +69,14 @@
   백엔드 API
 - `/files/*`
   사용자 데이터 정적 파일
+- `/_next/*`
+  Next.js static export 산출물
 - `/assets/*`
-  프런트 빌드 산출물
+  legacy Vite 빌드 산출물 fallback
 - `/`
   빌드된 `index.html`
 
-즉 배포나 로컬 실사용에서는 `vite dev`가 필수가 아닙니다.
+즉 배포나 로컬 실사용에서는 `next dev`가 필수가 아닙니다.
 
 ## 모델 엔진
 

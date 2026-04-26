@@ -90,7 +90,9 @@ JsonDict = Dict[str, Any]
 APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
-FRONTEND_DIST_DIR = REPO_ROOT / "app" / "frontend" / "dist"
+FRONTEND_DIR = REPO_ROOT / "app" / "frontend"
+LEGACY_FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
+NEXT_FRONTEND_OUT_DIR = FRONTEND_DIR / "out"
 UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS"
 DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
 load_dotenv(BACKEND_DIR / ".env")
@@ -450,10 +452,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/files", StaticFiles(directory=storage.data_dir), name="files")
-if FRONTEND_DIST_DIR.exists():
-    assets_dir = FRONTEND_DIST_DIR / "assets"
+
+
+def frontend_build_dir() -> Path:
+    """Return the active built frontend directory.
+
+    Next.js static export writes to ``out``. The legacy Vite build wrote to
+    ``dist``. Keeping the fallback lets older local builds still serve while
+    the project standard moves to Next.
+    """
+
+    if NEXT_FRONTEND_OUT_DIR.exists():
+        return NEXT_FRONTEND_OUT_DIR
+    return LEGACY_FRONTEND_DIST_DIR
+
+
+if frontend_build_dir().exists():
+    assets_dir = frontend_build_dir() / "assets"
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
+    next_dir = frontend_build_dir() / "_next"
+    if next_dir.exists():
+        app.mount("/_next", StaticFiles(directory=next_dir), name="next-static")
 
 
 @app.on_event("startup")
@@ -3435,7 +3455,8 @@ def serve_frontend_root() -> FileResponse:
         Built ``index.html`` when the frontend bundle exists.
     """
 
-    index_path = FRONTEND_DIST_DIR / "index.html"
+    build_dir = frontend_build_dir()
+    index_path = build_dir / "index.html"
     if not index_path.exists():
         raise HTTPException(
             status_code=404,
@@ -3458,11 +3479,12 @@ def serve_frontend_spa(frontend_path: str) -> FileResponse:
     if not frontend_path:
         return serve_frontend_root()
 
-    candidate = FRONTEND_DIST_DIR / frontend_path
+    build_dir = frontend_build_dir()
+    candidate = build_dir / frontend_path
     if candidate.exists() and candidate.is_file():
         return FileResponse(candidate)
 
-    index_path = FRONTEND_DIST_DIR / "index.html"
+    index_path = build_dir / "index.html"
     if not index_path.exists():
         raise HTTPException(
             status_code=404,

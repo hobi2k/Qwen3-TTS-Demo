@@ -275,11 +275,11 @@ uvicorn app.main:app --host 127.0.0.1 --port 8190
 - `http://127.0.0.1:8190/`
 - 같은 서버에서 `/api/*`와 빌드된 프런트를 함께 제공합니다.
 
-프런트 `vite dev`는 선택 사항입니다. 개발 중 HMR이 필요할 때만 사용합니다.
+프런트 개발 서버는 Next.js dev 서버입니다. 개발 중 HMR이 필요할 때만 별도로 사용합니다.
 
 ```bash
 cd app/frontend
-VITE_API_TARGET=http://127.0.0.1:<BACKEND_PORT> npm run dev
+BACKEND_PORT=<BACKEND_PORT> npm run dev
 ```
 
 ## 백엔드 준비와 모델 다운로드

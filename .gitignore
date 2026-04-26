@@ -191,6 +191,8 @@ cython_debug/
 # Frontend
 node_modules/
 app/frontend/dist/
+app/frontend/.next/
+app/frontend/out/
 app/frontend/tsconfig.tsbuildinfo
 
 # Local demo runtime
