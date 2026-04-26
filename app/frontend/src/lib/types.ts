@@ -424,6 +424,17 @@ export interface VoiceChangerRequest {
   embedder_model: string;
 }
 
+export interface VoiceChangerBatchRequest extends Omit<VoiceChangerRequest, "audio_path"> {
+  audio_paths: string[];
+}
+
+export interface VoiceModelBlendRequest {
+  model_name: string;
+  model_path_a: string;
+  model_path_b: string;
+  ratio: number;
+}
+
 export interface RvcTrainingRequest {
   model_name: string;
   dataset_path: string;

@@ -37,9 +37,11 @@ import type {
   UniversalInferenceRequest,
   VoiceBoxCloneRequest,
   VoiceBoxFusionRequest,
+  VoiceChangerBatchRequest,
   VoiceChangerRequest,
   VoiceChangerModelInfo,
   VoiceDesignRequest,
+  VoiceModelBlendRequest,
 } from "./types";
 
 function apiCandidates(path: string): string[] {
@@ -348,6 +350,22 @@ export const api = {
 
   changeVoice(payload: VoiceChangerRequest): Promise<AudioToolResponse> {
     return request<AudioToolResponse>("/api/audio-tools/voice-changer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  changeVoiceBatch(payload: VoiceChangerBatchRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/voice-changer/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  blendVoiceModels(payload: VoiceModelBlendRequest): Promise<RvcTrainingResponse> {
+    return request<RvcTrainingResponse>("/api/audio-tools/voice-models/blend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

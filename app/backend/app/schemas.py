@@ -380,7 +380,7 @@ class SoundEffectRequest(BaseModel):
 
 
 class VoiceChangerRequest(BaseModel):
-    """RVC/Applio 기반 audio-to-audio 보이스 체인저 요청 스키마다."""
+    """Applio/RVC 기반 audio-to-audio 단일 변환 요청 스키마다."""
 
     audio_path: str = Field(..., min_length=1)
     model_path: Optional[str] = None
@@ -394,6 +394,32 @@ class VoiceChangerRequest(BaseModel):
     clean_audio: bool = False
     clean_strength: float = Field(0.7, ge=0.0, le=1.0)
     embedder_model: str = "contentvec"
+
+
+class VoiceChangerBatchRequest(BaseModel):
+    """여러 오디오를 같은 Applio/RVC 모델로 일괄 변환하는 요청."""
+
+    audio_paths: List[str] = Field(default_factory=list)
+    model_path: Optional[str] = None
+    index_path: Optional[str] = None
+    pitch_shift_semitones: float = 0.0
+    f0_method: str = "rmvpe"
+    index_rate: float = Field(0.3, ge=0.0, le=1.0)
+    protect: float = Field(0.33, ge=0.0, le=0.5)
+    split_audio: bool = False
+    f0_autotune: bool = False
+    clean_audio: bool = False
+    clean_strength: float = Field(0.7, ge=0.0, le=1.0)
+    embedder_model: str = "contentvec"
+
+
+class VoiceModelBlendRequest(BaseModel):
+    """두 Applio/RVC 모델을 비율로 섞어 새 모델을 만드는 요청."""
+
+    model_name: str = Field(..., min_length=1, max_length=80)
+    model_path_a: str = Field(..., min_length=1)
+    model_path_b: str = Field(..., min_length=1)
+    ratio: float = Field(0.5, ge=0.0, le=1.0)
 
 
 class RvcTrainingRequest(BaseModel):
@@ -466,7 +492,7 @@ class AudioToolAsset(BaseModel):
 
 
 class AudioToolResponse(BaseModel):
-    """사운드 효과/보이스 체인저/오디오 툴 공통 응답 스키마다."""
+    """사운드 효과/Applio/오디오 툴 공통 응답 스키마다."""
 
     kind: str
     status: str
@@ -488,7 +514,7 @@ class AudioToolCapability(BaseModel):
 
 
 class VoiceChangerModelInfo(BaseModel):
-    """보이스 체인저에서 선택할 수 있는 RVC 모델 메타데이터."""
+    """Applio 변환에서 선택할 수 있는 RVC 모델 메타데이터."""
 
     id: str
     label: str

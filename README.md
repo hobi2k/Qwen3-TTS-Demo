@@ -28,8 +28,8 @@
   VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용합니다.
 - `사운드 효과`
   `MMAudio` 기반 효과음 생성 화면입니다.
-- `보이스 체인저`
-  `Applio / RVC` 기반 audio-to-audio 변환 화면입니다.
+- `Applio`
+  `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
 - `오디오 분리`
   `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
 - `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS`
@@ -330,7 +330,9 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 - `텍스트 음성 변환`이 메인 TTS 화면입니다.
 - `목소리 복제`와 `목소리 설계`는 다른 작업입니다.
 - `프리셋 기반 생성`은 저장된 스타일의 반복 생성용 화면입니다.
-- `보이스 체인저`는 TTS 재합성이 아니라 `Applio / RVC` 기반 audio-to-audio 변환을 전제로 합니다.
+- `Applio`는 TTS 재합성이 아니라 `Applio / RVC` 기반 audio-to-audio 변환을 전제로 합니다.
+- `Applio 단일 변환`과 `Applio 배치 변환`은 새 업로드 파일과 생성 갤러리 음성을 모두 입력으로 받을 수 있습니다.
+- `Applio 모델 블렌딩`은 이미 준비된 RVC `.pth` 모델 두 개를 섞어 새 변환 모델을 만듭니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 - `app/backend/.env`는 절대경로를 기본값으로 쓰지 않습니다.
 - 모델 경로는 비워 두면 `data/models/*`를 자동으로 찾습니다.

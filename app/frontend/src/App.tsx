@@ -370,7 +370,13 @@ export default function App() {
     clean_strength: "0.7",
     embedder_model: "contentvec",
   });
-  const [voiceChangerWorkflow, setVoiceChangerWorkflow] = useState<"train" | "convert">("convert");
+  const [applioBatchPaths, setApplioBatchPaths] = useState<string[]>([]);
+  const [applioBlendForm, setApplioBlendForm] = useState({
+    model_name: "blended-rvc-voice",
+    model_path_a: "",
+    model_path_b: "",
+    ratio: "0.5",
+  });
   const [rvcTrainForm, setRvcTrainForm] = useState({
     model_name: "my-rvc-voice",
     dataset_path: "",
@@ -684,6 +690,9 @@ export default function App() {
   const selectedCloneModelId = cloneEngine === "voicebox" ? voiceBoxCloneForm.model_id : selectedBaseModelId;
   const selectedVoiceChangerModel = voiceChangerModels.find((item) => item.id === voiceChangerForm.selected_model_id) ?? null;
   const selectedVoiceChangerAsset = voiceChangerForm.audio_path ? audioAssetByPath.get(voiceChangerForm.audio_path) ?? null : null;
+  const selectedApplioBatchAssets = applioBatchPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
+  const selectedBlendModelA = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_a) ?? null;
+  const selectedBlendModelB = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_b) ?? null;
   const selectedDatasetReferenceAsset = datasetForm.ref_audio_path ? audioAssetByPath.get(datasetForm.ref_audio_path) ?? null : null;
   const selectedDatasetSampleAssets = datasetSamples
     .filter((sample) => sample.audio_path.trim())
@@ -1084,8 +1093,59 @@ export default function App() {
       });
       setLastRvcTrainingResult(`${result.model_name} 모델 학습이 끝났습니다.`);
       await refreshAll();
-      setVoiceChangerWorkflow("convert");
+      setActiveTab("applio_convert");
       setMessage("RVC 모델을 만들었습니다. 변환 탭에서 바로 선택할 수 있습니다.");
+    });
+  }
+
+  async function handleVoiceChangerBatchSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.changeVoiceBatch({
+        audio_paths: applioBatchPaths,
+        model_path: voiceChangerForm.model_path || undefined,
+        index_path: voiceChangerForm.index_path || undefined,
+        pitch_shift_semitones: Number(voiceChangerForm.pitch_shift_semitones || "0"),
+        f0_method: voiceChangerForm.f0_method,
+        index_rate: Number(voiceChangerForm.index_rate || "0.3"),
+        protect: Number(voiceChangerForm.protect || "0.33"),
+        split_audio: voiceChangerForm.split_audio,
+        f0_autotune: voiceChangerForm.f0_autotune,
+        clean_audio: voiceChangerForm.clean_audio,
+        clean_strength: Number(voiceChangerForm.clean_strength || "0.7"),
+        embedder_model: voiceChangerForm.embedder_model,
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage(`${result.assets.length}개 음성을 변환했습니다.`);
+    });
+  }
+
+  async function handleVoiceModelBlendSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.blendVoiceModels({
+        model_name: applioBlendForm.model_name,
+        model_path_a: applioBlendForm.model_path_a,
+        model_path_b: applioBlendForm.model_path_b,
+        ratio: Number(applioBlendForm.ratio || "0.5"),
+      });
+      setLastRvcTrainingResult(`${result.model_name} 블렌딩 모델이 생성됐습니다.`);
+      await refreshAll();
+      setMessage("Applio 모델 블렌딩을 완료했습니다.");
+    });
+  }
+
+  function addApplioBatchAsset(asset: AudioAsset) {
+    setApplioBatchPaths((prev) => (prev.includes(asset.path) ? prev : [...prev, asset.path]));
+  }
+
+  async function handleApplioBatchUpload(file: File) {
+    await runAction(async () => {
+      const result = await api.uploadAudio(file);
+      setApplioBatchPaths((prev) => (prev.includes(result.path) ? prev : [...prev, result.path]));
+      await refreshAll();
+      setMessage(`${result.filename} 파일을 배치 변환 목록에 추가했습니다.`);
     });
   }
 
@@ -1603,8 +1663,21 @@ export default function App() {
             <button className={activeTab === "separation" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("separation")} type="button">
               <span>오디오 분리</span>
             </button>
-            <button className={activeTab === "changer" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("changer")} type="button">
-              <span>보이스 체인저</span>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">Applio</span>
+            <button className={activeTab === "applio_train" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_train")} type="button">
+              <span>RVC 모델 학습</span>
+            </button>
+            <button className={activeTab === "applio_convert" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_convert")} type="button">
+              <span>단일 변환</span>
+            </button>
+            <button className={activeTab === "applio_batch" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_batch")} type="button">
+              <span>배치 변환</span>
+            </button>
+            <button className={activeTab === "applio_blend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_blend")} type="button">
+              <span>모델 블렌딩</span>
             </button>
           </div>
 
@@ -3070,18 +3143,9 @@ export default function App() {
         </section>
       ) : null}
 
-      {activeTab === "changer" ? (
+      {activeTab === "applio_train" || activeTab === "applio_convert" ? (
         <section className="workspace workspace--stacked">
-          <div className="subtab-row subtab-row--wide">
-            <button className={voiceChangerWorkflow === "train" ? "subtab is-active" : "subtab"} type="button" onClick={() => setVoiceChangerWorkflow("train")}>
-              RVC 모델 훈련
-            </button>
-            <button className={voiceChangerWorkflow === "convert" ? "subtab is-active" : "subtab"} type="button" onClick={() => setVoiceChangerWorkflow("convert")}>
-              목소리 변환
-            </button>
-          </div>
-
-          {voiceChangerWorkflow === "train" ? (
+          {activeTab === "applio_train" ? (
             <form className="panel voice-changer-panel" onSubmit={handleRvcTrainSubmit}>
               <div className="section-heading">
                 <span className="step-badge">1</span>
@@ -3205,7 +3269,9 @@ export default function App() {
                 RVC 모델 만들기
               </button>
             </form>
-          ) : (
+          ) : null}
+
+          {activeTab === "applio_convert" ? (
             <div className="voice-changer-layout">
               <section className="panel voice-changer-source">
                 <div className="section-heading">
@@ -3327,14 +3393,177 @@ export default function App() {
                 </button>
               </form>
             </div>
-          )}
+          ) : null}
 
           {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
             <section className="panel">
               <h2>방금 변환한 결과</h2>
-              <AudioCard title="보이스 체인저 결과" record={lastAudioToolResult.record} />
+              <AudioCard title="Applio 변환 결과" record={lastAudioToolResult.record} />
             </section>
           ) : null}
+        </section>
+      ) : null}
+
+      {activeTab === "applio_batch" ? (
+        <section className="workspace workspace--stacked">
+          <div className="voice-changer-layout">
+            <section className="panel voice-changer-source">
+              <div className="section-heading">
+                <span className="step-badge">1</span>
+                <div>
+                  <h2>배치 변환할 오디오</h2>
+                  <p>생성 갤러리에서 여러 음성을 고르거나 새 파일을 업로드해 같은 RVC 모델로 한 번에 변환합니다.</p>
+                </div>
+              </div>
+              <label className="upload-field upload-field--compact">
+                배치에 파일 추가
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleApplioBatchUpload(file);
+                    }
+                  }}
+                />
+              </label>
+              <ServerAudioPicker assets={audioAssets} selectedPath="" onSelect={addApplioBatchAsset} />
+            </section>
+
+            <form className="panel voice-changer-panel" onSubmit={handleVoiceChangerBatchSubmit}>
+              <div className="section-heading">
+                <span className="step-badge">2</span>
+                <div>
+                  <h2>같은 목소리로 일괄 변환</h2>
+                  <p>목소리 모델과 변환 설정은 단일 변환과 동일하게 적용됩니다.</p>
+                </div>
+              </div>
+              <div className="selected-source-card">
+                <span className="meta-label">선택된 오디오</span>
+                <strong>{applioBatchPaths.length}개</strong>
+                <div className="voice-card-actions">
+                  <button onClick={() => setApplioBatchPaths([])} type="button">목록 비우기</button>
+                </div>
+                <div className="audio-asset-list">
+                  {selectedApplioBatchAssets.map((asset) => (
+                    <article className="audio-asset-card is-selected" key={asset.path}>
+                      <div className="audio-asset-card__header">
+                        <div>
+                          <strong>{asset.filename}</strong>
+                          <span>{asset.source === "generated" ? "생성 갤러리" : "업로드"}</span>
+                        </div>
+                        <button className="secondary-button" onClick={() => setApplioBatchPaths((prev) => prev.filter((path) => path !== asset.path))} type="button">
+                          제거
+                        </button>
+                      </div>
+                      <audio controls className="audio-card__player" src={asset.url} />
+                    </article>
+                  ))}
+                </div>
+              </div>
+              <label>
+                바꿀 목소리
+                <select value={voiceChangerForm.selected_model_id} onChange={(event) => handleSelectVoiceChangerModel(event.target.value)}>
+                  <option value="">목소리 선택</option>
+                  {voiceChangerModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="field-row">
+                <label>
+                  음정 추적 방식
+                  <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
+                    <option value="rmvpe">RMVPE - 기본 권장</option>
+                    <option value="fcpe">FCPE - 빠른 처리</option>
+                    <option value="crepe">CREPE - 선율 민감</option>
+                  </select>
+                </label>
+                <label>
+                  음색 반영 강도
+                  <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
+                </label>
+                <label>
+                  발음 보존
+                  <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
+                </label>
+              </div>
+              <button className="primary-button" disabled={loading || !voiceChangerAvailable || !applioBatchPaths.length || !voiceChangerForm.model_path} type="submit">
+                {applioBatchPaths.length}개 변환
+              </button>
+            </form>
+          </div>
+
+          {lastAudioToolResult?.kind === "voice_changer_batch" ? (
+            <section className="panel">
+              <h2>배치 변환 결과</h2>
+              <div className="audio-grid">
+                {lastAudioToolResult.assets.map((asset) => (
+                  <article className="audio-asset-card" key={asset.path}>
+                    <strong>{asset.filename}</strong>
+                    <audio controls src={asset.url} />
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeTab === "applio_blend" ? (
+        <section className="workspace workspace--stacked">
+          <form className="panel voice-changer-panel" onSubmit={handleVoiceModelBlendSubmit}>
+            <div className="section-heading">
+              <span className="step-badge">1</span>
+              <div>
+                <h2>두 RVC 모델을 섞어 새 목소리 만들기</h2>
+                <p>Applio Voice Blender처럼 모델 A와 모델 B의 가중치를 비율로 합쳐 새로운 `.pth` 모델을 만듭니다.</p>
+              </div>
+            </div>
+            <label>
+              새 모델 이름
+              <input value={applioBlendForm.model_name} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_name: event.target.value })} />
+            </label>
+            <div className="field-row">
+              <label>
+                모델 A
+                <select value={applioBlendForm.model_path_a} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_path_a: event.target.value })}>
+                  <option value="">모델 선택</option>
+                  {voiceChangerModels.map((model) => (
+                    <option key={model.model_path} value={model.model_path}>{model.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                모델 B
+                <select value={applioBlendForm.model_path_b} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_path_b: event.target.value })}>
+                  <option value="">모델 선택</option>
+                  {voiceChangerModels.map((model) => (
+                    <option key={model.model_path} value={model.model_path}>{model.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                A 반영 비율
+                <input value={applioBlendForm.ratio} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, ratio: event.target.value })} />
+              </label>
+            </div>
+            <div className="voice-model-summary">
+              <span className="voice-model-summary__avatar" aria-hidden="true" />
+              <div>
+                <span className="meta-label">블렌딩 미리보기</span>
+                <strong>{selectedBlendModelA?.label || "모델 A"} + {selectedBlendModelB?.label || "모델 B"}</strong>
+                <p>비율 {applioBlendForm.ratio || "0.5"}는 모델 A 쪽 성향을 얼마나 강하게 둘지 결정합니다.</p>
+              </div>
+            </div>
+            {lastRvcTrainingResult ? <p className="field-hint">{lastRvcTrainingResult}</p> : null}
+            <button className="primary-button" disabled={loading || !applioBlendForm.model_name || !applioBlendForm.model_path_a || !applioBlendForm.model_path_b} type="submit">
+              모델 블렌딩
+            </button>
+          </form>
         </section>
       ) : null}
 
@@ -3378,7 +3607,7 @@ export default function App() {
                   분리 모델
                   <select value={audioSeparationForm.model_profile} onChange={(event) => setAudioSeparationForm({ ...audioSeparationForm, model_profile: event.target.value })}>
                     <option value="roformer_vocals">Roformer vocals - 최신 보컬 분리</option>
-                    <option value="vocal_rvc">RVC vocal preset - 보이스 체인저용 보컬 추출</option>
+                    <option value="vocal_rvc">RVC vocal preset - Applio 변환용 보컬 추출</option>
                     <option value="demucs_4stem">Demucs 4-stem - 보컬/드럼/베이스/기타</option>
                   </select>
                 </label>

@@ -380,6 +380,79 @@ class ApplioVoiceChanger:
             "applio_root": str(self.applio_root),
         }
 
+    def blend_models(
+        self,
+        *,
+        model_name: str,
+        model_path_a: str,
+        model_path_b: str,
+        ratio: float,
+    ) -> Tuple[Path, Dict[str, Any]]:
+        """Blend two Applio/RVC model weights into a new voice model.
+
+        Args:
+            model_name: Name for the blended model.
+            model_path_a: First `.pth` model path.
+            model_path_b: Second `.pth` model path.
+            ratio: Weight applied to the first model, from 0.0 to 1.0.
+
+        Returns:
+            Path to the blended `.pth` and execution metadata.
+        """
+
+        if not self.is_available():
+            raise VoiceChangerError(f"Applio repository not found at {self.applio_root}")
+
+        safe_model_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", model_name.strip()).strip("-_.")
+        if not safe_model_name:
+            raise VoiceChangerError("Blended model name is required.")
+
+        actual_model_a = resolve_voice_model_path(self.project_root, model_path_a, "APPLIO_BLEND_MODEL_A")
+        actual_model_b = resolve_voice_model_path(self.project_root, model_path_b, "APPLIO_BLEND_MODEL_B")
+        rounded_ratio = round(max(0.0, min(1.0, float(ratio))), 1)
+
+        command = [
+            self.python_executable,
+            str((self.applio_root / "core.py").resolve()),
+            "model_blender",
+            "--model_name",
+            safe_model_name,
+            "--pth_path_1",
+            str(actual_model_a),
+            "--pth_path_2",
+            str(actual_model_b),
+            "--ratio",
+            str(rounded_ratio),
+        ]
+        completed = subprocess.run(
+            command,
+            cwd=str(self.applio_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise VoiceChangerError(
+                "Applio model blending failed with exit code "
+                f"{completed.returncode}.\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}"
+            )
+
+        blended_path = self.applio_root / "logs" / f"{safe_model_name}.pth"
+        if not blended_path.exists():
+            raise VoiceChangerError(f"Applio did not create blended model: {blended_path}")
+
+        return blended_path, {
+            "engine": "applio_rvc",
+            "strategy": "model_blending",
+            "model_name": safe_model_name,
+            "model_path_a": str(actual_model_a),
+            "model_path_b": str(actual_model_b),
+            "ratio": rounded_ratio,
+            "python_executable": self.python_executable,
+            "applio_root": str(self.applio_root),
+            "stdout": completed.stdout,
+        }
+
 
 def applio_voice_changer_available(repo_root: Path) -> bool:
     """Return whether an Applio checkout can be used from this project.

@@ -51,7 +51,7 @@
 - `data/generated`
   생성 오디오와 메타데이터
 - `data/audio-tools`
-  사운드 효과 / 보이스 체인저 / 분리 메타데이터
+  사운드 효과 / Applio 변환 / 분리 메타데이터
 - `data/clone-prompts`
   clone prompt 자산
 - `data/presets`
@@ -101,7 +101,7 @@
 
 ## 오디오 툴 엔진
 
-### 보이스 체인저
+### Applio / RVC
 
 [`voice_changer.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/voice_changer.py)의 `ApplioVoiceChanger`가 담당합니다.
 
@@ -111,11 +111,16 @@
 - `.pth + .index` 모델 쌍 필요
 - repo root는 기본 `vendor/Applio`
 - Python 실행 경로는 override 가능
+- `POST /api/audio-tools/voice-changer`는 단일 음성 변환
+- `POST /api/audio-tools/voice-changer/batch`는 여러 음성을 같은 RVC 설정으로 변환
+- `POST /api/audio-tools/voice-models/train`은 Applio RVC 학습 실행
+- `POST /api/audio-tools/voice-models/blend`는 두 RVC 모델을 섞어 새 `.pth` 모델 생성
 
 중요:
 
 - 이 기능은 “전사 후 다시 읽기”가 아닙니다.
 - 실제 voice conversion 전용 기능입니다.
+- 단일 변환과 배치 변환 모두 업로드된 파일 경로와 생성 갤러리 파일 경로를 입력으로 받을 수 있습니다.
 
 ### 사운드 효과
 

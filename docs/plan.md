@@ -24,7 +24,10 @@
 - `목소리 설계`
 - `프리셋 기반 생성`
 - `사운드 효과`
-- `보이스 체인저`
+- `Applio RVC 모델 학습`
+- `Applio 단일 변환`
+- `Applio 배치 변환`
+- `Applio 모델 블렌딩`
 - `오디오 분리`
 - `S2-Pro`
 - `데이터셋 만들기`
@@ -256,7 +259,7 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 - stock `CustomVoice`, `Base`, `VoiceDesign`
 - clone prompt / preset 저장과 재사용
 - `Base` / `CustomVoice` fine-tuning 실행
-- `Applio / RVC` voice changer
+- `Applio / RVC` 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩
 - `MMAudio` sound effects
 - `audio-separator` 기반 Stem Separator 오디오 분리
 - 품질 검수 스크립트와 보고서

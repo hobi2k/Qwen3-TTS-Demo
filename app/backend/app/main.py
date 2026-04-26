@@ -72,7 +72,9 @@ from .schemas import (
     PresetGenerateRequest,
     AudioTranslateRequest,
     UniversalInferenceRequest,
+    VoiceChangerBatchRequest,
     VoiceChangerRequest,
+    VoiceModelBlendRequest,
     VoiceCloneRequest,
     VoiceDesignRequest,
 )
@@ -1583,7 +1585,7 @@ def migrate_preset_records() -> None:
 def migrate_audio_tool_jobs() -> None:
     """오디오 도구 메타데이터와 산출물 경로를 읽기 쉬운 구조로 정리한다.
 
-    사운드 효과, 보이스 체인저, 오디오 분리처럼 새로 늘어난 기능은 산출물 종류가
+    사운드 효과, Applio 변환, 오디오 분리처럼 새로 늘어난 기능은 산출물 종류가
     섞이기 쉽다. 이 정리 단계는 각 작업 기록과 산출물 파일을 함께 옮겨서 기능별
     카테고리와 읽을 수 있는 파일명 규칙을 강제한다.
     """
@@ -1675,7 +1677,7 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
         ),
         AudioToolCapability(
             key="voice_changer",
-            label="보이스 체인저",
+            label="Applio 변환",
             description="RVC/Applio로 기존 음성의 타이밍을 유지한 채 음색을 바꿉니다.",
             available=applio_voice_changer_available(REPO_ROOT) and bool(available_voice_models),
             notes="Applio 저장소만으로는 부족하고, RVC 모델(.pth)과 인덱스(.index)가 함께 있어야 합니다.",
@@ -2066,7 +2068,7 @@ def audio_tool_voice_models() -> List[VoiceChangerModelInfo]:
 def train_rvc_voice_model(payload: RvcTrainingRequest) -> RvcTrainingResponse:
     """Applio/RVC 목소리 모델을 데이터 폴더에서 학습한다.
 
-    이 엔드포인트는 보이스 체인저의 '모델 만들기' 단계다. 결과로 생성된
+    이 엔드포인트는 Applio의 RVC 모델 만들기 단계다. 결과로 생성된
     `.pth`와 `.index`는 같은 화면의 변환 탭에서 바로 선택할 수 있다.
     """
     if not voice_changer.is_available():
@@ -2227,6 +2229,103 @@ def change_voice(payload: VoiceChangerRequest) -> AudioToolResponse:
         message="Voice converted from source audio.",
         assets=[asset],
         record=record,
+    )
+
+
+@app.post("/api/audio-tools/voice-changer/batch", response_model=AudioToolResponse)
+def change_voice_batch(payload: VoiceChangerBatchRequest) -> AudioToolResponse:
+    """Applio/RVC로 여러 오디오를 같은 목소리 모델로 일괄 변환한다."""
+
+    if not voice_changer.is_available():
+        raise HTTPException(status_code=400, detail="Applio repository is not available for batch voice conversion.")
+    if not payload.audio_paths:
+        raise HTTPException(status_code=400, detail="At least one source audio is required for batch conversion.")
+
+    assets: List[Any] = []
+    first_record: Optional[GenerationRecord] = None
+    converted_paths: List[str] = []
+    for index, source_audio in enumerate(payload.audio_paths, start=1):
+        output_path = generated_audio_path("voice-changer", f"batch voice conversion {index}", "wav")
+        try:
+            audio_path, meta = voice_changer.transform(
+                input_audio_path=source_audio,
+                output_path=output_path,
+                model_path=payload.model_path,
+                index_path=payload.index_path,
+                pitch_shift_semitones=payload.pitch_shift_semitones,
+                f0_method=payload.f0_method,
+                index_rate=payload.index_rate,
+                protect=payload.protect,
+                split_audio=payload.split_audio,
+                f0_autotune=payload.f0_autotune,
+                clean_audio=payload.clean_audio,
+                clean_strength=payload.clean_strength,
+                embedder_model=payload.embedder_model,
+            )
+        except VoiceChangerError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Batch voice changer failed: {exc}") from exc
+
+        record = write_audio_tool_generation_record(
+            mode="voice_changer",
+            text=f"batch voice conversion {index}",
+            language="N/A",
+            audio_path=audio_path,
+            meta={
+                "tool_kind": "voice_changer_batch",
+                "source_audio_path": source_audio,
+                "batch_index": index,
+                **meta,
+            },
+        )
+        if first_record is None:
+            first_record = record
+        asset = create_audio_tool_asset(audio_path, f"voice changed speech {index}")
+        assets.append(asset)
+        converted_paths.append(asset.path)
+
+    save_audio_tool_job(
+        kind="voice_changer_batch",
+        input_summary=f"{len(payload.audio_paths)} files",
+        message="Batch voice conversion completed.",
+        assets=assets,
+    )
+    return AudioToolResponse(
+        kind="voice_changer_batch",
+        status="completed",
+        message=f"{len(converted_paths)} files converted.",
+        assets=assets,
+        record=first_record,
+    )
+
+
+@app.post("/api/audio-tools/voice-models/blend", response_model=RvcTrainingResponse)
+def blend_voice_models(payload: VoiceModelBlendRequest) -> RvcTrainingResponse:
+    """두 Applio/RVC 모델을 섞어 새 voice model을 만든다."""
+
+    if not voice_changer.is_available():
+        raise HTTPException(status_code=400, detail="Applio repository is not available for model blending.")
+
+    try:
+        model_path, meta = voice_changer.blend_models(
+            model_name=payload.model_name,
+            model_path_a=payload.model_path_a,
+            model_path_b=payload.model_path_b,
+            ratio=payload.ratio,
+        )
+    except VoiceChangerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Voice model blending failed: {exc}") from exc
+
+    return RvcTrainingResponse(
+        status="completed",
+        message="Applio voice model blended. You can now use it in conversion.",
+        model_name=str(meta.get("model_name") or payload.model_name),
+        model_path=str(model_path),
+        index_path=None,
+        meta=meta,
     )
 
 

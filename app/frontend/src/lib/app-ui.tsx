@@ -9,7 +9,10 @@ export type TabKey =
   | "design"
   | "projects"
   | "effects"
-  | "changer"
+  | "applio_train"
+  | "applio_convert"
+  | "applio_batch"
+  | "applio_blend"
   | "separation"
   | "dataset"
   | "training"
@@ -77,10 +80,25 @@ export const PRODUCT_PAGES = {
     title: "사운드 효과",
     description: "영문 프롬프트로 효과음을 생성합니다.",
   },
-  changer: {
-    label: "보이스 체인저",
-    title: "보이스 체인저",
-    description: "Applio/RVC로 기존 음성의 음색을 바꿉니다.",
+  applio_train: {
+    label: "RVC 모델 학습",
+    title: "Applio 모델 학습",
+    description: "목표 목소리 데이터로 RVC/Applio voice model을 만듭니다.",
+  },
+  applio_convert: {
+    label: "단일 변환",
+    title: "Applio 단일 변환",
+    description: "업로드 또는 생성 갤러리 음성 하나를 RVC 모델로 변환합니다.",
+  },
+  applio_batch: {
+    label: "배치 변환",
+    title: "Applio 배치 변환",
+    description: "여러 음성을 같은 RVC 모델로 일괄 변환합니다.",
+  },
+  applio_blend: {
+    label: "모델 블렌딩",
+    title: "Applio 모델 블렌딩",
+    description: "두 RVC 모델을 비율로 섞어 새로운 목소리 모델을 만듭니다.",
   },
   separation: {
     label: "오디오 분리",
@@ -377,12 +395,12 @@ export const GUIDE_SECTIONS = [
   {
     title: "오디오 분리",
     summary: "음악이나 음성을 보컬/반주 등으로 분리합니다.",
-    steps: ["현재는 Stem Separator 계열 프로필을 사용합니다.", "분리한 보컬은 보이스 체인저나 RVC 학습 데이터로 이어서 사용할 수 있습니다."],
+    steps: ["현재는 Stem Separator 계열 프로필을 사용합니다.", "분리한 보컬은 Applio 단일 변환이나 RVC 학습 데이터로 이어서 사용할 수 있습니다."],
   },
   {
-    title: "보이스 체인저",
-    summary: "RVC 모델을 학습한 뒤 원본 보컬의 음색을 바꿉니다.",
-    steps: ["RVC 학습 탭에서 바꿀 목소리 모델을 먼저 만듭니다.", "변환 탭에서 원본 보컬과 RVC 목소리 모델을 선택합니다.", "pitch, index rate, protect 값은 원본 보존과 변환 강도를 조절합니다."],
+    title: "Applio",
+    summary: "RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 한 섹션에서 처리합니다.",
+    steps: ["RVC 모델 학습에서 바꿀 목소리 모델을 먼저 만듭니다.", "단일 변환과 배치 변환은 업로드 파일과 생성 갤러리 음성을 모두 입력으로 받을 수 있습니다.", "모델 블렌딩은 두 RVC 모델을 비율로 섞어 새 변환 모델을 만듭니다."],
   },
   {
     title: "데이터셋 만들기",
@@ -619,7 +637,8 @@ export function getModeLabel(mode: string): string {
     voicebox_clone: "VoiceBox 복제",
     voicebox_clone_instruct: "VoiceBox 지시 생성",
     sound_effect: "사운드 효과",
-    voice_changer: "보이스 체인저",
+    voice_changer: "Applio 단일 변환",
+    voice_changer_batch: "Applio 배치 변환",
     audio_converter: "오디오 변환",
     audio_separation: "오디오 분리",
     audio_translation: "전사/번역",
@@ -642,7 +661,8 @@ export function getModelDisplayLabel(model: ModelInfo): string {
 export function getAudioToolJobLabel(kind: string): string {
   const labels: Record<string, string> = {
     sound_effect: "사운드 효과",
-    voice_changer: "보이스 체인저",
+    voice_changer: "Applio 단일 변환",
+    voice_changer_batch: "Applio 배치 변환",
     audio_converter: "오디오 변환",
     audio_separation: "오디오 분리",
     audio_translation: "전사/번역",
@@ -676,7 +696,8 @@ export function getRecordDisplayTitle(record: GenerationRecord): string {
 
 export function getAudioToolJobDisplayTitle(job: AudioToolJob): string {
   if (job.kind === "sound_effect") return "사운드 효과";
-  if (job.kind === "voice_changer") return "보이스 체인저";
+  if (job.kind === "voice_changer") return "Applio 단일 변환";
+  if (job.kind === "voice_changer_batch") return "Applio 배치 변환";
   if (job.kind === "audio_converter") return "오디오 변환";
   if (job.kind === "audio_separation") return "오디오 분리";
   if (job.kind === "audio_translation") return "전사와 재합성";
