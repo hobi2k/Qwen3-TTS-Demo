@@ -153,8 +153,9 @@ data/datasets/mai_ko_full/
 현재 사이드바는 아래처럼 나눕니다.
 
 - `홈`: 홈, 나의 목소리들, 생성 갤러리
-- `Qwen`: Qwen3-TTS 기반 생성, 프리셋, 오디오 작업
+- `Qwen`: Qwen3-TTS 기반 목소리 설계, 텍스트 음성 변환, 복제, 프리셋 기반 생성
 - `S2-Pro`: Fish Speech S2-Pro 전용 작업실
+- `MMAudio`: 사운드 효과 생성
 - `Applio`: RVC 변환, Stem Separator 분리
 - `Music`: ACE-Step 작곡
 - `Qwen 학습`: 데이터셋 만들기, 학습 실행, VoiceBox 융합

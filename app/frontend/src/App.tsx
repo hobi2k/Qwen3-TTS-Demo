@@ -1741,9 +1741,6 @@ export default function App() {
             <button className={activeTab === "projects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("projects")} type="button">
               <span>프리셋 기반 생성</span>
             </button>
-            <button className={activeTab === "effects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("effects")} type="button">
-              <span>사운드 효과</span>
-            </button>
           </div>
 
           <div className="sidebar__section">
@@ -1759,6 +1756,13 @@ export default function App() {
             </button>
             <button className={activeTab === "s2pro_multilingual" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
               <span>다국어 TTS</span>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">MMAudio</span>
+            <button className={activeTab === "effects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("effects")} type="button">
+              <span>사운드 효과</span>
             </button>
           </div>
 
