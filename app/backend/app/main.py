@@ -662,6 +662,12 @@ def get_generation_record(record_id: str) -> JsonDict:
 
     payload = storage.get_record(storage.generated_dir, record_id)
     if not payload:
+        # Older generated audio may not have a JSON metadata record. The gallery
+        # still materializes those files through list_generation_records(), so
+        # deletion and reuse should be able to resolve them by their synthetic id.
+        for record in list_generation_records():
+            if record.id == record_id:
+                return record.model_dump()
         raise HTTPException(status_code=404, detail="Generation record not found.")
     return payload
 
