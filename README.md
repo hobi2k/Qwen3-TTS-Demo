@@ -34,7 +34,7 @@
   `오디오 분리`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리하며, 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
 - `ACE-Step 작곡`
-  장르/분위기/악기 태그와 가사 구조를 입력해 완성형 음악을 만들고 생성 갤러리에 저장합니다.
+  ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 모두 한 화면에서 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -308,6 +308,17 @@ BACKEND_PORT=<BACKEND_PORT> npm run dev
 - `Qwen3-TTS-12Hz-0.6B/1.7B-CustomVoice`
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
 - `whisper-large-v3`
+- Fish Speech S2-Pro 로컬 모델
+- Applio/RVC 데모 모델과 index
+- MMAudio 일반/NSFW 효과음 모델
+- Stem separator 모델
+- ACE-Step-1.5 소스, 전용 `.venv-ace-step`, 음악 생성 checkpoint
+
+ACE-Step은 메인 `.venv`와 의존성이 달라 별도 `.venv-ace-step`에 설치합니다.
+스크립트는 `uv pip install --python .venv-ace-step/bin/python -e vendor/ACE-Step`를 우선 사용하고,
+`HF_HUB_ENABLE_HF_TRANSFER=1`일 때 필요한 `hf_transfer`도 ACE-Step venv 안에 설치합니다.
+ACE-Step subprocess의 Hugging Face / Transformers / matplotlib 캐시는 `data/cache/ace-step`에
+저장되어 홈 디렉터리 캐시 권한 문제를 피합니다.
 - 기본 RVC `.pth + .index` 자산
 - `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
 - Stem Separator `vocals_mel_band_roformer.ckpt`

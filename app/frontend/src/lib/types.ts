@@ -189,6 +189,7 @@ export interface BootstrapResponse {
   gallery?: unknown[];
   audio_assets: AudioAsset[];
   history: GenerationRecord[];
+  clone_prompts: ClonePromptRecord[];
   presets: CharacterPreset[];
   datasets: FineTuneDataset[];
   finetune_runs: FineTuneRun[];
@@ -409,31 +410,200 @@ export interface SoundEffectRequest {
   negative_prompt?: string;
 }
 
-export interface MusicCompositionRequest {
-  output_name: string;
+export interface AceStepLoraRef {
+  path: string;
+  adapter_name?: string;
+  scale?: number;
+}
+
+export interface AceStepBaseRequest {
+  output_name?: string;
+  caption?: string;
+  prompt?: string;
+  lyrics?: string;
+  instrumental?: boolean;
+  duration?: number;
+  bpm?: number | null;
+  keyscale?: string;
+  timesignature?: string;
+  vocal_language?: string;
+  inference_steps?: number;
+  guidance_scale?: number;
+  seeds?: string;
+  use_random_seed?: boolean;
+  batch_size?: number;
+  audio_format?: string;
+  config_path?: string | null;
+  lm_model_path?: string | null;
+  lm_backend?: string | null;
+  device?: string;
+  cpu_offload?: boolean;
+  offload_dit_to_cpu?: boolean;
+  compile_model?: boolean;
+  quantization?: string | null;
+  vae_checkpoint?: string | null;
+  use_adg?: boolean;
+  cfg_interval_start?: number;
+  cfg_interval_end?: number;
+  shift?: number;
+  infer_method?: "ode" | "sde";
+  sampler_mode?: "euler" | "heun" | "pingpong";
+  thinking?: boolean;
+  lm_temperature?: number;
+  lm_cfg_scale?: number;
+  lm_top_k?: number;
+  lm_top_p?: number;
+  lm_negative_prompt?: string;
+  use_cot_metas?: boolean;
+  use_cot_caption?: boolean;
+  use_cot_lyrics?: boolean;
+  use_cot_language?: boolean;
+  use_constrained_decoding?: boolean;
+  enable_normalization?: boolean;
+  normalization_db?: number;
+  fade_in_duration?: number;
+  fade_out_duration?: number;
+  loras?: AceStepLoraRef[];
+}
+
+export interface MusicCompositionRequest extends AceStepBaseRequest {
   prompt: string;
+  audio_duration?: number;
+  infer_step?: number;
+  scheduler_type?: string;
+  cfg_type?: string;
+  omega_scale?: number;
+  manual_seeds?: string;
+  guidance_interval?: number;
+  guidance_interval_decay?: number;
+  min_guidance_scale?: number;
+  use_erg_tag?: boolean;
+  use_erg_lyric?: boolean;
+  use_erg_diffusion?: boolean;
+  oss_steps?: string;
+  guidance_scale_text?: number;
+  guidance_scale_lyric?: number;
+  bf16?: boolean;
+  torch_compile?: boolean;
+  overlapped_decode?: boolean;
+  device_id?: number;
+}
+
+export interface AceStepCoverRequest extends AceStepBaseRequest {
+  src_audio: string;
+  audio_cover_strength?: number;
+  cover_noise_strength?: number;
+}
+
+export interface AceStepRepaintRequest extends AceStepBaseRequest {
+  src_audio: string;
+  repainting_start: number;
+  repainting_end: number;
+  repaint_mode?: "conservative" | "balanced" | "aggressive";
+  repaint_strength?: number;
+  repaint_latent_crossfade_frames?: number;
+  repaint_wav_crossfade_sec?: number;
+  chunk_mask_mode?: "auto" | "explicit";
+}
+
+export interface AceStepExtendRequest extends AceStepBaseRequest {
+  src_audio: string;
+  complete_tracks?: string;
+}
+
+export interface AceStepExtractRequest extends AceStepBaseRequest {
+  src_audio: string;
+  extract_track: string;
+}
+
+export interface AceStepLegoRequest extends AceStepBaseRequest {
+  src_audio: string;
+  lego_track: string;
+}
+
+export interface AceStepCompleteRequest extends AceStepBaseRequest {
+  src_audio: string;
+  complete_tracks: string;
+}
+
+export interface AceStepUnderstandRequest {
+  output_name?: string;
+  src_audio: string;
+  audio_codes?: string;
+  config_path?: string;
+  lm_model_path?: string;
+  lm_backend?: string;
+  device?: string;
+  cpu_offload?: boolean;
+  lm_temperature?: number;
+  lm_top_k?: number;
+  lm_top_p?: number;
+  repetition_penalty?: number;
+  use_constrained_decoding?: boolean;
+}
+
+export interface AceStepCreateSampleRequest {
+  output_name?: string;
+  query: string;
+  instrumental?: boolean;
+  vocal_language?: string;
+  config_path?: string;
+  lm_model_path?: string;
+  lm_backend?: string;
+  device?: string;
+  cpu_offload?: boolean;
+  lm_temperature?: number;
+  lm_top_k?: number;
+  lm_top_p?: number;
+}
+
+export interface AceStepFormatSampleRequest {
+  output_name?: string;
+  caption?: string;
+  lyrics?: string;
+  bpm?: number | null;
+  duration?: number | null;
+  keyscale?: string;
+  timesignature?: string;
+  vocal_language?: string;
+  config_path?: string;
+  lm_model_path?: string;
+  lm_backend?: string;
+  device?: string;
+  cpu_offload?: boolean;
+  lm_temperature?: number;
+  lm_top_k?: number;
+  lm_top_p?: number;
+}
+
+export interface AceStepRuntimeResponse {
+  available: boolean;
+  notes: string;
+  ace_step_root: string;
+  python_executable: string;
+  checkpoint_path: string;
+  lora_dir: string;
+  model_variants: { name: string; available: boolean }[];
+  lm_models: { name: string; available: boolean }[];
+  lora_adapters: { name: string; path: string; size_bytes: number | null; relative_path: string }[];
+  track_names: string[];
+  supported_tasks: string[];
+}
+
+export interface AceStepUnderstandResponse {
+  success: boolean;
+  task: string;
+  caption: string;
   lyrics: string;
-  audio_duration: number;
-  infer_step: number;
-  guidance_scale: number;
-  scheduler_type: string;
-  cfg_type: string;
-  omega_scale: number;
-  manual_seeds: string;
-  guidance_interval: number;
-  guidance_interval_decay: number;
-  min_guidance_scale: number;
-  use_erg_tag: boolean;
-  use_erg_lyric: boolean;
-  use_erg_diffusion: boolean;
-  oss_steps: string;
-  guidance_scale_text: number;
-  guidance_scale_lyric: number;
-  bf16: boolean;
-  torch_compile: boolean;
-  cpu_offload: boolean;
-  overlapped_decode: boolean;
-  device_id: number;
+  bpm?: number | null;
+  duration?: number | null;
+  keyscale: string;
+  language: string;
+  timesignature: string;
+  instrumental?: boolean | null;
+  status_message: string;
+  error?: string | null;
+  raw_meta: Record<string, unknown>;
 }
 
 export interface VoiceChangerRequest {

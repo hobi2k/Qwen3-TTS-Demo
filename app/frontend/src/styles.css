@@ -529,12 +529,32 @@ select:focus {
 }
 
 .voice-gallery-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   padding: 0.7rem 0.95rem;
   color: var(--text-muted);
   font-weight: 800;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.voice-gallery-tabs button:hover {
+  transform: translateY(-1px);
+}
+
+.voice-gallery-tabs button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(17, 25, 26, 0.07);
+  color: currentColor;
+  font-size: 0.78rem;
 }
 
 .voice-gallery-tabs button.is-active {
@@ -1312,6 +1332,11 @@ label {
   gap: 12px;
 }
 
+.field-row--with-action {
+  align-items: end;
+  grid-template-columns: minmax(260px, 1fr) auto;
+}
+
 .advanced-controls {
   margin: 6px 0 14px;
   padding: 12px 14px 4px;
@@ -1710,15 +1735,6 @@ label {
   background: transparent;
 }
 
-.s2pro-mode-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: center;
-  padding: 0 4px 14px;
-  border-bottom: 1px solid rgba(25, 45, 42, 0.1);
-}
-
 .s2pro-form {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
@@ -2001,45 +2017,6 @@ label {
   border-radius: 18px;
   background: #eef7f1;
   color: #194b38;
-}
-
-.s2pro-mode-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0;
-  background: transparent;
-}
-
-.s2pro-mode-tab {
-  display: grid;
-  gap: 3px;
-  min-height: 54px;
-  min-width: 176px;
-  border: 1px solid rgba(25, 45, 42, 0.1);
-  border-radius: 16px;
-  background: transparent;
-  color: #5c6865;
-  padding: 0.65rem 0.85rem;
-  text-align: left;
-  transition: transform 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
-}
-
-.s2pro-mode-tab:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.62);
-}
-
-.s2pro-mode-tab.is-active {
-  background: #11191a;
-  color: #ffffff;
-  box-shadow: 0 16px 30px rgba(17, 25, 26, 0.18);
-}
-
-.s2pro-mode-tab span {
-  color: inherit;
-  opacity: 0.72;
-  font-size: 0.84rem;
 }
 
 .s2pro-section-heading {
@@ -2835,52 +2812,18 @@ label {
 
 .ace-step-shell {
   display: grid;
-  gap: 28px;
-}
-
-.ace-step-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-  gap: 28px;
-  padding: clamp(24px, 4vw, 44px);
-  border: 1px solid rgba(45, 60, 74, 0.12);
-  border-radius: 34px;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(255, 215, 120, 0.32), transparent 32%),
-    radial-gradient(circle at 82% 16%, rgba(109, 206, 185, 0.28), transparent 30%),
-    linear-gradient(135deg, #fffdf6 0%, #f7fbf8 56%, #eef9f5 100%);
-  box-shadow: 0 20px 50px rgba(48, 58, 72, 0.08);
-  overflow: hidden;
-}
-
-.ace-step-hero__copy {
-  display: grid;
-  align-content: center;
   gap: 16px;
-}
-
-.ace-step-hero h2 {
-  margin: 0;
-  max-width: 760px;
-  color: #102028;
-  font-size: clamp(2.5rem, 5vw, 5rem);
-  letter-spacing: -0.07em;
-  line-height: 0.92;
-}
-
-.ace-step-hero p {
-  margin: 0;
-  max-width: 720px;
-  color: rgba(16, 32, 40, 0.72);
-  font-size: 1.05rem;
-  line-height: 1.7;
 }
 
 .ace-step-preset-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 8px;
+  margin: 0;
+}
+
+.ace-step-preset-row--inline {
+  margin-bottom: 4px;
 }
 
 .pill-button {
@@ -2900,50 +2843,22 @@ label {
   box-shadow: 0 15px 28px rgba(40, 55, 66, 0.12);
 }
 
-.ace-step-runtime {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  padding: 24px;
-  border: 1px solid rgba(24, 45, 52, 0.12);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.64);
-  backdrop-filter: blur(14px);
-}
-
-.ace-step-runtime span {
-  color: rgba(16, 32, 40, 0.62);
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.ace-step-runtime strong {
-  color: #102028;
-  font-size: 1.45rem;
-}
-
-.ace-step-runtime p {
-  word-break: break-word;
-}
-
 .ace-step-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 440px);
-  gap: 24px;
+  gap: 16px;
   align-items: start;
 }
 
 .ace-step-main,
 .ace-step-controls {
   display: grid;
-  gap: 18px;
-  padding: 24px;
-  border: 1px solid #e6e9ef;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 16px 36px rgba(38, 45, 56, 0.06);
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
 }
 
 .ace-step-textarea {
@@ -2974,6 +2889,71 @@ label {
   color: #22313a;
   font-weight: 800;
   padding: 0 12px;
+}
+
+.ace-step-runtime__detail {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: rgba(16, 32, 40, 0.72);
+}
+
+.ace-step-runtime__detail strong {
+  font-size: 0.78rem;
+  color: #102028;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ace-step-source-panel,
+.ace-step-common-panel,
+.ace-step-task-form {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 0;
+}
+
+.ace-step-task-form h3 {
+  margin: 0;
+  font-size: 1.28rem;
+  letter-spacing: -0.02em;
+}
+
+.ace-step-task-form .field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.ace-step-meta-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ace-step-meta-lyrics {
+  white-space: pre-wrap;
+  background: rgba(16, 32, 40, 0.05);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-top: 6px;
+}
+
+.text-error {
+  color: #c1442b;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
 }
 
 @keyframes waveformPulse {
@@ -3123,11 +3103,9 @@ label {
   .voice-changer-layout,
   .rvc-train-hero,
   .guide-hero,
-  .s2pro-mode-strip,
   .s2pro-form,
   .s2pro-upload-panel,
   .s2pro-voice-meta,
-  .ace-step-hero,
   .ace-step-composer {
     grid-template-columns: 1fr;
   }

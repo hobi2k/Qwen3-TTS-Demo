@@ -123,6 +123,23 @@ ACE-Step 작곡만 준비하려면:
 ./scripts/download_models.sh ace-step
 ```
 
+ACE-Step-1.5는 내부 `nano-vllm`을 로컬 소스로 들고 있어서 일반 `pip install -e`가
+실패할 수 있습니다. 다운로드 스크립트는 `.venv-ace-step`을 만들고 `uv pip install
+--python .venv-ace-step/bin/python -e vendor/ACE-Step`로 설치하는 흐름을 우선 사용합니다.
+`HF_HUB_ENABLE_HF_TRANSFER=1`이면 `.venv-ace-step` 안에 `hf_transfer`도 설치합니다.
+Hugging Face 다운로드가 실제 네트워크 문제로 막히면 ModelScope로 fallback되며, 이 경우 4GB+ DiT 모델과
+3GB+ 5Hz LM을 동시에 받아 시간이 오래 걸릴 수 있습니다.
+
+검증된 ACE-Step main 구성:
+
+- `data/models/ace-step/acestep-v15-turbo/model.safetensors`
+- `data/models/ace-step/acestep-5Hz-lm-1.7B/model.safetensors`
+- `data/models/ace-step/Qwen3-Embedding-0.6B/model.safetensors`
+- `data/models/ace-step/vae/diffusion_pytorch_model.safetensors`
+
+ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`에 씁니다.
+서버나 샌드박스에서 홈 디렉터리 캐시가 read-only여도 동적 모듈 로드가 실패하지 않게 하기 위한 설정입니다.
+
 ## 4. `.env` 확인
 
 기본 템플릿은 [app/backend/.env.example](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/.env.example)입니다.

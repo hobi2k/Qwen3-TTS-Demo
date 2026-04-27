@@ -14,6 +14,15 @@ export type TabKey =
   | "applio_batch"
   | "applio_blend"
   | "ace_music"
+  | "ace_cover"
+  | "ace_repaint"
+  | "ace_extend"
+  | "ace_extract"
+  | "ace_lego"
+  | "ace_complete"
+  | "ace_understand"
+  | "ace_create_sample"
+  | "ace_format_sample"
   | "separation"
   | "dataset"
   | "training"
@@ -105,6 +114,51 @@ export const PRODUCT_PAGES = {
     label: "ACE-Step 작곡",
     title: "ACE-Step 작곡",
     description: "장르 태그와 가사 구조로 완성형 음악을 생성합니다.",
+  },
+  ace_cover: {
+    label: "커버",
+    title: "ACE-Step 커버",
+    description: "원곡의 구조를 유지하면서 다른 스타일로 다시 만듭니다.",
+  },
+  ace_repaint: {
+    label: "구간 수정",
+    title: "ACE-Step 구간 수정",
+    description: "오디오의 특정 구간만 새 프롬프트로 다시 그립니다.",
+  },
+  ace_extend: {
+    label: "이어붙이기",
+    title: "ACE-Step 이어붙이기",
+    description: "기존 트랙 뒤를 자연스럽게 이어 생성합니다.",
+  },
+  ace_extract: {
+    label: "스템 추출",
+    title: "ACE-Step 스템 추출",
+    description: "원곡에서 보컬, 드럼, 베이스 같은 단일 트랙을 분리합니다.",
+  },
+  ace_lego: {
+    label: "트랙 추가",
+    title: "ACE-Step 트랙 추가",
+    description: "기존 오디오 위에 새 악기나 보컬 트랙을 추가합니다.",
+  },
+  ace_complete: {
+    label: "트랙 채우기",
+    title: "ACE-Step 트랙 채우기",
+    description: "누락된 여러 트랙을 한 번에 보완합니다.",
+  },
+  ace_understand: {
+    label: "오디오 분석",
+    title: "ACE-Step 오디오 분석",
+    description: "BPM, 키, 캡션, 가사 같은 음악 메타 정보를 추정합니다.",
+  },
+  ace_create_sample: {
+    label: "아이디어 만들기",
+    title: "ACE-Step 아이디어 만들기",
+    description: "짧은 자연어 아이디어를 작곡용 캡션과 가사 초안으로 펼칩니다.",
+  },
+  ace_format_sample: {
+    label: "프롬프트 정리",
+    title: "ACE-Step 프롬프트 정리",
+    description: "작성한 스타일 설명과 가사를 모델이 읽기 좋은 작곡 입력으로 다듬습니다.",
   },
   separation: {
     label: "오디오 분리",

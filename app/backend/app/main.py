@@ -31,6 +31,17 @@ from .fish_speech import (
 )
 from .qwen import QwenDemoEngine
 from .schemas import (
+    AceStepCompleteRequest,
+    AceStepCoverRequest,
+    AceStepCreateSampleRequest,
+    AceStepExtendRequest,
+    AceStepExtractRequest,
+    AceStepFormatSampleRequest,
+    AceStepLegoRequest,
+    AceStepRepaintRequest,
+    AceStepRuntimeResponse,
+    AceStepUnderstandRequest,
+    AceStepUnderstandResponse,
     AudioAsset,
     AudioConvertRequest,
     AudioSeparationRequest,
@@ -1298,6 +1309,19 @@ def list_preset_records() -> List[CharacterPreset]:
     return [CharacterPreset(**record) for record in records]
 
 
+def list_clone_prompt_records() -> List[ClonePromptRecord]:
+    """저장된 Qwen clone prompt 원본 자산을 최신순으로 반환한다."""
+
+    prompts: List[ClonePromptRecord] = []
+    for record in storage.list_json_records(storage.clone_prompts_dir):
+        try:
+            prompts.append(ClonePromptRecord(**record))
+        except Exception:
+            continue
+    prompts.sort(key=lambda item: item.created_at or "", reverse=True)
+    return prompts
+
+
 def normalize_legacy_dataset_record(record: Dict[str, Any], fallback_name: str) -> Optional[Dict[str, Any]]:
     """Normalize legacy dataset manifests into the current dataset schema.
 
@@ -1908,6 +1932,7 @@ def bootstrap() -> BootstrapResponse:
         gallery=list_gallery_items(),
         audio_assets=list_server_audio_assets(),
         history=list_generation_records(),
+        clone_prompts=list_clone_prompt_records(),
         presets=list_preset_records(),
         datasets=list_dataset_records(),
         finetune_runs=list_finetune_run_records(),
@@ -2186,42 +2211,204 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
     )
 
 
-@app.post("/api/music/ace-step/generate", response_model=GenerationResponse)
-def generate_ace_step_music(payload: MusicCompositionRequest) -> GenerationResponse:
-    """ACE-Step으로 태그와 가사를 바탕으로 음악을 생성한다."""
+def _ace_step_base_payload(payload: Any) -> Dict[str, Any]:
+    """공통 ACE-Step 입력을 subprocess가 이해하는 dict로 직렬화한다."""
+
+    data = payload.model_dump()
+    seeds_raw = data.get("seeds") or ""
+    payload_dict = {
+        "caption": data.get("caption") or data.get("prompt") or "",
+        "prompt": data.get("prompt") or data.get("caption") or "",
+        "lyrics": data.get("lyrics") or "",
+        "instrumental": data.get("instrumental", False),
+        "duration": data.get("duration", -1.0),
+        "audio_duration": data.get("duration", -1.0),
+        "bpm": data.get("bpm"),
+        "keyscale": data.get("keyscale", ""),
+        "timesignature": data.get("timesignature", ""),
+        "vocal_language": data.get("vocal_language", "unknown"),
+        "inference_steps": data.get("inference_steps", 8),
+        "guidance_scale": data.get("guidance_scale", 7.0),
+        "seeds": seeds_raw,
+        "manual_seeds": seeds_raw,
+        "use_random_seed": data.get("use_random_seed", True),
+        "batch_size": data.get("batch_size", 1),
+        "audio_format": data.get("audio_format", "wav"),
+        "config_path": data.get("config_path"),
+        "lm_model_path": data.get("lm_model_path"),
+        "lm_backend": data.get("lm_backend"),
+        "device": data.get("device", "auto"),
+        "cpu_offload": data.get("cpu_offload", False),
+        "offload_dit_to_cpu": data.get("offload_dit_to_cpu", False),
+        "compile_model": data.get("compile_model", False),
+        "quantization": data.get("quantization"),
+        "vae_checkpoint": data.get("vae_checkpoint"),
+        "use_adg": data.get("use_adg", False),
+        "cfg_interval_start": data.get("cfg_interval_start", 0.0),
+        "cfg_interval_end": data.get("cfg_interval_end", 1.0),
+        "shift": data.get("shift", 1.0),
+        "infer_method": data.get("infer_method", "ode"),
+        "sampler_mode": data.get("sampler_mode", "euler"),
+        "thinking": data.get("thinking", True),
+        "lm_temperature": data.get("lm_temperature", 0.85),
+        "lm_cfg_scale": data.get("lm_cfg_scale", 2.0),
+        "lm_top_k": data.get("lm_top_k", 0),
+        "lm_top_p": data.get("lm_top_p", 0.9),
+        "lm_negative_prompt": data.get("lm_negative_prompt", "NO USER INPUT"),
+        "use_cot_metas": data.get("use_cot_metas", True),
+        "use_cot_caption": data.get("use_cot_caption", True),
+        "use_cot_lyrics": data.get("use_cot_lyrics", False),
+        "use_cot_language": data.get("use_cot_language", True),
+        "use_constrained_decoding": data.get("use_constrained_decoding", True),
+        "enable_normalization": data.get("enable_normalization", True),
+        "normalization_db": data.get("normalization_db", -1.0),
+        "fade_in_duration": data.get("fade_in_duration", 0.0),
+        "fade_out_duration": data.get("fade_out_duration", 0.0),
+        "loras": [
+            {
+                "path": resolve_repo_audio_path(item["path"]) if item.get("path") else item.get("path"),
+                "adapter_name": item.get("adapter_name"),
+                "scale": item.get("scale"),
+            }
+            for item in data.get("loras", [])
+        ],
+        "output_name": data.get("output_name"),
+    }
+    return payload_dict
+
+
+def _run_ace_step_audio_task(
+    *,
+    task: str,
+    payload: Any,
+    extra_payload: Dict[str, Any],
+    label_fields: List[str],
+    record_mode: str,
+    record_text_fields: List[str],
+) -> GenerationResponse:
+    """ACE-Step subprocess 호출과 GenerationRecord 저장을 한 번에 묶는다."""
 
     if not ace_step_composer.is_available():
         raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
 
-    label = requested_output_name(payload) or payload.prompt
-    output_path = generated_audio_path("ace-step-music", label, "wav")
+    payload_dict = _ace_step_base_payload(payload)
+    payload_dict.update(extra_payload)
+
+    label_seed = ""
+    for field in label_fields:
+        value = getattr(payload, field, "") or payload_dict.get(field, "")
+        if value:
+            label_seed = str(value)
+            break
+    label = requested_output_name(payload) or label_seed or task
+    output_path = generated_audio_path(f"ace-step-{task}", label, payload_dict.get("audio_format", "wav"))
+
     try:
-        audio_path, meta = ace_step_composer.generate(
+        audio_path, meta = ace_step_composer.run(
+            task=task,
             output_path=output_path,
-            prompt=payload.prompt,
-            lyrics=payload.lyrics,
-            audio_duration=payload.audio_duration,
-            infer_step=payload.infer_step,
-            guidance_scale=payload.guidance_scale,
-            scheduler_type=payload.scheduler_type,
-            cfg_type=payload.cfg_type,
-            omega_scale=payload.omega_scale,
-            manual_seeds=payload.manual_seeds,
-            guidance_interval=payload.guidance_interval,
-            guidance_interval_decay=payload.guidance_interval_decay,
-            min_guidance_scale=payload.min_guidance_scale,
-            use_erg_tag=payload.use_erg_tag,
-            use_erg_lyric=payload.use_erg_lyric,
-            use_erg_diffusion=payload.use_erg_diffusion,
-            oss_steps=payload.oss_steps,
-            guidance_scale_text=payload.guidance_scale_text,
-            guidance_scale_lyric=payload.guidance_scale_lyric,
-            bf16=payload.bf16,
-            torch_compile=payload.torch_compile,
-            cpu_offload=payload.cpu_offload,
-            overlapped_decode=payload.overlapped_decode,
-            device_id=payload.device_id,
-            extra={"output_name": payload.output_name},
+            payload=payload_dict,
+        )
+    except AceStepError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"ACE-Step {task} failed: {exc}") from exc
+
+    text_value = ""
+    for field in record_text_fields:
+        candidate = getattr(payload, field, "") or payload_dict.get(field, "")
+        if candidate:
+            text_value = str(candidate)
+            break
+
+    record = build_generation_record(
+        record_id=storage.new_id("music"),
+        mode=record_mode,
+        text=text_value,
+        language="Music",
+        audio_path=audio_path,
+        instruction=payload_dict.get("caption") or payload_dict.get("prompt") or "",
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.get("/api/music/ace-step/runtime", response_model=AceStepRuntimeResponse)
+def ace_step_runtime() -> AceStepRuntimeResponse:
+    """ACE-Step 런타임 가용성, 모델 변형, LoRA 어댑터 목록을 반환한다."""
+
+    from .ace_step import SUPPORTED_TASKS, TRACK_NAMES
+
+    return AceStepRuntimeResponse(
+        available=ace_step_composer.is_available(),
+        notes=ace_step_composer.availability_notes(),
+        ace_step_root=str(ace_step_composer.ace_step_root),
+        python_executable=ace_step_composer.python_executable,
+        checkpoint_path=str(ace_step_composer.checkpoint_path),
+        lora_dir=str(ace_step_composer.lora_dir),
+        model_variants=ace_step_composer.list_model_variants(),
+        lm_models=ace_step_composer.list_lm_models(),
+        lora_adapters=ace_step_composer.list_lora_adapters(),
+        track_names=list(TRACK_NAMES),
+        supported_tasks=sorted(SUPPORTED_TASKS),
+    )
+
+
+@app.post("/api/music/ace-step/generate", response_model=GenerationResponse)
+def generate_ace_step_music(payload: MusicCompositionRequest) -> GenerationResponse:
+    """ACE-Step으로 태그와 가사를 바탕으로 음악을 생성한다 (text2music)."""
+
+    if not ace_step_composer.is_available():
+        raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
+
+    duration_value = payload.duration if payload.duration is not None else 60.0
+    if payload.audio_duration is not None:
+        duration_value = payload.audio_duration
+
+    inference_steps = payload.inference_steps
+    if payload.infer_step is not None:
+        inference_steps = payload.infer_step
+
+    seeds_raw = (payload.seeds or payload.manual_seeds or "").strip()
+
+    base_payload = _ace_step_base_payload(payload)
+    base_payload.update(
+        {
+            "duration": duration_value,
+            "audio_duration": duration_value,
+            "inference_steps": inference_steps,
+            "seeds": seeds_raw,
+            "manual_seeds": seeds_raw,
+            "compile_model": payload.compile_model or payload.torch_compile,
+            "cpu_offload": payload.cpu_offload,
+        }
+    )
+    base_payload["legacy_params"] = {
+        "scheduler_type": payload.scheduler_type,
+        "cfg_type": payload.cfg_type,
+        "omega_scale": payload.omega_scale,
+        "guidance_interval": payload.guidance_interval,
+        "guidance_interval_decay": payload.guidance_interval_decay,
+        "min_guidance_scale": payload.min_guidance_scale,
+        "use_erg_tag": payload.use_erg_tag,
+        "use_erg_lyric": payload.use_erg_lyric,
+        "use_erg_diffusion": payload.use_erg_diffusion,
+        "oss_steps": payload.oss_steps,
+        "guidance_scale_text": payload.guidance_scale_text,
+        "guidance_scale_lyric": payload.guidance_scale_lyric,
+        "bf16": payload.bf16,
+        "overlapped_decode": payload.overlapped_decode,
+        "device_id": payload.device_id,
+    }
+
+    label = requested_output_name(payload) or payload.prompt or payload.caption or "ace-step-track"
+    output_path = generated_audio_path("ace-step-music", label, base_payload.get("audio_format", "wav"))
+    try:
+        audio_path, meta = ace_step_composer.run(
+            task="text2music",
+            output_path=output_path,
+            payload=base_payload,
         )
     except AceStepError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2231,14 +2418,214 @@ def generate_ace_step_music(payload: MusicCompositionRequest) -> GenerationRespo
     record = build_generation_record(
         record_id=storage.new_id("music"),
         mode="ace_step_music",
-        text=payload.lyrics or payload.prompt,
+        text=payload.lyrics or payload.prompt or payload.caption,
         language="Music",
         audio_path=audio_path,
-        instruction=payload.prompt,
+        instruction=payload.prompt or payload.caption,
         meta=meta,
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.post("/api/music/ace-step/cover", response_model=GenerationResponse)
+def generate_ace_step_cover(payload: AceStepCoverRequest) -> GenerationResponse:
+    """원본 오디오를 참조해 새 스타일의 커버 곡을 만든다."""
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    extra: Dict[str, Any] = {
+        "src_audio": src_audio,
+        "audio_cover_strength": payload.audio_cover_strength,
+        "cover_noise_strength": payload.cover_noise_strength,
+    }
+    return _run_ace_step_audio_task(
+        task="cover",
+        payload=payload,
+        extra_payload=extra,
+        label_fields=["prompt", "caption", "output_name"],
+        record_mode="ace_step_cover",
+        record_text_fields=["lyrics", "caption", "prompt"],
+    )
+
+
+@app.post("/api/music/ace-step/repaint", response_model=GenerationResponse)
+def generate_ace_step_repaint(payload: AceStepRepaintRequest) -> GenerationResponse:
+    """원본 오디오의 [start,end) 구간을 새로운 프롬프트로 다시 그린다."""
+
+    if payload.repainting_end != -1.0 and payload.repainting_end <= payload.repainting_start:
+        raise HTTPException(
+            status_code=400,
+            detail="repainting_end must be greater than repainting_start (or -1 for end of clip).",
+        )
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    extra: Dict[str, Any] = {
+        "src_audio": src_audio,
+        "repainting_start": payload.repainting_start,
+        "repainting_end": payload.repainting_end,
+        "repaint_mode": payload.repaint_mode,
+        "repaint_strength": payload.repaint_strength,
+        "repaint_latent_crossfade_frames": payload.repaint_latent_crossfade_frames,
+        "repaint_wav_crossfade_sec": payload.repaint_wav_crossfade_sec,
+        "chunk_mask_mode": payload.chunk_mask_mode,
+    }
+    return _run_ace_step_audio_task(
+        task="repaint",
+        payload=payload,
+        extra_payload=extra,
+        label_fields=["prompt", "caption", "output_name"],
+        record_mode="ace_step_repaint",
+        record_text_fields=["lyrics", "caption", "prompt"],
+    )
+
+
+@app.post("/api/music/ace-step/extend", response_model=GenerationResponse)
+def generate_ace_step_extend(payload: AceStepExtendRequest) -> GenerationResponse:
+    """기존 트랙 뒤를 ACE-Step의 complete task로 채운다."""
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    tracks = payload.complete_tracks or "vocals,drums,bass,guitar"
+    extra: Dict[str, Any] = {
+        "src_audio": src_audio,
+        "complete_tracks": tracks,
+    }
+    return _run_ace_step_audio_task(
+        task="extend",
+        payload=payload,
+        extra_payload=extra,
+        label_fields=["prompt", "caption", "output_name"],
+        record_mode="ace_step_extend",
+        record_text_fields=["lyrics", "caption", "prompt"],
+    )
+
+
+@app.post("/api/music/ace-step/extract", response_model=GenerationResponse)
+def generate_ace_step_extract(payload: AceStepExtractRequest) -> GenerationResponse:
+    """원본 오디오에서 단일 트랙(stem)을 분리한다."""
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    extra: Dict[str, Any] = {
+        "src_audio": src_audio,
+        "extract_track": payload.extract_track,
+    }
+    return _run_ace_step_audio_task(
+        task="extract",
+        payload=payload,
+        extra_payload=extra,
+        label_fields=["extract_track", "output_name"],
+        record_mode="ace_step_extract",
+        record_text_fields=["extract_track", "caption"],
+    )
+
+
+@app.post("/api/music/ace-step/lego", response_model=GenerationResponse)
+def generate_ace_step_lego(payload: AceStepLegoRequest) -> GenerationResponse:
+    """기존 트랙에 새 트랙 한 개를 더한다."""
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    extra: Dict[str, Any] = {
+        "src_audio": src_audio,
+        "lego_track": payload.lego_track,
+    }
+    return _run_ace_step_audio_task(
+        task="lego",
+        payload=payload,
+        extra_payload=extra,
+        label_fields=["lego_track", "prompt", "caption"],
+        record_mode="ace_step_lego",
+        record_text_fields=["lyrics", "caption", "prompt"],
+    )
+
+
+@app.post("/api/music/ace-step/complete", response_model=GenerationResponse)
+def generate_ace_step_complete(payload: AceStepCompleteRequest) -> GenerationResponse:
+    """누락 트랙 여러 개를 한 번에 채운다."""
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    extra: Dict[str, Any] = {
+        "src_audio": src_audio,
+        "complete_tracks": payload.complete_tracks,
+    }
+    return _run_ace_step_audio_task(
+        task="complete",
+        payload=payload,
+        extra_payload=extra,
+        label_fields=["complete_tracks", "prompt", "caption"],
+        record_mode="ace_step_complete",
+        record_text_fields=["lyrics", "caption", "prompt"],
+    )
+
+
+def _run_lm_only_task(task: str, payload: Any, request_payload: Dict[str, Any]) -> AceStepUnderstandResponse:
+    if not ace_step_composer.is_available():
+        raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
+    label = getattr(payload, "output_name", None) or task
+    output_path = generated_audio_path(f"ace-step-{task}", label, "json")
+    try:
+        _, meta = ace_step_composer.run(
+            task=task,
+            output_path=output_path,
+            payload=request_payload,
+        )
+    except AceStepError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"ACE-Step {task} failed: {exc}") from exc
+
+    result = (meta or {}).get("result") or {}
+    return AceStepUnderstandResponse(
+        success=bool(result.get("success", True)),
+        task=task,
+        caption=result.get("caption", "") or "",
+        lyrics=result.get("lyrics", "") or "",
+        bpm=result.get("bpm"),
+        duration=result.get("duration"),
+        keyscale=result.get("keyscale", "") or "",
+        language=result.get("language", "") or "",
+        timesignature=result.get("timesignature", "") or "",
+        instrumental=result.get("instrumental"),
+        status_message=result.get("status_message", "") or "",
+        error=result.get("error"),
+        raw_meta=meta or {},
+    )
+
+
+@app.post("/api/music/ace-step/understand", response_model=AceStepUnderstandResponse)
+def ace_step_understand(payload: AceStepUnderstandRequest) -> AceStepUnderstandResponse:
+    """오디오에서 BPM/캡션/가사/키 등을 LM으로 추정한다."""
+
+    src_audio = resolve_repo_audio_path(payload.src_audio)
+    request_payload = {
+        "src_audio": src_audio,
+        "audio_codes": payload.audio_codes,
+        "config_path": payload.config_path,
+        "lm_model_path": payload.lm_model_path,
+        "lm_backend": payload.lm_backend,
+        "device": payload.device,
+        "cpu_offload": payload.cpu_offload,
+        "lm_temperature": payload.lm_temperature,
+        "lm_top_k": payload.lm_top_k,
+        "lm_top_p": payload.lm_top_p,
+        "repetition_penalty": payload.repetition_penalty,
+        "use_constrained_decoding": payload.use_constrained_decoding,
+    }
+    return _run_lm_only_task("understand", payload, request_payload)
+
+
+@app.post("/api/music/ace-step/create-sample", response_model=AceStepUnderstandResponse)
+def ace_step_create_sample(payload: AceStepCreateSampleRequest) -> AceStepUnderstandResponse:
+    """짧은 자연어 한 줄을 받아 caption/lyrics/메타데이터를 만들어 준다."""
+
+    request_payload = payload.model_dump()
+    return _run_lm_only_task("create_sample", payload, request_payload)
+
+
+@app.post("/api/music/ace-step/format-sample", response_model=AceStepUnderstandResponse)
+def ace_step_format_sample(payload: AceStepFormatSampleRequest) -> AceStepUnderstandResponse:
+    """사용자가 적은 caption/lyrics를 공식 포맷으로 정리한다."""
+
+    request_payload = payload.model_dump()
+    return _run_lm_only_task("format_sample", payload, request_payload)
 
 
 @app.post("/api/audio-tools/voice-changer", response_model=AudioToolResponse)

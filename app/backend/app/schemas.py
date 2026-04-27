@@ -379,15 +379,83 @@ class SoundEffectRequest(BaseModel):
     negative_prompt: str = ""
 
 
-class MusicCompositionRequest(BaseModel):
-    """ACE-Step 음악 작곡 요청 스키마입니다."""
+class AceStepLoraRef(BaseModel):
+    """ACE-Step LoRA 어댑터 참조."""
+
+    path: str = Field(..., min_length=1)
+    adapter_name: Optional[str] = None
+    scale: Optional[float] = Field(None, ge=0.0, le=2.0)
+
+
+class AceStepGenerateBaseRequest(BaseModel):
+    """ACE-Step 1.5 공통 입력 스키마.
+
+    각 task별 엔드포인트가 이 스키마를 상속해 추가 필드를 더한다.
+    """
 
     output_name: str = "ace-step-track"
-    prompt: str = Field(..., min_length=1)
-    lyrics: str = Field("", max_length=12000)
-    audio_duration: float = Field(60.0, ge=-1.0, le=240.0)
-    infer_step: int = Field(27, ge=1, le=200)
-    guidance_scale: float = Field(15.0, ge=0.1, le=50.0)
+    caption: str = Field("", max_length=12000)
+    prompt: Optional[str] = Field(None, max_length=12000)
+    lyrics: str = Field("", max_length=24000)
+    instrumental: bool = False
+    duration: float = Field(60.0, ge=-1.0, le=600.0)
+    bpm: Optional[int] = Field(None, ge=20, le=300)
+    keyscale: str = ""
+    timesignature: str = ""
+    vocal_language: str = "unknown"
+    inference_steps: int = Field(8, ge=1, le=200)
+    guidance_scale: float = Field(7.0, ge=0.1, le=50.0)
+    seeds: str = ""
+    use_random_seed: bool = True
+    batch_size: int = Field(1, ge=1, le=4)
+    audio_format: str = Field("wav", pattern="^(wav|wav32|flac|mp3|opus|aac|ogg)$")
+
+    # Model selection
+    config_path: Optional[str] = None
+    lm_model_path: Optional[str] = None
+    lm_backend: Optional[str] = None
+    device: str = "auto"
+    cpu_offload: bool = False
+    offload_dit_to_cpu: bool = False
+    compile_model: bool = False
+    quantization: Optional[str] = None
+    vae_checkpoint: Optional[str] = None
+
+    # CFG / sampler
+    use_adg: bool = False
+    cfg_interval_start: float = Field(0.0, ge=0.0, le=1.0)
+    cfg_interval_end: float = Field(1.0, ge=0.0, le=1.0)
+    shift: float = Field(1.0, ge=0.0, le=20.0)
+    infer_method: str = Field("ode", pattern="^(ode|sde)$")
+    sampler_mode: str = Field("euler", pattern="^(euler|heun|pingpong)$")
+
+    # 5Hz LM CoT
+    thinking: bool = True
+    lm_temperature: float = Field(0.85, ge=0.0, le=2.0)
+    lm_cfg_scale: float = Field(2.0, ge=0.0, le=20.0)
+    lm_top_k: int = Field(0, ge=0, le=200)
+    lm_top_p: float = Field(0.9, ge=0.0, le=1.0)
+    lm_negative_prompt: str = "NO USER INPUT"
+    use_cot_metas: bool = True
+    use_cot_caption: bool = True
+    use_cot_lyrics: bool = False
+    use_cot_language: bool = True
+    use_constrained_decoding: bool = True
+
+    # Audio post processing
+    enable_normalization: bool = True
+    normalization_db: float = Field(-1.0, ge=-30.0, le=0.0)
+    fade_in_duration: float = Field(0.0, ge=0.0, le=10.0)
+    fade_out_duration: float = Field(0.0, ge=0.0, le=10.0)
+
+    loras: List[AceStepLoraRef] = Field(default_factory=list)
+
+
+class MusicCompositionRequest(AceStepGenerateBaseRequest):
+    """ACE-Step text2music 요청 (legacy 호환 필드 포함)."""
+
+    audio_duration: Optional[float] = Field(None, ge=-1.0, le=600.0)
+    infer_step: Optional[int] = Field(None, ge=1, le=200)
     scheduler_type: str = "euler"
     cfg_type: str = "apg"
     omega_scale: float = Field(10.0, ge=0.0, le=50.0)
@@ -403,9 +471,147 @@ class MusicCompositionRequest(BaseModel):
     guidance_scale_lyric: float = Field(0.0, ge=0.0, le=50.0)
     bf16: bool = True
     torch_compile: bool = False
-    cpu_offload: bool = False
     overlapped_decode: bool = False
     device_id: int = Field(0, ge=0)
+
+
+class AceStepCoverRequest(AceStepGenerateBaseRequest):
+    """Cover / style transfer 요청 (src_audio 필수)."""
+
+    src_audio: str = Field(..., min_length=1)
+    audio_cover_strength: float = Field(1.0, ge=0.0, le=1.0)
+    cover_noise_strength: float = Field(0.0, ge=0.0, le=1.0)
+
+
+class AceStepRepaintRequest(AceStepGenerateBaseRequest):
+    """Repaint 요청. ``[start, end)`` 구간만 다시 그린다."""
+
+    src_audio: str = Field(..., min_length=1)
+    repainting_start: float = Field(0.0, ge=0.0)
+    repainting_end: float = Field(-1.0, ge=-1.0)
+    repaint_mode: str = Field("balanced", pattern="^(conservative|balanced|aggressive)$")
+    repaint_strength: float = Field(0.5, ge=0.0, le=1.0)
+    repaint_latent_crossfade_frames: int = Field(10, ge=0, le=120)
+    repaint_wav_crossfade_sec: float = Field(0.0, ge=0.0, le=5.0)
+    chunk_mask_mode: str = Field("auto", pattern="^(auto|explicit)$")
+
+
+class AceStepExtendRequest(AceStepGenerateBaseRequest):
+    """Extend / continuation 요청. ACE-Step의 ``complete`` task로 라우팅된다."""
+
+    src_audio: str = Field(..., min_length=1)
+    complete_tracks: str = "vocals,drums,bass,guitar"
+
+
+class AceStepExtractRequest(AceStepGenerateBaseRequest):
+    """단일 트랙 stem 추출."""
+
+    src_audio: str = Field(..., min_length=1)
+    extract_track: str = Field("vocals", min_length=1)
+
+
+class AceStepLegoRequest(AceStepGenerateBaseRequest):
+    """기존 트랙 위에 한 가지 새 트랙 레이어를 만든다."""
+
+    src_audio: str = Field(..., min_length=1)
+    lego_track: str = Field("vocals", min_length=1)
+
+
+class AceStepCompleteRequest(AceStepGenerateBaseRequest):
+    """누락된 다중 트랙을 한 번에 채워 넣는다."""
+
+    src_audio: str = Field(..., min_length=1)
+    complete_tracks: str = "vocals,drums,bass,guitar"
+
+
+class AceStepUnderstandRequest(BaseModel):
+    """오디오에서 BPM/캡션/가사를 추출하는 LM 전용 요청."""
+
+    output_name: str = "ace-step-understand"
+    src_audio: str = Field(..., min_length=1)
+    audio_codes: str = ""
+    config_path: Optional[str] = None
+    lm_model_path: Optional[str] = None
+    lm_backend: Optional[str] = None
+    device: str = "auto"
+    cpu_offload: bool = False
+    lm_temperature: float = Field(0.85, ge=0.0, le=2.0)
+    lm_top_k: int = Field(0, ge=0, le=200)
+    lm_top_p: float = Field(0.9, ge=0.0, le=1.0)
+    repetition_penalty: float = Field(1.0, ge=0.5, le=2.0)
+    use_constrained_decoding: bool = True
+
+
+class AceStepCreateSampleRequest(BaseModel):
+    """자연어 한 줄로 캡션/가사/BPM 등을 생성한다."""
+
+    output_name: str = "ace-step-sample"
+    query: str = Field(..., min_length=1)
+    instrumental: bool = False
+    vocal_language: Optional[str] = None
+    config_path: Optional[str] = None
+    lm_model_path: Optional[str] = None
+    lm_backend: Optional[str] = None
+    device: str = "auto"
+    cpu_offload: bool = False
+    lm_temperature: float = Field(0.85, ge=0.0, le=2.0)
+    lm_top_k: int = Field(0, ge=0, le=200)
+    lm_top_p: float = Field(0.9, ge=0.0, le=1.0)
+
+
+class AceStepFormatSampleRequest(BaseModel):
+    """사용자가 적은 caption/lyrics를 정리한다."""
+
+    output_name: str = "ace-step-format"
+    caption: str = ""
+    lyrics: str = ""
+    bpm: Optional[int] = Field(None, ge=20, le=300)
+    duration: Optional[float] = Field(None, ge=0.0, le=600.0)
+    keyscale: str = ""
+    timesignature: str = ""
+    vocal_language: Optional[str] = None
+    config_path: Optional[str] = None
+    lm_model_path: Optional[str] = None
+    lm_backend: Optional[str] = None
+    device: str = "auto"
+    cpu_offload: bool = False
+    lm_temperature: float = Field(0.85, ge=0.0, le=2.0)
+    lm_top_k: int = Field(0, ge=0, le=200)
+    lm_top_p: float = Field(0.9, ge=0.0, le=1.0)
+
+
+class AceStepRuntimeResponse(BaseModel):
+    """ACE-Step 런타임/모델/LoRA 상태 응답."""
+
+    available: bool
+    notes: str
+    ace_step_root: str
+    python_executable: str
+    checkpoint_path: str
+    lora_dir: str
+    model_variants: List[Dict[str, Any]] = Field(default_factory=list)
+    lm_models: List[Dict[str, Any]] = Field(default_factory=list)
+    lora_adapters: List[Dict[str, Any]] = Field(default_factory=list)
+    track_names: List[str] = Field(default_factory=list)
+    supported_tasks: List[str] = Field(default_factory=list)
+
+
+class AceStepUnderstandResponse(BaseModel):
+    """understand_music / create_sample / format_sample 공통 응답."""
+
+    success: bool
+    task: str
+    caption: str = ""
+    lyrics: str = ""
+    bpm: Optional[int] = None
+    duration: Optional[float] = None
+    keyscale: str = ""
+    language: str = ""
+    timesignature: str = ""
+    instrumental: Optional[bool] = None
+    status_message: str = ""
+    error: Optional[str] = None
+    raw_meta: Dict[str, Any] = Field(default_factory=dict)
 
 
 class VoiceChangerRequest(BaseModel):
@@ -572,6 +778,7 @@ class BootstrapResponse(BaseModel):
     gallery: List[GalleryItem] = Field(default_factory=list)
     audio_assets: List[AudioAsset]
     history: List[GenerationRecord]
+    clone_prompts: List[ClonePromptRecord] = Field(default_factory=list)
     presets: List[CharacterPreset]
     datasets: List["FineTuneDataset"]
     finetune_runs: List["FineTuneRun"]

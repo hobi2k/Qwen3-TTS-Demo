@@ -38,6 +38,8 @@ import {
   VOICEBOX_STEPS,
 } from "./lib/app-ui";
 import type {
+  AceStepRuntimeResponse,
+  AceStepUnderstandResponse,
   AudioAsset,
   AudioToolCapability,
   AudioToolResponse,
@@ -54,6 +56,60 @@ import type {
   UploadResponse,
   VoiceChangerModelInfo,
 } from "./lib/types";
+
+type AceStepMode =
+  | "text2music"
+  | "cover"
+  | "repaint"
+  | "extend"
+  | "extract"
+  | "lego"
+  | "complete"
+  | "understand"
+  | "create_sample"
+  | "format_sample";
+
+type AceStepTabKey = Extract<
+  TabKey,
+  | "ace_music"
+  | "ace_cover"
+  | "ace_repaint"
+  | "ace_extend"
+  | "ace_extract"
+  | "ace_lego"
+  | "ace_complete"
+  | "ace_understand"
+  | "ace_create_sample"
+  | "ace_format_sample"
+>;
+
+const ACE_STEP_TAB_TO_MODE: Record<AceStepTabKey, AceStepMode> = {
+  ace_music: "text2music",
+  ace_cover: "cover",
+  ace_repaint: "repaint",
+  ace_extend: "extend",
+  ace_extract: "extract",
+  ace_lego: "lego",
+  ace_complete: "complete",
+  ace_understand: "understand",
+  ace_create_sample: "create_sample",
+  ace_format_sample: "format_sample",
+};
+
+const ACE_STEP_TRACK_OPTIONS = [
+  "vocals",
+  "backing_vocals",
+  "drums",
+  "percussion",
+  "bass",
+  "guitar",
+  "keyboard",
+  "synth",
+  "strings",
+  "brass",
+  "woodwinds",
+  "fx",
+] as const;
 
 const ACE_STEP_STYLE_PRESETS = [
   {
@@ -176,6 +232,10 @@ function isS2ProTab(tab: TabKey): boolean {
   return tab === "s2pro_tagged" || tab === "s2pro_clone" || tab === "s2pro_multi_speaker" || tab === "s2pro_multilingual";
 }
 
+function isAceStepTab(tab: TabKey): tab is AceStepTabKey {
+  return tab in ACE_STEP_TAB_TO_MODE;
+}
+
 function gallerySelectionKey(record: GenerationRecord): string {
   return `${record.id}::${record.output_audio_path}`;
 }
@@ -197,7 +257,7 @@ function guessMatchingCustomVoiceModel(
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
-  const [voiceGalleryView, setVoiceGalleryView] = useState<"mine" | "stock" | "collections">("mine");
+  const [voiceGalleryView, setVoiceGalleryView] = useState<"trained" | "qwen" | "s2pro" | "rvc">("trained");
   const [activeGuideTitle, setActiveGuideTitle] = useState<string>(GUIDE_SECTIONS[0]?.title || "");
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
   const [ttsSideView, setTtsSideView] = useState<"settings" | "history">("settings");
@@ -207,6 +267,7 @@ export default function App() {
   const [audioAssets, setAudioAssets] = useState<AudioAsset[]>([]);
   const [history, setHistory] = useState<GenerationRecord[]>([]);
   const [selectedGalleryIds, setSelectedGalleryIds] = useState<string[]>([]);
+  const [clonePrompts, setClonePrompts] = useState<ClonePromptRecord[]>([]);
   const [presets, setPresets] = useState<CharacterPreset[]>([]);
   const [datasets, setDatasets] = useState<FineTuneDataset[]>([]);
   const [runs, setRuns] = useState<FineTuneRun[]>([]);
@@ -346,7 +407,7 @@ export default function App() {
     speaker_script:
       "<|speaker:0|> [calm] 오늘 회의는 여기서 정리하겠습니다.\n<|speaker:1|> [excited] 좋아요, 다음 단계로 바로 넘어가죠.",
     clone_text: "[whispers] 이 목소리로 아주 가까이서 말하는 느낌을 확인해볼게.",
-    instruction: "[professional broadcast tone] Keep articulation clean and stable.",
+    instruction: "",
     temperature: "0.7",
     top_p: "0.8",
     max_tokens: "2048",
@@ -402,6 +463,46 @@ export default function App() {
     device_id: "0",
   });
   const [lastAceStepRecord, setLastAceStepRecord] = useState<GenerationRecord | null>(null);
+  const [aceStepMode, setAceStepMode] = useState<AceStepMode>("text2music");
+  const [aceStepRuntime, setAceStepRuntime] = useState<AceStepRuntimeResponse | null>(null);
+  const [aceStepCommonForm, setAceStepCommonForm] = useState({
+    config_path: "",
+    lm_model_path: "",
+    lora_path: "",
+    lora_scale: "1.0",
+    lora_adapter_name: "",
+  });
+  const [aceStepAudioForm, setAceStepAudioForm] = useState({
+    src_audio: "",
+  });
+  const [aceStepCoverForm, setAceStepCoverForm] = useState({
+    audio_cover_strength: "1.0",
+    cover_noise_strength: "0.0",
+  });
+  const [aceStepRepaintForm, setAceStepRepaintForm] = useState({
+    repainting_start: "0",
+    repainting_end: "-1",
+    repaint_mode: "balanced",
+    repaint_strength: "0.5",
+  });
+  const [aceStepExtendForm, setAceStepExtendForm] = useState({
+    complete_tracks: "vocals,drums,bass,guitar",
+  });
+  const [aceStepExtractForm, setAceStepExtractForm] = useState({
+    extract_track: "vocals",
+  });
+  const [aceStepLegoForm, setAceStepLegoForm] = useState({
+    lego_track: "vocals",
+  });
+  const [aceStepCompleteForm, setAceStepCompleteForm] = useState({
+    complete_tracks: "vocals,drums,bass,guitar",
+  });
+  const [aceStepCreateSampleForm, setAceStepCreateSampleForm] = useState({
+    query: "a soft Bengali love song for a quiet evening",
+    instrumental: false,
+    vocal_language: "",
+  });
+  const [aceStepUnderstandResult, setAceStepUnderstandResult] = useState<AceStepUnderstandResponse | null>(null);
   const [voiceChangerForm, setVoiceChangerForm] = useState({
     audio_path: "",
     selected_model_id: "",
@@ -418,6 +519,7 @@ export default function App() {
     embedder_model: "contentvec",
   });
   const [applioBatchPaths, setApplioBatchPaths] = useState<string[]>([]);
+  const [applioBatchManualPath, setApplioBatchManualPath] = useState("");
   const [applioBlendForm, setApplioBlendForm] = useState({
     model_name: "blended-rvc-voice",
     model_path_a: "",
@@ -464,6 +566,7 @@ export default function App() {
     setSpeakers(data.speakers);
     setAudioAssets(data.audio_assets);
     setHistory(data.history);
+    setClonePrompts(data.clone_prompts || []);
     setPresets(data.presets);
     setDatasets(data.datasets);
     setRuns(data.finetune_runs);
@@ -711,6 +814,7 @@ export default function App() {
   const pageMeta = PRODUCT_PAGES[activeTab];
   const selectedGuideSection = GUIDE_SECTIONS.find((section) => section.title === activeGuideTitle) ?? GUIDE_SECTIONS[0];
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
+  const currentAceStepMode = isAceStepTab(activeTab) ? ACE_STEP_TAB_TO_MODE[activeTab] : aceStepMode;
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
   const s2VoiceProjects = s2ProVoices.map((voice) => {
     const relatedHistory = history.filter((record) => {
@@ -728,6 +832,9 @@ export default function App() {
     );
     return { voice, relatedHistory, relatedPresets };
   });
+  const presetPromptPaths = new Set(presets.map((preset) => preset.clone_prompt_path).filter(Boolean));
+  const rawQwenClonePrompts = clonePrompts.filter((prompt) => !presetPromptPaths.has(prompt.prompt_path));
+  const qwenVoiceAssetCount = presets.length + rawQwenClonePrompts.length;
   const filteredS2TagCategories = S2_PRO_TAG_CATEGORIES.map((category) => ({
     ...category,
     tags: category.tags.filter((tag) => {
@@ -740,6 +847,7 @@ export default function App() {
   const selectedVoiceChangerModel = voiceChangerModels.find((item) => item.id === voiceChangerForm.selected_model_id) ?? null;
   const selectedVoiceChangerAsset = voiceChangerForm.audio_path ? audioAssetByPath.get(voiceChangerForm.audio_path) ?? null : null;
   const selectedApplioBatchAssets = applioBatchPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
+  const selectedApplioBatchExternalPaths = applioBatchPaths.filter((path) => !audioAssetByPath.has(path));
   const selectedBlendModelA = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_a) ?? null;
   const selectedBlendModelB = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_b) ?? null;
   const selectedDatasetReferenceAsset = datasetForm.ref_audio_path ? audioAssetByPath.get(datasetForm.ref_audio_path) ?? null : null;
@@ -845,6 +953,11 @@ export default function App() {
     setActiveTab(tab);
   }
 
+  function openAceStepTab(tab: AceStepTabKey) {
+    setAceStepMode(ACE_STEP_TAB_TO_MODE[tab]);
+    setActiveTab(tab);
+  }
+
   function applyS2ProTag(prompt: string) {
     setS2ProForm((prev) => ({
       ...prev,
@@ -894,6 +1007,12 @@ export default function App() {
       setMessage("먼저 S2-Pro 참조 음성을 선택하거나 업로드하세요.");
       return;
     }
+    const savedTranscript = assetTextByPath.get(s2ProVoiceForm.reference_audio_path);
+    if (savedTranscript) {
+      setS2ProVoiceForm((prev) => ({ ...prev, reference_text: savedTranscript }));
+      setMessage("생성 갤러리에 저장된 대사를 참조 텍스트로 불러왔습니다.");
+      return;
+    }
     await runAction(async () => {
       const result = await api.transcribeAudio(s2ProVoiceForm.reference_audio_path);
       setS2ProVoiceForm((prev) => ({ ...prev, reference_text: result.text }));
@@ -916,11 +1035,38 @@ export default function App() {
         ...prev,
         ref_audio_path: voice.reference_audio_path,
         ref_text: voice.reference_text,
+        voice_clone_prompt_path: voice.qwen_clone_prompt_path || prev.voice_clone_prompt_path,
         output_name: voice.name,
       }));
       setActiveTab("tts");
     }
     setMessage(`${voice.name}을 Qwen 작업에 연결했습니다.`);
+  }
+
+  function createS2VoiceFromQwenAsset(asset: {
+    name: string;
+    reference_audio_path: string;
+    reference_text: string;
+    language?: string;
+  }) {
+    runAction(async () => {
+      if (!asset.reference_audio_path || !asset.reference_text.trim()) {
+        setMessage("S2-Pro 목소리로 저장하려면 참조 음성과 참조 텍스트가 모두 필요합니다.");
+        return;
+      }
+      const voice = await api.createS2ProVoice({
+        name: asset.name,
+        runtime_source: s2ProVoiceForm.runtime_source,
+        reference_audio_path: asset.reference_audio_path,
+        reference_text: asset.reference_text,
+        language: asset.language || "Auto",
+        notes: "Qwen 목소리 자산에서 만든 S2-Pro 목소리",
+        create_qwen_prompt: false,
+      });
+      setSelectedS2VoiceId(voice.id);
+      await refreshAll();
+      setMessage(`${voice.name}을 S2-Pro 목소리로 저장했습니다.`);
+    });
   }
 
   function handleCreateS2ProVoice(event?: FormEvent) {
@@ -1070,6 +1216,196 @@ export default function App() {
       setMessage("ACE-Step 음악 생성이 완료되어 생성 갤러리에 저장했습니다.");
     });
   }
+
+  function aceStepCommonPayload() {
+    const seedsRaw = (aceStepForm.manual_seeds || "").trim();
+    const lorasInput: { path: string; adapter_name?: string; scale?: number }[] = [];
+    if (aceStepCommonForm.lora_path.trim()) {
+      const entry: { path: string; adapter_name?: string; scale?: number } = {
+        path: aceStepCommonForm.lora_path.trim(),
+      };
+      if (aceStepCommonForm.lora_adapter_name.trim()) entry.adapter_name = aceStepCommonForm.lora_adapter_name.trim();
+      if (aceStepCommonForm.lora_scale.trim()) entry.scale = Number(aceStepCommonForm.lora_scale);
+      lorasInput.push(entry);
+    }
+    return {
+      output_name: aceStepForm.output_name,
+      caption: aceStepForm.prompt,
+      prompt: aceStepForm.prompt,
+      lyrics: aceStepForm.lyrics,
+      duration: Number(aceStepForm.audio_duration || "60"),
+      inference_steps: Number(aceStepForm.infer_step || "27"),
+      guidance_scale: Number(aceStepForm.guidance_scale || "15"),
+      seeds: seedsRaw,
+      use_random_seed: !seedsRaw,
+      cpu_offload: aceStepForm.cpu_offload,
+      compile_model: aceStepForm.torch_compile,
+      config_path: aceStepCommonForm.config_path || undefined,
+      lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+      loras: lorasInput,
+    };
+  }
+
+  async function loadAceStepRuntime() {
+    try {
+      const data = await api.aceStepRuntime();
+      setAceStepRuntime(data);
+    } catch {
+      setAceStepRuntime(null);
+    }
+  }
+
+  async function handleAceStepCoverSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.aceStepCover({
+        ...aceStepCommonPayload(),
+        src_audio: aceStepAudioForm.src_audio,
+        audio_cover_strength: Number(aceStepCoverForm.audio_cover_strength || "1"),
+        cover_noise_strength: Number(aceStepCoverForm.cover_noise_strength || "0"),
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage("Cover 생성이 완료되어 갤러리에 저장했습니다.");
+    });
+  }
+
+  async function handleAceStepRepaintSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.aceStepRepaint({
+        ...aceStepCommonPayload(),
+        src_audio: aceStepAudioForm.src_audio,
+        repainting_start: Number(aceStepRepaintForm.repainting_start || "0"),
+        repainting_end: Number(aceStepRepaintForm.repainting_end || "-1"),
+        repaint_mode: aceStepRepaintForm.repaint_mode as "balanced" | "conservative" | "aggressive",
+        repaint_strength: Number(aceStepRepaintForm.repaint_strength || "0.5"),
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage("Repaint 결과를 갤러리에 저장했습니다.");
+    });
+  }
+
+  async function handleAceStepExtendSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.aceStepExtend({
+        ...aceStepCommonPayload(),
+        src_audio: aceStepAudioForm.src_audio,
+        complete_tracks: aceStepExtendForm.complete_tracks,
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage("Extend 결과를 갤러리에 저장했습니다.");
+    });
+  }
+
+  async function handleAceStepExtractSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.aceStepExtract({
+        ...aceStepCommonPayload(),
+        src_audio: aceStepAudioForm.src_audio,
+        extract_track: aceStepExtractForm.extract_track,
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage(`Extract(${aceStepExtractForm.extract_track}) 결과를 갤러리에 저장했습니다.`);
+    });
+  }
+
+  async function handleAceStepLegoSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.aceStepLego({
+        ...aceStepCommonPayload(),
+        src_audio: aceStepAudioForm.src_audio,
+        lego_track: aceStepLegoForm.lego_track,
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage(`Lego(${aceStepLegoForm.lego_track}) 트랙을 추가했습니다.`);
+    });
+  }
+
+  async function handleAceStepCompleteSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.aceStepComplete({
+        ...aceStepCommonPayload(),
+        src_audio: aceStepAudioForm.src_audio,
+        complete_tracks: aceStepCompleteForm.complete_tracks,
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage("Complete 결과를 갤러리에 저장했습니다.");
+    });
+  }
+
+  async function handleAceStepUnderstandSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.aceStepUnderstand({
+        src_audio: aceStepAudioForm.src_audio,
+        config_path: aceStepCommonForm.config_path || undefined,
+        lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+        cpu_offload: aceStepForm.cpu_offload,
+      });
+      setAceStepUnderstandResult(result);
+      setMessage(result.success ? "오디오 메타데이터 추출이 끝났습니다." : `Understand 실패: ${result.error || ""}`);
+    });
+  }
+
+  async function handleAceStepCreateSampleSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.aceStepCreateSample({
+        query: aceStepCreateSampleForm.query,
+        instrumental: aceStepCreateSampleForm.instrumental,
+        vocal_language: aceStepCreateSampleForm.vocal_language || undefined,
+        config_path: aceStepCommonForm.config_path || undefined,
+        lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+      });
+      setAceStepUnderstandResult(result);
+      if (result.success) {
+        setAceStepForm((prev) => ({
+          ...prev,
+          prompt: result.caption || prev.prompt,
+          lyrics: result.lyrics || prev.lyrics,
+        }));
+      }
+      setMessage(result.success ? "Inspiration 결과를 가져왔습니다. text2music 폼으로 옮겨두었어요." : `Inspiration 실패: ${result.error || ""}`);
+    });
+  }
+
+  async function handleAceStepFormatSampleSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const result = await api.aceStepFormatSample({
+        caption: aceStepForm.prompt,
+        lyrics: aceStepForm.lyrics,
+        config_path: aceStepCommonForm.config_path || undefined,
+        lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+      });
+      setAceStepUnderstandResult(result);
+      if (result.success) {
+        setAceStepForm((prev) => ({
+          ...prev,
+          prompt: result.caption || prev.prompt,
+          lyrics: result.lyrics || prev.lyrics,
+        }));
+      }
+      setMessage(result.success ? "Format 결과를 폼에 반영했습니다." : `Format 실패: ${result.error || ""}`);
+    });
+  }
+
+  useEffect(() => {
+    if (isAceStepTab(activeTab) && aceStepRuntime === null) {
+      loadAceStepRuntime();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   async function handleAudioToolUpload(file: File) {
     await runAction(async () => {
@@ -1222,6 +1558,17 @@ export default function App() {
 
   function addApplioBatchAsset(asset: AudioAsset) {
     setApplioBatchPaths((prev) => (prev.includes(asset.path) ? prev : [...prev, asset.path]));
+  }
+
+  function addApplioBatchManualPath() {
+    const path = applioBatchManualPath.trim();
+    if (!path) {
+      setMessage("추가할 오디오 경로를 입력하세요.");
+      return;
+    }
+    setApplioBatchPaths((prev) => (prev.includes(path) ? prev : [...prev, path]));
+    setApplioBatchManualPath("");
+    setMessage(`${basenameFromPath(path)} 경로를 배치 변환 목록에 추가했습니다.`);
   }
 
   async function handleApplioBatchUpload(file: File) {
@@ -1787,8 +2134,35 @@ export default function App() {
 
           <div className="sidebar__section">
             <span className="sidebar__section-title">Music</span>
-            <button className={activeTab === "ace_music" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("ace_music")} type="button">
-              <span>ACE-Step 작곡</span>
+            <button className={activeTab === "ace_music" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_music")} type="button">
+              <span>작곡</span>
+            </button>
+            <button className={activeTab === "ace_cover" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_cover")} type="button">
+              <span>커버</span>
+            </button>
+            <button className={activeTab === "ace_repaint" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_repaint")} type="button">
+              <span>구간 수정</span>
+            </button>
+            <button className={activeTab === "ace_extend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_extend")} type="button">
+              <span>이어붙이기</span>
+            </button>
+            <button className={activeTab === "ace_extract" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_extract")} type="button">
+              <span>스템 추출</span>
+            </button>
+            <button className={activeTab === "ace_lego" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_lego")} type="button">
+              <span>트랙 추가</span>
+            </button>
+            <button className={activeTab === "ace_complete" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_complete")} type="button">
+              <span>트랙 채우기</span>
+            </button>
+            <button className={activeTab === "ace_understand" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_understand")} type="button">
+              <span>오디오 분석</span>
+            </button>
+            <button className={activeTab === "ace_create_sample" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_create_sample")} type="button">
+              <span>아이디어 만들기</span>
+            </button>
+            <button className={activeTab === "ace_format_sample" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_format_sample")} type="button">
+              <span>프롬프트 정리</span>
             </button>
           </div>
 
@@ -1866,127 +2240,283 @@ export default function App() {
             <div className="voice-gallery-toolbar">
               <div>
                 <h2>목소리 프로젝트</h2>
-                <p>저장한 목소리별로 참조 음성, Qwen 프리셋, 생성 결과, 데이터셋 연결을 한곳에서 관리합니다.</p>
+                <p>직접 만든 목소리 자산만 모아 관리합니다. 기본 목소리는 여기서 제외합니다.</p>
               </div>
               <div className="voice-gallery-tabs" aria-label="목소리 보기 필터">
-                <button className={voiceGalleryView === "mine" ? "is-active" : ""} onClick={() => setVoiceGalleryView("mine")} type="button">
-                  나의 목소리들
+                <button className={voiceGalleryView === "trained" ? "is-active" : ""} onClick={() => setVoiceGalleryView("trained")} type="button">
+                  훈련한 모델 <span>{latestFineTunedModels.length}</span>
                 </button>
-                <button className={voiceGalleryView === "stock" ? "is-active" : ""} onClick={() => setVoiceGalleryView("stock")} type="button">
-                  기본 음성
+                <button className={voiceGalleryView === "qwen" ? "is-active" : ""} onClick={() => setVoiceGalleryView("qwen")} type="button">
+                  Qwen 프리셋 <span>{qwenVoiceAssetCount}</span>
                 </button>
-                <button className={voiceGalleryView === "collections" ? "is-active" : ""} onClick={() => setVoiceGalleryView("collections")} type="button">
-                  컬렉션
+                <button className={voiceGalleryView === "s2pro" ? "is-active" : ""} onClick={() => setVoiceGalleryView("s2pro")} type="button">
+                  S2-Pro 프리셋 <span>{s2VoiceProjects.length}</span>
+                </button>
+                <button className={voiceGalleryView === "rvc" ? "is-active" : ""} onClick={() => setVoiceGalleryView("rvc")} type="button">
+                  RVC 모델 <span>{voiceChangerModels.length}</span>
                 </button>
               </div>
             </div>
 
             <div className="voice-project-list">
-              {voiceGalleryView === "mine" && (s2VoiceProjects.length ? s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
-                <article className="voice-project-row" key={voice.id}>
-                  <div className="voice-project-avatar" aria-hidden="true">
-                    <MiniWaveform dense />
-                  </div>
-                  <div className="voice-project-main">
-                    <div className="voice-project-title">
-                      <strong>{voice.name}</strong>
-                      <span>{voice.language} · {formatDate(voice.created_at)}</span>
-                    </div>
-                    <p>{voice.reference_text || "참조 문장이 아직 없습니다."}</p>
-                    <div className="voice-project-assets">
-                      <span>참조 음성 1개</span>
-                      <span>생성 결과 {relatedHistory.length}개</span>
-                      <span>Qwen 프리셋 {relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)}개</span>
-                      <span>{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</span>
-                    </div>
-                    <audio controls src={voice.reference_audio_url} />
-                  </div>
-                  <div className="voice-project-actions">
-                    <button className="secondary-button" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
-                      S2-Pro에서 사용
-                    </button>
-                    <button className="secondary-button" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
-                      Qwen 복제로 보내기
-                    </button>
-                    <button
-                      className="secondary-button"
-                      onClick={() => {
-                        setDatasetForm((prev) => ({ ...prev, ref_audio_path: voice.reference_audio_path, speaker_name: voice.name || prev.speaker_name }));
-                        mergeDatasetSamples([{ audio_path: voice.reference_audio_path, text: voice.reference_text }]);
-                        setActiveTab("dataset");
-                      }}
-                      type="button"
-                    >
-                      데이터셋에 사용
-                    </button>
-                  </div>
-                </article>
-              )) : (
-                <div className="voice-project-empty">
-                  <strong>아직 저장된 S2-Pro 목소리가 없습니다.</strong>
-                  <p>목소리 저장에서 참조 음성을 등록하면 여기서 목소리별 프로젝트로 관리됩니다.</p>
-                  <button className="primary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
-                    목소리 저장하기
-                  </button>
-                </div>
-              ))}
-              {voiceGalleryView === "stock" ? speakers.slice(0, 12).map((speaker) => (
-                <article className="voice-project-row" key={speaker.speaker}>
-                  <div className="voice-project-avatar" aria-hidden="true">
-                    <MiniWaveform dense />
-                  </div>
-                  <div className="voice-project-main">
-                    <div className="voice-project-title">
-                      <strong>{speaker.speaker}</strong>
-                      <span>{speaker.nativeLanguage}</span>
-                    </div>
-                    <p>{speaker.description}</p>
-                  </div>
-                  <div className="voice-project-actions">
-                    <button
-                      className="secondary-button"
-                      onClick={() => {
-                        setInferenceForm((prev) => ({ ...prev, speaker: speaker.speaker }));
-                        setActiveTab("tts");
-                      }}
-                      type="button"
-                    >
-                      TTS에서 사용
+              {voiceGalleryView === "trained" ? (
+                latestFineTunedModels.length ? (
+                  latestFineTunedModels.map((model) => (
+                    <article className="voice-project-row" key={model.model_id}>
+                      <div className="voice-project-avatar" aria-hidden="true">
+                        <MiniWaveform dense />
+                      </div>
+                      <div className="voice-project-main">
+                        <div className="voice-project-title">
+                          <strong>{displayModelName(model)}</strong>
+                          <span>{model.default_speaker ? `${model.default_speaker} 목소리` : "학습 모델"}</span>
+                        </div>
+                        <p>{model.notes || "바로 선택해서 텍스트 음성 변환에 사용할 수 있는 학습 결과입니다."}</p>
+                        <div className="voice-project-assets">
+                          <span>{model.source}</span>
+                          <span>{model.default_speaker || "speaker"}</span>
+                          <span>{model.speaker_encoder_included ? "speaker encoder 포함" : "speaker encoder 없음"}</span>
+                        </div>
+                      </div>
+                      <div className="voice-project-actions">
+                        <button
+                          className="secondary-button"
+                          onClick={() => {
+                            setInferenceForm((prev) => ({
+                              ...prev,
+                              model_id: model.model_id,
+                              speaker: model.default_speaker || prev.speaker,
+                            }));
+                            setActiveTab("tts");
+                          }}
+                          type="button"
+                        >
+                          텍스트 음성 변환에서 사용
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="voice-project-empty">
+                    <strong>훈련한 모델이 없습니다.</strong>
+                    <p>Qwen 학습을 완료한 모델만 이 영역에 표시됩니다.</p>
+                    <button className="primary-button" onClick={() => setActiveTab("training")} type="button">
+                      학습 실행으로 이동
                     </button>
                   </div>
-                </article>
-              )) : null}
-              {voiceGalleryView === "collections" ? presets.map((preset) => (
-                <article className="voice-project-row" key={preset.id}>
-                  <div className="voice-project-avatar" aria-hidden="true">
-                    <MiniWaveform dense />
-                  </div>
-                  <div className="voice-project-main">
-                    <div className="voice-project-title">
-                      <strong>{preset.name}</strong>
-                      <span>{preset.language} · {formatDate(preset.created_at)}</span>
-                    </div>
-                    <p>{preset.reference_text}</p>
-                    <div className="voice-project-assets">
-                      <span>프리셋</span>
-                      <span>{preset.source_type}</span>
-                    </div>
-                  </div>
-                  <div className="voice-project-actions">
-                    <button
-                      className="secondary-button"
-                      onClick={() => {
-                        setSelectedPresetId(preset.id);
-                        setSelectedHybridPresetId(preset.id);
-                        setActiveTab("projects");
-                      }}
-                      type="button"
-                    >
-                      프리셋으로 생성
+                )
+              ) : null}
+
+              {voiceGalleryView === "qwen" ? (
+                qwenVoiceAssetCount ? (
+                  <>
+                    {presets.map((preset) => (
+                      <article className="voice-project-row" key={preset.id}>
+                        <div className="voice-project-avatar" aria-hidden="true">
+                          <MiniWaveform dense />
+                        </div>
+                        <div className="voice-project-main">
+                          <div className="voice-project-title">
+                            <strong>{preset.name}</strong>
+                            <span>{preset.language} · {formatDate(preset.created_at)}</span>
+                          </div>
+                          <p>{preset.reference_text}</p>
+                          <div className="voice-project-assets">
+                            <span>Qwen 프리셋</span>
+                            <span>{preset.source_type}</span>
+                          </div>
+                        </div>
+                        <div className="voice-project-actions">
+                          <button
+                            className="secondary-button"
+                            onClick={() => {
+                              setSelectedPresetId(preset.id);
+                              setSelectedHybridPresetId(preset.id);
+                              setActiveTab("projects");
+                            }}
+                            type="button"
+                          >
+                            프리셋 기반 생성
+                          </button>
+                          <button
+                            className="secondary-button"
+                            onClick={() =>
+                              createS2VoiceFromQwenAsset({
+                                name: preset.name,
+                                reference_audio_path: preset.reference_audio_path,
+                                reference_text: preset.reference_text,
+                                language: preset.language,
+                              })
+                            }
+                            type="button"
+                          >
+                            S2-Pro 프리셋으로 저장
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                    {rawQwenClonePrompts.map((prompt) => (
+                      <article className="voice-project-row" key={prompt.id}>
+                        <div className="voice-project-avatar" aria-hidden="true">
+                          <MiniWaveform dense />
+                        </div>
+                        <div className="voice-project-main">
+                          <div className="voice-project-title">
+                            <strong>{basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, "")}</strong>
+                            <span>{formatDate(prompt.created_at)}</span>
+                          </div>
+                          <p>{prompt.reference_text || "참조 텍스트가 저장되지 않았습니다."}</p>
+                          <div className="voice-project-assets">
+                            <span>Qwen clone prompt</span>
+                            <span>{prompt.source_type}</span>
+                            <span>{prompt.x_vector_only_mode ? "x-vector" : "full style"}</span>
+                          </div>
+                        </div>
+                        <div className="voice-project-actions">
+                          <button
+                            className="secondary-button"
+                            onClick={() => {
+                              setUploadedClonePrompt(prompt);
+                              setActiveTab("projects");
+                            }}
+                            type="button"
+                          >
+                            프리셋으로 저장
+                          </button>
+                          <button
+                            className="secondary-button"
+                            onClick={() =>
+                              createS2VoiceFromQwenAsset({
+                                name: basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, ""),
+                                reference_audio_path: prompt.reference_audio_path,
+                                reference_text: prompt.reference_text,
+                                language: "Auto",
+                              })
+                            }
+                            type="button"
+                          >
+                            S2-Pro 프리셋으로 저장
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </>
+                ) : (
+                  <div className="voice-project-empty">
+                    <strong>Qwen 프리셋이 없습니다.</strong>
+                    <p>목소리 복제나 목소리 설계에서 저장한 프리셋만 이 영역에 표시됩니다.</p>
+                    <button className="primary-button" onClick={() => setActiveTab("clone")} type="button">
+                      목소리 복제로 이동
                     </button>
                   </div>
-                </article>
-              )) : null}
+                )
+              ) : null}
+
+              {voiceGalleryView === "s2pro" ? (
+                s2VoiceProjects.length ? (
+                  s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
+                    <article className="voice-project-row" key={voice.id}>
+                      <div className="voice-project-avatar" aria-hidden="true">
+                        <MiniWaveform dense />
+                      </div>
+                      <div className="voice-project-main">
+                        <div className="voice-project-title">
+                          <strong>{voice.name}</strong>
+                          <span>{voice.language} · {formatDate(voice.created_at)}</span>
+                        </div>
+                        <p>{voice.reference_text || "참조 문장이 아직 없습니다."}</p>
+                        <div className="voice-project-assets">
+                          <span>S2-Pro 프리셋</span>
+                          <span>생성 결과 {relatedHistory.length}개</span>
+                          <span>Qwen 연결 {relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)}개</span>
+                          <span>{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</span>
+                        </div>
+                        <audio controls src={voice.reference_audio_url} />
+                      </div>
+                      <div className="voice-project-actions">
+                        <button className="secondary-button" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
+                          S2-Pro에서 사용
+                        </button>
+                        <button className="secondary-button" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
+                          Qwen 복제로 보내기
+                        </button>
+                        <button
+                          className="secondary-button"
+                          onClick={() => {
+                            setDatasetForm((prev) => ({ ...prev, ref_audio_path: voice.reference_audio_path, speaker_name: voice.name || prev.speaker_name }));
+                            mergeDatasetSamples([{ audio_path: voice.reference_audio_path, text: voice.reference_text }]);
+                            setActiveTab("dataset");
+                          }}
+                          type="button"
+                        >
+                          데이터셋에 사용
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="voice-project-empty">
+                    <strong>S2-Pro 프리셋이 없습니다.</strong>
+                    <p>S2-Pro 목소리 저장에서 만든 재사용 목소리만 이 영역에 표시됩니다.</p>
+                    <button className="primary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
+                      S2-Pro 목소리 저장으로 이동
+                    </button>
+                  </div>
+                )
+              ) : null}
+
+              {voiceGalleryView === "rvc" ? (
+                voiceChangerModels.length ? (
+                  voiceChangerModels.map((model) => (
+                    <article className="voice-project-row" key={model.id}>
+                      <div className="voice-project-avatar" aria-hidden="true">
+                        <MiniWaveform dense />
+                      </div>
+                      <div className="voice-project-main">
+                        <div className="voice-project-title">
+                          <strong>{model.label}</strong>
+                          <span>RVC / Applio</span>
+                        </div>
+                        <p>기존 음성을 이 목소리로 변환할 때 사용하는 RVC 모델입니다.</p>
+                        <div className="voice-project-assets">
+                          <span>{basenameFromPath(model.model_path)}</span>
+                          <span>{model.index_path ? basenameFromPath(model.index_path) : "index 없음"}</span>
+                        </div>
+                      </div>
+                      <div className="voice-project-actions">
+                        <button
+                          className="secondary-button"
+                          onClick={() => {
+                            handleSelectVoiceChangerModel(model.id);
+                            setActiveTab("applio_convert");
+                          }}
+                          type="button"
+                        >
+                          단일 변환에서 사용
+                        </button>
+                        <button
+                          className="secondary-button"
+                          onClick={() => {
+                            handleSelectVoiceChangerModel(model.id);
+                            setActiveTab("applio_batch");
+                          }}
+                          type="button"
+                        >
+                          배치 변환에서 사용
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="voice-project-empty">
+                    <strong>RVC 모델이 없습니다.</strong>
+                    <p>Applio 학습을 완료하거나 모델 다운로드를 마친 RVC 모델만 이 영역에 표시됩니다.</p>
+                    <button className="primary-button" onClick={() => setActiveTab("applio_train")} type="button">
+                      RVC 모델 학습으로 이동
+                    </button>
+                  </div>
+                )
+              ) : null}
             </div>
           </section>
 
@@ -2709,25 +3239,7 @@ export default function App() {
 
       {isS2ProTab(activeTab) ? (
         <section className="workspace workspace--stacked">
-          <section className="s2pro-mode-strip">
-            <div className="s2pro-mode-tabs" aria-label="S2-Pro 작업 선택">
-              {[
-                ["s2pro_tagged", "텍스트 음성 변환", "저장 목소리로 읽기"],
-                ["s2pro_clone", "목소리 저장", "참조 음성 등록"],
-                ["s2pro_multi_speaker", "대화 생성", "화자 태그 대사"],
-                ["s2pro_multilingual", "다국어 TTS", "언어 섞어 읽기"],
-              ].map(([tab, label, hint]) => (
-                <button
-                  className={activeTab === tab ? "s2pro-mode-tab is-active" : "s2pro-mode-tab"}
-                  key={tab}
-                  onClick={() => openS2ProTab(tab as Extract<TabKey, "s2pro_tagged" | "s2pro_clone" | "s2pro_multi_speaker" | "s2pro_multilingual">)}
-                  type="button"
-                >
-                  <strong>{label}</strong>
-                  <span>{hint}</span>
-                </button>
-              ))}
-            </div>
+          <section className="s2pro-workspace">
             {s2ProRuntime ? (
               <span className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
                 {s2ProRuntime.runtime_mode === "api"
@@ -2742,9 +3254,6 @@ export default function App() {
             ) : (
               <span className="runtime-pill">Runtime 확인 중</span>
             )}
-          </section>
-
-          <section className="s2pro-workspace">
             <form className="s2pro-form" onSubmit={handleS2ProSubmit}>
               <div className="s2pro-form__main">
                 {currentS2ProMode === "tagged" ? (
@@ -2918,21 +3427,29 @@ export default function App() {
                           />
                         </label>
                         <div className="button-row">
-                          <button className="secondary-button" disabled={!s2ProVoiceForm.reference_audio_path} onClick={handleTranscribeS2ProReference} type="button">
-                            Whisper 전사
-                          </button>
-                          <label className="inline-check">
-                            <input
-                              checked={s2ProVoiceForm.create_qwen_prompt}
-                              onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: event.target.checked })}
-                              type="checkbox"
-                            />
-                            Qwen clone prompt도 함께 생성
-                          </label>
                           <button className="primary-button" disabled={!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim()} onClick={() => handleCreateS2ProVoice()} type="button">
                             목소리 저장
                           </button>
                         </div>
+                        <details className="advanced-inline">
+                          <summary>Advanced controls</summary>
+                          <div className="button-row">
+                            <button className="secondary-button" disabled={!s2ProVoiceForm.reference_audio_path} onClick={handleTranscribeS2ProReference} type="button">
+                              참조 텍스트 불러오기 / Whisper 전사
+                            </button>
+                            <label className="inline-check">
+                              <input
+                                checked={s2ProVoiceForm.create_qwen_prompt}
+                                onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: event.target.checked })}
+                                type="checkbox"
+                              />
+                              Qwen clone prompt도 함께 생성
+                            </label>
+                          </div>
+                          <p className="field-hint">
+                            생성 갤러리 음성은 저장된 생성 기록의 대사를 먼저 사용하고, 업로드 파일처럼 대사가 없는 경우에만 Whisper를 실행합니다.
+                          </p>
+                        </details>
                       </section>
                     </div>
                     <div className="s2pro-section-heading">
@@ -3065,15 +3582,18 @@ export default function App() {
                   Language
                   <LanguageSelect value={s2ProForm.language} onChange={(language) => setS2ProForm({ ...s2ProForm, language })} />
                 </label>
-                <label>
-                  Style instruction
-                  <textarea
-                    value={s2ProForm.instruction}
-                    onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
-                  />
-                </label>
                 <details className="advanced-inline">
                   <summary>Advanced controls</summary>
+                  <label>
+                    Inline style instruction
+                    <textarea
+                      value={s2ProForm.instruction}
+                      onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
+                    />
+                    <span className="field-caption">
+                      Native S2-Pro parameter가 아니라, 생성 시 대사 앞에 bracket tag로 합쳐 넣는 보조 입력입니다.
+                    </span>
+                  </label>
                   <div className="field-row">
                     <label>
                       Temperature
@@ -3238,17 +3758,112 @@ export default function App() {
         </section>
       ) : null}
 
-      {activeTab === "ace_music" ? (
+      {isAceStepTab(activeTab) ? (
         <section className="workspace workspace--stacked">
           <section className="ace-step-shell">
-            <div className="ace-step-hero">
-              <div className="ace-step-hero__copy">
-                <span className="eyebrow eyebrow--soft">ACE-Step</span>
-                <h2>태그와 가사로 음악 작곡</h2>
-                <p>
-                  장르, 악기, 보컬 톤은 Style prompt에 쓰고 Lyrics에는 [verse], [chorus]처럼 곡 구조를 넣어 완성형 트랙을 만듭니다.
-                </p>
-                <div className="ace-step-preset-row">
+            {currentAceStepMode !== "text2music" && currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" ? (
+              <div className="panel ace-step-source-panel">
+                <h3>Source audio</h3>
+                <p className="text-muted">업로드, 직접 경로, 생성 갤러리 중 하나로 작업할 원본을 고릅니다.</p>
+                <label>
+                  Source audio path
+                  <input
+                    placeholder="data/uploads/... 또는 절대경로"
+                    value={aceStepAudioForm.src_audio}
+                    onChange={(event) => setAceStepAudioForm({ ...aceStepAudioForm, src_audio: event.target.value })}
+                  />
+                </label>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    await runAction(async () => {
+                      const result = await api.uploadAudio(file);
+                      setAceStepAudioForm((prev) => ({ ...prev, src_audio: result.path }));
+                      setMessage(`${result.filename} 업로드 완료`);
+                    });
+                  }}
+                />
+                <ServerAudioPicker assets={generatedAudioAssets} selectedPath={aceStepAudioForm.src_audio} onSelect={(asset) => setAceStepAudioForm({ src_audio: asset.path })} />
+              </div>
+            ) : null}
+
+            {currentAceStepMode !== "text2music" ? (
+              <div className="panel ace-step-common-panel">
+                <h3>Model & LoRA</h3>
+                <p className="text-muted">모델을 비워두면 다운로드된 turbo 계열을 우선 사용합니다. LoRA는 특정 스타일을 더 강하게 입힐 때만 선택하세요.</p>
+                <div className="field-row">
+                  <label>
+                    DiT 모델
+                    <select
+                      value={aceStepCommonForm.config_path}
+                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, config_path: event.target.value })}
+                    >
+                      <option value="">자동 (turbo 우선)</option>
+                      {(aceStepRuntime?.model_variants || []).map((variant) => (
+                        <option key={variant.name} value={variant.name}>
+                          {variant.name}
+                          {variant.available ? "" : " (다운로드 필요)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    5Hz LM
+                    <select
+                      value={aceStepCommonForm.lm_model_path}
+                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_model_path: event.target.value })}
+                    >
+                      <option value="">자동 (1.7B 우선)</option>
+                      {(aceStepRuntime?.lm_models || []).map((variant) => (
+                        <option key={variant.name} value={variant.name}>
+                          {variant.name}
+                          {variant.available ? "" : " (다운로드 필요)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    LoRA 경로
+                    <select
+                      value={aceStepCommonForm.lora_path}
+                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_path: event.target.value })}
+                    >
+                      <option value="">사용 안 함</option>
+                      {(aceStepRuntime?.lora_adapters || []).map((lora) => (
+                        <option key={lora.path} value={lora.path}>
+                          {lora.relative_path || lora.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    LoRA scale
+                    <input
+                      value={aceStepCommonForm.lora_scale}
+                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_scale: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Adapter name
+                    <input
+                      placeholder="예: voice / style"
+                      value={aceStepCommonForm.lora_adapter_name}
+                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_adapter_name: event.target.value })}
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : null}
+
+            {currentAceStepMode === "text2music" ? (
+            <form className="ace-step-composer" onSubmit={handleAceStepSubmit}>
+              <div className="ace-step-main">
+                <div className="ace-step-preset-row ace-step-preset-row--inline">
                   {ACE_STEP_STYLE_PRESETS.map((preset) => (
                     <button
                       className="pill-button"
@@ -3260,16 +3875,6 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-              </div>
-              <aside className="ace-step-runtime">
-                <span>Runtime</span>
-                <strong>{aceStepAvailable ? "Ready" : "Setup required"}</strong>
-                <p>{aceStepNotes || "ACE-Step 로컬 실행 환경을 사용합니다."}</p>
-              </aside>
-            </div>
-
-            <form className="ace-step-composer" onSubmit={handleAceStepSubmit}>
-              <div className="ace-step-main">
                 <label>
                   Track name
                   <input
@@ -3482,6 +4087,299 @@ export default function App() {
                 </button>
               </aside>
             </form>
+            ) : null}
+
+            {currentAceStepMode === "cover" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepCoverSubmit}>
+                <h3>커버 만들기</h3>
+                <p className="text-muted">원본 오디오의 흐름은 남기고 장르, 악기 질감, 보컬 분위기를 새 프롬프트 쪽으로 바꿉니다.</p>
+                <div className="field-row">
+                  <label>
+                    Style prompt
+                    <textarea
+                      className="ace-step-textarea"
+                      value={aceStepForm.prompt}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Lyrics (선택)
+                    <textarea
+                      className="ace-step-textarea ace-step-textarea--lyrics"
+                      value={aceStepForm.lyrics}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    Cover strength (0=완전 새로, 1=원곡 가깝게)
+                    <input
+                      value={aceStepCoverForm.audio_cover_strength}
+                      onChange={(event) => setAceStepCoverForm({ ...aceStepCoverForm, audio_cover_strength: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Cover noise strength
+                    <input
+                      value={aceStepCoverForm.cover_noise_strength}
+                      onChange={(event) => setAceStepCoverForm({ ...aceStepCoverForm, cover_noise_strength: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  Cover 생성
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "repaint" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepRepaintSubmit}>
+                <h3>구간 다시 만들기</h3>
+                <p className="text-muted">전체 곡을 버리지 않고, 타임라인에서 지정한 초 단위 구간만 새로 합성합니다.</p>
+                <div className="field-row">
+                  <label>
+                    Style prompt
+                    <textarea
+                      className="ace-step-textarea"
+                      value={aceStepForm.prompt}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Lyrics
+                    <textarea
+                      className="ace-step-textarea ace-step-textarea--lyrics"
+                      value={aceStepForm.lyrics}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    Repaint start (초)
+                    <input
+                      value={aceStepRepaintForm.repainting_start}
+                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repainting_start: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Repaint end (초, -1=끝까지)
+                    <input
+                      value={aceStepRepaintForm.repainting_end}
+                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repainting_end: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Mode
+                    <select
+                      value={aceStepRepaintForm.repaint_mode}
+                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_mode: event.target.value })}
+                    >
+                      <option value="conservative">conservative</option>
+                      <option value="balanced">balanced</option>
+                      <option value="aggressive">aggressive</option>
+                    </select>
+                  </label>
+                  <label>
+                    Strength (balanced 전용)
+                    <input
+                      value={aceStepRepaintForm.repaint_strength}
+                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_strength: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  Repaint 생성
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "extend" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepExtendSubmit}>
+                <h3>뒤를 이어붙이기</h3>
+                <p className="text-muted">소스 오디오 뒤에 이어질 파트를 만듭니다. 어떤 트랙을 이어갈지 콤마로 적습니다.</p>
+                <label>
+                  Style prompt
+                  <textarea
+                    className="ace-step-textarea"
+                    value={aceStepForm.prompt}
+                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Tracks (콤마로 구분)
+                  <input
+                    value={aceStepExtendForm.complete_tracks}
+                    onChange={(event) => setAceStepExtendForm({ ...aceStepExtendForm, complete_tracks: event.target.value })}
+                  />
+                </label>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  Extend 실행
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "extract" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepExtractSubmit}>
+                <h3>트랙 하나만 분리하기</h3>
+                <p className="text-muted">원본에서 보컬, 드럼, 베이스처럼 하나의 stem만 뽑아 새 파일로 저장합니다.</p>
+                <label>
+                  Track
+                  <select
+                    value={aceStepExtractForm.extract_track}
+                    onChange={(event) => setAceStepExtractForm({ ...aceStepExtractForm, extract_track: event.target.value })}
+                  >
+                    {ACE_STEP_TRACK_OPTIONS.map((track) => (
+                      <option key={track} value={track}>
+                        {track}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  Extract
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "lego" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepLegoSubmit}>
+                <h3>트랙 추가하기</h3>
+                <p className="text-muted">기존 믹스는 유지하고, 선택한 악기나 보컬 lane 하나를 새로 얹습니다.</p>
+                <label>
+                  Style prompt
+                  <textarea
+                    className="ace-step-textarea"
+                    value={aceStepForm.prompt}
+                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Track
+                  <select
+                    value={aceStepLegoForm.lego_track}
+                    onChange={(event) => setAceStepLegoForm({ ...aceStepLegoForm, lego_track: event.target.value })}
+                  >
+                    {ACE_STEP_TRACK_OPTIONS.map((track) => (
+                      <option key={track} value={track}>
+                        {track}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  Lego 추가
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "complete" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepCompleteSubmit}>
+                <h3>부족한 트랙 채우기</h3>
+                <p className="text-muted">드럼, 베이스, 보컬처럼 비어 있거나 약한 여러 트랙을 한 번에 보강합니다.</p>
+                <label>
+                  Style prompt
+                  <textarea
+                    className="ace-step-textarea"
+                    value={aceStepForm.prompt}
+                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Tracks (콤마로 구분)
+                  <input
+                    value={aceStepCompleteForm.complete_tracks}
+                    onChange={(event) => setAceStepCompleteForm({ ...aceStepCompleteForm, complete_tracks: event.target.value })}
+                  />
+                </label>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  Complete 실행
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "understand" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepUnderstandSubmit}>
+                <h3>오디오 분석하기</h3>
+                <p className="text-muted">오디오를 듣고 BPM, 키, 언어, 가사, 스타일 캡션을 추정해 다음 작곡 입력으로 재사용합니다.</p>
+                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
+                  분석 실행
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "create_sample" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepCreateSampleSubmit}>
+                <h3>아이디어를 작곡 초안으로 바꾸기</h3>
+                <p className="text-muted">“비 오는 밤의 한국 시티팝” 같은 한 줄 아이디어를 스타일 설명과 가사 초안으로 펼칩니다.</p>
+                <label>
+                  Query
+                  <textarea
+                    className="ace-step-textarea"
+                    value={aceStepCreateSampleForm.query}
+                    onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, query: event.target.value })}
+                  />
+                </label>
+                <div className="field-row">
+                  <label>
+                    Vocal language (선택)
+                    <input
+                      placeholder="예: ko, en, ja"
+                      value={aceStepCreateSampleForm.vocal_language}
+                      onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, vocal_language: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={aceStepCreateSampleForm.instrumental}
+                      onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, instrumental: event.target.checked })}
+                    />
+                    Instrumental
+                  </label>
+                </div>
+                <button className="primary-button" disabled={loading || !aceStepAvailable} type="submit">
+                  샘플 만들기
+                </button>
+              </form>
+            ) : null}
+
+            {currentAceStepMode === "format_sample" ? (
+              <form className="panel ace-step-task-form" onSubmit={handleAceStepFormatSampleSubmit}>
+                <h3>프롬프트와 가사를 정리하기</h3>
+                <p className="text-muted">
+                  이 기능은 오디오를 바꾸는 기능이 아닙니다. 현재 작곡 폼의 Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬고,
+                  정리된 결과를 다시 작곡 폼에 반영합니다.
+                </p>
+                <button className="primary-button" disabled={loading || !aceStepAvailable} type="submit">
+                  작곡 입력 정리
+                </button>
+              </form>
+            ) : null}
+
+            {aceStepUnderstandResult ? (
+              <section className="panel">
+                <h3>분석 / 메타 결과</h3>
+                <ul className="ace-step-meta-list">
+                  <li>
+                    <strong>Caption:</strong> {aceStepUnderstandResult.caption || "-"}
+                  </li>
+                  <li>
+                    <strong>BPM:</strong> {aceStepUnderstandResult.bpm ?? "-"} | <strong>Duration:</strong> {aceStepUnderstandResult.duration ?? "-"}s
+                  </li>
+                  <li>
+                    <strong>Key:</strong> {aceStepUnderstandResult.keyscale || "-"} | <strong>Time signature:</strong>{" "}
+                    {aceStepUnderstandResult.timesignature || "-"} | <strong>Language:</strong> {aceStepUnderstandResult.language || "-"}
+                  </li>
+                  <li>
+                    <strong>Lyrics:</strong>
+                    <pre className="ace-step-meta-lyrics">{aceStepUnderstandResult.lyrics || "-"}</pre>
+                  </li>
+                  {aceStepUnderstandResult.error ? <li className="text-error">Error: {aceStepUnderstandResult.error}</li> : null}
+                </ul>
+              </section>
+            ) : null}
 
             {lastAceStepRecord ? (
               <div className="result-stack">
@@ -3643,6 +4541,14 @@ export default function App() {
                     }}
                   />
                 </label>
+                <label>
+                  직접 경로 입력
+                  <input
+                    placeholder="data/generated/... 또는 /mnt/d/..."
+                    value={voiceChangerForm.audio_path}
+                    onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, audio_path: event.target.value })}
+                  />
+                </label>
                 {voiceChangerForm.audio_path ? (
                   <div className="selected-source-card">
                     <span className="meta-label">선택한 원본</span>
@@ -3652,7 +4558,7 @@ export default function App() {
                 ) : (
                   <p className="field-hint">업로드하거나 아래 목록에서 변환할 원본 음성을 선택하세요.</p>
                 )}
-                <ServerAudioPicker assets={audioAssets} selectedPath={voiceChangerForm.audio_path} onSelect={handleSelectAudioToolAsset} />
+                <ServerAudioPicker assets={generatedAudioAssets} selectedPath={voiceChangerForm.audio_path} onSelect={handleSelectAudioToolAsset} />
               </section>
 
               <form className="panel voice-changer-panel" onSubmit={handleVoiceChangerSubmit}>
@@ -3705,6 +4611,16 @@ export default function App() {
                 </div>
                 <details className="advanced-controls voice-changer-advanced">
                   <summary>Advanced controls</summary>
+                  <div className="field-row">
+                    <label>
+                      RVC model path
+                      <input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
+                    </label>
+                    <label>
+                      Index path
+                      <input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
+                    </label>
+                  </div>
                   <div className="field-row">
                     <label>
                       Pitch shift
@@ -3777,7 +4693,20 @@ export default function App() {
                   }}
                 />
               </label>
-              <ServerAudioPicker assets={audioAssets} selectedPath="" onSelect={addApplioBatchAsset} />
+              <div className="field-row field-row--with-action">
+                <label>
+                  직접 경로 추가
+                  <input
+                    placeholder="data/generated/... 또는 /mnt/d/..."
+                    value={applioBatchManualPath}
+                    onChange={(event) => setApplioBatchManualPath(event.target.value)}
+                  />
+                </label>
+                <button className="secondary-button" onClick={addApplioBatchManualPath} type="button">
+                  경로 추가
+                </button>
+              </div>
+              <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addApplioBatchAsset} />
             </section>
 
             <form className="panel voice-changer-panel" onSubmit={handleVoiceChangerBatchSubmit}>
@@ -3807,6 +4736,24 @@ export default function App() {
                         </button>
                       </div>
                       <audio controls className="audio-card__player" src={asset.url} />
+                    </article>
+                  ))}
+                  {selectedApplioBatchExternalPaths.map((path) => (
+                    <article className="audio-asset-card is-selected" key={path}>
+                      <div className="audio-asset-card__header">
+                        <div>
+                          <strong>{basenameFromPath(path)}</strong>
+                          <span>직접 경로</span>
+                        </div>
+                        <button className="secondary-button" onClick={() => setApplioBatchPaths((prev) => prev.filter((item) => item !== path))} type="button">
+                          제거
+                        </button>
+                      </div>
+                      {path.startsWith("data/") ? (
+                        <audio controls className="audio-card__player" src={fileUrlFromPath(path)} />
+                      ) : (
+                        <span className="field-hint">외부 경로는 변환 실행 시 백엔드가 직접 읽습니다.</span>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -3840,6 +4787,36 @@ export default function App() {
                   <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
                 </label>
               </div>
+              <details className="advanced-controls voice-changer-advanced">
+                <summary>Advanced controls</summary>
+                <div className="field-row">
+                  <label>
+                    RVC model path
+                    <input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
+                  </label>
+                  <label>
+                    Index path
+                    <input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    Pitch shift
+                    <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
+                  </label>
+                  <label>
+                    Clean strength
+                    <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
+                  </label>
+                  <label>
+                    Content embedder
+                    <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
+                      <option value="contentvec">contentvec</option>
+                      <option value="hubert">hubert</option>
+                    </select>
+                  </label>
+                </div>
+              </details>
               <button className="primary-button" disabled={loading || !voiceChangerAvailable || !applioBatchPaths.length || !voiceChangerForm.model_path} type="submit">
                 {applioBatchPaths.length}개 변환
               </button>

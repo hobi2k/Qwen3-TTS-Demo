@@ -1,4 +1,15 @@
 import type {
+  AceStepCompleteRequest,
+  AceStepCoverRequest,
+  AceStepCreateSampleRequest,
+  AceStepExtendRequest,
+  AceStepExtractRequest,
+  AceStepFormatSampleRequest,
+  AceStepLegoRequest,
+  AceStepRepaintRequest,
+  AceStepRuntimeResponse,
+  AceStepUnderstandRequest,
+  AceStepUnderstandResponse,
   AudioTranscriptionResponse,
   AudioConvertRequest,
   AudioSeparationRequest,
@@ -52,6 +63,8 @@ function apiCandidates(path: string): string[] {
   if (configuredBase) {
     candidates.push(`${configuredBase}${path}`);
   }
+
+  candidates.push(`http://127.0.0.1:8190${path}`);
 
   return Array.from(new Set(candidates));
 }
@@ -351,6 +364,82 @@ export const api = {
 
   generateAceStepMusic(payload: MusicCompositionRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/music/ace-step/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepRuntime(): Promise<AceStepRuntimeResponse> {
+    return request<AceStepRuntimeResponse>("/api/music/ace-step/runtime");
+  },
+
+  aceStepCover(payload: AceStepCoverRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/cover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepRepaint(payload: AceStepRepaintRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/repaint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepExtend(payload: AceStepExtendRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/extend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepExtract(payload: AceStepExtractRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepLego(payload: AceStepLegoRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/lego", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepComplete(payload: AceStepCompleteRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepUnderstand(payload: AceStepUnderstandRequest): Promise<AceStepUnderstandResponse> {
+    return request<AceStepUnderstandResponse>("/api/music/ace-step/understand", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepCreateSample(payload: AceStepCreateSampleRequest): Promise<AceStepUnderstandResponse> {
+    return request<AceStepUnderstandResponse>("/api/music/ace-step/create-sample", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  aceStepFormatSample(payload: AceStepFormatSampleRequest): Promise<AceStepUnderstandResponse> {
+    return request<AceStepUnderstandResponse>("/api/music/ace-step/format-sample", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

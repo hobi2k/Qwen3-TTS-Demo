@@ -183,22 +183,40 @@ print("Fish Speech S2-Pro model download completed.")
 PY
 fi
 
-ACE_STEP_REPO_URL="${ACE_STEP_REPO_URL:-https://github.com/ace-step/ACE-Step.git}"
+ACE_STEP_REPO_URL="${ACE_STEP_REPO_URL:-https://github.com/ace-step/ACE-Step-1.5.git}"
+ACE_STEP_VENV="${ACE_STEP_VENV:-${ROOT_DIR}/.venv-ace-step}"
+ACE_STEP_DOWNLOAD_PROFILE="${ACE_STEP_DOWNLOAD_PROFILE:-main}"
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "ace-step" ]]; then
   if [[ ! -d "${ACE_STEP_DIR}/.git" ]]; then
-    echo "Cloning ACE-Step -> ${ACE_STEP_DIR}"
-    git clone "${ACE_STEP_REPO_URL}" "${ACE_STEP_DIR}"
+    echo "Cloning ACE-Step-1.5 -> ${ACE_STEP_DIR}"
+    git clone --depth 1 "${ACE_STEP_REPO_URL}" "${ACE_STEP_DIR}"
   else
     echo "ACE-Step already present at ${ACE_STEP_DIR}"
   fi
 
-  ACE_STEP_VENV="${ACE_STEP_VENV:-${ROOT_DIR}/.venv-ace-step}"
   if [[ ! -d "${ACE_STEP_VENV}" ]]; then
     echo "Creating ACE-Step venv -> ${ACE_STEP_VENV}"
     python -m venv "${ACE_STEP_VENV}"
   fi
-  "${ACE_STEP_VENV}/bin/python" -m pip install --upgrade pip
-  "${ACE_STEP_VENV}/bin/python" -m pip install -e "${ACE_STEP_DIR}"
+  "${ACE_STEP_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools hatchling
+  echo "Installing ACE-Step-1.5 into ${ACE_STEP_VENV} (this may take a while)"
+  if command -v uv >/dev/null 2>&1; then
+    # ACE-Step 1.5 declares nano-vllm as a local source in pyproject.toml.
+    # Plain pip ignores [tool.uv.sources] and tries PyPI instead, so prefer uv.
+    uv pip install --python "${ACE_STEP_VENV}/bin/python" -e "${ACE_STEP_DIR}"
+    if [[ "${HF_HUB_ENABLE_HF_TRANSFER:-}" == "1" ]]; then
+      # The downloader prefers Hugging Face first. When hf_transfer is enabled
+      # but missing, huggingface_hub aborts before it can resume the model files.
+      uv pip install --python "${ACE_STEP_VENV}/bin/python" hf_transfer
+    fi
+  else
+    echo "uv not found; using pip fallback with local nano-vllm source." >&2
+    "${ACE_STEP_VENV}/bin/python" -m pip install -e "${ACE_STEP_DIR}/acestep/third_parts/nano-vllm"
+    "${ACE_STEP_VENV}/bin/python" -m pip install --no-deps -e "${ACE_STEP_DIR}"
+    if [[ "${HF_HUB_ENABLE_HF_TRANSFER:-}" == "1" ]]; then
+      "${ACE_STEP_VENV}/bin/python" -m pip install hf_transfer
+    fi
+  fi
 
   if [[ -n "${PRIVATE_ASSET_REPO_ID}" ]] && [[ "${QWEN_USE_PRIVATE_ASSET_REPO}" == "1" ]]; then
     python - "${ACE_STEP_MODEL_DIR}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" <<'PY'
@@ -224,7 +242,28 @@ for filename in files:
 print("ACE-Step private model mirror download completed.")
 PY
   else
-    echo "ACE-Step will auto-download checkpoints into ${ACE_STEP_MODEL_DIR} on first generation."
+    echo "Downloading ACE-Step-1.5 checkpoints (profile: ${ACE_STEP_DOWNLOAD_PROFILE}) -> ${ACE_STEP_MODEL_DIR}"
+    export ACESTEP_CHECKPOINTS_DIR="${ACE_STEP_MODEL_DIR}"
+    case "${ACE_STEP_DOWNLOAD_PROFILE}" in
+      none|skip)
+        echo "ACE_STEP_DOWNLOAD_PROFILE=${ACE_STEP_DOWNLOAD_PROFILE}: skipping checkpoint download. Models will be fetched on first generation."
+        ;;
+      all)
+        "${ACE_STEP_VENV}/bin/python" -m acestep.model_downloader --all --dir "${ACE_STEP_MODEL_DIR}" || {
+          echo "ACE-Step model download failed. You can retry with: ${ACE_STEP_VENV}/bin/python -m acestep.model_downloader --all --dir ${ACE_STEP_MODEL_DIR}" >&2
+        }
+        ;;
+      main|"")
+        "${ACE_STEP_VENV}/bin/python" -m acestep.model_downloader --dir "${ACE_STEP_MODEL_DIR}" || {
+          echo "ACE-Step main model download failed. You can retry with: ${ACE_STEP_VENV}/bin/python -m acestep.model_downloader --dir ${ACE_STEP_MODEL_DIR}" >&2
+        }
+        ;;
+      *)
+        "${ACE_STEP_VENV}/bin/python" -m acestep.model_downloader --model "${ACE_STEP_DOWNLOAD_PROFILE}" --dir "${ACE_STEP_MODEL_DIR}" || {
+          echo "ACE-Step download for model '${ACE_STEP_DOWNLOAD_PROFILE}' failed." >&2
+        }
+        ;;
+    esac
   fi
 fi
 
