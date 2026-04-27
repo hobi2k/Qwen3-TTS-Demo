@@ -51,6 +51,7 @@
 - `Applio 단일 변환`
 - `Applio 배치 변환`
 - `Applio 모델 블렌딩`
+- `ACE-Step 작곡`
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
@@ -177,6 +178,14 @@
 - `단일 변환`은 업로드 파일 또는 생성 갤러리 음성 하나를 선택해 RVC 모델로 변환합니다.
 - `배치 변환`은 여러 업로드/갤러리 음성을 같은 설정으로 한 번에 변환합니다.
 - `모델 블렌딩`은 두 RVC 모델을 비율로 섞어 새 모델을 만듭니다.
+
+### ACE-Step 작곡
+
+- `Music` 섹션 아래의 독립 작곡 화면입니다.
+- `Style prompt`에는 장르, 분위기, 악기, 보컬 톤을 씁니다.
+- `Lyrics`에는 실제 가사와 `[verse]`, `[chorus]` 같은 구조 태그를 넣습니다.
+- `Duration`, `Steps`, `Guidance`, `Seed`는 기본 제어로 두고, scheduler/ERG/CPU offload 등은 `Advanced controls`에 넣습니다.
+- 생성 결과는 `생성 갤러리`에 저장됩니다.
 
 중요:
 

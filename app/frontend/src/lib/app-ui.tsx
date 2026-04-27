@@ -13,6 +13,7 @@ export type TabKey =
   | "applio_convert"
   | "applio_batch"
   | "applio_blend"
+  | "ace_music"
   | "separation"
   | "dataset"
   | "training"
@@ -99,6 +100,11 @@ export const PRODUCT_PAGES = {
     label: "모델 블렌딩",
     title: "Applio 모델 블렌딩",
     description: "두 RVC 모델을 비율로 섞어 새로운 목소리 모델을 만듭니다.",
+  },
+  ace_music: {
+    label: "ACE-Step 작곡",
+    title: "ACE-Step 작곡",
+    description: "장르 태그와 가사 구조로 완성형 음악을 생성합니다.",
   },
   separation: {
     label: "오디오 분리",
@@ -401,6 +407,11 @@ export const GUIDE_SECTIONS = [
     title: "Applio",
     summary: "RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 한 섹션에서 처리합니다.",
     steps: ["RVC 모델 학습에서 바꿀 목소리 모델을 먼저 만듭니다.", "단일 변환과 배치 변환은 업로드 파일과 생성 갤러리 음성을 모두 입력으로 받을 수 있습니다.", "모델 블렌딩은 두 RVC 모델을 비율로 섞어 새 변환 모델을 만듭니다."],
+  },
+  {
+    title: "ACE-Step 작곡",
+    summary: "태그, 장르 설명, 가사 구조를 넣어 완성형 음악을 생성합니다.",
+    steps: ["Tags에는 genre, mood, instrumentation을 쉼표로 적습니다.", "Lyrics에는 [verse], [chorus], [bridge] 같은 구조 태그를 넣을 수 있습니다.", "Advanced controls에서 steps, guidance, seed, CPU offload를 조절합니다."],
   },
   {
     title: "데이터셋 만들기",

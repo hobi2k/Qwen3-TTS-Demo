@@ -24,6 +24,7 @@ import type {
   HealthResponse,
   HybridCloneInstructRequest,
   ModelInfo,
+  MusicCompositionRequest,
   PrepareDatasetRequest,
   RvcTrainingRequest,
   RvcTrainingResponse,
@@ -342,6 +343,14 @@ export const api = {
 
   generateSoundEffect(payload: SoundEffectRequest): Promise<AudioToolResponse> {
     return request<AudioToolResponse>("/api/audio-tools/sound-effects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateAceStepMusic(payload: MusicCompositionRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/music/ace-step/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

@@ -10,6 +10,7 @@
   "layout": {
     "models": "models/<model-dir>/...",
     "fish_speech_s2_pro": "fish-speech/s2-pro/...",
+    "ace_step": "ace-step/...",
     "rvc": "rvc-models/<model>.pth and <model>.index",
     "mmaudio": "mmaudio/nsfw/<checkpoint>.safetensors",
     "stem_separator": "stem-separator-models/<model>.ckpt and <model>.yaml"

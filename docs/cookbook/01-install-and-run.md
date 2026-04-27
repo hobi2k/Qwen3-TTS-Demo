@@ -45,6 +45,7 @@ Windows PowerShell:
 - `uv sync`
 - `uv pip install hf_transfer certifi`
 - `vendor/Applio`, `vendor/MMAudio`, `vendor/fish-speech` 준비
+- ACE-Step은 기본 setup 단계가 아니라 `download_models.sh ace-step` 또는 `all`에서 별도 준비
 - `app/backend/.env` 생성
 - 시스템 의존성 점검
 
@@ -84,6 +85,8 @@ Windows PowerShell:
   `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
 - Stem Separator 모델:
   `data/stem-separator-models/vocals_mel_band_roformer.ckpt`
+- ACE-Step 작곡 런타임:
+  `vendor/ACE-Step`, `.venv-ace-step`, `data/models/ace-step`
 
 개인 Hugging Face mirror를 먼저 사용하려면:
 
@@ -112,6 +115,12 @@ S2-Pro만 준비하려면:
 
 ```bash
 ./scripts/download_models.sh s2pro
+```
+
+ACE-Step 작곡만 준비하려면:
+
+```bash
+./scripts/download_models.sh ace-step
 ```
 
 ## 4. `.env` 확인
@@ -147,6 +156,9 @@ S2-Pro만 준비하려면:
 - `FISH_AUDIO_API_KEY`
 - `FISH_AUDIO_API_URL`
 - `FISH_AUDIO_MODEL`
+- `ACE_STEP_REPO_ROOT`
+- `ACE_STEP_PYTHON`
+- `ACE_STEP_CHECKPOINT_PATH`
 
 현재 기준 원칙:
 
@@ -192,6 +204,24 @@ FISH_AUDIO_MODEL=s2-pro
 ```
 
 로컬과 API를 화면에서 번갈아 쓰려면 `S2_PRO_RUNTIME`은 비워 두고, 각 생성 폼의 `Runtime`만 선택해도 됩니다.
+
+## 4-2. ACE-Step 작곡 런타임
+
+ACE-Step은 음악 모델 의존성이 크기 때문에 메인 Qwen `.venv`가 아니라 별도 `.venv-ace-step`에서 실행합니다.
+
+```bash
+./scripts/download_models.sh ace-step
+```
+
+기본 경로:
+
+```env
+ACE_STEP_REPO_ROOT=vendor/ACE-Step
+ACE_STEP_PYTHON=.venv-ace-step/bin/python
+ACE_STEP_CHECKPOINT_PATH=data/models/ace-step
+```
+
+웹 UI의 `ACE-Step 작곡` 탭은 `/api/music/ace-step/generate`를 호출하고, 백엔드는 `scripts/run_ace_step_generate.py`를 별도 프로세스로 실행합니다. 생성 결과는 `생성 갤러리`에 저장됩니다.
 
 ## 5. 프런트 빌드
 

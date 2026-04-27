@@ -200,6 +200,7 @@ app/frontend/tsconfig.tsbuildinfo
 .uv-cache/
 .venv/
 .venv-fish-speech/
+.venv-ace-step/
 app/backend/.venv*/
 .cache/
 models/

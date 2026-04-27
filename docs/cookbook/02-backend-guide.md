@@ -10,6 +10,7 @@
 - Base / CustomVoice 학습 실행
 - `Applio / RVC` voice changer 호출
 - `MMAudio` sound effects 호출
+- `ACE-Step` music composition 호출
 - 생성 결과와 메타데이터 저장
 - `/files` 정적 제공
 - 빌드된 프런트 정적 파일 서빙
@@ -20,6 +21,7 @@
 - [qwen.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/qwen.py)
 - [voice_changer.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/voice_changer.py)
 - [mmaudio.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/mmaudio.py)
+- [ace_step.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/ace_step.py)
 - [schemas.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/schemas.py)
 - [storage.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/storage.py)
 - [qwen3_tts_upstream_train.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/scripts/qwen3_tts_upstream_train.py)
@@ -35,6 +37,7 @@
 - `QwenDemoEngine(storage)` 생성
 - `ApplioVoiceChanger(REPO_ROOT)` 생성
 - `MMAudioSoundEffectEngine(REPO_ROOT)` 생성
+- `AceStepComposer(REPO_ROOT)` 생성
 - `/files` 정적 마운트
 - `app/frontend/dist`가 있으면 프런트 SPA도 함께 서빙
 
@@ -60,6 +63,8 @@
   canonical dataset 폴더
 - `data/finetune-runs`
   학습 run과 결과 모델
+- `data/models/ace-step`
+  ACE-Step checkpoint/cache
 
 ## 프런트 동시 서빙
 
@@ -150,6 +155,22 @@
 - 최소 입력 길이: 10초
 
 이 기능은 TTS와 분리된 오디오 툴로 취급합니다. 결과는 보컬, 반주, 드럼, 베이스 같은 stem asset으로 저장되고 생성 갤러리/작업 이력에서 다시 쓸 수 있습니다.
+
+### ACE-Step 작곡
+
+[`ace_step.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/ace_step.py)의 `AceStepComposer`가 담당합니다.
+
+현재 기준:
+
+- `POST /api/music/ace-step/generate`가 곡 생성 요청을 받습니다.
+- FastAPI 프로세스가 직접 ACE-Step 모델을 import하지 않습니다.
+- `scripts/run_ace_step_generate.py`를 별도 Python 프로세스로 실행합니다.
+- 기본 ACE-Step 저장소는 `vendor/ACE-Step`입니다.
+- 기본 Python은 `.venv-ace-step/bin/python`입니다.
+- 기본 checkpoint/cache는 `data/models/ace-step`입니다.
+- 생성 결과는 `data/generated/ace-step-music/`에 저장되고, `GenerationRecord`로 생성 갤러리에 연결됩니다.
+
+이 분리는 의존성 충돌과 서버 멈춤을 줄이기 위한 것입니다.
 
 ## 스키마 계층
 

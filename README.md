@@ -1,6 +1,6 @@
 # Qwen3-TTS-Demo
 
-`Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`를 하나의 로컬 작업실로 묶은 음성 데모 애플리케이션입니다.
+`Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`, `ACE-Step`을 하나의 로컬 작업실로 묶은 음성/음악 데모 애플리케이션입니다.
 
 현재 구조는 “기능을 나열하는 데모”가 아니라, 사용자가 실제로 아래 작업을 구분해서 쓸 수 있는 제품형 흐름을 기준으로 정리되어 있습니다.
 
@@ -33,6 +33,8 @@
 - `Applio`
   `오디오 분리`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리하며, 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
+- `ACE-Step 작곡`
+  장르/분위기/악기 태그와 가사 구조를 입력해 완성형 음악을 만들고 생성 갤러리에 저장합니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -55,6 +57,7 @@
 - 스크립트 진입점 정리: [docs/cookbook/19-script-entrypoints.md](docs/cookbook/19-script-entrypoints.md)
 - 개인 Hugging Face 자산 mirror: [docs/cookbook/20-private-hf-assets.md](docs/cookbook/20-private-hf-assets.md)
 - S2-Pro 작업실: [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)
+- ACE-Step 작곡: [docs/cookbook/22-ace-step-music.md](docs/cookbook/22-ace-step-music.md)
 
 VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리합니다.
 
@@ -83,6 +86,7 @@ Qwen3-TTS-Demo/
   vendor/
     Applio/                  # tracked source
     MMAudio/                 # tracked source
+    ACE-Step/                # optional local ACE-Step checkout
   app/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript
@@ -93,6 +97,7 @@ Qwen3-TTS-Demo/
     generated/               # generated audio + metadata
     audio-tools/             # sound effect / changer / separation metadata
     s2-pro-voices/           # saved Fish Speech reference voice records
+    models/ace-step/         # ACE-Step checkpoint/cache, gitignored
     clone-prompts/           # saved clone prompt assets
     presets/                 # saved presets
     datasets/                # canonical dataset folders
@@ -150,6 +155,8 @@ data/datasets/mai_ko_full/
 - `홈`: 홈, 나의 목소리들, 생성 갤러리
 - `Qwen`: Qwen3-TTS 기반 생성, 프리셋, 오디오 작업
 - `S2-Pro`: Fish Speech S2-Pro 전용 작업실
+- `Applio`: RVC 변환, Stem Separator 분리
+- `Music`: ACE-Step 작곡
 - `Qwen 학습`: 데이터셋 만들기, 학습 실행, VoiceBox 융합
 - `도움말`: 가이드
 

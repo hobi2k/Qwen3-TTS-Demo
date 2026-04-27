@@ -8,9 +8,11 @@ MODELS_DIR="${ROOT_DIR}/data/models"
 VENDOR_DIR="${ROOT_DIR}/vendor"
 APPLIO_DIR="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
 MMAUDIO_DIR="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
+ACE_STEP_DIR="${ACE_STEP_REPO_ROOT:-${VENDOR_DIR}/ACE-Step}"
 RVC_DIR="${ROOT_DIR}/data/rvc-models"
 MMAUDIO_MODELS_DIR="${ROOT_DIR}/data/mmaudio"
 STEM_SEPARATOR_MODELS_DIR="${ROOT_DIR}/data/stem-separator-models"
+ACE_STEP_MODEL_DIR="${ACE_STEP_CHECKPOINT_PATH:-${ROOT_DIR}/data/models/ace-step}"
 FISH_SPEECH_DIR="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
 FISH_SPEECH_MODEL_DIR="${FISH_SPEECH_MODEL_DIR:-${ROOT_DIR}/data/models/fish-speech/s2-pro}"
 PROFILE="${1:-all}"
@@ -25,6 +27,7 @@ mkdir -p "${VENDOR_DIR}"
 mkdir -p "${RVC_DIR}"
 mkdir -p "${MMAUDIO_MODELS_DIR}"
 mkdir -p "${STEM_SEPARATOR_MODELS_DIR}"
+mkdir -p "${ACE_STEP_MODEL_DIR}"
 mkdir -p "${FISH_SPEECH_MODEL_DIR}"
 source "${VENV_DIR}/bin/activate"
 
@@ -81,6 +84,7 @@ private_revision = sys.argv[4]
 use_private_assets = sys.argv[5] == "1"
 
 profiles = {
+    "ace-step": [],
     "s2pro": [],
     "core": [
         ("Qwen/Qwen3-TTS-Tokenizer-12Hz", "Qwen3-TTS-Tokenizer-12Hz"),
@@ -101,7 +105,7 @@ profiles = {
 }
 
 if profile not in profiles:
-    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', or 's2pro'.")
+    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', 's2pro', or 'ace-step'.")
 
 for repo_id, dirname in profiles[profile]:
     local_dir = models_dir / dirname
@@ -179,6 +183,51 @@ print("Fish Speech S2-Pro model download completed.")
 PY
 fi
 
+ACE_STEP_REPO_URL="${ACE_STEP_REPO_URL:-https://github.com/ace-step/ACE-Step.git}"
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "ace-step" ]]; then
+  if [[ ! -d "${ACE_STEP_DIR}/.git" ]]; then
+    echo "Cloning ACE-Step -> ${ACE_STEP_DIR}"
+    git clone "${ACE_STEP_REPO_URL}" "${ACE_STEP_DIR}"
+  else
+    echo "ACE-Step already present at ${ACE_STEP_DIR}"
+  fi
+
+  ACE_STEP_VENV="${ACE_STEP_VENV:-${ROOT_DIR}/.venv-ace-step}"
+  if [[ ! -d "${ACE_STEP_VENV}" ]]; then
+    echo "Creating ACE-Step venv -> ${ACE_STEP_VENV}"
+    python -m venv "${ACE_STEP_VENV}"
+  fi
+  "${ACE_STEP_VENV}/bin/python" -m pip install --upgrade pip
+  "${ACE_STEP_VENV}/bin/python" -m pip install -e "${ACE_STEP_DIR}"
+
+  if [[ -n "${PRIVATE_ASSET_REPO_ID}" ]] && [[ "${QWEN_USE_PRIVATE_ASSET_REPO}" == "1" ]]; then
+    python - "${ACE_STEP_MODEL_DIR}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download, list_repo_files
+
+target_dir = Path(sys.argv[1])
+private_repo_id = sys.argv[2]
+private_revision = sys.argv[3]
+prefix = "ace-step/"
+files = [item for item in list_repo_files(private_repo_id, repo_type="model", revision=private_revision) if item.startswith(prefix)]
+if not files:
+    raise SystemExit(f"Private ACE-Step mirror missing path: {prefix}")
+for filename in files:
+    rel = filename.removeprefix(prefix)
+    target = target_dir / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    cached = hf_hub_download(repo_id=private_repo_id, filename=filename, revision=private_revision, repo_type="model")
+    shutil.copy2(cached, target)
+print("ACE-Step private model mirror download completed.")
+PY
+  else
+    echo "ACE-Step will auto-download checkpoints into ${ACE_STEP_MODEL_DIR} on first generation."
+  fi
+fi
+
 APPLIO_REPO_URL="${APPLIO_REPO_URL:-https://github.com/IAHispano/Applio.git}"
 MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-https://github.com/hkchengrex/MMAudio.git}"
 APPLIO_DEFAULT_RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth}"
@@ -187,7 +236,7 @@ APPLIO_DEFAULT_RVC_MODEL_FILENAME="${APPLIO_DEFAULT_RVC_MODEL_FILENAME:-yui-mix-
 APPLIO_DEFAULT_RVC_INDEX_FILENAME="${APPLIO_DEFAULT_RVC_INDEX_FILENAME:-added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index}"
 APPLIO_SKIP_DEFAULT_RVC="${APPLIO_SKIP_DEFAULT_RVC:-0}"
 
-if [[ "${PROFILE}" != "s2pro" ]]; then
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "core" ]]; then
 
 if [[ ! -d "${APPLIO_DIR}/.git" ]]; then
   echo "Cloning Applio -> ${APPLIO_DIR}"

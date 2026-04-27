@@ -34,6 +34,7 @@ AUXILIARY_PATHS = [
     "data/mmaudio/nsfw",
     "data/stem-separator-models",
     "data/models/fish-speech/s2-pro",
+    "data/models/ace-step",
 ]
 
 
@@ -81,6 +82,8 @@ def collect_assets(include_public_models: bool) -> list[AssetEntry]:
         for file_path in iter_files(root):
             if rel_root == "data/models/fish-speech/s2-pro":
                 repo_path = Path("fish-speech") / "s2-pro" / file_path.relative_to(root)
+            elif rel_root == "data/models/ace-step":
+                repo_path = Path("ace-step") / file_path.relative_to(root)
             else:
                 repo_path = file_path.relative_to(REPO_ROOT / "data")
             entries.append(asset_entry(file_path, repo_path, "auxiliary"))
@@ -117,6 +120,7 @@ def write_manifest(entries: list[AssetEntry], manifest_path: Path, repo_id: str 
         "layout": {
             "models": "models/<model-dir>/...",
             "fish_speech_s2_pro": "fish-speech/s2-pro/...",
+            "ace_step": "ace-step/...",
             "rvc": "rvc-models/<model>.pth and <model>.index",
             "mmaudio": "mmaudio/nsfw/<checkpoint>.safetensors",
             "stem_separator": "stem-separator-models/<model>.ckpt and <model>.yaml",

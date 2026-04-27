@@ -55,6 +55,25 @@ import type {
   VoiceChangerModelInfo,
 } from "./lib/types";
 
+const ACE_STEP_STYLE_PRESETS = [
+  {
+    label: "City pop",
+    prompt: "Korean city pop, warm analog synths, clean female vocal, night drive, glossy drums, melodic bass",
+  },
+  {
+    label: "Dark trap",
+    prompt: "dark trap, distorted 808 bass, sparse piano, whispered female vocal hook, tense cinematic atmosphere",
+  },
+  {
+    label: "Anime rock",
+    prompt: "anime opening rock, fast drums, bright electric guitar, energetic female vocal, uplifting chorus",
+  },
+  {
+    label: "Ballad",
+    prompt: "Korean emotional ballad, intimate piano, soft strings, breathy female vocal, slow build, dramatic chorus",
+  },
+] as const;
+
 function PromptSummaryCard({
   title,
   prompt,
@@ -355,6 +374,34 @@ export default function App() {
     cfg_scale: "5.0",
     negative_prompt: "",
   });
+  const [aceStepForm, setAceStepForm] = useState({
+    output_name: "midnight-city-demo",
+    prompt: "Korean city pop, warm analog synths, clean female vocal, night drive, glossy drums, melodic bass",
+    lyrics:
+      "[verse]\n오늘 밤도 불빛은 천천히 흐르고\n창밖의 도시는 말없이 반짝여\n\n[chorus]\n우린 멀리 가도 같은 노래를 기억해\n끝나지 않을 밤처럼 다시 시작해",
+    audio_duration: "60",
+    infer_step: "27",
+    guidance_scale: "15",
+    scheduler_type: "euler",
+    cfg_type: "apg",
+    omega_scale: "10",
+    manual_seeds: "42",
+    guidance_interval: "0.5",
+    guidance_interval_decay: "0",
+    min_guidance_scale: "3",
+    use_erg_tag: true,
+    use_erg_lyric: true,
+    use_erg_diffusion: false,
+    oss_steps: "",
+    guidance_scale_text: "0",
+    guidance_scale_lyric: "0",
+    bf16: true,
+    torch_compile: false,
+    cpu_offload: false,
+    overlapped_decode: false,
+    device_id: "0",
+  });
+  const [lastAceStepRecord, setLastAceStepRecord] = useState<GenerationRecord | null>(null);
   const [voiceChangerForm, setVoiceChangerForm] = useState({
     audio_path: "",
     selected_model_id: "",
@@ -659,6 +706,8 @@ export default function App() {
   const soundEffectsAvailable = audioToolCapabilityMap.get("sound_effects")?.available ?? true;
   const voiceChangerAvailable = audioToolCapabilityMap.get("voice_changer")?.available ?? true;
   const audioSeparationAvailable = audioToolCapabilityMap.get("audio_separation")?.available ?? true;
+  const aceStepAvailable = audioToolCapabilityMap.get("ace_step")?.available ?? false;
+  const aceStepNotes = audioToolCapabilityMap.get("ace_step")?.notes || "";
   const pageMeta = PRODUCT_PAGES[activeTab];
   const selectedGuideSection = GUIDE_SECTIONS.find((section) => section.title === activeGuideTitle) ?? GUIDE_SECTIONS[0];
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
@@ -984,6 +1033,41 @@ export default function App() {
       setLastAudioToolResult(result);
       await refreshAll();
       setMessage("사운드 이펙트를 생성했습니다.");
+    });
+  }
+
+  async function handleAceStepSubmit(event: FormEvent) {
+    event.preventDefault();
+    await runAction(async () => {
+      const response = await api.generateAceStepMusic({
+        output_name: aceStepForm.output_name,
+        prompt: aceStepForm.prompt,
+        lyrics: aceStepForm.lyrics,
+        audio_duration: Number(aceStepForm.audio_duration || "60"),
+        infer_step: Number(aceStepForm.infer_step || "27"),
+        guidance_scale: Number(aceStepForm.guidance_scale || "15"),
+        scheduler_type: aceStepForm.scheduler_type,
+        cfg_type: aceStepForm.cfg_type,
+        omega_scale: Number(aceStepForm.omega_scale || "10"),
+        manual_seeds: aceStepForm.manual_seeds,
+        guidance_interval: Number(aceStepForm.guidance_interval || "0.5"),
+        guidance_interval_decay: Number(aceStepForm.guidance_interval_decay || "0"),
+        min_guidance_scale: Number(aceStepForm.min_guidance_scale || "3"),
+        use_erg_tag: aceStepForm.use_erg_tag,
+        use_erg_lyric: aceStepForm.use_erg_lyric,
+        use_erg_diffusion: aceStepForm.use_erg_diffusion,
+        oss_steps: aceStepForm.oss_steps,
+        guidance_scale_text: Number(aceStepForm.guidance_scale_text || "0"),
+        guidance_scale_lyric: Number(aceStepForm.guidance_scale_lyric || "0"),
+        bf16: aceStepForm.bf16,
+        torch_compile: aceStepForm.torch_compile,
+        cpu_offload: aceStepForm.cpu_offload,
+        overlapped_decode: aceStepForm.overlapped_decode,
+        device_id: Number(aceStepForm.device_id || "0"),
+      });
+      setLastAceStepRecord(response.record);
+      await refreshAll();
+      setMessage("ACE-Step 음악 생성이 완료되어 생성 갤러리에 저장했습니다.");
     });
   }
 
@@ -1694,6 +1778,13 @@ export default function App() {
             </button>
             <button className={activeTab === "applio_blend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_blend")} type="button">
               <span>모델 블렌딩</span>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <span className="sidebar__section-title">Music</span>
+            <button className={activeTab === "ace_music" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("ace_music")} type="button">
+              <span>ACE-Step 작곡</span>
             </button>
           </div>
 
@@ -3138,6 +3229,260 @@ export default function App() {
                 <h3>방금 생성한 사운드 효과</h3>
                 <AudioCard title="사운드 효과" record={lastAudioToolResult.record} />
               </section>
+            ) : null}
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === "ace_music" ? (
+        <section className="workspace workspace--stacked">
+          <section className="ace-step-shell">
+            <div className="ace-step-hero">
+              <div className="ace-step-hero__copy">
+                <span className="eyebrow eyebrow--soft">ACE-Step</span>
+                <h2>태그와 가사로 음악 작곡</h2>
+                <p>
+                  장르, 악기, 보컬 톤은 Style prompt에 쓰고 Lyrics에는 [verse], [chorus]처럼 곡 구조를 넣어 완성형 트랙을 만듭니다.
+                </p>
+                <div className="ace-step-preset-row">
+                  {ACE_STEP_STYLE_PRESETS.map((preset) => (
+                    <button
+                      className="pill-button"
+                      key={preset.label}
+                      onClick={() => setAceStepForm((prev) => ({ ...prev, prompt: preset.prompt }))}
+                      type="button"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <aside className="ace-step-runtime">
+                <span>Runtime</span>
+                <strong>{aceStepAvailable ? "Ready" : "Setup required"}</strong>
+                <p>{aceStepNotes || "ACE-Step 로컬 실행 환경을 사용합니다."}</p>
+              </aside>
+            </div>
+
+            <form className="ace-step-composer" onSubmit={handleAceStepSubmit}>
+              <div className="ace-step-main">
+                <label>
+                  Track name
+                  <input
+                    value={aceStepForm.output_name}
+                    onChange={(event) => setAceStepForm({ ...aceStepForm, output_name: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Style prompt
+                  <textarea
+                    className="ace-step-textarea"
+                    value={aceStepForm.prompt}
+                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Lyrics
+                  <textarea
+                    className="ace-step-textarea ace-step-textarea--lyrics"
+                    value={aceStepForm.lyrics}
+                    onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
+                  />
+                </label>
+              </div>
+
+              <aside className="ace-step-controls">
+                <div className="field-row">
+                  <label>
+                    Duration
+                    <input
+                      value={aceStepForm.audio_duration}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, audio_duration: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Steps
+                    <input
+                      value={aceStepForm.infer_step}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, infer_step: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label>
+                    Guidance
+                    <input
+                      value={aceStepForm.guidance_scale}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Seed
+                    <input
+                      value={aceStepForm.manual_seeds}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, manual_seeds: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <details className="advanced-inline">
+                  <summary>Advanced controls</summary>
+                  <div className="field-row">
+                    <label>
+                      Scheduler
+                      <select
+                        value={aceStepForm.scheduler_type}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, scheduler_type: event.target.value })}
+                      >
+                        <option value="euler">euler</option>
+                        <option value="heun">heun</option>
+                        <option value="pingpong">pingpong</option>
+                      </select>
+                    </label>
+                    <label>
+                      CFG type
+                      <select
+                        value={aceStepForm.cfg_type}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, cfg_type: event.target.value })}
+                      >
+                        <option value="apg">apg</option>
+                        <option value="cfg">cfg</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="field-row">
+                    <label>
+                      Omega scale
+                      <input
+                        value={aceStepForm.omega_scale}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, omega_scale: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Guidance interval
+                      <input
+                        value={aceStepForm.guidance_interval}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_interval: event.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div className="field-row">
+                    <label>
+                      Guidance decay
+                      <input
+                        value={aceStepForm.guidance_interval_decay}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_interval_decay: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Min guidance
+                      <input
+                        value={aceStepForm.min_guidance_scale}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, min_guidance_scale: event.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div className="field-row">
+                    <label>
+                      Text guidance
+                      <input
+                        value={aceStepForm.guidance_scale_text}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale_text: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Lyric guidance
+                      <input
+                        value={aceStepForm.guidance_scale_lyric}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale_lyric: event.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div className="field-row">
+                    <label>
+                      OSS steps
+                      <input
+                        placeholder="예: 10,20"
+                        value={aceStepForm.oss_steps}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, oss_steps: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Device ID
+                      <input
+                        value={aceStepForm.device_id}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, device_id: event.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div className="ace-step-toggle-grid">
+                    <label>
+                      <input
+                        checked={aceStepForm.use_erg_tag}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_tag: event.target.checked })}
+                        type="checkbox"
+                      />
+                      ERG tag
+                    </label>
+                    <label>
+                      <input
+                        checked={aceStepForm.use_erg_lyric}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_lyric: event.target.checked })}
+                        type="checkbox"
+                      />
+                      ERG lyric
+                    </label>
+                    <label>
+                      <input
+                        checked={aceStepForm.use_erg_diffusion}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: event.target.checked })}
+                        type="checkbox"
+                      />
+                      ERG diffusion
+                    </label>
+                    <label>
+                      <input
+                        checked={aceStepForm.bf16}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, bf16: event.target.checked })}
+                        type="checkbox"
+                      />
+                      BF16
+                    </label>
+                    <label>
+                      <input
+                        checked={aceStepForm.torch_compile}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, torch_compile: event.target.checked })}
+                        type="checkbox"
+                      />
+                      torch.compile
+                    </label>
+                    <label>
+                      <input
+                        checked={aceStepForm.cpu_offload}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, cpu_offload: event.target.checked })}
+                        type="checkbox"
+                      />
+                      CPU offload
+                    </label>
+                    <label>
+                      <input
+                        checked={aceStepForm.overlapped_decode}
+                        onChange={(event) => setAceStepForm({ ...aceStepForm, overlapped_decode: event.target.checked })}
+                        type="checkbox"
+                      />
+                      Overlapped decode
+                    </label>
+                  </div>
+                </details>
+                <button className="primary-button" disabled={loading || !aceStepAvailable} type="submit">
+                  음악 생성
+                </button>
+              </aside>
+            </form>
+
+            {lastAceStepRecord ? (
+              <div className="result-stack">
+                <AudioCard title={getRecordDisplayTitle(lastAceStepRecord)} subtitle="ACE-Step" record={lastAceStepRecord} />
+              </div>
             ) : null}
           </section>
         </section>

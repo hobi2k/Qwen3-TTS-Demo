@@ -30,6 +30,7 @@
 15. [스크립트 진입점 정리](./19-script-entrypoints.md)
 16. [개인 Hugging Face 자산 mirror](./20-private-hf-assets.md)
 17. [S2-Pro 작업실](./21-s2-pro-workspace.md)
+18. [ACE-Step 작곡](./22-ace-step-music.md)
 
 ## 현재 문서 맵
 
@@ -74,6 +75,8 @@
   모델과 오디오 도구 자산을 개인 Hugging Face repo로 모으는 업로드/다운로드 기준
 - [21-s2-pro-workspace.md](./21-s2-pro-workspace.md)
   Fish Speech S2-Pro 탭의 태그 기반 생성, 복제, 멀티 스피커, 다국어 입력 구조
+- [22-ace-step-music.md](./22-ace-step-music.md)
+  ACE-Step 기반 음악 작곡 탭, 다운로드, 런타임 분리, 생성 갤러리 연결 구조
 
 ### 현재 기능에서 중요한 두 문서
 
@@ -114,6 +117,8 @@
 - `Applio 단일 변환`
 - `Applio 배치 변환`
 - `Applio 모델 블렌딩`
+- `ACE-Step 작곡`
+  장르/분위기/악기 태그와 가사 구조를 입력해 완성형 음악을 생성합니다.
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`

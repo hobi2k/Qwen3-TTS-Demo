@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
+from .ace_step import AceStepComposer, AceStepError
 from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
 from .fish_speech import (
     FishSpeechError,
@@ -58,6 +59,7 @@ from .schemas import (
     HealthResponse,
     HybridCloneInstructRequest,
     ModelInfo,
+    MusicCompositionRequest,
     RvcTrainingRequest,
     RvcTrainingResponse,
     S2ProGenerateRequest,
@@ -104,6 +106,7 @@ engine = QwenDemoEngine(storage)
 voice_changer = ApplioVoiceChanger(REPO_ROOT)
 mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
 stem_separator_engine = StemSeparatorEngine(REPO_ROOT)
+ace_step_composer = AceStepComposer(REPO_ROOT)
 
 
 def default_model_id(category: str) -> str:
@@ -1689,6 +1692,13 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
             available=stem_separator_engine.is_available(),
             notes=stem_separator_engine.availability_notes(),
         ),
+        AudioToolCapability(
+            key="ace_step",
+            label="ACE-Step 작곡",
+            description="ACE-Step으로 태그와 가사를 바탕으로 완성형 음악을 생성합니다.",
+            available=ace_step_composer.is_available(),
+            notes=ace_step_composer.availability_notes(),
+        ),
     ]
 
 
@@ -2168,6 +2178,61 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
         assets=[asset],
         record=record,
     )
+
+
+@app.post("/api/music/ace-step/generate", response_model=GenerationResponse)
+def generate_ace_step_music(payload: MusicCompositionRequest) -> GenerationResponse:
+    """ACE-Step으로 태그와 가사를 바탕으로 음악을 생성한다."""
+
+    if not ace_step_composer.is_available():
+        raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
+
+    label = requested_output_name(payload) or payload.prompt
+    output_path = generated_audio_path("ace-step-music", label, "wav")
+    try:
+        audio_path, meta = ace_step_composer.generate(
+            output_path=output_path,
+            prompt=payload.prompt,
+            lyrics=payload.lyrics,
+            audio_duration=payload.audio_duration,
+            infer_step=payload.infer_step,
+            guidance_scale=payload.guidance_scale,
+            scheduler_type=payload.scheduler_type,
+            cfg_type=payload.cfg_type,
+            omega_scale=payload.omega_scale,
+            manual_seeds=payload.manual_seeds,
+            guidance_interval=payload.guidance_interval,
+            guidance_interval_decay=payload.guidance_interval_decay,
+            min_guidance_scale=payload.min_guidance_scale,
+            use_erg_tag=payload.use_erg_tag,
+            use_erg_lyric=payload.use_erg_lyric,
+            use_erg_diffusion=payload.use_erg_diffusion,
+            oss_steps=payload.oss_steps,
+            guidance_scale_text=payload.guidance_scale_text,
+            guidance_scale_lyric=payload.guidance_scale_lyric,
+            bf16=payload.bf16,
+            torch_compile=payload.torch_compile,
+            cpu_offload=payload.cpu_offload,
+            overlapped_decode=payload.overlapped_decode,
+            device_id=payload.device_id,
+            extra={"output_name": payload.output_name},
+        )
+    except AceStepError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"ACE-Step generation failed: {exc}") from exc
+
+    record = build_generation_record(
+        record_id=storage.new_id("music"),
+        mode="ace_step_music",
+        text=payload.lyrics or payload.prompt,
+        language="Music",
+        audio_path=audio_path,
+        instruction=payload.prompt,
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
 
 
 @app.post("/api/audio-tools/voice-changer", response_model=AudioToolResponse)

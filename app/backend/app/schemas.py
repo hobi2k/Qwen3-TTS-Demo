@@ -379,6 +379,35 @@ class SoundEffectRequest(BaseModel):
     negative_prompt: str = ""
 
 
+class MusicCompositionRequest(BaseModel):
+    """ACE-Step 음악 작곡 요청 스키마입니다."""
+
+    output_name: str = "ace-step-track"
+    prompt: str = Field(..., min_length=1)
+    lyrics: str = Field("", max_length=12000)
+    audio_duration: float = Field(60.0, ge=-1.0, le=240.0)
+    infer_step: int = Field(27, ge=1, le=200)
+    guidance_scale: float = Field(15.0, ge=0.1, le=50.0)
+    scheduler_type: str = "euler"
+    cfg_type: str = "apg"
+    omega_scale: float = Field(10.0, ge=0.0, le=50.0)
+    manual_seeds: str = "42"
+    guidance_interval: float = Field(0.5, ge=0.0, le=1.0)
+    guidance_interval_decay: float = Field(0.0, ge=0.0, le=1.0)
+    min_guidance_scale: float = Field(3.0, ge=0.0, le=50.0)
+    use_erg_tag: bool = True
+    use_erg_lyric: bool = True
+    use_erg_diffusion: bool = False
+    oss_steps: str = ""
+    guidance_scale_text: float = Field(0.0, ge=0.0, le=50.0)
+    guidance_scale_lyric: float = Field(0.0, ge=0.0, le=50.0)
+    bf16: bool = True
+    torch_compile: bool = False
+    cpu_offload: bool = False
+    overlapped_decode: bool = False
+    device_id: int = Field(0, ge=0)
+
+
 class VoiceChangerRequest(BaseModel):
     """Applio/RVC 기반 audio-to-audio 단일 변환 요청 스키마다."""
 

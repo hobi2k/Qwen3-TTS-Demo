@@ -30,6 +30,7 @@
 - `Applio 단일 변환`
 - `Applio 배치 변환`
 - `Applio 모델 블렌딩`
+- `ACE-Step 작곡`
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
@@ -39,7 +40,7 @@
 
 ## 제품 목표
 
-이 저장소의 목표는 `Qwen3-TTS`, `Applio`, `MMAudio`를 한데 묶어, 아래 흐름을 실제로 시연할 수 있는 로컬 음성 작업실을 제공하는 것입니다.
+이 저장소의 목표는 `Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`, `ACE-Step`을 한데 묶어, 아래 흐름을 실제로 시연할 수 있는 로컬 음성/음악 작업실을 제공하는 것입니다.
 
 1. `CustomVoice`로 바로 TTS를 생성하고 듣기
 2. `Base`로 참조 음성에서 스타일을 추출하기
@@ -49,6 +50,7 @@
 6. 오디오 툴을 독립 기능으로 사용하기
 7. 데이터셋을 만들고 파인튜닝을 실행하기
 8. Fish Speech S2-Pro 계열 태그 기반 생성을 별도 작업실로 제공하기
+9. ACE-Step으로 장르 태그와 가사 구조 기반 음악을 생성하기
 
 ## 현재 구조에서 중요한 구분
 
@@ -84,6 +86,14 @@
 
 - 사용자가 탭별 목적을 앱 안에서 확인
 - 모델 선택 이유, 데이터셋 흐름, 학습 흐름을 문서형 화면으로 제공
+
+### 7. ACE-Step 작곡
+
+- Qwen / S2-Pro / Applio와 다른 음악 생성 제품군
+- `Style prompt`, `Lyrics`, `Duration`, `Guidance`, `Seed`를 기준으로 완성형 음악을 생성
+- 메인 FastAPI 서버 안에 모델을 직접 import하지 않고 `scripts/run_ace_step_generate.py`를 별도 프로세스로 실행
+- 기본 checkout은 `vendor/ACE-Step`, 전용 venv는 `.venv-ace-step`, checkpoint/cache는 `data/models/ace-step`
+- 결과는 다른 생성물과 동일하게 `생성 갤러리`에서 관리
 
 ## 현재 우선 과제
 

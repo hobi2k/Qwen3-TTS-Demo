@@ -409,6 +409,33 @@ export interface SoundEffectRequest {
   negative_prompt?: string;
 }
 
+export interface MusicCompositionRequest {
+  output_name: string;
+  prompt: string;
+  lyrics: string;
+  audio_duration: number;
+  infer_step: number;
+  guidance_scale: number;
+  scheduler_type: string;
+  cfg_type: string;
+  omega_scale: number;
+  manual_seeds: string;
+  guidance_interval: number;
+  guidance_interval_decay: number;
+  min_guidance_scale: number;
+  use_erg_tag: boolean;
+  use_erg_lyric: boolean;
+  use_erg_diffusion: boolean;
+  oss_steps: string;
+  guidance_scale_text: number;
+  guidance_scale_lyric: number;
+  bf16: boolean;
+  torch_compile: boolean;
+  cpu_offload: boolean;
+  overlapped_decode: boolean;
+  device_id: number;
+}
+
 export interface VoiceChangerRequest {
   audio_path: string;
   model_path?: string;

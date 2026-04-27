@@ -14,6 +14,7 @@
 - MMAudio NSFW checkpoint
 - Stem Separator checkpoint와 YAML
 - Fish Speech S2-Pro 모델 자산
+- ACE-Step checkpoint/cache 자산
 
 이 자산들은 git에 직접 올리면 안 됩니다. 크기가 크고, GitHub 제한에 걸리며, 저장소 clone도 느려집니다.
 
@@ -56,6 +57,8 @@ fish-speech/
     tokenizer.json
     tokenizer_config.json
     special_tokens_map.json
+ace-step/
+  checkpoints-or-cache-files...
 ```
 
 ## 업로드 준비
@@ -130,6 +133,7 @@ export QWEN_USE_PRIVATE_ASSET_REPO=1
 - 개인 repo에 파일이 없으면 기존 public URL 또는 `audio-separator` 다운로드 경로로 되돌아갑니다.
 - `QWEN_USE_PRIVATE_ASSET_REPO=1`이면 Qwen/Whisper 모델도 `models/<model-dir>/...` mirror에서 받습니다.
 - S2-Pro는 `fish-speech/s2-pro/...` mirror에서 받습니다.
+- ACE-Step은 `ace-step/...` mirror에서 받아 `data/models/ace-step`에 복구합니다.
 - 모델과 생성물 폴더는 gitignore 대상입니다.
 
 ## 남은 운영 과제
