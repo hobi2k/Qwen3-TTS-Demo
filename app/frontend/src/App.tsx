@@ -411,6 +411,7 @@ function StudioApp() {
     language: "Korean",
     notes: "",
   });
+  const [createS2ProWithPreset, setCreateS2ProWithPreset] = useState(false);
   const [presetGenerateText, setPresetGenerateText] = useState("이 캐릭터는 앞으로도 같은 목소리로 말해야 해.");
   const [presetOutputName, setPresetOutputName] = useState("프리셋-생성");
   const [selectedPresetId, setSelectedPresetId] = useState("");
@@ -1936,27 +1937,6 @@ function StudioApp() {
     });
   }
 
-  async function handleCreateCloneFromUpload() {
-    if (!uploadedRef) {
-      setMessage("먼저 참조 음성을 업로드해주세요.");
-      return;
-    }
-    if (!selectedBaseModelId) {
-      setMessage("먼저 스타일 분석 모델을 선택해주세요.");
-      return;
-    }
-    await runAction(async () => {
-      const result = await api.createCloneFromUpload({
-        model_id: selectedBaseModelId,
-        reference_audio_path: uploadedRef.path,
-        reference_text: uploadRefText.trim() || undefined,
-      });
-      setUploadedClonePrompt(result);
-      setPresetForm((prev) => ({ ...prev, name: prev.name || `upload-${result.id}` }));
-      setMessage("업로드한 음성으로 목소리 스타일을 만들었습니다.");
-    });
-  }
-
   async function handleVoiceBoxCloneFromUpload() {
     if (!uploadedRef) {
       setMessage("먼저 참조 음성을 업로드해주세요.");
@@ -1981,14 +1961,35 @@ function StudioApp() {
   }
 
   async function handleCreatePreset(source: "design" | "upload") {
-    const prompt = source === "design" ? selectedClonePrompt : uploadedClonePrompt;
-    if (!prompt) {
-      setMessage("먼저 목소리 스타일을 만들어주세요.");
+    if (source === "design" && !selectedClonePrompt) {
+      setMessage("먼저 목소리 설계 결과를 선택해주세요.");
+      return;
+    }
+    if (source === "upload" && !uploadedRef) {
+      setMessage("먼저 참조 음성을 업로드해주세요.");
+      return;
+    }
+    if (source === "upload" && !selectedBaseModelId) {
+      setMessage("먼저 스타일 분석 모델을 선택해주세요.");
       return;
     }
     await runAction(async () => {
+      let prompt = source === "design" ? selectedClonePrompt : uploadedClonePrompt;
+      if (!prompt && source === "upload" && uploadedRef) {
+        prompt = await api.createCloneFromUpload({
+          model_id: selectedBaseModelId,
+          reference_audio_path: uploadedRef.path,
+          reference_text: uploadRefText.trim() || undefined,
+        });
+        setUploadedClonePrompt(prompt);
+      }
+      if (!prompt) {
+        setMessage("프리셋을 만들 목소리 정보를 준비하지 못했습니다.");
+        return;
+      }
+      const presetName = presetForm.name || `preset-${prompt.id}`;
       await api.createPreset({
-        name: presetForm.name || `preset-${prompt.id}`,
+        name: presetName,
         source_type: source === "design" ? "voice_design" : "uploaded_reference",
         language: presetForm.language,
         base_model: prompt.base_model,
@@ -1997,8 +1998,20 @@ function StudioApp() {
         clone_prompt_path: prompt.prompt_path,
         notes: presetForm.notes,
       });
+      if (createS2ProWithPreset) {
+        const voice = await api.createS2ProVoice({
+          name: presetName,
+          runtime_source: s2ProVoiceForm.runtime_source,
+          reference_audio_path: prompt.reference_audio_path,
+          reference_text: prompt.reference_text,
+          language: presetForm.language,
+          notes: presetForm.notes || "Qwen 프리셋 저장과 함께 만든 S2-Pro 목소리",
+          create_qwen_prompt: false,
+        });
+        setSelectedS2VoiceId(voice.id);
+      }
       await refreshAll();
-      setMessage("캐릭터 프리셋을 저장했습니다.");
+      setMessage(createS2ProWithPreset ? "캐릭터 프리셋과 S2-Pro 목소리를 함께 저장했습니다." : "캐릭터 프리셋을 저장했습니다.");
     });
   }
 
@@ -2376,7 +2389,10 @@ function StudioApp() {
 
     if (activeTab === "design") return handleVoiceDesignSubmit();
     if (activeTab === "tts") return handleModelInferenceSubmit();
-    if (activeTab === "clone") return handleCreateCloneFromUpload();
+    if (activeTab === "clone") {
+      if (cloneEngine === "voicebox") return handleVoiceBoxCloneFromUpload();
+      return handleCreatePreset("upload");
+    }
     if (activeTab === "projects") {
       if (selectedHybridPreset && hybridForm.custom_model_id) return handleHybridInferenceSubmit();
       return handleGenerateFromPreset();
@@ -3495,6 +3511,7 @@ function StudioApp() {
                       {t("design.preset.name", "프리셋 이름")}
                     </Label>
                     <Input
+                      placeholder={t("design.preset.namePlaceholder", "예: 차분한-여성-내레이션")}
                       value={presetForm.name}
                       onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
                     />
@@ -3513,6 +3530,7 @@ function StudioApp() {
                       {t("design.preset.notes", "메모")}
                     </Label>
                     <Textarea
+                      placeholder={t("design.preset.notesPlaceholder", "예: 차분한 내레이션용. 낮은 속도와 또렷한 발음이 잘 맞음.")}
                       value={presetForm.notes}
                       onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
                       className="min-h-[64px] resize-y border-line bg-canvas"
@@ -3605,35 +3623,11 @@ function StudioApp() {
                 <Button variant="outline" size="sm" onClick={handleTranscribeUploadText} type="button">
                   {t("clone.step1.retranscribe", "다시 전사")}
                 </Button>
-                {cloneEngine === "base_prompt" ? (
-                  <>
-                    <Button size="sm" onClick={handleCreateCloneFromUpload} type="button">
-                      {t("clone.step1.saveStyleQwen", "Qwen 스타일로 저장")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!uploadedRef}
-                      onClick={() => {
-                        if (!uploadedRef) return;
-                        const stem = uploadedRef.filename.replace(/\.[^.]+$/, "") || `upload-${uploadedRef.id}`;
-                        createS2VoiceFromQwenAsset({
-                          name: stem,
-                          reference_audio_path: uploadedRef.path,
-                          reference_text: uploadRefText.trim(),
-                          language: "Auto",
-                        });
-                      }}
-                      type="button"
-                    >
-                      {t("clone.step1.saveStyleS2Pro", "S2-Pro 보이스로 저장")}
-                    </Button>
-                  </>
-                ) : (
+                {cloneEngine === "voicebox" ? (
                   <Button size="sm" onClick={handleVoiceBoxCloneFromUpload} type="button">
                     {t("clone.step1.voiceboxClone", "VoiceBox 복제 생성")}
                   </Button>
-                )}
+                ) : null}
               </div>
             </WorkspaceCard>
 
@@ -3665,9 +3659,7 @@ function StudioApp() {
                 </Select>
               </div>
 
-              {cloneEngine === "base_prompt" ? (
-                <PromptSummaryCard title={t("clone.step2.styleAsset", "복제 스타일 자산")} prompt={uploadedClonePrompt} />
-              ) : (
+              {cloneEngine === "base_prompt" ? null : (
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
@@ -3718,6 +3710,7 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("design.preset.name", "프리셋 이름")}</Label>
                     <Input
+                      placeholder={t("design.preset.namePlaceholder", "예: 차분한-여성-내레이션")}
                       value={presetForm.name}
                       onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
                     />
@@ -3732,15 +3725,25 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("design.preset.notes", "메모")}</Label>
                     <Textarea
+                      placeholder={t("design.preset.notesPlaceholder", "예: 차분한 내레이션용. 낮은 속도와 또렷한 발음이 잘 맞음.")}
                       value={presetForm.notes}
                       onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
                       className="min-h-[64px] resize-y border-line bg-canvas"
                     />
                   </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-canvas/60 px-3 py-2.5">
+                    <span className="text-xs font-medium text-ink-muted">
+                      {t("clone.step3.createS2ProToo", "S2-Pro 프리셋도 함께 생성")}
+                    </span>
+                    <Switch
+                      checked={createS2ProWithPreset}
+                      onCheckedChange={setCreateS2ProWithPreset}
+                    />
+                  </div>
                   <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
                     <Button
                       size="sm"
-                      disabled={!uploadedClonePrompt}
+                      disabled={!uploadedRef || !selectedBaseModelId || loading}
                       onClick={() => void handleCreatePreset("upload")}
                       type="button"
                     >
@@ -6626,15 +6629,117 @@ function StudioApp() {
               </WorkspaceCard>
             </aside>
 
-            <WorkspaceCard className="flex flex-col gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Guide</span>
-              <h3 className="text-lg font-semibold text-ink">{selectedGuideSection.title}</h3>
-              <p className="text-sm text-ink-muted">{selectedGuideSection.summary}</p>
-              <ol className="mt-2 flex list-decimal flex-col gap-2 pl-5 text-sm text-ink-muted marker:text-ink-subtle marker:font-mono">
-                {selectedGuideSection.steps.map((step) => (
-                  <li key={step} className="leading-relaxed">{step}</li>
-                ))}
-              </ol>
+            <WorkspaceCard className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Guide</span>
+                <h3 className="text-xl font-semibold tracking-tight text-ink">{selectedGuideSection.title}</h3>
+                <p className="text-sm leading-relaxed text-ink-muted">{selectedGuideSection.summary}</p>
+              </div>
+
+              {selectedGuideSection.body?.length ? (
+                <div className="flex flex-col gap-3 border-t border-line pt-4">
+                  {selectedGuideSection.body.map((paragraph, index) => (
+                    <p key={index} className="text-sm leading-relaxed text-ink">{paragraph}</p>
+                  ))}
+                </div>
+              ) : null}
+
+              {selectedGuideSection.steps?.length ? (
+                <div className="flex flex-col gap-2 border-t border-line pt-4">
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Steps</h4>
+                  <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm text-ink-muted marker:font-mono marker:text-ink-subtle">
+                    {selectedGuideSection.steps.map((step, index) => (
+                      <li key={index} className="leading-relaxed">{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              ) : null}
+
+              {selectedGuideSection.prompts?.length ? (
+                <div className="flex flex-col gap-3 border-t border-line pt-4">
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Prompt examples</h4>
+                  <div className="flex flex-col gap-3">
+                    {selectedGuideSection.prompts.map((prompt, index) => (
+                      <article
+                        key={index}
+                        className="rounded-md border border-line bg-canvas/60 p-3"
+                      >
+                        <header className="mb-2 flex items-center gap-2">
+                          <span className="inline-flex items-center rounded-pill bg-accent-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-allcaps text-accent-ink">
+                            {prompt.label}
+                          </span>
+                        </header>
+                        <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">{prompt.example}</pre>
+                        {prompt.note ? (
+                          <p className="mt-2 text-[11px] leading-relaxed text-ink-subtle">↪︎ {prompt.note}</p>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedGuideSection.tags?.length ? (
+                <div className="flex flex-col gap-3 border-t border-line pt-4">
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Tag reference</h4>
+                  <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                    {selectedGuideSection.tags.map((entry) => (
+                      <div
+                        key={entry.tag}
+                        className="flex items-baseline gap-2 border-b border-line/60 py-1.5"
+                      >
+                        <code className="shrink-0 rounded bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-accent-ink">
+                          {entry.tag}
+                        </code>
+                        <span className="text-[12px] leading-relaxed text-ink-muted">{entry.meaning}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedGuideSection.controls?.length ? (
+                <div className="flex flex-col gap-3 border-t border-line pt-4">
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Controls reference</h4>
+                  <div className="overflow-hidden rounded-md border border-line">
+                    <table className="w-full border-collapse text-left text-[12px]">
+                      <thead className="bg-canvas/60">
+                        <tr className="border-b border-line">
+                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Name</th>
+                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Default</th>
+                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Effect</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedGuideSection.controls.map((control) => (
+                          <tr key={control.name} className="border-b border-line/60 last:border-b-0 align-top">
+                            <td className="px-3 py-2 font-mono text-[11px] text-ink">{control.name}</td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-ink-muted">
+                              {control.defaultValue ?? "—"}
+                              {control.range ? <span className="block text-[10px] text-ink-subtle">{control.range}</span> : null}
+                            </td>
+                            <td className="px-3 py-2 leading-relaxed text-ink-muted">{control.effect}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedGuideSection.tips?.length ? (
+                <div className="flex flex-col gap-2 border-t border-line pt-4">
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Tips</h4>
+                  <ul className="flex flex-col gap-1.5 text-sm leading-relaxed text-ink-muted">
+                    {selectedGuideSection.tips.map((tip, index) => (
+                      <li key={index} className="flex gap-2">
+                        <span className="text-accent-ink">•</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </WorkspaceCard>
           </div>
         </WorkspaceShell>
