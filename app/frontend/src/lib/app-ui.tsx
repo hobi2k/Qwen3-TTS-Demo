@@ -3,6 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useTranslation } from "./i18n";
 
 export type TabKey =
@@ -428,98 +435,411 @@ export const S2_PRO_FEATURES = [
   "Local or API runtime",
 ] as const;
 
-export const GUIDE_SECTIONS = [
+export type GuidePromptExample = {
+  label: string;
+  example: string;
+  note?: string;
+};
+
+export type GuideTagEntry = {
+  tag: string;
+  meaning: string;
+};
+
+export type GuideControlEntry = {
+  name: string;
+  defaultValue?: string;
+  range?: string;
+  effect: string;
+};
+
+export type GuideSection = {
+  title: string;
+  summary: string;
+  body?: string[];
+  steps?: string[];
+  tips?: string[];
+  prompts?: GuidePromptExample[];
+  tags?: GuideTagEntry[];
+  controls?: GuideControlEntry[];
+};
+
+export const GUIDE_SECTIONS: GuideSection[] = [
   {
-    title: "홈",
-    summary: "자주 쓰는 작업으로 바로 이동하는 시작 화면입니다.",
-    steps: ["목소리 설계, 목소리 복제, 텍스트 음성 변환, 프리셋 기반 생성을 빠르게 시작합니다.", "생성 결과는 생성 갤러리에서만 관리합니다."],
+    title: "프롬프트 작성 (Voice Design)",
+    summary: "목소리 설계의 instruction 필드는 자연어 프롬프트입니다. 잘 쓰면 그대로 캐릭터가 만들어지고, 못 쓰면 모델이 흐릿한 평균값으로 갑니다.",
+    body: [
+      "Qwen3-TTS의 Voice Design은 instruct 텍스트를 음성 디자인 신호로 해석합니다. 공식 가이드는 \"5가지 원칙\"을 제안합니다 — 구체적으로(deep, crisp, fast-paced 같은 물리 기술어, '좋은 목소리' 같은 추상어 X), 다차원적으로(성별·나이·감정·발성·속도·톤을 동시에 명시), 객관적으로(감상이 아니라 음향 특성), 독창적으로(특정 인물 흉내 X), 그리고 길이는 1~3문장(15~40단어)이 sweet spot.",
+      "instruct는 영어 또는 중국어로 적으면 모델이 안정적으로 해석합니다. 출력 언어와 별개입니다 — 영어 설명문으로 일본어 음성을 만들 수 있습니다. 한국어로 적어도 어느 정도 인식되지만 영문이 가장 신뢰도 높습니다.",
+      "주의: 모순되는 속성을 같이 적으면 결과가 무너집니다. 'high-pitched deep bass' 같은 충돌 기술은 피하세요.",
+    ],
+    prompts: [
+      {
+        label: "차분한 중년 남성 (방송 톤)",
+        example:
+          "A composed middle-aged male announcer with a deep, rich and magnetic voice, a steady speaking speed and clear articulation, suitable for news broadcasting or documentary commentary.",
+      },
+      {
+        label: "젊은 여성 (시네마틱 / 자신감)",
+        example:
+          "Young Korean woman, cinematic and confident. Clear articulation, bright upper tone, slight emotional swell at the end of each sentence.",
+      },
+      {
+        label: "심야 라디오 호스트",
+        example:
+          "Late-night Korean female radio host. Intimate and low-key, breathy but controlled, speaking very close to the microphone with slow, warm pacing.",
+      },
+      {
+        label: "냉정한 빌런",
+        example:
+          "Korean woman with poised menace. Calm surface, cold authority, sharp consonants, restrained but dangerous energy. Avoid overt aggression — keep it pressurized.",
+      },
+      {
+        label: "활기찬 청년 남성",
+        example:
+          "Energetic young male voice in his early twenties, bright and forward, with quick rhythmic delivery and a playful upward inflection at sentence ends.",
+        note: "쉬운 잘못: 'happy voice' 만 쓰지 마세요. 음역대(bright/forward), 속도(quick), 운율(playful upward inflection)을 같이 명시해야 모델이 잡아냅니다.",
+      },
+    ],
+    tips: [
+      "한 문장 = 한 차원으로 쓰면 정리가 쉽습니다. 첫 문장: 누구(성별·나이·국적). 둘째: 음향 특성(피치·질감·속도). 셋째: 발화 스타일(억양·감정 톤).",
+      "원하는 결과가 안 나오면 프롬프트를 더 길게 쓰지 말고 더 구체적으로 바꾸세요. \"a bit warmer\" → \"warmer mid-range, with slight breathiness on long vowels\".",
+      "결과가 마음에 들면 곧장 \"S2-Pro 프리셋 저장\" 또는 Qwen 프리셋 저장으로 보존하세요. seed가 다르면 같은 프롬프트로도 다른 결과가 나옵니다.",
+    ],
   },
   {
-    title: "나의 목소리들",
-    summary: "저장한 스타일과 바로 사용할 수 있는 모델만 모아 봅니다.",
-    steps: ["모델은 사용자가 알아볼 수 있는 모델명 중심으로 표시합니다.", "저장된 스타일은 프리셋 기반 생성이나 데이터셋 구성으로 이어갈 수 있습니다."],
+    title: "프롬프트 작성 (Inline Style Instruction)",
+    summary: "텍스트 음성 변환과 프리셋 기반 생성에서 화자/프리셋과 함께 쓰는 짧은 말투 지시문입니다. 프레임이 다릅니다 — 목소리 자체가 아니라 \"이번 한 줄을 어떻게 읽을지\"를 적습니다.",
+    body: [
+      "instruct가 영어로 들어가면 안정적이지만, S2-Pro의 inline 스타일은 자연어 그대로 가능합니다. 핵심은 '연기 지시'를 적는 것 — 감독이 성우에게 주는 한 줄 디렉션처럼 씁니다.",
+      "Qwen의 instruct 필드는 화자(또는 참조 음성)의 음색은 보존한 채, 이번 발화의 톤·속도·감정만 바꿉니다. 그래서 길게 쓰면 오히려 흐려집니다. 1문장, 핵심 형용사 2~4개 권장.",
+    ],
+    prompts: [
+      {
+        label: "차분/방송",
+        example: "Calm, clear, and steady. Read it like a polished studio narration.",
+      },
+      {
+        label: "따뜻한 위로",
+        example: "Warm, gentle, and reassuring. Speak like you are comforting someone at close distance.",
+      },
+      {
+        label: "냉정한 압박",
+        example: "Cold, firm, and restrained. Keep the emotion suppressed and press the line forward.",
+      },
+      {
+        label: "분노 직전",
+        example: "On the verge of exploding. Sharp, rough, and clipped, with hard sentence endings.",
+      },
+      {
+        label: "두려움 + 분노",
+        example: "Shaken by fear and anger at the same time. Add unstable breathing and a trembling tone.",
+      },
+      {
+        label: "비밀 / 속삭임",
+        example: "Hushed, intimate, almost whispered. Slow tempo, breathy onset, no projection.",
+      },
+    ],
+    tips: [
+      "instruct는 \"무엇\"이 아니라 \"어떻게\"를 적습니다. \"오늘은 정말 힘들었어\"는 Text에. \"피곤하고 절제된, 약간 건조하게\"는 instruct에.",
+      "감정 단어 하나로는 약합니다. \"sad\" 보다 \"sad, with tightened throat and slow tempo\". 신체 감각을 동반한 묘사가 잘 먹습니다.",
+      "Voice Design용 프롬프트(목소리 자체를 만드는 긴 묘사)와 inline instruct(이번 한 줄 연기 지시)는 절대 섞지 마세요. 둘은 다른 역할입니다.",
+    ],
   },
   {
-    title: "생성 갤러리",
-    summary: "생성된 오디오를 듣고 내려받고 삭제하는 전용 공간입니다.",
-    steps: ["개별 선택, 전체 선택, 선택 해제로 관리합니다.", "선택한 음성은 데이터셋 기준 음성이나 샘플로 보낼 수 있습니다."],
+    title: "S2-Pro 태그 레퍼런스",
+    summary: "Fish Speech S2-Pro는 텍스트 안에 [bracket] 태그를 넣어 단어 단위로 표현을 제어합니다. 정해진 목록 + 자유 텍스트 모두 가능 (15,000+ 학습된 태그).",
+    body: [
+      "태그는 대사 중간에 그대로 끼워 넣습니다. 예: `오늘은 [sigh] 그냥 집에 갈래. [whisper] 너만 알고 있어.` 모델이 태그 위치 직후의 단어/구절에 해당 표현을 적용합니다.",
+      "정의된 카테고리 외에 [whisper in small voice], [professional broadcast tone], [pitch up] 같은 자유 기술도 학습된 임베딩에 매핑됩니다 — 영어로 명확하게 적으면 대부분 작동합니다.",
+      "주의: 태그 남발하면 결과가 깨집니다. 한 문장에 1~2개가 적절. Voice Design처럼 태그를 \"감독 디렉션\"이라 생각하세요.",
+    ],
+    tags: [
+      { tag: "[pause]", meaning: "긴 정지" },
+      { tag: "[short pause]", meaning: "짧은 정지" },
+      { tag: "[laughing]", meaning: "웃음 (소리 내어)" },
+      { tag: "[chuckle]", meaning: "낄낄, 짧은 웃음" },
+      { tag: "[laughing tone]", meaning: "웃음기 섞인 어조 (소리 X, 톤만)" },
+      { tag: "[sigh]", meaning: "한숨" },
+      { tag: "[inhale]", meaning: "들숨 (긴장/주저)" },
+      { tag: "[exhale]", meaning: "날숨" },
+      { tag: "[panting]", meaning: "헐떡임" },
+      { tag: "[clearing throat]", meaning: "목 가다듬기" },
+      { tag: "[tsk]", meaning: "혀 차기" },
+      { tag: "[whisper]", meaning: "속삭임" },
+      { tag: "[low voice]", meaning: "낮은 목소리" },
+      { tag: "[shouting]", meaning: "외침" },
+      { tag: "[screaming]", meaning: "비명" },
+      { tag: "[loud]", meaning: "큰 소리" },
+      { tag: "[volume up]", meaning: "볼륨 상승" },
+      { tag: "[volume down]", meaning: "볼륨 감소" },
+      { tag: "[low volume]", meaning: "낮은 볼륨" },
+      { tag: "[emphasis]", meaning: "강조" },
+      { tag: "[interrupting]", meaning: "끊어 들어감" },
+      { tag: "[echo]", meaning: "에코 효과" },
+      { tag: "[singing]", meaning: "노래 (음정 흐름)" },
+      { tag: "[excited]", meaning: "흥분" },
+      { tag: "[excited tone]", meaning: "흥분된 어조" },
+      { tag: "[angry]", meaning: "분노" },
+      { tag: "[sad]", meaning: "슬픔" },
+      { tag: "[surprised]", meaning: "놀람" },
+      { tag: "[shocked]", meaning: "충격" },
+      { tag: "[delight]", meaning: "기쁨" },
+      { tag: "[moaning]", meaning: "신음" },
+      { tag: "[audience laughter]", meaning: "관객 웃음 (배경)" },
+      { tag: "[with strong accent]", meaning: "강한 억양" },
+    ],
+    tips: [
+      "전환 효과: 같은 문장 안에서 톤이 바뀔 때, 정확한 위치에 태그를 박으세요. \"네… [pause] 그래, 알았어.\"",
+      "다중 화자: `<|speaker:0|>`, `<|speaker:1|>`로 화자 전환. 태그는 각 화자 발화 안에 따로 넣습니다.",
+      "효과음 태그(echo, audience laughter)는 결과 길이를 늘립니다. 짧은 데모용 합성에서는 피하세요.",
+    ],
   },
   {
-    title: "목소리 설계",
-    summary: "목소리 설명과 대사를 넣어 새 목소리 방향을 만듭니다.",
-    steps: ["Voice description은 영어로 적으면 모델이 안정적으로 해석합니다.", "Text에는 실제로 읽을 대사를 넣습니다.", "결과가 마음에 들면 목소리 복제나 데이터셋 구성으로 넘깁니다."],
+    title: "Advanced controls (Sampling)",
+    summary: "Qwen3-TTS와 S2-Pro는 LLM 기반이라 텍스트 생성과 동일한 sampling 파라미터로 음성 토큰을 추출합니다. 잘못 만지면 더듬거리거나 단조로워집니다.",
+    body: [
+      "Sampling 토글이 OFF면 greedy(가장 확률 높은 토큰)만 뽑아 가장 \"안전한\" 결과가 나옵니다. 짧은 정형 문장(뉴스 한 줄)에 좋지만 감정 표현이 평탄해집니다.",
+      "ON이면 top_k, top_p, temperature, repetition_penalty가 활성화됩니다. 일반 권장: temperature 0.7~0.9, top_p 0.9, top_k 40~50, repetition_penalty 1.1.",
+      "결과가 한 단어를 반복하거나 \"으...으...\" 같은 늪에 빠지면 repetition_penalty를 1.2~1.4로 올리거나 temperature를 +0.1 하세요. 반대로 너무 들쑥날쑥하면 temperature를 0.5로 내리고 top_p를 0.85로 좁히세요.",
+    ],
+    controls: [
+      {
+        name: "do_sample (Sampling 토글)",
+        defaultValue: "ON",
+        effect: "OFF = greedy(평탄, 안정). ON = 확률 분포에서 추출(다양, 표현력 ↑).",
+      },
+      {
+        name: "temperature",
+        defaultValue: "0.9",
+        range: "0.1 – 1.5",
+        effect: "낮음 = 결정적, 단조로움. 높음 = 창의적, 변동 ↑. 0.7 이하면 같은 입력에 거의 같은 결과.",
+      },
+      {
+        name: "top_k",
+        defaultValue: "50",
+        range: "1 – 100",
+        effect: "후보 토큰을 상위 K개로 제한. 낮을수록 보수적. 너무 낮으면 운율이 죽음(같은 곡선만 반복).",
+      },
+      {
+        name: "top_p (nucleus)",
+        defaultValue: "1.0",
+        range: "0.5 – 1.0",
+        effect: "누적 확률이 P 이하인 토큰만 후보. 0.9 = 상위 90% 확률 질량 안에서만 선택. 0.85 이하면 너무 안전, 1.0이면 모든 토큰.",
+      },
+      {
+        name: "repetition_penalty",
+        defaultValue: "1.0",
+        range: "1.0 – 1.5",
+        effect: "1.0 = 페널티 없음. 1.1~1.2가 무난. 너무 올리면 자연스러운 반복(\"네, 네\")까지 깎임.",
+      },
+      {
+        name: "max_new_tokens",
+        defaultValue: "(model default)",
+        effect: "생성 토큰 상한. 너무 길게 잡으면 모델이 늘어진 결과 생성. 짧은 대사면 1024~2048 권장.",
+      },
+      {
+        name: "seed",
+        defaultValue: "(랜덤)",
+        effect: "재현용. 같은 seed + 같은 입력 = 같은 결과. 마음에 드는 결과의 seed를 메모해 두면 변형 실험에 유용.",
+      },
+    ],
+    tips: [
+      "음성은 텍스트보다 \"안 좋은 후보\"의 비용이 큽니다(잡음, 더듬거림). top_p는 0.9~0.95에서 시작.",
+      "감정/연기가 강한 라인은 temperature를 0.85~1.0까지 올려 표현 폭을 줍니다. 뉴스 톤은 0.6~0.7로 내려 안정.",
+      "긴 문장이 점점 끊어진다면 repetition_penalty를 먼저 의심. 1.05~1.15 사이 미세 조정으로 대부분 해결.",
+    ],
   },
   {
-    title: "텍스트 음성 변환",
-    summary: "모델을 직접 골라 짧은 대사를 빠르게 확인합니다.",
-    steps: ["CustomVoice 계열은 speaker를 선택하고, Base/clone 계열은 참조 음성 또는 프리셋을 사용합니다.", "Seed, top_p, top_k 같은 값은 Advanced controls에서만 조절합니다."],
-  },
-  {
-    title: "목소리 복제",
-    summary: "참조 음성에서 스타일을 저장하거나 VoiceBox로 바로 복제합니다.",
-    steps: ["Base 모델은 clone prompt를 만들기 위한 스타일 분석에 사용합니다.", "VoiceBox 모델은 speaker encoder를 포함한 경우 같은 화면에서 직접 복제할 수 있습니다.", "참조 텍스트는 비워두면 서버 전사를 사용할 수 있습니다."],
+    title: "Advanced controls (Subtalker)",
+    summary: "Subtalker는 메인 토큰 흐름과 별개로 보조 운율/스타일 토큰을 다루는 sub-decoder입니다. 같은 sampling 파라미터를 따로 노출합니다.",
+    body: [
+      "Qwen3-TTS는 메인 토크나이저 외에 \"subtalker\" 흐름을 둬, 음향의 prosodic 변동(억양 굴곡, 호흡, 미세한 timbre 변화)을 별도로 샘플합니다. 메인은 단어/음절 단위, subtalker는 그 위에 얹는 표현 layer라고 보면 됩니다.",
+      "기본값은 메인보다 살짝 보수적(top_k=50, top_p=1.0, temperature=0.9). 끄면(subtalker_dosample OFF) 표현 변동이 줄고 더 \"평탄하고 깨끗한\" 결과가 됩니다.",
+      "감정 폭이 큰 라인이나 연기 톤에서 표현이 부족하다면 메인 sampling을 만지기 전에 subtalker temperature를 +0.1 올리는 것이 안전한 첫 수입니다. 메인을 흔들면 발음 자체가 깨질 수 있어요.",
+    ],
+    controls: [
+      {
+        name: "subtalker_dosample",
+        defaultValue: "ON",
+        effect: "Subtalker 샘플링 토글. OFF면 보조 운율이 결정적(=평탄). 깨끗한 안내문엔 OFF가 좋을 수도.",
+      },
+      {
+        name: "subtalker_top_k",
+        defaultValue: "50",
+        effect: "보조 운율 토큰 후보 수. 낮을수록 운율 단조.",
+      },
+      {
+        name: "subtalker_top_p",
+        defaultValue: "1.0",
+        effect: "보조 운율 nucleus. 0.9 정도로 좁히면 과한 뉘앙스 변동을 줄임.",
+      },
+      {
+        name: "subtalker_temperature",
+        defaultValue: "0.9",
+        effect: "보조 운율 다양성. +0.1 → 감정 표현 ↑, -0.1 → 차분.",
+      },
+    ],
+    tips: [
+      "디버깅 순서: 결과가 단조 → subtalker temperature 먼저. 결과가 와장창 깨짐 → 메인 top_p / repetition_penalty 먼저.",
+      "Subtalker를 메인보다 더 흔들면 운율은 풍부해지지만 발음 신뢰도가 떨어집니다. 메인 ≥ subtalker 다양성을 원칙으로 잡으세요.",
+    ],
   },
   {
     title: "프리셋 기반 생성",
-    summary: "저장한 스타일을 새 대사에 재사용합니다.",
-    steps: ["Base Preset은 Base가 스타일 신호를 읽어 생성합니다.", "Base + Instruction은 Base 스타일과 CustomVoice 지시 모델을 함께 씁니다.", "VoiceBox 모드는 모델 하나로 프리셋과 지시를 처리하는 흐름입니다."],
+    summary: "저장된 스타일에 새 대사를 입혀 반복 생성하는 메인 워크플로우. Base 모드, Base + Instruction (hybrid), VoiceBox 3가지 흐름을 같은 화면에서 전환합니다.",
+    body: [
+      "Base Preset 모드: 저장된 clone prompt만 가지고 Base 모델이 새 대사를 읽습니다. 가장 안정적이고 가벼움. 같은 화자 음색 유지가 최우선일 때 사용.",
+      "Base + Instruction (hybrid) 모드: Base 스타일 위에 CustomVoice 지시 모델의 instruct를 얹습니다. 같은 인물이 다양한 감정/톤을 연기해야 할 때 — 한 캐릭터가 차분하게 / 분노로 / 속삭임으로 같은 대사를 다르게 하는 시나리오.",
+      "VoiceBox 모드: 융합된 VoiceBox 모델(speaker encoder 포함) 한 개로 프리셋 + 지시를 동시에 처리. CustomVoice 학습 후 VoiceBox 융합을 거친 모델에서 가장 일관성 좋은 결과.",
+    ],
+    steps: [
+      "사이드바 > 프리셋 기반 생성 진입.",
+      "상단에서 사용할 프리셋 선택 (없으면 목소리 복제 또는 목소리 설계에서 먼저 만들기).",
+      "모드 선택 — 단순 재사용은 Base, 연기 변주는 Base + Instruction, 학습한 모델 활용은 VoiceBox.",
+      "Text에 새 대사, 필요하면 Instruction 칸에 말투 지시를 적습니다 (앞 섹션 참고).",
+      "Advanced controls는 기본값으로 시작해 결과 보고 조정.",
+    ],
+    tips: [
+      "한 프리셋으로 여러 라인을 만들 때, output_name을 일관된 prefix(예: `mai-`)로 쓰면 갤러리에서 그룹으로 보입니다.",
+      "Hybrid 모드의 instruct는 Voice Design처럼 길게 쓰지 마세요 — 한 줄 디렉션 1~2문장.",
+    ],
   },
   {
-    title: "사운드 효과",
-    summary: "MMAudio 계열 모델로 효과음을 만듭니다.",
-    steps: ["프롬프트는 영어로 작성합니다.", "일반 MMAudio와 NSFW용 MMAudio 프로필을 선택할 수 있습니다.", "길이, 강도, steps, CFG는 결과 질감과 생성 시간을 바꿉니다."],
+    title: "텍스트 음성 변환",
+    summary: "모델·화자·언어를 직접 골라 짧은 대사를 빠르게 검증하는 화면. 프리셋이 없을 때 가장 가볍게 쓰는 도구.",
+    steps: [
+      "Model 선택 — 0.6B는 빠르고 가볍게, 1.7B는 더 자연스러움.",
+      "Speaker 선택 — 9개 기본 화자(중국어 5/영어 2/일본어 1/한국어 1). 화자를 고르면 Language가 자동으로 native에 맞춰집니다.",
+      "Language를 native와 다르게 두면 cross-lingual 합성(품질 ↓)이 시도됩니다 — 경고 메시지가 뜹니다.",
+      "Style instruction(모델이 지원하는 경우)에 한 줄 말투 지시. 비워도 됩니다.",
+      "Advanced controls는 결과를 본 뒤 조정하세요. 처음엔 기본값.",
+    ],
+    tips: [
+      "긴 대사는 잘라서 여러 번 합성하는 게 안정적입니다. 한 번에 500바이트 이상은 권장 X.",
+      "같은 라인의 다른 톤이 필요하면 seed만 바꾸세요. 화자/언어 고정 + seed 변동이 가장 자연스러운 변형.",
+    ],
   },
   {
-    title: "오디오 분리",
-    summary: "음악이나 음성을 보컬/반주 등으로 분리합니다.",
-    steps: ["현재는 Stem Separator 계열 프로필을 사용합니다.", "분리한 보컬은 Applio 단일 변환이나 RVC 학습 데이터로 이어서 사용할 수 있습니다."],
+    title: "목소리 설계",
+    summary: "설명문에서 새 목소리를 디자인합니다. 프롬프트 작성 가이드를 먼저 읽고 들어오세요.",
+    steps: [
+      "모델 선택 (`Qwen3-TTS-12Hz-1.7B-VoiceDesign`).",
+      "파일 이름 — 결과가 갤러리에 어떻게 저장될지 결정.",
+      "목소리 설명 — 영어 1~3문장, 다차원적 묘사 (앞 \"Voice Design 프롬프트\" 섹션).",
+      "대사(Text) — 실제로 읽어 검증할 짧은 문장. 캐릭터에 맞는 라인.",
+      "결과를 듣고 마음에 들면 우측 패널에서 Qwen 또는 S2-Pro 프리셋으로 저장.",
+    ],
+    tips: [
+      "Seed를 바꿔가며 5~10개 변형을 만들고 그 중 한 개를 프리셋으로 저장하는 흐름이 안정적.",
+      "결과가 흐릿하면 프롬프트의 \"음향 특성\" 차원이 부족한 경우가 많음. 피치/속도/질감 형용사를 추가하세요.",
+    ],
   },
   {
-    title: "Applio",
-    summary: "RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 한 섹션에서 처리합니다.",
-    steps: ["RVC 모델 학습에서 바꿀 목소리 모델을 먼저 만듭니다.", "단일 변환과 배치 변환은 업로드 파일과 생성 갤러리 음성을 모두 입력으로 받을 수 있습니다.", "모델 블렌딩은 두 RVC 모델을 비율로 섞어 새 변환 모델을 만듭니다."],
-  },
-  {
-    title: "ACE-Step 작곡",
-    summary: "태그, 장르 설명, 가사 구조를 넣어 완성형 음악을 생성합니다.",
-    steps: ["Tags에는 genre, mood, instrumentation을 쉼표로 적습니다.", "Lyrics에는 [verse], [chorus], [bridge] 같은 구조 태그를 넣을 수 있습니다.", "Advanced controls에서 steps, guidance, seed, CPU offload를 조절합니다."],
-  },
-  {
-    title: "데이터셋 만들기",
-    summary: "기준 음성과 학습 샘플을 한 데이터셋 폴더로 정리합니다.",
-    steps: ["생성 갤러리에서 고르거나, 기준 음성 경로와 샘플 폴더 경로를 입력합니다.", "텍스트가 비어 있으면 Whisper 전사로 채울 수 있습니다.", "최소 20개 이상, 가능하면 50개 이상의 다양한 문장을 권장합니다."],
-  },
-  {
-    title: "학습 실행",
-    summary: "준비된 데이터셋으로 Base, CustomVoice, VoiceBox 학습을 실행합니다.",
-    steps: ["데이터셋을 선택한 뒤 학습 방식과 초기 모델을 확인합니다.", "품질 확인용이라면 마지막 체크포인트 하나만 남기는 흐름을 권장합니다.", "훈련 중에는 다른 대형 GPU 작업을 동시에 실행하지 않는 것이 안전합니다."],
-  },
-  {
-    title: "VoiceBox 융합",
-    summary: "CustomVoice 학습 결과와 Base speaker encoder를 결합합니다.",
-    steps: ["먼저 CustomVoice에 새 화자를 학습합니다.", "그 다음 Base 1.7B의 speaker encoder를 포함시켜 독립 VoiceBox 체크포인트를 만듭니다.", "완성된 VoiceBox는 추가 학습, clone, clone+instruct 검증으로 이어갑니다."],
+    title: "목소리 복제",
+    summary: "참조 음성에서 스타일을 추출해 저장하거나, VoiceBox 모델로 바로 복제합니다.",
+    steps: [
+      "Step 1: 참조 음성 업로드 + 참조 텍스트(비우면 Whisper 자동 전사).",
+      "Step 2: 엔진/모델 선택 — Base는 clone prompt 추출용, VoiceBox는 직접 복제용.",
+      "Step 3: Base 엔진이면 Qwen 스타일 또는 S2-Pro 보이스로 저장. VoiceBox면 결과를 데이터셋으로 보낼지 선택.",
+    ],
+    tips: [
+      "참조 음성은 5~15초, 한 화자가 깨끗한 환경에서 또렷하게 읽은 클립이 가장 좋습니다.",
+      "여러 톤을 한 클립에 섞지 마세요 — 분리해 각각 따로 추출하는 게 안정적.",
+    ],
   },
   {
     title: "S2-Pro 텍스트 음성 변환",
-    summary: "저장한 목소리로 대사를 만들고 bracket 태그로 표현을 조절합니다.",
-    steps: ["먼저 S2-Pro 목소리 저장에서 참조 음성을 reusable voice로 만듭니다.", "텍스트 음성 변환에서 저장 목소리를 고르고 실제로 읽을 Text를 입력합니다.", "태그는 기능 이름이 아니라 `[whisper]`, `[laugh]`처럼 대사 중간에 넣는 표현 지시입니다."],
+    summary: "저장한 S2-Pro 보이스로 대사를 만들고 [bracket] 태그로 표현을 단어 단위로 제어합니다.",
+    steps: [
+      "선행 작업: 사이드바 > 보이스 저장에서 참조 음성을 reusable voice로 등록.",
+      "Tagged TTS 진입 → 저장 보이스 선택.",
+      "Text에 대사. 표현 디테일이 필요한 자리에 `[whisper]`, `[laughing]`, `[sigh]` 같은 태그 삽입.",
+      "결과를 들어보며 태그 위치/종류 조정. 태그 1~2개로 시작 → 점진적으로 추가.",
+    ],
+    tips: [
+      "\"S2-Pro 태그 레퍼런스\" 섹션을 참고하세요. 정의된 태그 외에도 자유 텍스트 태그(`[urgent professional tone]` 등)가 작동합니다.",
+      "Text를 한국어로 적어도 태그는 영어로. 모델은 태그 텍스트를 영어 임베딩으로 학습.",
+    ],
   },
   {
-    title: "S2-Pro 목소리 저장",
-    summary: "참조 음성을 Fish Speech reference voice로 저장해 계속 재사용합니다.",
-    steps: ["생성 갤러리 또는 업로드된 참조 음성을 고르고 Reference text를 입력합니다.", "목소리를 저장하면 S2-Pro에서 계속 선택할 수 있는 voice asset이 만들어집니다.", "Qwen clone prompt 생성 옵션을 켜면 같은 참조 음성을 Qwen 복제 흐름에서도 바로 쓸 수 있습니다."],
+    title: "S2-Pro 다국어 / 대화",
+    summary: "한 보이스로 여러 언어 또는 여러 화자 대화를 한 합성에서 다룹니다.",
+    body: [
+      "다국어: Language 메타는 갤러리 정리용. 실제 언어는 Text가 결정합니다 — 한 문장 안에 여러 언어를 섞을 수 있습니다.",
+      "대화: `<|speaker:0|>`, `<|speaker:1|>`로 화자 전환. 각 화자별 reference voice를 사전에 저장해 두는 것이 안정적.",
+    ],
+    tips: [
+      "다국어 합성은 화자의 native 언어가 아닌 언어가 들어가면 액센트가 묻어납니다. 의도된 효과로 사용하거나 화자를 분리하세요.",
+    ],
   },
   {
-    title: "S2-Pro 대화 생성",
-    summary: "저장 목소리와 speaker tag를 조합해 대화형 음성을 만듭니다.",
-    steps: ["저장 목소리를 기준 음색으로 선택합니다.", "대사에는 `<|speaker:0|>`, `<|speaker:1|>` 같은 speaker tag를 직접 넣습니다.", "여러 화자를 엄밀하게 고정하는 고급 구성은 Fish Speech runtime의 reference id 관리와 함께 검증합니다."],
+    title: "사운드 효과 (MMAudio)",
+    summary: "MMAudio 계열 모델로 효과음을 만듭니다.",
+    body: [
+      "프롬프트는 영어로. 자연어로 sound scene을 묘사 — \"heavy footsteps on wet pavement, distant thunder, indoor reverb\".",
+      "일반 MMAudio와 NSFW 프로필이 분리되어 있습니다.",
+    ],
+    controls: [
+      { name: "duration", effect: "출력 길이(초). 길수록 시간이 비례해서 늘어남." },
+      { name: "guidance / CFG", effect: "프롬프트 충실도. 높이면 묘사에 더 매달리지만 자연스러움 ↓." },
+      { name: "steps", effect: "추론 스텝 수. 많을수록 정교, 시간 ↑. 25~50 사이가 일반적." },
+    ],
   },
   {
-    title: "S2-Pro 다국어 TTS",
-    summary: "저장 목소리와 언어별 문장을 함께 써서 다국어 음성을 생성합니다.",
-    steps: ["Language는 관리용 메타데이터이고 실제 언어는 Text에 적힌 문장과 태그가 결정합니다.", "한국어, 영어, 일본어, 중국어 등을 같은 작업 안에 섞을 수 있습니다.", "저장 목소리를 선택하면 같은 음색으로 다국어 결과를 이어서 확인할 수 있습니다."],
+    title: "오디오 분리 / Applio",
+    summary: "Stem Separator로 보컬·반주 분리, Applio로 RVC 학습/변환/배치/블렌딩.",
+    steps: [
+      "오디오 분리에서 음원을 보컬/반주로 분리.",
+      "분리한 보컬을 Applio 단일 변환 입력으로 사용하거나 RVC 학습 데이터셋으로 활용.",
+      "RVC 학습 → 단일/배치 변환 → 필요 시 두 모델을 비율로 블렌딩.",
+    ],
+    tips: [
+      "RVC 학습은 GPU 메모리를 많이 씁니다. 다른 대형 작업과 병행 X.",
+      "단일 변환은 빠른 검증용, 배치 변환은 다량 처리용. 블렌딩은 학습 없이 두 음색을 섞는 빠른 방법.",
+    ],
   },
-] as const;
+  {
+    title: "ACE-Step 작곡",
+    summary: "태그 + 가사 구조 + 어드밴스드 컨트롤로 완성형 음악 생성.",
+    steps: [
+      "Tags: 장르·무드·악기·BPM 등을 쉼표로. \"lo-fi hip hop, melancholic, rhodes piano, vinyl crackle, 80 BPM\".",
+      "Lyrics: `[verse]`, `[chorus]`, `[bridge]` 같은 구조 태그로 섹션을 나눕니다.",
+      "Advanced에서 steps, guidance, seed 조정. CPU offload는 VRAM 부족 시.",
+    ],
+    tips: [
+      "장르/악기는 영어로. 한국어 입력도 받지만 모델이 영어로 학습됨.",
+      "구조 태그가 없으면 결과가 흐름 없이 평탄. 짧은 곡이라도 [verse] [chorus] 정도는 명시 권장.",
+    ],
+  },
+  {
+    title: "데이터셋 / 학습 / VoiceBox 융합",
+    summary: "직접 학습으로 자체 모델을 만드는 흐름. CustomVoice → VoiceBox 융합 → 추가 학습.",
+    steps: [
+      "데이터셋 만들기: 기준 음성 + 학습 샘플 폴더 정리. 최소 20개, 권장 50개 이상의 다양한 문장.",
+      "학습 실행: Base / CustomVoice / VoiceBox 중 선택. 데이터셋 + 초기 모델 지정 후 실행.",
+      "VoiceBox 융합: CustomVoice 학습 결과 + Base 1.7B speaker encoder 결합 → 독립 VoiceBox 체크포인트.",
+      "검증: 완성 모델로 clone, clone+instruct를 돌려 일관성/품질 확인.",
+    ],
+    tips: [
+      "데이터셋의 문장 다양성이 결과 품질을 좌우합니다. 한 톤만 수십 개보다 여러 톤 + 길이 다양 20~50개가 낫습니다.",
+      "학습 중 GPU를 다른 작업과 공유하면 OOM 또는 학습 손상. 단일 작업으로 두세요.",
+    ],
+  },
+  {
+    title: "라이브러리 (나의 목소리들 / 갤러리)",
+    summary: "저장된 모든 자산을 모아 보고 재사용하는 곳.",
+    steps: [
+      "나의 목소리들: 훈련한 모델 / Qwen 프리셋 / S2-Pro 프리셋 / RVC 모델 4개 탭.",
+      "각 카드에서 이미지 등록(상단 우측 X로 제거), 우측 휴지통으로 삭제(파일까지 같이 지움).",
+      "생성 갤러리: 생성된 오디오만 모음. 데이터셋/샘플로 보내거나 다운로드.",
+    ],
+    tips: [
+      "RVC 모델 삭제는 .pth/.index 파일까지 지웁니다 — 되돌릴 수 없으니 백업을 분리해 두세요.",
+      "이미지 등록은 카드 식별용 — 캐릭터 일러스트나 음원 cover 같은 걸 붙여두면 라이브러리가 한눈에 들어옵니다.",
+    ],
+  },
+];
 
 export const CUSTOM_RECIPES = [
   {
@@ -813,18 +1133,21 @@ export function LanguageSelect({
   const hasKnownValue = LANGUAGE_OPTIONS.some((option) => option.value === normalizedValue);
 
   return (
-    <select
-      value={normalizedValue}
-      onChange={(event) => onChange(event.target.value)}
-      className="flex h-9 w-full items-center rounded-md border border-line bg-canvas px-3 text-sm text-ink shadow-xs outline-none focus-visible:border-accent-edge focus-visible:ring-2 focus-visible:ring-accent-soft"
-    >
-      {!hasKnownValue && normalizedValue ? <option value={normalizedValue}>{normalizedValue}</option> : null}
-      {LANGUAGE_OPTIONS.map((option) => (
-        <option key={option.value} value={option.value}>
-          {t(option.i18nKey, option.label)}
-        </option>
-      ))}
-    </select>
+    <Select value={normalizedValue} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {!hasKnownValue && normalizedValue ? (
+          <SelectItem value={normalizedValue}>{normalizedValue}</SelectItem>
+        ) : null}
+        {LANGUAGE_OPTIONS.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {t(option.i18nKey, option.label)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -842,18 +1165,21 @@ export function TargetLanguageSelect({
   const hasKnownValue = targetOptions.some((option) => option.value === fallbackValue);
 
   return (
-    <select
-      value={fallbackValue}
-      onChange={(event) => onChange(event.target.value)}
-      className="flex h-9 w-full items-center rounded-md border border-line bg-canvas px-3 text-sm text-ink shadow-xs outline-none focus-visible:border-accent-edge focus-visible:ring-2 focus-visible:ring-accent-soft"
-    >
-      {!hasKnownValue && fallbackValue ? <option value={fallbackValue}>{fallbackValue}</option> : null}
-      {targetOptions.map((option) => (
-        <option key={option.value} value={option.value}>
-          {t(option.i18nKey, option.label)}
-        </option>
-      ))}
-    </select>
+    <Select value={fallbackValue} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {!hasKnownValue && fallbackValue ? (
+          <SelectItem value={fallbackValue}>{fallbackValue}</SelectItem>
+        ) : null}
+        {targetOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {t(option.i18nKey, option.label)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
