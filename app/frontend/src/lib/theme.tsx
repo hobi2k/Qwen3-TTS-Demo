@@ -63,12 +63,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
+    const isLight = theme === "light";
+    // Light theme uses a deeper, more saturated accent so primary buttons read clearly
+    // against the warm-white canvas. Dark themes keep the brighter accent for contrast.
+    const accentL = isLight ? 0.58 : 0.78;
+    const accentC = isLight ? 0.18 : 0.16;
+    const inkOnAccentL = isLight ? 0.98 : 0.16;
+    const inkOnAccentC = isLight ? 0.01 : 0.04;
+    const inkOnAccentH = isLight ? 80 : accentHue;
     root.style.setProperty("--accent-hue", String(accentHue));
-    root.style.setProperty("--accent", `oklch(0.78 0.16 ${accentHue})`);
-    root.style.setProperty("--accent-soft", `oklch(0.78 0.16 ${accentHue} / 0.16)`);
-    root.style.setProperty("--accent-edge", `oklch(0.78 0.16 ${accentHue} / 0.45)`);
-    root.style.setProperty("--accent-ink", `oklch(0.18 0.04 ${accentHue})`);
-  }, [accentHue]);
+    root.style.setProperty("--accent", `oklch(${accentL} ${accentC} ${accentHue})`);
+    root.style.setProperty("--accent-soft", `oklch(${accentL} ${accentC} ${accentHue} / ${isLight ? 0.12 : 0.16})`);
+    root.style.setProperty("--accent-edge", `oklch(${accentL} ${accentC} ${accentHue} / 0.45)`);
+    root.style.setProperty("--accent-ink", `oklch(${isLight ? 0.18 : 0.18} ${isLight ? 0.04 : 0.04} ${accentHue})`);
+    root.style.setProperty("--ink-on-accent", `oklch(${inkOnAccentL} ${inkOnAccentC} ${inkOnAccentH})`);
+  }, [accentHue, theme]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);

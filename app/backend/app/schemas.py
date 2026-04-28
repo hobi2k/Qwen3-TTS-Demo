@@ -236,6 +236,7 @@ class S2ProVoiceRecord(BaseModel):
     qwen_clone_prompt_id: Optional[str] = None
     qwen_clone_prompt_path: Optional[str] = None
     fish_reference_present: bool = False
+    image_url: Optional[str] = None
 
 
 class GenerationRecord(BaseModel):
@@ -319,6 +320,7 @@ class CharacterPreset(BaseModel):
     clone_prompt_path: str
     created_at: str
     notes: str = ""
+    image_url: Optional[str] = None
 
 
 class PresetGenerateRequest(BaseModel):
@@ -787,6 +789,24 @@ class VoiceChangerModelInfo(BaseModel):
     label: str
     model_path: str
     index_path: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class VoiceImageUploadResponse(BaseModel):
+    """음성 자산에 부착된 이미지 업로드 결과."""
+
+    kind: str
+    asset_id: str
+    image_url: str
+
+
+class VoiceAssetDeleteResponse(BaseModel):
+    """프리셋 또는 모델 삭제 응답."""
+
+    kind: str
+    asset_id: str
+    deleted: bool = True
+    removed_files: int = 0
 
 
 class AudioToolJob(BaseModel):

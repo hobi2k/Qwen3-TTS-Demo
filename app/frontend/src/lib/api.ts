@@ -52,9 +52,12 @@ import type {
   VoiceBoxCloneRequest,
   VoiceBoxFusionRequest,
   VoiceChangerBatchRequest,
+  VoiceAssetDeleteResponse,
+  VoiceAssetKind,
   VoiceChangerRequest,
   VoiceChangerModelInfo,
   VoiceDesignRequest,
+  VoiceImageUploadResponse,
   VoiceModelBlendRequest,
 } from "./types";
 
@@ -180,6 +183,48 @@ export const api = {
 
   presets(): Promise<CharacterPreset[]> {
     return request<CharacterPreset[]>("/api/presets");
+  },
+
+  deletePreset(presetId: string): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(`/api/presets/${presetId}`, {
+      method: "DELETE",
+    });
+  },
+
+  deleteS2ProVoice(voiceId: string): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(`/api/s2-pro/voices/${voiceId}`, {
+      method: "DELETE",
+    });
+  },
+
+  deleteVoiceChangerModel(modelId: string): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(
+      `/api/audio-tools/voice-models/${encodeURIComponent(modelId)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  uploadVoiceImage(
+    kind: VoiceAssetKind,
+    assetId: string,
+    file: File,
+  ): Promise<VoiceImageUploadResponse> {
+    const form = new FormData();
+    form.append("file", file);
+    return request<VoiceImageUploadResponse>(
+      `/api/voice-images/${kind}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body: form },
+    );
+  },
+
+  deleteVoiceImage(
+    kind: VoiceAssetKind,
+    assetId: string,
+  ): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(
+      `/api/voice-images/${kind}/${encodeURIComponent(assetId)}`,
+      { method: "DELETE" },
+    );
   },
 
   datasets(): Promise<FineTuneDataset[]> {

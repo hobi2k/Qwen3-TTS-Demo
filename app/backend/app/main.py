@@ -82,6 +82,8 @@ from .schemas import (
     VoiceBoxCloneRequest,
     VoiceBoxFusionRequest,
     VoiceChangerModelInfo,
+    VoiceImageUploadResponse,
+    VoiceAssetDeleteResponse,
     SoundEffectRequest,
     PrepareDatasetRequest,
     PresetGenerateRequest,
@@ -713,6 +715,35 @@ def delete_generation_record_files(record_id: str) -> int:
     return 1 if deleted_any else 0
 
 
+VOICE_ASSET_KINDS = {"preset", "s2pro", "rvc"}
+VOICE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+VOICE_IMAGE_MAX_BYTES = 4 * 1024 * 1024  # 4 MB cap keeps card images snappy.
+
+
+def _voice_image_dir(kind: str) -> Path:
+    if kind not in VOICE_ASSET_KINDS:
+        raise HTTPException(status_code=400, detail=f"Unsupported voice asset kind: {kind}")
+    return storage.voice_images_dir / kind
+
+
+def _voice_image_paths_for(kind: str, asset_id: str) -> List[Path]:
+    if not asset_id:
+        return []
+    base_dir = _voice_image_dir(kind)
+    return [base_dir / f"{asset_id}{ext}" for ext in VOICE_IMAGE_EXTENSIONS if (base_dir / f"{asset_id}{ext}").exists()]
+
+
+def voice_image_url_for(kind: str, asset_id: Optional[str]) -> Optional[str]:
+    """Return the static `/files/...` URL for a voice asset image, or None when missing."""
+
+    if not asset_id:
+        return None
+    matches = _voice_image_paths_for(kind, asset_id)
+    if not matches:
+        return None
+    return audio_url_for(storage.relpath(matches[0]))
+
+
 def get_preset_record(preset_id: str) -> JsonDict:
     """프리셋 레코드를 조회하고 없으면 404를 발생시킨다.
 
@@ -1308,7 +1339,11 @@ def list_gallery_items() -> List[GalleryItem]:
 
 def list_preset_records() -> List[CharacterPreset]:
     records = storage.list_json_records(storage.presets_dir)
-    return [CharacterPreset(**record) for record in records]
+    presets: List[CharacterPreset] = []
+    for record in records:
+        record["image_url"] = voice_image_url_for("preset", record.get("id"))
+        presets.append(CharacterPreset(**record))
+    return presets
 
 
 def list_clone_prompt_records() -> List[ClonePromptRecord]:
@@ -1966,7 +2001,11 @@ def gallery() -> List[GalleryItem]:
 
 
 def list_voice_changer_models() -> List[VoiceChangerModelInfo]:
-    return [VoiceChangerModelInfo(**item) for item in list_available_voice_models(REPO_ROOT, voice_changer.applio_root)]
+    items: List[VoiceChangerModelInfo] = []
+    for item in list_available_voice_models(REPO_ROOT, voice_changer.applio_root):
+        item["image_url"] = voice_image_url_for("rvc", item.get("id"))
+        items.append(VoiceChangerModelInfo(**item))
+    return items
 
 
 @app.get("/api/models", response_model=List[ModelInfo])
@@ -3225,6 +3264,7 @@ def list_s2pro_voice_records() -> List[S2ProVoiceRecord]:
         record["fish_reference_present"] = (
             bool(record.get("reference_id")) if record["runtime_source"] == "api" else str(record.get("reference_id", "")) in fish_reference_ids
         )
+        record["image_url"] = voice_image_url_for("s2pro", record.get("id"))
         try:
             records.append(S2ProVoiceRecord(**record))
         except Exception:
@@ -3935,7 +3975,164 @@ def get_preset(preset_id: str) -> CharacterPreset:
         저장된 프리셋 모델.
     """
 
-    return CharacterPreset(**get_preset_record(preset_id))
+    record = get_preset_record(preset_id)
+    record["image_url"] = voice_image_url_for("preset", preset_id)
+    return CharacterPreset(**record)
+
+
+@app.delete("/api/presets/{preset_id}", response_model=VoiceAssetDeleteResponse)
+def delete_preset(preset_id: str) -> VoiceAssetDeleteResponse:
+    """저장된 캐릭터 프리셋과 부속 이미지를 함께 삭제한다.
+
+    Args:
+        preset_id: 삭제할 프리셋 식별자.
+
+    Returns:
+        삭제 결과와 제거된 파일 개수.
+    """
+
+    record = get_preset_record(preset_id)
+    removed = 0
+    for record_path in storage.find_record_paths(storage.presets_dir, record["id"]):
+        try:
+            record_path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+    for image_path in _voice_image_paths_for("preset", preset_id):
+        try:
+            image_path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+    return VoiceAssetDeleteResponse(kind="preset", asset_id=preset_id, removed_files=removed)
+
+
+@app.delete("/api/s2-pro/voices/{voice_id}", response_model=VoiceAssetDeleteResponse)
+def delete_s2_pro_voice(voice_id: str) -> VoiceAssetDeleteResponse:
+    """저장된 S2-Pro 보이스를 메타데이터와 부속 이미지까지 삭제한다.
+
+    Args:
+        voice_id: 삭제할 보이스 식별자.
+
+    Returns:
+        삭제 결과와 제거된 파일 개수.
+    """
+
+    record = get_s2pro_voice_record(voice_id)
+    removed = 0
+    for record_path in storage.find_record_paths(storage.s2pro_voices_dir, record.id):
+        try:
+            record_path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+    for image_path in _voice_image_paths_for("s2pro", record.id):
+        try:
+            image_path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+    return VoiceAssetDeleteResponse(kind="s2pro", asset_id=record.id, removed_files=removed)
+
+
+@app.delete("/api/audio-tools/voice-models/{model_id}", response_model=VoiceAssetDeleteResponse)
+def delete_voice_changer_model(model_id: str) -> VoiceAssetDeleteResponse:
+    """등록된 RVC 모델 파일과 부속 이미지를 삭제한다.
+
+    Args:
+        model_id: 삭제할 모델 식별자(`.pth` 파일 stem).
+
+    Returns:
+        삭제 결과와 제거된 파일 개수.
+    """
+
+    matches = [item for item in list_voice_changer_models() if item.id == model_id]
+    if not matches:
+        raise HTTPException(status_code=404, detail="Voice changer model not found.")
+    target = matches[0]
+    removed = 0
+    for path_str in (target.model_path, target.index_path):
+        if not path_str:
+            continue
+        candidate = Path(path_str)
+        if candidate.exists():
+            try:
+                candidate.unlink()
+                removed += 1
+            except FileNotFoundError:
+                continue
+    for image_path in _voice_image_paths_for("rvc", model_id):
+        try:
+            image_path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+    return VoiceAssetDeleteResponse(kind="rvc", asset_id=model_id, removed_files=removed)
+
+
+@app.post("/api/voice-images/{kind}/{asset_id}", response_model=VoiceImageUploadResponse)
+async def upload_voice_image(
+    kind: str,
+    asset_id: str,
+    file: UploadFile = File(...),
+) -> VoiceImageUploadResponse:
+    """프리셋, S2-Pro 보이스, RVC 모델 카드에 사용할 이미지를 업로드한다.
+
+    Args:
+        kind: 자산 종류 (`preset`, `s2pro`, `rvc`).
+        asset_id: 자산 식별자.
+        file: 업로드한 이미지 파일.
+
+    Returns:
+        저장된 이미지 정보와 정적 URL.
+    """
+
+    base_dir = _voice_image_dir(kind)
+    extension = Path(file.filename or "image.png").suffix.lower() or ".png"
+    if extension not in VOICE_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported image type: {extension}. Allowed: {', '.join(sorted(VOICE_IMAGE_EXTENSIONS))}",
+        )
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty image upload.")
+    if len(contents) > VOICE_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image too large ({len(contents)} bytes). Max {VOICE_IMAGE_MAX_BYTES} bytes.",
+        )
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Replace any previous image for the same asset (different extensions allowed).
+    for existing in _voice_image_paths_for(kind, asset_id):
+        try:
+            existing.unlink()
+        except FileNotFoundError:
+            continue
+
+    target = base_dir / f"{asset_id}{extension}"
+    target.write_bytes(contents)
+    image_url = audio_url_for(storage.relpath(target))
+    return VoiceImageUploadResponse(kind=kind, asset_id=asset_id, image_url=image_url)
+
+
+@app.delete("/api/voice-images/{kind}/{asset_id}", response_model=VoiceAssetDeleteResponse)
+def delete_voice_image(kind: str, asset_id: str) -> VoiceAssetDeleteResponse:
+    """프리셋, S2-Pro 보이스, RVC 모델 카드에 등록된 이미지를 제거한다."""
+
+    _voice_image_dir(kind)  # validates kind
+    removed = 0
+    for image_path in _voice_image_paths_for(kind, asset_id):
+        try:
+            image_path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            continue
+    return VoiceAssetDeleteResponse(kind=kind, asset_id=asset_id, removed_files=removed)
 
 
 @app.post("/api/presets/{preset_id}/generate", response_model=GenerationResponse)

@@ -619,12 +619,12 @@ export const SOUND_EFFECT_LIBRARY = [
 ] as const;
 
 export const LANGUAGE_OPTIONS = [
-  { value: "Auto", label: "자동 감지" },
-  { value: "Korean", label: "한국어" },
-  { value: "English", label: "영어" },
-  { value: "Japanese", label: "일본어" },
-  { value: "Chinese", label: "중국어" },
-  { value: "Cantonese", label: "광동어" },
+  { value: "Auto", label: "자동 감지", i18nKey: "language.auto" },
+  { value: "Korean", label: "한국어", i18nKey: "language.ko" },
+  { value: "English", label: "영어", i18nKey: "language.en" },
+  { value: "Japanese", label: "일본어", i18nKey: "language.ja" },
+  { value: "Chinese", label: "중국어", i18nKey: "language.zh" },
+  { value: "Cantonese", label: "광동어", i18nKey: "language.yue" },
 ] as const;
 
 export function createEmptyDatasetSample() {
@@ -808,15 +808,20 @@ export function LanguageSelect({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const normalizedValue = normalizeLanguageValue(value);
   const hasKnownValue = LANGUAGE_OPTIONS.some((option) => option.value === normalizedValue);
 
   return (
-    <select value={normalizedValue} onChange={(event) => onChange(event.target.value)}>
+    <select
+      value={normalizedValue}
+      onChange={(event) => onChange(event.target.value)}
+      className="flex h-9 w-full items-center rounded-md border border-line bg-canvas px-3 text-sm text-ink shadow-xs outline-none focus-visible:border-accent-edge focus-visible:ring-2 focus-visible:ring-accent-soft"
+    >
       {!hasKnownValue && normalizedValue ? <option value={normalizedValue}>{normalizedValue}</option> : null}
       {LANGUAGE_OPTIONS.map((option) => (
         <option key={option.value} value={option.value}>
-          {option.label}
+          {t(option.i18nKey, option.label)}
         </option>
       ))}
     </select>
@@ -830,17 +835,22 @@ export function TargetLanguageSelect({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const normalizedValue = normalizeLanguageValue(value);
   const targetOptions = LANGUAGE_OPTIONS.filter((option) => option.value !== "Auto");
   const fallbackValue = normalizedValue === "Auto" ? "English" : normalizedValue;
   const hasKnownValue = targetOptions.some((option) => option.value === fallbackValue);
 
   return (
-    <select value={fallbackValue} onChange={(event) => onChange(event.target.value)}>
+    <select
+      value={fallbackValue}
+      onChange={(event) => onChange(event.target.value)}
+      className="flex h-9 w-full items-center rounded-md border border-line bg-canvas px-3 text-sm text-ink shadow-xs outline-none focus-visible:border-accent-edge focus-visible:ring-2 focus-visible:ring-accent-soft"
+    >
       {!hasKnownValue && fallbackValue ? <option value={fallbackValue}>{fallbackValue}</option> : null}
       {targetOptions.map((option) => (
         <option key={option.value} value={option.value}>
-          {option.label}
+          {t(option.i18nKey, option.label)}
         </option>
       ))}
     </select>

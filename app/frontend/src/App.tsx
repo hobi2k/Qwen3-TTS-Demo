@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Play, AudioWaveform, Sparkles, Clock, Wand2, Mic, Layers, Music2, Music, Drum, AudioLines, Scissors, FileAudio, Volume2, GitMerge, Database, Cog, BookOpen, Home as HomeIcon, Library, FolderOpen, Headphones, Save } from "lucide-react";
+import { Loader2, Play, AudioWaveform, Sparkles, Clock, Wand2, Mic, Layers, Music2, Music, Drum, AudioLines, Scissors, FileAudio, Volume2, GitMerge, Database, Cog, BookOpen, Home as HomeIcon, Library, FolderOpen, Headphones, Save, Upload } from "lucide-react";
 import {
   WorkspaceShell,
   WorkspaceHeader,
@@ -24,6 +24,7 @@ import {
   WorkspaceResultHeader,
   WorkspaceFieldLabel,
 } from "./components/workspace";
+import { VoiceAssetAvatar, DeleteAssetButton } from "./components/voice-asset";
 import { toast } from "sonner";
 
 import { api } from "./lib/api";
@@ -165,11 +166,14 @@ function PromptSummaryCard({
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const { t } = useTranslation();
   if (!prompt) {
     return (
       <div className="rounded-md border border-dashed border-line bg-sunken/40 p-3 flex flex-col gap-1">
         <strong className="text-sm font-medium text-ink">{title}</strong>
-        <p className="text-xs text-ink-muted">아직 저장된 목소리 스타일이 없습니다. 먼저 참조 음성으로 스타일을 만들어 주세요.</p>
+        <p className="text-xs text-ink-muted">
+          {t("promptSummary.empty", "아직 저장된 목소리 스타일이 없습니다. 먼저 참조 음성으로 스타일을 만들어 주세요.")}
+        </p>
       </div>
     );
   }
@@ -178,7 +182,9 @@ function PromptSummaryCard({
     <article className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">목소리 스타일</span>
+          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
+            {t("promptSummary.styleEyebrow", "목소리 스타일")}
+          </span>
           <h3 className="text-sm font-medium text-ink">{title}</h3>
         </div>
         {actionLabel && onAction ? (
@@ -189,12 +195,24 @@ function PromptSummaryCard({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">생성 방식</span>
-          <strong className="text-xs font-medium text-ink">{prompt.source_type === "generated_sample" ? "생성 음성에서 추출" : "참조 음성에서 추출"}</strong>
+          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
+            {t("promptSummary.sourceLabel", "생성 방식")}
+          </span>
+          <strong className="text-xs font-medium text-ink">
+            {prompt.source_type === "generated_sample"
+              ? t("promptSummary.sourceFromGenerated", "생성 음성에서 추출")
+              : t("promptSummary.sourceFromReference", "참조 음성에서 추출")}
+          </strong>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">모드</span>
-          <strong className="text-xs font-medium text-ink">{prompt.x_vector_only_mode ? "가벼운 복제" : "전체 스타일"}</strong>
+          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
+            {t("promptSummary.modeLabel", "모드")}
+          </span>
+          <strong className="text-xs font-medium text-ink">
+            {prompt.x_vector_only_mode
+              ? t("promptSummary.modeLight", "가벼운 복제")
+              : t("promptSummary.modeFull", "전체 스타일")}
+          </strong>
         </div>
       </div>
       <p className="text-xs text-ink-muted">{prompt.reference_text}</p>
@@ -2351,17 +2369,6 @@ function StudioApp() {
   ]);
   const canRunCurrentTab = renderableTabs.has(activeTab);
 
-  async function handleShareWorkspace() {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setMessage("현재 작업 링크를 클립보드에 복사했습니다.");
-    } catch {
-      setMessage(url);
-    }
-  }
-
   async function handleRunCurrentTab() {
     if (!canRunCurrentTab) {
       return;
@@ -2400,10 +2407,7 @@ function StudioApp() {
 
   return (
     <>
-    <StudioTopBar
-      onShare={handleShareWorkspace}
-      title={pageTitle}
-    />
+    <StudioTopBar title={pageTitle} />
     <div className="page-shell">
       <div className="app-shell">
         <aside className="sidebar studio-nav">
@@ -2666,9 +2670,18 @@ function StudioApp() {
                   <>
                     {presets.map((preset) => (
                       <WorkspaceCard key={preset.id} className="flex flex-wrap items-center gap-4">
-                        <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
-                          <MiniWaveform dense />
-                        </div>
+                        <VoiceAssetAvatar
+                          kind="preset"
+                          assetId={preset.id}
+                          imageUrl={preset.image_url}
+                          alt={preset.name}
+                          fallback={<MiniWaveform dense />}
+                          onChange={(nextUrl) =>
+                            setPresets((items) =>
+                              items.map((item) => (item.id === preset.id ? { ...item, image_url: nextUrl } : item)),
+                            )
+                          }
+                        />
                         <div className="flex min-w-0 flex-1 flex-col gap-2">
                           <div className="flex flex-wrap items-baseline gap-2">
                             <strong className="text-sm font-medium text-ink">{preset.name}</strong>
@@ -2680,7 +2693,7 @@ function StudioApp() {
                             <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{preset.source_type}</Badge>
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -2708,6 +2721,12 @@ function StudioApp() {
                           >
                             {t("voices.qwen.saveAsS2Pro", "S2-Pro 프리셋으로 저장")}
                           </Button>
+                          <DeleteAssetButton
+                            kind="preset"
+                            assetId={preset.id}
+                            assetName={preset.name}
+                            onDeleted={() => setPresets((items) => items.filter((item) => item.id !== preset.id))}
+                          />
                         </div>
                       </WorkspaceCard>
                     ))}
@@ -2777,9 +2796,18 @@ function StudioApp() {
                 {s2VoiceProjects.length ? (
                   s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
                     <WorkspaceCard key={voice.id} className="flex flex-wrap items-start gap-4">
-                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
-                        <MiniWaveform dense />
-                      </div>
+                      <VoiceAssetAvatar
+                        kind="s2pro"
+                        assetId={voice.id}
+                        imageUrl={voice.image_url}
+                        alt={voice.name}
+                        fallback={<MiniWaveform dense />}
+                        onChange={(nextUrl) =>
+                          setS2ProVoices((items) =>
+                            items.map((item) => (item.id === voice.id ? { ...item, image_url: nextUrl } : item)),
+                          )
+                        }
+                      />
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <div className="flex flex-wrap items-baseline gap-2">
                           <strong className="text-sm font-medium text-ink">{voice.name}</strong>
@@ -2794,7 +2822,7 @@ function StudioApp() {
                         </div>
                         <audio controls src={mediaUrl(voice.reference_audio_url)} className="mt-1 h-8 w-full" />
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
                           {t("voices.s2pro.useInS2Pro", "S2-Pro에서 사용")}
                         </Button>
@@ -2813,6 +2841,12 @@ function StudioApp() {
                         >
                           {t("voices.s2pro.toDataset", "데이터셋에 사용")}
                         </Button>
+                        <DeleteAssetButton
+                          kind="s2pro"
+                          assetId={voice.id}
+                          assetName={voice.name}
+                          onDeleted={() => setS2ProVoices((items) => items.filter((item) => item.id !== voice.id))}
+                        />
                       </div>
                     </WorkspaceCard>
                   ))
@@ -2834,9 +2868,18 @@ function StudioApp() {
                 {voiceChangerModels.length ? (
                   voiceChangerModels.map((model) => (
                     <WorkspaceCard key={model.id} className="flex flex-wrap items-center gap-4">
-                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
-                        <MiniWaveform dense />
-                      </div>
+                      <VoiceAssetAvatar
+                        kind="rvc"
+                        assetId={model.id}
+                        imageUrl={model.image_url}
+                        alt={model.label}
+                        fallback={<MiniWaveform dense />}
+                        onChange={(nextUrl) =>
+                          setVoiceChangerModels((items) =>
+                            items.map((item) => (item.id === model.id ? { ...item, image_url: nextUrl } : item)),
+                          )
+                        }
+                      />
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <div className="flex flex-wrap items-baseline gap-2">
                           <strong className="text-sm font-medium text-ink">{model.label}</strong>
@@ -2848,7 +2891,7 @@ function StudioApp() {
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.index_path ? basenameFromPath(model.index_path) : t("voices.rvc.noIndex", "index 없음")}</Badge>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -2871,6 +2914,12 @@ function StudioApp() {
                         >
                           {t("voices.rvc.useInBatch", "배치 변환에서 사용")}
                         </Button>
+                        <DeleteAssetButton
+                          kind="rvc"
+                          assetId={model.id}
+                          assetName={model.label}
+                          onDeleted={() => setVoiceChangerModels((items) => items.filter((item) => item.id !== model.id))}
+                        />
                       </div>
                     </WorkspaceCard>
                   ))
@@ -3152,33 +3201,67 @@ function StudioApp() {
                       <Label className="text-xs font-medium text-ink-muted">{t("tts.field.speaker")}</Label>
                       <Select
                         value={inferenceForm.speaker || undefined}
-                        onValueChange={(value) =>
-                          setInferenceForm((prev) => ({ ...prev, speaker: value }))
-                        }
+                        onValueChange={(value) => {
+                          const info = speakers.find((item) => item.speaker === value);
+                          setInferenceForm((prev) => ({
+                            ...prev,
+                            speaker: value,
+                            language: info?.nativeLanguage || prev.language,
+                          }));
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder={t("tts.field.speakerPlaceholder")} />
                         </SelectTrigger>
                         <SelectContent>
-                          {selectedInferenceModel.available_speakers.map((speaker) => (
-                            <SelectItem key={speaker} value={speaker}>
-                              {speaker}
-                            </SelectItem>
-                          ))}
+                          {selectedInferenceModel.available_speakers.map((speaker) => {
+                            const info = speakers.find((item) => item.speaker === speaker);
+                            return (
+                              <SelectItem key={speaker} value={speaker}>
+                                <span className="flex items-center gap-2">
+                                  <span>{speaker}</span>
+                                  {info ? (
+                                    <span className="font-mono text-[10px] uppercase tracking-wide text-ink-subtle">
+                                      {info.nativeLanguage}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
                   ) : null}
 
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language")}</Label>
-                    <LanguageSelect
-                      value={inferenceForm.language}
-                      onChange={(language) =>
-                        setInferenceForm((prev) => ({ ...prev, language }))
-                      }
-                    />
-                  </div>
+                  {(() => {
+                    const speakerInfo = speakers.find((item) => item.speaker === inferenceForm.speaker);
+                    const isNonNative =
+                      speakerInfo &&
+                      inferenceForm.language &&
+                      inferenceForm.language !== "Auto" &&
+                      inferenceForm.language !== speakerInfo.nativeLanguage;
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language")}</Label>
+                        <LanguageSelect
+                          value={inferenceForm.language}
+                          onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))}
+                        />
+                        {isNonNative ? (
+                          <p className="text-[11px] text-warn">
+                            {t(
+                              "tts.field.nonNativeWarning",
+                              "{speaker}는 {native} 화자입니다. {target} 합성은 품질이 낮을 수 있습니다.",
+                            )
+                              .replace("{speaker}", inferenceForm.speaker)
+                              .replace("{native}", speakerInfo.nativeLanguage)
+                              .replace("{target}", inferenceForm.language)}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="qwen-tts-output" className="text-xs font-medium text-ink-muted">
@@ -3300,14 +3383,6 @@ function StudioApp() {
             className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]"
           >
             <div className="flex flex-col gap-5">
-              <WorkspaceCard>
-                <RecipeBar
-                  title={t("design.recipes.title", "목소리 설명 템플릿")}
-                  items={DESIGN_RECIPES}
-                  onApply={applyDesignRecipe}
-                />
-              </WorkspaceCard>
-
               <WorkspaceCard>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -3488,27 +3563,30 @@ function StudioApp() {
 
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">{t("clone.step1.upload", "음성 파일 불러오기")}</Label>
-                <Input
-                  type="file"
-                  accept="audio/*"
-                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleUploadReference(file);
-                    }
-                  }}
-                />
-              </div>
-
-              {uploadedRef ? (
-                <div className="rounded-md border border-line bg-canvas/60 p-3">
-                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
-                    {t("clone.step1.selected", "선택한 참조 음성")}
+                <label className="group flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-line bg-canvas/60 px-3 py-2.5 transition hover:border-accent-edge hover:bg-canvas">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent-ink">
+                    <Upload className="size-3.5" />
+                    {t("clone.step1.choose", "파일 선택")}
                   </span>
-                  <p className="mt-1 truncate text-sm font-medium text-ink">{uploadedRef.filename}</p>
-                </div>
-              ) : null}
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
+                    {uploadedRef
+                      ? uploadedRef.filename
+                      : t("clone.step1.noFile", "선택된 파일 없음")}
+                  </span>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) {
+                        void handleUploadReference(file);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
 
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">{t("clone.step1.refText", "참조 텍스트")}</Label>
@@ -3523,14 +3601,34 @@ function StudioApp() {
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
                 <Button variant="outline" size="sm" onClick={handleTranscribeUploadText} type="button">
                   {t("clone.step1.retranscribe", "다시 전사")}
                 </Button>
                 {cloneEngine === "base_prompt" ? (
-                  <Button size="sm" onClick={handleCreateCloneFromUpload} type="button">
-                    {t("clone.step1.saveStyle", "복제용 스타일 저장")}
-                  </Button>
+                  <>
+                    <Button size="sm" onClick={handleCreateCloneFromUpload} type="button">
+                      {t("clone.step1.saveStyleQwen", "Qwen 스타일로 저장")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!uploadedRef}
+                      onClick={() => {
+                        if (!uploadedRef) return;
+                        const stem = uploadedRef.filename.replace(/\.[^.]+$/, "") || `upload-${uploadedRef.id}`;
+                        createS2VoiceFromQwenAsset({
+                          name: stem,
+                          reference_audio_path: uploadedRef.path,
+                          reference_text: uploadRefText.trim(),
+                          language: "Auto",
+                        });
+                      }}
+                      type="button"
+                    >
+                      {t("clone.step1.saveStyleS2Pro", "S2-Pro 보이스로 저장")}
+                    </Button>
+                  </>
                 ) : (
                   <Button size="sm" onClick={handleVoiceBoxCloneFromUpload} type="button">
                     {t("clone.step1.voiceboxClone", "VoiceBox 복제 생성")}
@@ -3639,32 +3737,38 @@ function StudioApp() {
                       className="min-h-[64px] resize-y border-line bg-canvas"
                     />
                   </div>
-                  <Button
-                    disabled={!uploadedClonePrompt}
-                    onClick={() => void handleCreatePreset("upload")}
-                    type="button"
-                  >
-                    {t("clone.step3.savePreset", "현재 스타일로 프리셋 저장")}
-                  </Button>
+                  <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      disabled={!uploadedClonePrompt}
+                      onClick={() => void handleCreatePreset("upload")}
+                      type="button"
+                    >
+                      {t("clone.step3.savePreset", "현재 스타일로 프리셋 저장")}
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <>
                   <p className="text-xs text-ink-muted">
                     {t("clone.step3.note", "VoiceBox로 만든 결과는 생성 갤러리에 저장되고, 필요하면 데이터셋 샘플로 이어서 쓸 수 있습니다.")}
                   </p>
-                  <Button
-                    variant="outline"
-                    disabled={!lastVoiceBoxCloneRecord}
-                    onClick={() => {
-                      if (!lastVoiceBoxCloneRecord) return;
-                      mergeDatasetSamples([{ audio_path: lastVoiceBoxCloneRecord.output_audio_path, text: lastVoiceBoxCloneRecord.input_text }]);
-                      setDatasetForm((prev) => ({ ...prev, ref_audio_path: prev.ref_audio_path || lastVoiceBoxCloneRecord.output_audio_path }));
-                      setActiveTab("dataset");
-                    }}
-                    type="button"
-                  >
-                    {t("clone.step3.toDataset", "방금 결과를 데이터셋에 추가")}
-                  </Button>
+                  <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!lastVoiceBoxCloneRecord}
+                      onClick={() => {
+                        if (!lastVoiceBoxCloneRecord) return;
+                        mergeDatasetSamples([{ audio_path: lastVoiceBoxCloneRecord.output_audio_path, text: lastVoiceBoxCloneRecord.input_text }]);
+                        setDatasetForm((prev) => ({ ...prev, ref_audio_path: prev.ref_audio_path || lastVoiceBoxCloneRecord.output_audio_path }));
+                        setActiveTab("dataset");
+                      }}
+                      type="button"
+                    >
+                      {t("clone.step3.toDataset", "방금 결과를 데이터셋에 추가")}
+                    </Button>
+                  </div>
                 </>
               )}
             </WorkspaceCard>

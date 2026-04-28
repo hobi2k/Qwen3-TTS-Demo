@@ -114,6 +114,22 @@ export interface CharacterPreset {
   clone_prompt_path: string;
   created_at: string;
   notes: string;
+  image_url?: string | null;
+}
+
+export type VoiceAssetKind = "preset" | "s2pro" | "rvc";
+
+export interface VoiceImageUploadResponse {
+  kind: VoiceAssetKind;
+  asset_id: string;
+  image_url: string;
+}
+
+export interface VoiceAssetDeleteResponse {
+  kind: string;
+  asset_id: string;
+  deleted: boolean;
+  removed_files: number;
 }
 
 export interface FineTuneDataset {
@@ -163,6 +179,7 @@ export interface VoiceChangerModelInfo {
   label: string;
   model_path: string;
   index_path?: string | null;
+  image_url?: string | null;
 }
 
 export interface AudioToolAsset {
@@ -344,6 +361,7 @@ export interface S2ProVoiceRecord {
   qwen_clone_prompt_id?: string | null;
   qwen_clone_prompt_path?: string | null;
   fish_reference_present: boolean;
+  image_url?: string | null;
 }
 
 export interface S2ProVoiceCreateRequest {
