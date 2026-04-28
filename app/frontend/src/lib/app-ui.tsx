@@ -841,6 +841,475 @@ export const GUIDE_SECTIONS: GuideSection[] = [
   },
 ];
 
+const GUIDE_SECTIONS_EN: GuideSection[] = [
+  {
+    title: "Prompting (Voice Design)",
+    summary: "The instruction field in Voice Design is a natural-language voice prompt. Specific, acoustic descriptions produce better characters than vague taste words.",
+    body: [
+      "Voice Design reads the instruct text as a voice-design signal. Write concrete physical traits such as deep, crisp, fast-paced, breathy, bright, restrained, and avoid vague phrases like good voice.",
+      "English or Chinese prompts are interpreted most reliably. The prompt language is separate from the spoken output language.",
+      "Avoid contradictory traits such as high-pitched deep bass. Conflicting descriptions usually blur the result.",
+    ],
+    prompts: [
+      { label: "Calm middle-aged male", example: "A composed middle-aged male announcer with a deep, rich and magnetic voice, a steady speaking speed and clear articulation, suitable for news broadcasting or documentary commentary." },
+      { label: "Young confident woman", example: "Young Korean woman, cinematic and confident. Clear articulation, bright upper tone, slight emotional swell at the end of each sentence." },
+      { label: "Late-night radio host", example: "Late-night Korean female radio host. Intimate and low-key, breathy but controlled, speaking very close to the microphone with slow, warm pacing." },
+      { label: "Cold villain", example: "Korean woman with poised menace. Calm surface, cold authority, sharp consonants, restrained but dangerous energy. Avoid overt aggression — keep it pressurized." },
+      { label: "Energetic young male", example: "Energetic young male voice in his early twenties, bright and forward, with quick rhythmic delivery and a playful upward inflection at sentence ends.", note: "Do not write only happy voice. Add range, speed, texture, and prosody." },
+    ],
+    tips: [
+      "Use one sentence per dimension: who the speaker is, how the voice sounds, and how the line is delivered.",
+      "If the result is weak, make the prompt more specific rather than longer.",
+      "When you like a result, save it as a Qwen preset, optionally with an S2-Pro preset as well.",
+    ],
+  },
+  {
+    title: "Prompting (Inline Style Instruction)",
+    summary: "Inline instructions control how this line is read. They are not for designing the base voice.",
+    body: [
+      "Think of this as a director's note to the actor. It should describe tone, pacing, emotion, and delivery for the current line.",
+      "Keep it short. One sentence with two to four strong traits is usually better than a long character description.",
+    ],
+    prompts: [
+      { label: "Calm narration", example: "Calm, clear, and steady. Read it like a polished studio narration." },
+      { label: "Warm comfort", example: "Warm, gentle, and reassuring. Speak like you are comforting someone at close distance." },
+      { label: "Cold pressure", example: "Cold, firm, and restrained. Keep the emotion suppressed and press the line forward." },
+      { label: "Near anger", example: "On the verge of exploding. Sharp, rough, and clipped, with hard sentence endings." },
+      { label: "Fear and anger", example: "Shaken by fear and anger at the same time. Add unstable breathing and a trembling tone." },
+      { label: "Secret whisper", example: "Hushed, intimate, almost whispered. Slow tempo, breathy onset, no projection." },
+    ],
+    tips: [
+      "Put the spoken words in Text and the acting direction in instruct.",
+      "A body sensation often helps: tightened throat, slow tempo, clipped endings, breathy onset.",
+      "Do not mix Voice Design prompts with inline instructions; they serve different jobs.",
+    ],
+  },
+  {
+    title: "S2-Pro Tag Reference",
+    summary: "Fish Speech S2-Pro can use [bracket] tags inside text to control local expression.",
+    body: [
+      "Place tags directly in the script, for example: `Today [sigh] I just want to go home. [whisper] Keep this between us.`",
+      "Free-form English tags can also work, such as [professional broadcast tone] or [whisper in small voice].",
+      "Use tags sparingly. One or two tags per sentence is usually enough.",
+    ],
+    tags: GUIDE_SECTIONS[2].tags?.map((entry) => ({
+      tag: entry.tag,
+      meaning: ({
+        "[pause]": "long pause",
+        "[short pause]": "short pause",
+        "[laughing]": "audible laugh",
+        "[chuckle]": "short chuckle",
+        "[laughing tone]": "smiling tone without a laugh",
+        "[sigh]": "sigh",
+        "[inhale]": "inhale",
+        "[exhale]": "exhale",
+        "[panting]": "panting breath",
+        "[clearing throat]": "clears throat",
+        "[tsk]": "tongue click",
+        "[whisper]": "whisper",
+        "[low voice]": "low voice",
+        "[shouting]": "shouting",
+        "[screaming]": "screaming",
+        "[loud]": "loud voice",
+        "[volume up]": "raise volume",
+        "[volume down]": "lower volume",
+        "[low volume]": "low volume",
+        "[emphasis]": "emphasis",
+        "[interrupting]": "cuts in",
+        "[echo]": "echo effect",
+        "[singing]": "singing contour",
+        "[excited]": "excited",
+        "[excited tone]": "excited tone",
+        "[angry]": "angry",
+        "[sad]": "sad",
+        "[surprised]": "surprised",
+        "[shocked]": "shocked",
+        "[delight]": "delight",
+        "[moaning]": "moaning",
+        "[audience laughter]": "audience laughter",
+        "[with strong accent]": "strong accent",
+      } as Record<string, string>)[entry.tag] || entry.meaning,
+    })) ?? [],
+    tips: [
+      "Place a tag exactly where the tone should change.",
+      "For multi-speaker text, use `<|speaker:0|>` and `<|speaker:1|>`, then place tags inside each speaker line.",
+      "Effect tags such as echo or audience laughter can lengthen the result.",
+    ],
+  },
+  {
+    title: "Advanced Controls (Sampling)",
+    summary: "Qwen3-TTS and S2-Pro sample audio tokens much like language models sample text tokens.",
+    body: [
+      "With sampling off, generation is safer and flatter. It works well for short formal lines.",
+      "With sampling on, top_k, top_p, temperature, and repetition_penalty shape variation and expressiveness.",
+      "Start around temperature 0.7-0.9, top_p 0.9, top_k 40-50, and repetition_penalty 1.1.",
+    ],
+    controls: GUIDE_SECTIONS[3].controls?.map((control) => ({
+      ...control,
+      effect: ({
+        "do_sample (Sampling 토글)": "OFF = greedy and stable. ON = samples from a probability distribution for more variety.",
+        temperature: "Lower is safer and flatter. Higher is more expressive and less predictable.",
+        top_k: "Limits candidates to the top K tokens. Lower values are more conservative.",
+        "top_p (nucleus)": "Keeps candidates inside the selected cumulative probability mass.",
+        repetition_penalty: "Discourages loops and repeated sounds. Too high can damage natural repetition.",
+        max_new_tokens: "Upper limit for generation length. Very high values can make output drift.",
+        seed: "Use a fixed seed to reproduce a result.",
+      } as Record<string, string>)[control.name] || control.effect,
+    })) ?? [],
+    tips: [
+      "Speech is less forgiving than text, so start with conservative top_p values.",
+      "For acting-heavy lines, raise temperature slightly. For news-like lines, lower it.",
+      "If long lines start stuttering, adjust repetition_penalty first.",
+    ],
+  },
+  {
+    title: "Advanced Controls (Subtalker)",
+    summary: "Subtalker is a secondary decoder for prosody and style tokens, separate from the main token stream.",
+    body: [
+      "The main stream handles core speech content, while subtalker adds expressive variation such as intonation, breath, and subtle timbre changes.",
+      "Turning subtalker sampling off can make output cleaner and flatter.",
+      "If a line lacks expression, try raising subtalker temperature before changing the main sampling controls.",
+    ],
+    controls: [
+      { name: "subtalker_dosample", defaultValue: "ON", effect: "Toggles subtalker sampling. OFF makes auxiliary prosody more deterministic." },
+      { name: "subtalker_top_k", defaultValue: "50", effect: "Number of auxiliary prosody candidates." },
+      { name: "subtalker_top_p", defaultValue: "1.0", effect: "Nucleus sampling for auxiliary prosody." },
+      { name: "subtalker_temperature", defaultValue: "0.9", effect: "Auxiliary prosody variety. Higher means more expression." },
+    ],
+    tips: [
+      "Flat result: try subtalker temperature first.",
+      "Broken pronunciation: tune main top_p or repetition_penalty first.",
+    ],
+  },
+  {
+    title: "Preset-Based Generation",
+    summary: "Reuse a saved voice style with new text. Switch between Base, Base + Instruction, and VoiceBox workflows.",
+    body: [
+      "Base Preset uses the saved clone prompt with a Base model. It is light and stable.",
+      "Base + Instruction adds a CustomVoice instruction model on top of the saved style for acting variation.",
+      "VoiceBox uses a fused VoiceBox model with speaker encoder support for preset and instruction in one model.",
+    ],
+    steps: [
+      "Open Preset-Based Generation from the sidebar.",
+      "Choose a saved preset. If none exists, create one in Voice Clone or Voice Design first.",
+      "Choose the workflow: Base for reuse, Base + Instruction for acting variation, VoiceBox for trained models.",
+      "Enter new text and, if needed, a short instruction.",
+      "Start with default advanced controls and adjust after listening.",
+    ],
+    tips: [
+      "Use a consistent output_name prefix when generating many lines from one preset.",
+      "Keep hybrid instructions short: one or two directing sentences.",
+    ],
+  },
+  {
+    title: "Text-to-Speech",
+    summary: "Quickly test a line by choosing a model, speaker, language, and optional style instruction.",
+    steps: [
+      "Choose a model. 0.6B is faster; 1.7B is usually more natural.",
+      "Choose a speaker. The language will follow the speaker's native language when possible.",
+      "Cross-lingual synthesis is possible but may lower quality.",
+      "Add a short style instruction only when the model supports it.",
+      "Tune advanced controls after listening to the first result.",
+    ],
+    tips: [
+      "Split long scripts into shorter lines for more stable output.",
+      "For alternate takes, keep speaker/language fixed and change only the seed.",
+    ],
+  },
+  {
+    title: "Voice Design",
+    summary: "Design a new voice from a written description, then save the best result as a preset.",
+    steps: [
+      "Select the VoiceDesign model.",
+      "Set the output file name.",
+      "Write a 1-3 sentence English voice description.",
+      "Enter a short script that reveals the character.",
+      "Listen, then save the result as a Qwen preset, optionally with an S2-Pro preset.",
+    ],
+    tips: [
+      "Try 5-10 seed variations and save the best one.",
+      "If the result feels vague, add acoustic traits such as pitch, pacing, and texture.",
+    ],
+  },
+  {
+    title: "Voice Clone",
+    summary: "Use reference audio to create a reusable preset, or use VoiceBox for direct cloning.",
+    steps: [
+      "Upload reference audio and confirm the reference text. If empty, Whisper transcription can fill it.",
+      "Choose the engine/model. Base creates the internal clone asset for a preset; VoiceBox generates directly.",
+      "In Base mode, save the current style as a preset. Enable the S2-Pro option if you also need an S2-Pro preset.",
+    ],
+    tips: [
+      "Use 5-15 seconds of clean single-speaker audio.",
+      "Do not mix several acting tones in one reference clip.",
+    ],
+  },
+  {
+    title: "S2-Pro Text-to-Speech",
+    summary: "Generate with saved S2-Pro voices and control expression using bracket tags.",
+    steps: [
+      "First save a reusable voice in S2-Pro Voice Save.",
+      "Open Tagged TTS and choose a saved voice.",
+      "Insert tags such as `[whisper]`, `[laughing]`, or `[sigh]` where expression should change.",
+      "Listen and adjust tag placement gradually.",
+    ],
+    tips: [
+      "Use the S2-Pro Tag Reference section for tag ideas.",
+      "Write tags in English even when the spoken text is Korean or Japanese.",
+    ],
+  },
+  {
+    title: "S2-Pro Multilingual / Dialogue",
+    summary: "Use one voice across languages or create multi-speaker dialogue.",
+    body: [
+      "For multilingual synthesis, the actual spoken language is determined by the text.",
+      "For dialogue, use `<|speaker:0|>` and `<|speaker:1|>` speaker tags.",
+    ],
+    tips: [
+      "Non-native languages may carry the speaker's accent. Use it intentionally or separate voices by language.",
+    ],
+  },
+  {
+    title: "Sound Effects (MMAudio)",
+    summary: "Create sound effects with MMAudio-style models.",
+    body: [
+      "Write prompts in English as sound scenes, for example: heavy footsteps on wet pavement, distant thunder, indoor reverb.",
+      "General MMAudio and NSFW profiles are separated.",
+    ],
+    controls: [
+      { name: "duration", effect: "Output length in seconds." },
+      { name: "guidance / CFG", effect: "Prompt adherence. Higher values follow the prompt more strongly but may sound less natural." },
+      { name: "steps", effect: "Inference steps. More steps can improve detail but take longer." },
+    ],
+  },
+  {
+    title: "Audio Separation / Applio",
+    summary: "Separate vocals/instrumentals with Stem Separator, then train or convert with Applio RVC.",
+    steps: [
+      "Separate a source track into vocal and instrumental stems.",
+      "Use separated vocals for single conversion or as RVC training material.",
+      "Train RVC, run single/batch conversion, then blend models if needed.",
+    ],
+    tips: [
+      "RVC training uses a lot of GPU memory. Avoid running other large jobs at the same time.",
+      "Single conversion is for quick tests; batch conversion is for larger sets.",
+    ],
+  },
+  {
+    title: "ACE-Step Music",
+    summary: "Generate full music from tags, lyrics structure, and advanced controls.",
+    steps: [
+      "Write genre, mood, instruments, and BPM in comma-separated English tags.",
+      "Use structure tags such as `[verse]`, `[chorus]`, and `[bridge]` in lyrics.",
+      "Adjust steps, guidance, seed, and CPU offload in Advanced.",
+    ],
+    tips: [
+      "English genre and instrument tags work best.",
+      "Without structure tags, the song can feel flat.",
+    ],
+  },
+  {
+    title: "Dataset / Training / VoiceBox Fusion",
+    summary: "Build your own model through CustomVoice training, VoiceBox fusion, and validation.",
+    steps: [
+      "Create a dataset with a reference voice and training samples. Aim for at least 20 clips, preferably 50+.",
+      "Run training with Base, CustomVoice, or VoiceBox mode.",
+      "Fuse a CustomVoice result with a Base 1.7B speaker encoder to create a standalone VoiceBox checkpoint.",
+      "Validate the final model with clone and clone+instruct tests.",
+    ],
+    tips: [
+      "Sentence variety strongly affects quality.",
+      "Do not share the GPU with other large jobs during training.",
+    ],
+  },
+  {
+    title: "Library (My Voices / Gallery)",
+    summary: "Review and reuse saved presets, voices, models, and generated audio.",
+    steps: [
+      "My Voices groups trained models, Qwen presets, S2-Pro presets, and RVC models.",
+      "Use each card to add/remove an image or delete the asset.",
+      "The generation gallery collects generated audio for download or dataset reuse.",
+    ],
+    tips: [
+      "Deleting an RVC model removes the .pth/.index files too, so keep backups separately.",
+      "Images help identify character voices and project assets at a glance.",
+    ],
+  },
+];
+
+const JA_GUIDE_TRANSLATIONS: Record<string, Partial<GuideSection>> = {
+  "Advanced Controls (Sampling)": {
+    summary: "Qwen3-TTS と S2-Pro は、言語モデルのテキスト生成と同じように音声トークンをサンプリングします。",
+    body: [
+      "Sampling を OFF にすると安全で平坦な生成になります。短い定型文に向いています。",
+      "ON にすると top_k、top_p、temperature、repetition_penalty で表現の幅を調整できます。",
+      "まずは temperature 0.7〜0.9、top_p 0.9、top_k 40〜50、repetition_penalty 1.1 付近から始めます。",
+    ],
+    controls: [
+      { name: "do_sample (Sampling)", defaultValue: "ON", effect: "OFF は安定した greedy 生成。ON は確率分布からサンプリングして表現幅を増やします。" },
+      { name: "temperature", defaultValue: "0.9", range: "0.1 – 1.5", effect: "低いほど安定、高いほど表現豊かで予測しにくくなります。" },
+      { name: "top_k", defaultValue: "50", range: "1 – 100", effect: "候補を上位 K 個に制限します。低いほど保守的です。" },
+      { name: "top_p (nucleus)", defaultValue: "1.0", range: "0.5 – 1.0", effect: "累積確率 P 内の候補だけを使います。" },
+      { name: "repetition_penalty", defaultValue: "1.0", range: "1.0 – 1.5", effect: "ループや繰り返しを抑えます。上げすぎると自然な繰り返しも壊れます。" },
+      { name: "max_new_tokens", defaultValue: "(model default)", effect: "生成長の上限です。長すぎると結果が伸びたり崩れたりします。" },
+      { name: "seed", defaultValue: "(random)", effect: "同じ入力と seed で結果を再現します。" },
+    ],
+    tips: [
+      "音声はテキストより失敗候補の影響が大きいので、top_p は保守的に始めます。",
+      "演技の強い台詞は temperature を少し上げ、ニュース調は下げます。",
+      "長文で詰まり始めたら repetition_penalty を先に疑います。",
+    ],
+  },
+  "Advanced Controls (Subtalker)": {
+    summary: "Subtalker はメインのトークン列とは別に、抑揚やスタイルの補助トークンを扱うデコーダーです。",
+    body: [
+      "メイン列は発話内容を、Subtalker はイントネーション、呼吸、微妙な音色変化を担当します。",
+      "Subtalker の sampling を切ると、より平坦でクリーンな結果になります。",
+      "表現が足りないときは、メイン設定を動かす前に subtalker temperature を少し上げるのが安全です。",
+    ],
+    controls: [
+      { name: "subtalker_dosample", defaultValue: "ON", effect: "Subtalker のサンプリングを切り替えます。OFF では補助韻律が決定的になります。" },
+      { name: "subtalker_top_k", defaultValue: "50", effect: "補助韻律トークンの候補数です。" },
+      { name: "subtalker_top_p", defaultValue: "1.0", effect: "補助韻律の nucleus sampling です。" },
+      { name: "subtalker_temperature", defaultValue: "0.9", effect: "補助韻律の多様性です。高いほど表現が増えます。" },
+    ],
+    tips: ["単調なら subtalker temperature から調整します。", "発音が壊れる場合はメインの top_p や repetition_penalty を先に見ます。"],
+  },
+  "Preset-Based Generation": {
+    summary: "保存済みの声スタイルに新しい台詞を載せて再利用する画面です。Base、Base + Instruction、VoiceBox の流れを切り替えます。",
+    body: [
+      "Base Preset は保存済み clone prompt を Base モデルで読む軽く安定した方式です。",
+      "Base + Instruction は保存スタイルに CustomVoice の指示モデルを重ね、演技の変化を付けます。",
+      "VoiceBox は speaker encoder を含む融合モデルで、プリセットと指示を1つのモデルで扱います。",
+    ],
+    steps: ["サイドバーからプリセットベース生成を開きます。", "使用する保存済みプリセットを選びます。なければ音声複製または音声設計で先に作成します。", "単純な再利用は Base、演技変化は Base + Instruction、学習済みモデルは VoiceBox を選びます。", "新しい台詞と必要な短い指示を入力します。", "まず既定値で生成し、聞いてから詳細設定を調整します。"],
+    tips: ["同じプリセットで複数行を作るときは output_name の prefix を揃えると整理しやすいです。", "Hybrid の instruct は1〜2文の短い演出指示にします。"],
+  },
+  "Text-to-Speech": {
+    summary: "モデル、話者、言語、任意のスタイル指示を選んで短い台詞を素早く確認する画面です。",
+    steps: ["モデルを選びます。0.6B は速く、1.7B はより自然です。", "話者を選びます。可能な場合は話者の native 言語に合わせます。", "クロスリンガル合成も可能ですが品質は落ちることがあります。", "対応モデルでは短い style instruction を追加できます。", "最初の結果を聞いてから詳細設定を調整します。"],
+    tips: ["長い台本は短い行に分ける方が安定します。", "別テイクは話者と言語を固定し、seed だけ変えるのが自然です。"],
+  },
+  "Voice Design": {
+    summary: "文章による説明から新しい声を設計し、良い結果をプリセットとして保存します。",
+    steps: ["VoiceDesign モデルを選びます。", "出力ファイル名を設定します。", "英語で1〜3文の声の説明を書きます。", "キャラクターが分かる短い台詞を入力します。", "聞いて良ければ Qwen プリセットとして保存し、必要なら S2-Pro も同時に作成します。"],
+    tips: ["seed を変えて5〜10個ほど試し、良いものを保存します。", "結果がぼやける場合はピッチ、速度、質感などの音響特徴を追加します。"],
+  },
+  "Voice Clone": {
+    summary: "参照音声から再利用可能なプリセットを作るか、VoiceBox で直接複製します。",
+    steps: ["参照音声をアップロードし、参照テキストを確認します。空なら Whisper で自動転写できます。", "エンジン/モデルを選びます。Base はプリセット用の内部 clone asset を作り、VoiceBox は直接生成します。", "Base では現在のスタイルをプリセット保存します。S2-Pro も必要なら同時作成を有効にします。"],
+    tips: ["5〜15秒程度の、1人がきれいに話している音声が最適です。", "複数の演技トーンを1つの参照クリップに混ぜないでください。"],
+  },
+  "S2-Pro Text-to-Speech": {
+    summary: "保存済み S2-Pro ボイスで生成し、bracket タグで表現を制御します。",
+    steps: ["先に S2-Pro 音声保存で再利用ボイスを作ります。", "Tagged TTS を開いて保存ボイスを選びます。", "表現を変えたい位置に `[whisper]`、`[laughing]`、`[sigh]` などを入れます。", "聞きながらタグの位置と種類を少しずつ調整します。"],
+    tips: ["タグ候補は S2-Pro タグリファレンスを参照します。", "発話テキストが日本語や韓国語でも、タグは英語で書くのが安定します。"],
+  },
+  "S2-Pro Multilingual / Dialogue": {
+    summary: "1つの声で複数言語を扱ったり、複数話者の会話を生成します。",
+    body: ["多言語合成では、実際の発話言語は Text の内容で決まります。", "会話では `<|speaker:0|>` と `<|speaker:1|>` の話者タグを使います。"],
+    tips: ["非 native 言語では話者のアクセントが出ることがあります。効果として使うか、言語ごとに声を分けます。"],
+  },
+  "Sound Effects (MMAudio)": {
+    summary: "MMAudio 系モデルで効果音を生成します。",
+    body: ["プロンプトは英語で sound scene として書きます。例: heavy footsteps on wet pavement, distant thunder, indoor reverb.", "通常 MMAudio と NSFW プロファイルは分離されています。"],
+    controls: [{ name: "duration", effect: "出力長（秒）です。" }, { name: "guidance / CFG", effect: "プロンプトへの忠実度です。高いほど説明に寄りますが自然さは下がる場合があります。" }, { name: "steps", effect: "推論ステップ数です。多いほど精細ですが時間がかかります。" }],
+  },
+  "Audio Separation / Applio": {
+    summary: "Stem Separator でボーカル/伴奏を分離し、Applio RVC で学習や変換を行います。",
+    steps: ["音源をボーカルと伴奏に分離します。", "分離したボーカルを単一変換または RVC 学習素材に使います。", "RVC 学習、単一/バッチ変換、必要ならモデルブレンドを行います。"],
+    tips: ["RVC 学習は GPU メモリを多く使うため、大きな処理との並行実行は避けます。", "単一変換は確認用、バッチ変換は大量処理用です。"],
+  },
+  "ACE-Step Music": {
+    summary: "タグ、歌詞構造、詳細設定から完成形の音楽を生成します。",
+    steps: ["ジャンル、ムード、楽器、BPM を英語タグでカンマ区切りにします。", "歌詞には `[verse]`、`[chorus]`、`[bridge]` などの構造タグを使います。", "Advanced で steps、guidance、seed、CPU offload を調整します。"],
+    tips: ["ジャンルや楽器名は英語が最も安定します。", "構造タグがないと曲が平坦になりやすいです。"],
+  },
+  "Dataset / Training / VoiceBox Fusion": {
+    summary: "CustomVoice 学習、VoiceBox 融合、検証を通じて自分のモデルを作る流れです。",
+    steps: ["基準音声と学習サンプルでデータセットを作ります。最低20、できれば50以上を目安にします。", "Base、CustomVoice、VoiceBox のいずれかで学習を実行します。", "CustomVoice 結果と Base 1.7B speaker encoder を融合して独立した VoiceBox checkpoint を作ります。", "clone と clone+instruct で品質を確認します。"],
+    tips: ["文のバリエーションが品質を大きく左右します。", "学習中は GPU を他の大きな処理と共有しないでください。"],
+  },
+  "Library (My Voices / Gallery)": {
+    summary: "保存済みプリセット、ボイス、モデル、生成音声を確認して再利用する場所です。",
+    steps: ["自分の声では、学習済みモデル、Qwen プリセット、S2-Pro プリセット、RVC モデルを管理します。", "各カードから画像の追加/削除やアセット削除ができます。", "生成ギャラリーには生成済み音声が集まり、ダウンロードやデータセット利用ができます。"],
+    tips: ["RVC モデル削除は .pth/.index ファイルも削除するため、必要なら別途バックアップしてください。", "画像を付けるとキャラクターやプロジェクトを見分けやすくなります。"],
+  },
+};
+
+const GUIDE_SECTIONS_JA: GuideSection[] = [
+  {
+    title: "プロンプト作成 (Voice Design)",
+    summary: "Voice Design の instruction は自然言語の音声設計プロンプトです。曖昧な好みではなく、具体的な音響特徴を書くほど狙いに近づきます。",
+    body: [
+      "deep、crisp、fast-paced、breathy、bright、restrained など物理的に聞こえる特徴を書きます。good voice のような抽象語だけでは弱くなります。",
+      "英語または中国語の指示が最も安定します。出力言語とは別なので、英語の説明で日本語音声も作れます。",
+      "high-pitched deep bass のような矛盾した特徴は避けてください。",
+    ],
+    prompts: GUIDE_SECTIONS_EN[0].prompts,
+    tips: [
+      "1文ごとに役割を分けると書きやすいです。人物、音響特徴、話し方の順に整理します。",
+      "結果が弱いときは長くするより具体化します。",
+      "良い結果は Qwen プリセットとして保存し、必要なら S2-Pro も同時に作成します。",
+    ],
+  },
+  {
+    title: "プロンプト作成 (Inline Style Instruction)",
+    summary: "Inline instruction は今回の一文をどう読むかを指定する短い演技指示です。声そのものを設計する欄ではありません。",
+    body: [
+      "声優への演出メモとして考えます。トーン、速度、感情、語尾を短く指定します。",
+      "長いキャラクター説明より、強い特徴を2〜4個含む1文が安定します。",
+    ],
+    prompts: GUIDE_SECTIONS_EN[1].prompts,
+    tips: [
+      "発話内容は Text に、演技指示は instruct に入れます。",
+      "tightened throat、slow tempo、clipped endings など身体感覚を伴う表現が効きやすいです。",
+      "Voice Design 用の長い説明とは混ぜないでください。",
+    ],
+  },
+  {
+    title: "S2-Pro タグリファレンス",
+    summary: "Fish Speech S2-Pro はテキスト内の [bracket] タグで局所的な表現を制御できます。",
+    body: [
+      "タグは台詞の中に直接入れます。例: `今日は [sigh] もう帰りたい。 [whisper] これは内緒だよ。`",
+      "[professional broadcast tone] のような自由形式の英語タグも使えます。",
+      "タグを入れすぎると崩れやすいので、1文に1〜2個から始めます。",
+    ],
+    tags: GUIDE_SECTIONS_EN[2].tags,
+    tips: [
+      "トーンを変えたい位置に正確にタグを置きます。",
+      "複数話者では `<|speaker:0|>` / `<|speaker:1|>` を使い、各話者の台詞内にタグを置きます。",
+      "echo や audience laughter などの効果タグは結果が長くなることがあります。",
+    ],
+  },
+  ...GUIDE_SECTIONS_EN.slice(3).map((section) => ({
+    ...section,
+    ...JA_GUIDE_TRANSLATIONS[section.title],
+    title: ({
+      "Advanced Controls (Sampling)": "高度な設定 (Sampling)",
+      "Advanced Controls (Subtalker)": "高度な設定 (Subtalker)",
+      "Preset-Based Generation": "プリセットベース生成",
+      "Text-to-Speech": "テキスト音声変換",
+      "Voice Design": "音声設計",
+      "Voice Clone": "音声複製",
+      "S2-Pro Text-to-Speech": "S2-Pro テキスト音声変換",
+      "S2-Pro Multilingual / Dialogue": "S2-Pro 多言語 / 会話",
+      "Sound Effects (MMAudio)": "効果音 (MMAudio)",
+      "Audio Separation / Applio": "オーディオ分離 / Applio",
+      "ACE-Step Music": "ACE-Step 作曲",
+      "Dataset / Training / VoiceBox Fusion": "データセット / 学習 / VoiceBox 融合",
+      "Library (My Voices / Gallery)": "ライブラリ (自分の声 / ギャラリー)",
+    } as Record<string, string>)[section.title] || section.title,
+    summary: section.summary,
+  })),
+];
+
+export function getGuideSections(locale: string): GuideSection[] {
+  if (locale === "en") return GUIDE_SECTIONS_EN;
+  if (locale === "ja") return GUIDE_SECTIONS_JA;
+  return GUIDE_SECTIONS;
+}
+
 export const CUSTOM_RECIPES = [
   {
     label: "Broadcast",

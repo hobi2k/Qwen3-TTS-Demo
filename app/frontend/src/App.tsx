@@ -33,25 +33,21 @@ import {
   basenameFromPath,
   createEmptyDatasetSample,
   createGenerationControls,
-  CUSTOM_RECIPES,
-  DESIGN_RECIPES,
   fileUrlFromPath,
   FineTuneMode,
   getAudioDownloadName,
   formatDate,
   GenerationControlsEditor,
   GenerationControlsForm,
+  getGuideSections,
   getModeLabel,
   getRecordDisplayTitle,
-  GUIDE_SECTIONS,
-  HYBRID_RECIPES,
   LanguageSelect,
   mediaUrl,
   MiniWaveform,
   normalizeDatasetPath,
   parseDatasetSampleBulkInput,
   PRODUCT_PAGES,
-  RecipeBar,
   serializeGenerationControls,
   ServerAudioPicker,
   S2_PRO_TAG_CATEGORIES,
@@ -355,10 +351,10 @@ function guessMatchingCustomVoiceModel(
 }
 
 function StudioApp() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [voiceGalleryView, setVoiceGalleryView] = useState<"trained" | "qwen" | "s2pro" | "rvc">("trained");
-  const [activeGuideTitle, setActiveGuideTitle] = useState<string>(GUIDE_SECTIONS[0]?.title || "");
+  const [activeGuideIndex, setActiveGuideIndex] = useState(0);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
   const [ttsSideView, setTtsSideView] = useState<"settings" | "history">("settings");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -965,7 +961,8 @@ function StudioApp() {
   const pageMeta = PRODUCT_PAGES[activeTab];
   const pageTitle = t(`page.${activeTab}.title`, pageMeta.title);
   const pageDescription = t(`page.${activeTab}.description`, pageMeta.description);
-  const selectedGuideSection = GUIDE_SECTIONS.find((section) => section.title === activeGuideTitle) ?? GUIDE_SECTIONS[0];
+  const guideSections = getGuideSections(locale);
+  const selectedGuideSection = guideSections[activeGuideIndex] ?? guideSections[0];
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
   const currentAceStepMode = isAceStepTab(activeTab) ? ACE_STEP_TAB_TO_MODE[activeTab] : aceStepMode;
   const aceComposerBars = makeWaveBars(`${aceStepForm.prompt}|${aceStepForm.lyrics}|${aceStepForm.audio_duration}`, 72);
@@ -1107,22 +1104,6 @@ function StudioApp() {
       language: item.language || prev.language,
       model_id: preferredStockCustomVoiceModel?.model_id || prev.model_id,
       speaker: preferredStockCustomVoiceModel?.default_speaker || prev.speaker,
-    }));
-  }
-
-  function applyDesignRecipe(item: { instruction?: string }) {
-    setDesignForm((prev) => ({
-      ...prev,
-      instruct: item.instruction || prev.instruct,
-    }));
-  }
-
-  function applyHybridRecipe(item: { text?: string; instruction?: string; language?: string }) {
-    setHybridForm((prev) => ({
-      ...prev,
-      text: item.text || prev.text,
-      instruct: item.instruction || prev.instruct,
-      language: item.language || prev.language,
     }));
   }
 
@@ -3871,11 +3852,10 @@ function StudioApp() {
                 </form>
               </TabsContent>
 
-              <TabsContent value="hybrid" className="m-0">
-                <form className="flex flex-col gap-4" onSubmit={handleHybridInferenceSubmit}>
-                  <h3 className="text-sm font-medium text-ink">{t("projects.hybrid.title", "Base + CustomVoice 지시 생성")}</h3>
-                  <RecipeBar title={t("projects.hybrid.recipes", "말투 템플릿")} items={HYBRID_RECIPES} onApply={applyHybridRecipe} />
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+	              <TabsContent value="hybrid" className="m-0">
+	                <form className="flex flex-col gap-4" onSubmit={handleHybridInferenceSubmit}>
+	                  <h3 className="text-sm font-medium text-ink">{t("projects.hybrid.title", "Base + CustomVoice 지시 생성")}</h3>
+	                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">{t("projects.hybrid.styleModel", "스타일 분석 모델")}</Label>
                       <Select
@@ -3996,11 +3976,10 @@ function StudioApp() {
                 </form>
               </TabsContent>
 
-              <TabsContent value="voicebox_instruct" className="m-0">
-                <form className="flex flex-col gap-4" onSubmit={handleGenerateVoiceBoxInstructFromPreset}>
-                  <h3 className="text-sm font-medium text-ink">{t("projects.voiceboxInstruct.title", "VoiceBox 프리셋 + 말투 지시")}</h3>
-                  <RecipeBar title={t("projects.hybrid.recipes", "말투 템플릿")} items={HYBRID_RECIPES} onApply={(item) => setVoiceBoxPresetInstructForm((prev) => ({ ...prev, instruct: item.instruction || prev.instruct, text: item.text || prev.text, language: item.language || prev.language }))} />
-                  <div className="flex flex-col gap-1.5">
+	              <TabsContent value="voicebox_instruct" className="m-0">
+	                <form className="flex flex-col gap-4" onSubmit={handleGenerateVoiceBoxInstructFromPreset}>
+	                  <h3 className="text-sm font-medium text-ink">{t("projects.voiceboxInstruct.title", "VoiceBox 프리셋 + 말투 지시")}</h3>
+	                  <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("projects.voicebox.model", "VoiceBox 모델")}</Label>
                     <Select value={voiceBoxPresetInstructForm.model_id || undefined} onValueChange={(value) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, model_id: value })}>
                       <SelectTrigger>
@@ -6615,11 +6594,11 @@ function StudioApp() {
             <aside className="self-start">
               <WorkspaceCard className="flex flex-col gap-1 p-3">
                 <nav className="flex flex-col gap-1" aria-label="Guide documents">
-                  {GUIDE_SECTIONS.map((section) => (
+                  {guideSections.map((section, index) => (
                     <button
-                      className={`rounded-md px-3 py-2 text-left text-sm transition ${selectedGuideSection.title === section.title ? "bg-accent-soft text-accent-ink font-medium" : "text-ink-muted hover:bg-canvas hover:text-ink"}`}
+                      className={`rounded-md px-3 py-2 text-left text-sm transition ${activeGuideIndex === index ? "bg-accent-soft text-accent-ink font-medium" : "text-ink-muted hover:bg-canvas hover:text-ink"}`}
                       key={section.title}
-                      onClick={() => setActiveGuideTitle(section.title)}
+                      onClick={() => setActiveGuideIndex(index)}
                       type="button"
                     >
                       {section.title}
@@ -6646,7 +6625,7 @@ function StudioApp() {
 
               {selectedGuideSection.steps?.length ? (
                 <div className="flex flex-col gap-2 border-t border-line pt-4">
-                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Steps</h4>
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.section.steps", "Steps")}</h4>
                   <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm text-ink-muted marker:font-mono marker:text-ink-subtle">
                     {selectedGuideSection.steps.map((step, index) => (
                       <li key={index} className="leading-relaxed">{step}</li>
@@ -6657,7 +6636,7 @@ function StudioApp() {
 
               {selectedGuideSection.prompts?.length ? (
                 <div className="flex flex-col gap-3 border-t border-line pt-4">
-                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Prompt examples</h4>
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.section.prompts", "Prompt examples")}</h4>
                   <div className="flex flex-col gap-3">
                     {selectedGuideSection.prompts.map((prompt, index) => (
                       <article
@@ -6681,7 +6660,7 @@ function StudioApp() {
 
               {selectedGuideSection.tags?.length ? (
                 <div className="flex flex-col gap-3 border-t border-line pt-4">
-                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Tag reference</h4>
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.section.tags", "Tag reference")}</h4>
                   <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
                     {selectedGuideSection.tags.map((entry) => (
                       <div
@@ -6700,14 +6679,14 @@ function StudioApp() {
 
               {selectedGuideSection.controls?.length ? (
                 <div className="flex flex-col gap-3 border-t border-line pt-4">
-                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Controls reference</h4>
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.section.controls", "Controls reference")}</h4>
                   <div className="overflow-hidden rounded-md border border-line">
                     <table className="w-full border-collapse text-left text-[12px]">
                       <thead className="bg-canvas/60">
                         <tr className="border-b border-line">
-                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Name</th>
-                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Default</th>
-                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Effect</th>
+                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.table.name", "Name")}</th>
+                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.table.default", "Default")}</th>
+                          <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.table.effect", "Effect")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6729,7 +6708,7 @@ function StudioApp() {
 
               {selectedGuideSection.tips?.length ? (
                 <div className="flex flex-col gap-2 border-t border-line pt-4">
-                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Tips</h4>
+                  <h4 className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("guide.section.tips", "Tips")}</h4>
                   <ul className="flex flex-col gap-1.5 text-sm leading-relaxed text-ink-muted">
                     {selectedGuideSection.tips.map((tip, index) => (
                       <li key={index} className="flex gap-2">
