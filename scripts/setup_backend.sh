@@ -6,9 +6,6 @@ BACKEND_DIR="${ROOT_DIR}/app/backend"
 UPSTREAM_DIR="${ROOT_DIR}/Qwen3-TTS"
 VENV_DIR="${ROOT_DIR}/.venv"
 VENDOR_DIR="${ROOT_DIR}/vendor"
-MMAUDIO_REPO_URL_DEFAULT="https://github.com/hkchengrex/MMAudio.git"
-APPLIO_REPO_URL_DEFAULT="https://github.com/IAHispano/Applio.git"
-FISH_SPEECH_REPO_URL_DEFAULT="https://github.com/fishaudio/fish-speech.git"
 FLASH_ATTN_WHEEL_URL="https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 if [[ -n "${QWEN_DEMO_PYTHON:-}" ]]; then
@@ -82,21 +79,6 @@ set -a
 source "${BACKEND_DIR}/.env"
 set +a
 
-clone_repo_if_missing() {
-  local repo_url="$1"
-  local target_dir="$2"
-  if [[ -d "${target_dir}/.git" ]]; then
-    echo "Using existing repo: ${target_dir}"
-    return
-  fi
-  if [[ -d "${target_dir}" && ! -z "$(ls -A "${target_dir}" 2>/dev/null)" ]]; then
-    echo "Skipping clone because target exists and is not empty: ${target_dir}"
-    return
-  fi
-  echo "Cloning ${repo_url} -> ${target_dir}"
-  git clone "${repo_url}" "${target_dir}"
-}
-
 install_optional_repo_requirements() {
   local repo_dir="$1"
   for requirements_file in \
@@ -117,16 +99,10 @@ install_optional_repo_requirements() {
 MMAUDIO_REPO_ROOT="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
 APPLIO_REPO_ROOT="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
 FISH_SPEECH_REPO_ROOT="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
-MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-${MMAUDIO_REPO_URL_DEFAULT}}"
-APPLIO_REPO_URL="${APPLIO_REPO_URL:-${APPLIO_REPO_URL_DEFAULT}}"
-FISH_SPEECH_REPO_URL="${FISH_SPEECH_REPO_URL:-${FISH_SPEECH_REPO_URL_DEFAULT}}"
 
-clone_repo_if_missing "${MMAUDIO_REPO_URL}" "${MMAUDIO_REPO_ROOT}"
-clone_repo_if_missing "${APPLIO_REPO_URL}" "${APPLIO_REPO_ROOT}"
-clone_repo_if_missing "${FISH_SPEECH_REPO_URL}" "${FISH_SPEECH_REPO_ROOT}"
 install_optional_repo_requirements "${MMAUDIO_REPO_ROOT}"
 install_optional_repo_requirements "${APPLIO_REPO_ROOT}"
-echo "Fish Speech is cloned only. S2-Pro uses a separate .venv-fish-speech runtime to avoid changing Qwen torch/flash-attn."
+echo "Fish Speech sources are vendored in this repo. S2-Pro uses a separate .venv-fish-speech runtime."
 
 python - <<'PY'
 import importlib.util

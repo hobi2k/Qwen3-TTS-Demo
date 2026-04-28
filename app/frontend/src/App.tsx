@@ -4,6 +4,27 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { I18nProvider, useTranslation } from "./lib/i18n";
 import { ThemeProvider } from "./lib/theme";
 import { StudioTopBar } from "./components/StudioTopBar";
+import { Providers } from "./components/Providers";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Play, AudioWaveform, Sparkles, Clock, Wand2, Mic, Layers, Music2, Music, Drum, AudioLines, Scissors, FileAudio, Volume2, GitMerge, Database, Cog, BookOpen, Home as HomeIcon, Library, FolderOpen, Headphones, Save } from "lucide-react";
+import {
+  WorkspaceShell,
+  WorkspaceHeader,
+  WorkspaceCard,
+  WorkspaceEmptyState,
+  WorkspaceResultHeader,
+  WorkspaceFieldLabel,
+} from "./components/workspace";
+import { toast } from "sonner";
 
 import { api } from "./lib/api";
 import {
@@ -146,37 +167,37 @@ function PromptSummaryCard({
 }) {
   if (!prompt) {
     return (
-      <div className="result-card result-card--empty">
-        <strong>{title}</strong>
-        <p>아직 저장된 목소리 스타일이 없습니다. 먼저 참조 음성으로 스타일을 만들어 주세요.</p>
+      <div className="rounded-md border border-dashed border-line bg-sunken/40 p-3 flex flex-col gap-1">
+        <strong className="text-sm font-medium text-ink">{title}</strong>
+        <p className="text-xs text-ink-muted">아직 저장된 목소리 스타일이 없습니다. 먼저 참조 음성으로 스타일을 만들어 주세요.</p>
       </div>
     );
   }
 
   return (
-    <article className="result-card">
-      <div className="result-card__header">
-        <div>
-          <span className="eyebrow eyebrow--soft">목소리 스타일</span>
-          <h3>{title}</h3>
+    <article className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">목소리 스타일</span>
+          <h3 className="text-sm font-medium text-ink">{title}</h3>
         </div>
         {actionLabel && onAction ? (
-          <button className="secondary-button" onClick={onAction} type="button">
+          <Button variant="outline" size="sm" onClick={onAction} type="button">
             {actionLabel}
-          </button>
+          </Button>
         ) : null}
       </div>
-      <div className="result-card__grid">
-        <div>
-          <span className="meta-label">생성 방식</span>
-          <strong>{prompt.source_type === "generated_sample" ? "생성 음성에서 추출" : "참조 음성에서 추출"}</strong>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">생성 방식</span>
+          <strong className="text-xs font-medium text-ink">{prompt.source_type === "generated_sample" ? "생성 음성에서 추출" : "참조 음성에서 추출"}</strong>
         </div>
-        <div>
-          <span className="meta-label">모드</span>
-          <strong>{prompt.x_vector_only_mode ? "가벼운 복제" : "전체 스타일"}</strong>
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">모드</span>
+          <strong className="text-xs font-medium text-ink">{prompt.x_vector_only_mode ? "가벼운 복제" : "전체 스타일"}</strong>
         </div>
       </div>
-      <p>{prompt.reference_text}</p>
+      <p className="text-xs text-ink-muted">{prompt.reference_text}</p>
     </article>
   );
 }
@@ -2380,9 +2401,7 @@ function StudioApp() {
   return (
     <>
     <StudioTopBar
-      onRender={canRunCurrentTab ? handleRunCurrentTab : undefined}
       onShare={handleShareWorkspace}
-      renderDisabled={loading}
       title={pageTitle}
     />
     <div className="page-shell">
@@ -2519,13 +2538,14 @@ function StudioApp() {
 
         <main className="page-main">
           {activeTab === "home" ? (
-            <header className="hero">
-              <div className="hero__copy">
-                <span className="hero__section-label">{t("home.eyebrow")}</span>
-                <h1>{t("home.title")}</h1>
-                <p>{t("home.description")}</p>
-              </div>
-              <div className="spotlight-grid">
+            <WorkspaceShell>
+              <WorkspaceHeader
+                eyebrow={t("home.eyebrow")}
+                eyebrowIcon={HomeIcon}
+                title={t("home.title")}
+                subtitle={t("home.description")}
+              />
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
                 <SpotlightCard
                   eyebrow={t("home.card.design.eyebrow")}
                   title={t("home.card.design.title")}
@@ -2555,57 +2575,63 @@ function StudioApp() {
                   onAction={() => setActiveTab("projects")}
                 />
               </div>
-            </header>
+            </WorkspaceShell>
           ) : null}
 
           {message ? <div className="message-banner">{message}</div> : null}
       {activeTab === "voices" ? (
-        <section className="workspace workspace--stacked">
-          <section className="voice-gallery-shell">
-            <div className="voice-gallery-toolbar">
-              <div>
-                <h2>목소리 프로젝트</h2>
-                <p>직접 만든 목소리 자산만 모아 관리합니다. 기본 목소리는 여기서 제외합니다.</p>
-              </div>
-              <div className="voice-gallery-tabs" aria-label="목소리 보기 필터">
-                <button className={voiceGalleryView === "trained" ? "is-active" : ""} onClick={() => setVoiceGalleryView("trained")} type="button">
-                  훈련한 모델 <span>{latestFineTunedModels.length}</span>
-                </button>
-                <button className={voiceGalleryView === "qwen" ? "is-active" : ""} onClick={() => setVoiceGalleryView("qwen")} type="button">
-                  Qwen 프리셋 <span>{qwenVoiceAssetCount}</span>
-                </button>
-                <button className={voiceGalleryView === "s2pro" ? "is-active" : ""} onClick={() => setVoiceGalleryView("s2pro")} type="button">
-                  S2-Pro 프리셋 <span>{s2VoiceProjects.length}</span>
-                </button>
-                <button className={voiceGalleryView === "rvc" ? "is-active" : ""} onClick={() => setVoiceGalleryView("rvc")} type="button">
-                  RVC 모델 <span>{voiceChangerModels.length}</span>
-                </button>
-              </div>
-            </div>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("voices.eyebrow", "VOICE LIBRARY")}
+            eyebrowIcon={Library}
+            title={t("voices.title", "목소리 프로젝트")}
+            subtitle={t("voices.subtitle", "직접 만든 목소리 자산만 모아 관리합니다. 기본 목소리는 여기서 제외합니다.")}
+          />
 
-            <div className="voice-project-list">
-              {voiceGalleryView === "trained" ? (
-                latestFineTunedModels.length ? (
+          <Tabs
+            value={voiceGalleryView}
+            onValueChange={(value) => setVoiceGalleryView(value as typeof voiceGalleryView)}
+            className="flex flex-col gap-5"
+          >
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 bg-surface border border-line p-1 h-auto">
+              <TabsTrigger value="trained" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.trained", "훈련한 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{latestFineTunedModels.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="qwen" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.qwen", "Qwen 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{qwenVoiceAssetCount}</span>
+              </TabsTrigger>
+              <TabsTrigger value="s2pro" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.s2pro", "S2-Pro 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{s2VoiceProjects.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="rvc" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.rvc", "RVC 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voiceChangerModels.length}</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex flex-col gap-3">
+              <TabsContent value="trained" className="m-0 flex flex-col gap-3">
+                {latestFineTunedModels.length ? (
                   latestFineTunedModels.map((model) => (
-                    <article className="voice-project-row" key={model.model_id}>
-                      <div className="voice-project-avatar" aria-hidden="true">
+                    <WorkspaceCard key={model.model_id} className="flex flex-wrap items-center gap-4">
+                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
                         <MiniWaveform dense />
                       </div>
-                      <div className="voice-project-main">
-                        <div className="voice-project-title">
-                          <strong>{displayModelName(model)}</strong>
-                          <span>{model.default_speaker ? `${model.default_speaker} 목소리` : "학습 모델"}</span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <strong className="text-sm font-medium text-ink">{displayModelName(model)}</strong>
+                          <span className="text-xs text-ink-muted">{model.default_speaker ? t("voices.trained.speaker", "{name} 목소리").replace("{name}", model.default_speaker) : t("voices.trained.fallback", "학습 모델")}</span>
                         </div>
-                        <p>{model.notes || "바로 선택해서 텍스트 음성 변환에 사용할 수 있는 학습 결과입니다."}</p>
-                        <div className="voice-project-assets">
-                          <span>{model.source}</span>
-                          <span>{model.default_speaker || "speaker"}</span>
-                          <span>{model.speaker_encoder_included ? "speaker encoder 포함" : "speaker encoder 없음"}</span>
+                        <p className="text-sm text-ink-muted">{model.notes || t("voices.trained.note", "바로 선택해서 텍스트 음성 변환에 사용할 수 있는 학습 결과입니다.")}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.source}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.default_speaker || "speaker"}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.speaker_encoder_included ? t("voices.trained.encoderYes", "speaker encoder 포함") : t("voices.trained.encoderNo", "speaker encoder 없음")}</Badge>
                         </div>
                       </div>
-                      <div className="voice-project-actions">
-                        <button
-                          className="secondary-button"
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setInferenceForm((prev) => ({
                               ...prev,
@@ -2616,44 +2642,48 @@ function StudioApp() {
                           }}
                           type="button"
                         >
-                          텍스트 음성 변환에서 사용
-                        </button>
+                          {t("voices.trained.useInTts", "텍스트 음성 변환에서 사용")}
+                        </Button>
                       </div>
-                    </article>
+                    </WorkspaceCard>
                   ))
                 ) : (
-                  <div className="voice-project-empty">
-                    <strong>훈련한 모델이 없습니다.</strong>
-                    <p>Qwen 학습을 완료한 모델만 이 영역에 표시됩니다.</p>
-                    <button className="primary-button" onClick={() => setActiveTab("training")} type="button">
-                      학습 실행으로 이동
-                    </button>
-                  </div>
-                )
-              ) : null}
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title={t("voices.trained.emptyTitle", "훈련한 모델이 없습니다.")}
+                    body={t("voices.trained.emptyBody", "Qwen 학습을 완료한 모델만 이 영역에 표시됩니다.")}
+                    action={
+                      <Button onClick={() => setActiveTab("training")} type="button">
+                        {t("voices.trained.gotoTraining", "학습 실행으로 이동")}
+                      </Button>
+                    }
+                  />
+                )}
+              </TabsContent>
 
-              {voiceGalleryView === "qwen" ? (
-                qwenVoiceAssetCount ? (
+              <TabsContent value="qwen" className="m-0 flex flex-col gap-3">
+                {qwenVoiceAssetCount ? (
                   <>
                     {presets.map((preset) => (
-                      <article className="voice-project-row" key={preset.id}>
-                        <div className="voice-project-avatar" aria-hidden="true">
+                      <WorkspaceCard key={preset.id} className="flex flex-wrap items-center gap-4">
+                        <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
                           <MiniWaveform dense />
                         </div>
-                        <div className="voice-project-main">
-                          <div className="voice-project-title">
-                            <strong>{preset.name}</strong>
-                            <span>{preset.language} · {formatDate(preset.created_at)}</span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                            <span className="text-xs text-ink-muted">{preset.language} · {formatDate(preset.created_at)}</span>
                           </div>
-                          <p>{preset.reference_text}</p>
-                          <div className="voice-project-assets">
-                            <span>Qwen 프리셋</span>
-                            <span>{preset.source_type}</span>
+                          <p className="text-sm text-ink-muted line-clamp-2">{preset.reference_text}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">Qwen 프리셋</Badge>
+                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{preset.source_type}</Badge>
                           </div>
                         </div>
-                        <div className="voice-project-actions">
-                          <button
-                            className="secondary-button"
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => {
                               setSelectedPresetId(preset.id);
                               setSelectedHybridPresetId(preset.id);
@@ -2661,10 +2691,11 @@ function StudioApp() {
                             }}
                             type="button"
                           >
-                            프리셋 기반 생성
-                          </button>
-                          <button
-                            className="secondary-button"
+                            {t("voices.qwen.usePreset", "프리셋 기반 생성")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() =>
                               createS2VoiceFromQwenAsset({
                                 name: preset.name,
@@ -2675,41 +2706,43 @@ function StudioApp() {
                             }
                             type="button"
                           >
-                            S2-Pro 프리셋으로 저장
-                          </button>
+                            {t("voices.qwen.saveAsS2Pro", "S2-Pro 프리셋으로 저장")}
+                          </Button>
                         </div>
-                      </article>
+                      </WorkspaceCard>
                     ))}
                     {rawQwenClonePrompts.map((prompt) => (
-                      <article className="voice-project-row" key={prompt.id}>
-                        <div className="voice-project-avatar" aria-hidden="true">
+                      <WorkspaceCard key={prompt.id} className="flex flex-wrap items-center gap-4">
+                        <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
                           <MiniWaveform dense />
                         </div>
-                        <div className="voice-project-main">
-                          <div className="voice-project-title">
-                            <strong>{basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, "")}</strong>
-                            <span>{formatDate(prompt.created_at)}</span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <strong className="text-sm font-medium text-ink">{basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, "")}</strong>
+                            <span className="text-xs text-ink-muted">{formatDate(prompt.created_at)}</span>
                           </div>
-                          <p>{prompt.reference_text || "참조 텍스트가 저장되지 않았습니다."}</p>
-                          <div className="voice-project-assets">
-                            <span>Qwen clone prompt</span>
-                            <span>{prompt.source_type}</span>
-                            <span>{prompt.x_vector_only_mode ? "x-vector" : "full style"}</span>
+                          <p className="text-sm text-ink-muted line-clamp-2">{prompt.reference_text || t("voices.qwen.noText", "참조 텍스트가 저장되지 않았습니다.")}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">Qwen clone prompt</Badge>
+                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{prompt.source_type}</Badge>
+                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{prompt.x_vector_only_mode ? "x-vector" : "full style"}</Badge>
                           </div>
                         </div>
-                        <div className="voice-project-actions">
-                          <button
-                            className="secondary-button"
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => {
                               setUploadedClonePrompt(prompt);
                               setActiveTab("projects");
                             }}
                             type="button"
                           >
-                            프리셋으로 저장
-                          </button>
-                          <button
-                            className="secondary-button"
+                            {t("voices.qwen.savePreset", "프리셋으로 저장")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() =>
                               createS2VoiceFromQwenAsset({
                                 name: basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, ""),
@@ -2720,53 +2753,57 @@ function StudioApp() {
                             }
                             type="button"
                           >
-                            S2-Pro 프리셋으로 저장
-                          </button>
+                            {t("voices.qwen.saveAsS2Pro", "S2-Pro 프리셋으로 저장")}
+                          </Button>
                         </div>
-                      </article>
+                      </WorkspaceCard>
                     ))}
                   </>
                 ) : (
-                  <div className="voice-project-empty">
-                    <strong>Qwen 프리셋이 없습니다.</strong>
-                    <p>목소리 복제나 목소리 설계에서 저장한 프리셋만 이 영역에 표시됩니다.</p>
-                    <button className="primary-button" onClick={() => setActiveTab("clone")} type="button">
-                      목소리 복제로 이동
-                    </button>
-                  </div>
-                )
-              ) : null}
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title={t("voices.qwen.emptyTitle", "Qwen 프리셋이 없습니다.")}
+                    body={t("voices.qwen.emptyBody", "목소리 복제나 목소리 설계에서 저장한 프리셋만 이 영역에 표시됩니다.")}
+                    action={
+                      <Button onClick={() => setActiveTab("clone")} type="button">
+                        {t("voices.qwen.gotoClone", "목소리 복제로 이동")}
+                      </Button>
+                    }
+                  />
+                )}
+              </TabsContent>
 
-              {voiceGalleryView === "s2pro" ? (
-                s2VoiceProjects.length ? (
+              <TabsContent value="s2pro" className="m-0 flex flex-col gap-3">
+                {s2VoiceProjects.length ? (
                   s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
-                    <article className="voice-project-row" key={voice.id}>
-                      <div className="voice-project-avatar" aria-hidden="true">
+                    <WorkspaceCard key={voice.id} className="flex flex-wrap items-start gap-4">
+                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
                         <MiniWaveform dense />
                       </div>
-                      <div className="voice-project-main">
-                        <div className="voice-project-title">
-                          <strong>{voice.name}</strong>
-                          <span>{voice.language} · {formatDate(voice.created_at)}</span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <strong className="text-sm font-medium text-ink">{voice.name}</strong>
+                          <span className="text-xs text-ink-muted">{voice.language} · {formatDate(voice.created_at)}</span>
                         </div>
-                        <p>{voice.reference_text || "참조 문장이 아직 없습니다."}</p>
-                        <div className="voice-project-assets">
-                          <span>S2-Pro 프리셋</span>
-                          <span>생성 결과 {relatedHistory.length}개</span>
-                          <span>Qwen 연결 {relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)}개</span>
-                          <span>{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</span>
+                        <p className="text-sm text-ink-muted line-clamp-2">{voice.reference_text || t("voices.s2pro.noText", "참조 문장이 아직 없습니다.")}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">S2-Pro 프리셋</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{t("voices.s2pro.histCount", "생성 결과 {n}개").replace("{n}", String(relatedHistory.length))}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{t("voices.s2pro.qwenLinks", "Qwen 연결 {n}개").replace("{n}", String(relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)))}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</Badge>
                         </div>
-                        <audio controls src={mediaUrl(voice.reference_audio_url)} />
+                        <audio controls src={mediaUrl(voice.reference_audio_url)} className="mt-1 h-8 w-full" />
                       </div>
-                      <div className="voice-project-actions">
-                        <button className="secondary-button" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
-                          S2-Pro에서 사용
-                        </button>
-                        <button className="secondary-button" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
-                          Qwen 복제로 보내기
-                        </button>
-                        <button
-                          className="secondary-button"
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
+                          {t("voices.s2pro.useInS2Pro", "S2-Pro에서 사용")}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
+                          {t("voices.s2pro.toQwenClone", "Qwen 복제로 보내기")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setDatasetForm((prev) => ({ ...prev, ref_audio_path: voice.reference_audio_path, speaker_name: voice.name || prev.speaker_name }));
                             mergeDatasetSamples([{ audio_path: voice.reference_audio_path, text: voice.reference_text }]);
@@ -2774,978 +2811,1376 @@ function StudioApp() {
                           }}
                           type="button"
                         >
-                          데이터셋에 사용
-                        </button>
+                          {t("voices.s2pro.toDataset", "데이터셋에 사용")}
+                        </Button>
                       </div>
-                    </article>
+                    </WorkspaceCard>
                   ))
                 ) : (
-                  <div className="voice-project-empty">
-                    <strong>S2-Pro 프리셋이 없습니다.</strong>
-                    <p>S2-Pro 목소리 저장에서 만든 재사용 목소리만 이 영역에 표시됩니다.</p>
-                    <button className="primary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
-                      S2-Pro 목소리 저장으로 이동
-                    </button>
-                  </div>
-                )
-              ) : null}
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title={t("voices.s2pro.emptyTitle", "S2-Pro 프리셋이 없습니다.")}
+                    body={t("voices.s2pro.emptyBody", "S2-Pro 목소리 저장에서 만든 재사용 목소리만 이 영역에 표시됩니다.")}
+                    action={
+                      <Button onClick={() => openS2ProTab("s2pro_clone")} type="button">
+                        {t("voices.s2pro.gotoClone", "S2-Pro 목소리 저장으로 이동")}
+                      </Button>
+                    }
+                  />
+                )}
+              </TabsContent>
 
-              {voiceGalleryView === "rvc" ? (
-                voiceChangerModels.length ? (
+              <TabsContent value="rvc" className="m-0 flex flex-col gap-3">
+                {voiceChangerModels.length ? (
                   voiceChangerModels.map((model) => (
-                    <article className="voice-project-row" key={model.id}>
-                      <div className="voice-project-avatar" aria-hidden="true">
+                    <WorkspaceCard key={model.id} className="flex flex-wrap items-center gap-4">
+                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
                         <MiniWaveform dense />
                       </div>
-                      <div className="voice-project-main">
-                        <div className="voice-project-title">
-                          <strong>{model.label}</strong>
-                          <span>RVC / Applio</span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <strong className="text-sm font-medium text-ink">{model.label}</strong>
+                          <span className="text-xs text-ink-muted">RVC / Applio</span>
                         </div>
-                        <p>기존 음성을 이 목소리로 변환할 때 사용하는 RVC 모델입니다.</p>
-                        <div className="voice-project-assets">
-                          <span>{basenameFromPath(model.model_path)}</span>
-                          <span>{model.index_path ? basenameFromPath(model.index_path) : "index 없음"}</span>
+                        <p className="text-sm text-ink-muted">{t("voices.rvc.note", "기존 음성을 이 목소리로 변환할 때 사용하는 RVC 모델입니다.")}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{basenameFromPath(model.model_path)}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.index_path ? basenameFromPath(model.index_path) : t("voices.rvc.noIndex", "index 없음")}</Badge>
                         </div>
                       </div>
-                      <div className="voice-project-actions">
-                        <button
-                          className="secondary-button"
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             handleSelectVoiceChangerModel(model.id);
                             setActiveTab("applio_convert");
                           }}
                           type="button"
                         >
-                          단일 변환에서 사용
-                        </button>
-                        <button
-                          className="secondary-button"
+                          {t("voices.rvc.useInConvert", "단일 변환에서 사용")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             handleSelectVoiceChangerModel(model.id);
                             setActiveTab("applio_batch");
                           }}
                           type="button"
                         >
-                          배치 변환에서 사용
-                        </button>
+                          {t("voices.rvc.useInBatch", "배치 변환에서 사용")}
+                        </Button>
                       </div>
-                    </article>
+                    </WorkspaceCard>
                   ))
                 ) : (
-                  <div className="voice-project-empty">
-                    <strong>RVC 모델이 없습니다.</strong>
-                    <p>Applio 학습을 완료하거나 모델 다운로드를 마친 RVC 모델만 이 영역에 표시됩니다.</p>
-                    <button className="primary-button" onClick={() => setActiveTab("applio_train")} type="button">
-                      RVC 모델 학습으로 이동
-                    </button>
-                  </div>
-                )
-              ) : null}
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title={t("voices.rvc.emptyTitle", "RVC 모델이 없습니다.")}
+                    body={t("voices.rvc.emptyBody", "Applio 학습을 완료하거나 모델 다운로드를 마친 RVC 모델만 이 영역에 표시됩니다.")}
+                    action={
+                      <Button onClick={() => setActiveTab("applio_train")} type="button">
+                        {t("voices.rvc.gotoTrain", "RVC 모델 학습으로 이동")}
+                      </Button>
+                    }
+                  />
+                )}
+              </TabsContent>
             </div>
-          </section>
-
-        </section>
+          </Tabs>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "gallery" ? (
-        <section className="gallery-studio">
-          <div className="gallery-studio__header">
-            <div>
-              <span className="studio-page-head__eyebrow"><i /> {t("gallery.eyebrow")}</span>
-              <h2>{t("gallery.title")}</h2>
-              <p>{t("gallery.description")}</p>
-            </div>
-            <div className="gallery-stats" aria-label="생성 통계">
-              <span><b>{galleryStats.total}</b>{t("gallery.total")}</span>
-              <span><b>{galleryStats.speech}</b>{t("gallery.speech")}</span>
-              <span><b>{galleryStats.music}</b>{t("gallery.music")}</span>
-              <span><b>{galleryStats.audio}</b>{t("gallery.audio")}</span>
-            </div>
-          </div>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("gallery.eyebrow")}
+            eyebrowIcon={Headphones}
+            title={t("gallery.title")}
+            subtitle={t("gallery.description")}
+            meta={
+              <div className="mt-2 flex flex-wrap gap-2" aria-label="생성 통계">
+                <Badge variant="secondary" className="bg-canvas text-ink-muted">
+                  <b className="mr-1 text-ink">{galleryStats.total}</b>{t("gallery.total")}
+                </Badge>
+                <Badge variant="secondary" className="bg-canvas text-ink-muted">
+                  <b className="mr-1 text-ink">{galleryStats.speech}</b>{t("gallery.speech")}
+                </Badge>
+                <Badge variant="secondary" className="bg-canvas text-ink-muted">
+                  <b className="mr-1 text-ink">{galleryStats.music}</b>{t("gallery.music")}
+                </Badge>
+                <Badge variant="secondary" className="bg-canvas text-ink-muted">
+                  <b className="mr-1 text-ink">{galleryStats.audio}</b>{t("gallery.audio")}
+                </Badge>
+              </div>
+            }
+          />
 
-          <section className="gallery-console">
-            <div className="gallery-console__toolbar">
-              <div className="gallery-console__selection">
-                <strong>{selectedGalleryIds.length ? t("gallery.selectedCount").replace("{count}", String(selectedGalleryIds.length)) : t("gallery.noneSelected")}</strong>
-                <span>{t("gallery.selectionHint")}</span>
+          <WorkspaceCard className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+              <div className="flex flex-col gap-0.5">
+                <strong className="text-sm font-medium text-ink">{selectedGalleryIds.length ? t("gallery.selectedCount").replace("{count}", String(selectedGalleryIds.length)) : t("gallery.noneSelected")}</strong>
+                <span className="text-xs text-ink-muted">{t("gallery.selectionHint")}</span>
               </div>
-              <div className="gallery-toolbar__actions">
-                <button className="secondary-button" disabled={!history.length} onClick={() => setSelectedGalleryIds(history.map((record) => gallerySelectionKey(record)))} type="button">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" disabled={!history.length} onClick={() => setSelectedGalleryIds(history.map((record) => gallerySelectionKey(record)))} type="button">
                   {t("action.selectAll")}
-                </button>
-                <button className="secondary-button" disabled={!selectedGalleryIds.length} onClick={() => setSelectedGalleryIds([])} type="button">
+                </Button>
+                <Button variant="outline" size="sm" disabled={!selectedGalleryIds.length} onClick={() => setSelectedGalleryIds([])} type="button">
                   {t("action.clearSelection")}
-                </button>
-                <button className="secondary-button icon-button--danger" disabled={!selectedGalleryIds.length} onClick={handleDeleteSelectedHistory} type="button">
+                </Button>
+                <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" disabled={!selectedGalleryIds.length} onClick={handleDeleteSelectedHistory} type="button">
                   {t("action.deleteSelection")}
-                </button>
+                </Button>
               </div>
             </div>
-            <div className="gallery-render-list">
+            <div className="flex flex-col gap-2">
               {history.length ? history.map((record) => {
                 const selectionKey = gallerySelectionKey(record);
-                const accent = galleryAccentForMode(record.mode);
-                const waveBars = makeWaveBars(selectionKey, 54);
+                const isSelected = selectedGalleryIds.includes(selectionKey);
                 return (
-                <article className={selectedGalleryIds.includes(selectionKey) ? `render-row render-row--${accent} is-selected` : `render-row render-row--${accent}`} key={selectionKey}>
-                  <label className="gallery-row__select" aria-label={`${getRecordDisplayTitle(record)} 선택`}>
-                    <input checked={selectedGalleryIds.includes(selectionKey)} onChange={() => toggleGallerySelection(selectionKey)} type="checkbox" />
-                    <span />
+                <article
+                  key={selectionKey}
+                  className={`flex flex-wrap items-center gap-3 rounded-md border p-3 transition ${isSelected ? "border-accent-edge bg-accent-soft/30" : "border-line bg-canvas/50 hover:border-line-strong"}`}
+                >
+                  <label className="flex items-center" aria-label={`${getRecordDisplayTitle(record)} 선택`}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleGallerySelection(selectionKey)}
+                      className="size-4 cursor-pointer rounded border-line accent-accent"
+                    />
                   </label>
-                  <div className="render-row__title">
-                    <small>{getModeLabel(record.mode)} · {recordLanguageLabel(record)}</small>
-                    <strong>{getRecordDisplayTitle(record)}</strong>
-                    <span>{getRecordModelLabel(record)}</span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <small className="text-[10px] uppercase tracking-allcaps font-mono text-ink-subtle">{getModeLabel(record.mode)} · {recordLanguageLabel(record)}</small>
+                    <strong className="line-clamp-1 text-sm font-medium text-ink">{getRecordDisplayTitle(record)}</strong>
+                    <span className="text-xs text-ink-muted">{getRecordModelLabel(record)}</span>
                   </div>
-                  <div className="render-row__wave" aria-hidden="true">
-                    {waveBars.map((height, index) => (
-                      <i key={`${selectionKey}-${index}`} style={{ height }} />
-                    ))}
-                  </div>
-                  <time className="render-row__date">{formatShortDate(record.created_at)}</time>
-                  <audio controls src={mediaUrl(record.output_audio_url)} className="render-row__player" />
-                  <div className="render-row__actions">
-                    <a className="secondary-button" href={mediaUrl(record.output_audio_url)} download={getAudioDownloadName(record)} aria-label="다운로드">
-                      {t("action.download")}
-                    </a>
-                    <button className="secondary-button icon-button--danger" onClick={() => void handleDeleteHistoryRecord(record.id)} type="button">
+                  <time className="shrink-0 text-[10px] font-mono uppercase tracking-wide text-ink-subtle">{formatShortDate(record.created_at)}</time>
+                  <audio controls src={mediaUrl(record.output_audio_url)} className="h-8 w-full sm:w-auto sm:flex-1 max-w-[280px]" />
+                  <div className="flex gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <a href={mediaUrl(record.output_audio_url)} download={getAudioDownloadName(record)} aria-label="다운로드">
+                        {t("action.download")}
+                      </a>
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" onClick={() => void handleDeleteHistoryRecord(record.id)} type="button">
                       {t("action.delete")}
-                    </button>
+                    </Button>
                   </div>
                 </article>
                 );
               }) : (
-                <div className="gallery-empty-state">
-                  <strong>{t("gallery.emptyTitle")}</strong>
-                  <p>{t("gallery.emptyDescription")}</p>
-                  <button className="primary-button" onClick={() => setActiveTab("tts")} type="button">{t("action.firstVoice")}</button>
-                </div>
+                <WorkspaceEmptyState
+                  icon={Headphones}
+                  title={t("gallery.emptyTitle")}
+                  body={t("gallery.emptyDescription")}
+                  action={
+                    <Button onClick={() => setActiveTab("tts")} type="button">{t("action.firstVoice")}</Button>
+                  }
+                />
               )}
             </div>
-          </section>
-        </section>
+          </WorkspaceCard>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "tts" ? (
-        <section className="workspace workspace--stacked studio-workspace">
-          <form className="speech-console speech-console--qwen" onSubmit={handleModelInferenceSubmit}>
-            <div className="speech-console__header">
-              <div>
-                <span className="studio-page-head__eyebrow"><i />QWEN · SPEECH</span>
-                <h2>Text → Speech</h2>
-                <p>Qwen 모델, 화자, 말투 지시, 샘플링 값을 골라 바로 생성합니다.</p>
+        <section className="mx-auto flex w-full max-w-[var(--shell-content-max)] flex-col gap-6 px-1">
+          {/* Page header */}
+          <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line/80 pb-6">
+            <div className="flex flex-col gap-2">
+              <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase text-ink-muted tracking-allcaps">
+                <Sparkles className="size-3" />
+                {t("tts.eyebrow")}
+              </span>
+              <h1 className="text-display font-semibold tracking-tight text-ink">{t("tts.title")}</h1>
+              <p className="max-w-prose text-base text-ink-muted">{t("tts.subtitle")}</p>
+            </div>
+            <Button
+              type="submit"
+              form="qwen-tts-form"
+              disabled={loading || !selectedInferenceModel}
+              size="lg"
+              className="gap-2 px-6"
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Play className="size-4 fill-current" />
+              )}
+              {t("tts.action.generate")}
+            </Button>
+          </header>
+
+          {/* Two-column workspace */}
+          <form
+            id="qwen-tts-form"
+            onSubmit={handleModelInferenceSubmit}
+            className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]"
+          >
+            {/* Left column: script + style + result */}
+            <div className="flex flex-col gap-5">
+              <div className="rounded-lg border border-line bg-surface p-5 shadow-[0_1px_0_0_var(--line-subtle)]">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <Label htmlFor="qwen-tts-text" className="text-sm font-medium">
+                    {t("tts.section.script")}
+                  </Label>
+                  <div className="flex items-center gap-2 text-xs text-ink-muted">
+                    <span className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-canvas px-2 py-0.5">
+                      <span className="grid size-4 place-items-center rounded-full bg-accent text-[10px] font-semibold text-ink-on-accent">
+                        {(inferenceForm.speaker || selectedInferenceModel?.label || "V").slice(0, 1)}
+                      </span>
+                      <span className="max-w-[140px] truncate">
+                        {inferenceForm.speaker ||
+                          (selectedInferenceModel
+                            ? displayModelName(selectedInferenceModel)
+                            : t("tts.placeholder.voiceFallback"))}
+                      </span>
+                    </span>
+                    <span className="font-mono tabular-nums">
+                      {new Blob([inferenceForm.text]).size}/500 B
+                    </span>
+                  </div>
+                </div>
+                <Textarea
+                  id="qwen-tts-text"
+                  placeholder={t("tts.placeholder.text")}
+                  value={inferenceForm.text}
+                  onChange={(event) =>
+                    setInferenceForm((prev) => ({ ...prev, text: event.target.value }))
+                  }
+                  className="min-h-[180px] resize-y border-line bg-canvas text-base leading-relaxed focus-visible:border-accent-edge focus-visible:ring-accent-soft"
+                />
               </div>
-              <button className="studio-cta" disabled={loading || !selectedInferenceModel} type="submit">
-                음성 생성
-              </button>
-            </div>
 
-            <div className="speech-console__grid">
-              <section className="speech-script-panel">
-                <div className="speech-script-panel__toolbar">
-                  <span className="voice-pill">
-                    <span className="voice-pill__avatar">{(inferenceForm.speaker || selectedInferenceModel?.label || "V").slice(0, 1)}</span>
-                    <span>{inferenceForm.speaker || (selectedInferenceModel ? displayModelName(selectedInferenceModel) : "목소리 선택")}</span>
-                  </span>
-                  <span className="byte-counter">{new Blob([inferenceForm.text]).size} / 500 bytes</span>
-                </div>
-                <label>
-                  Text
-                  <textarea
-                    className="speech-script-panel__textarea"
-                    placeholder="생성할 대사를 입력하세요."
-                    value={inferenceForm.text}
-                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))}
+              {selectedInferenceModel?.supports_instruction ? (
+                <div className="rounded-lg border border-line bg-surface p-5 shadow-[0_1px_0_0_var(--line-subtle)]">
+                  <Label
+                    htmlFor="qwen-tts-instruct"
+                    className="mb-3 flex items-center gap-2 text-sm font-medium"
+                  >
+                    {t("tts.section.style")}
+                    <span className="font-normal text-ink-subtle">{t("tts.section.styleOptional")}</span>
+                  </Label>
+                  <Textarea
+                    id="qwen-tts-instruct"
+                    placeholder={t("tts.placeholder.style")}
+                    value={inferenceForm.instruct}
+                    onChange={(event) =>
+                      setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))
+                    }
+                    className="min-h-[100px] resize-y border-line bg-canvas focus-visible:border-accent-edge focus-visible:ring-accent-soft"
                   />
-                </label>
-                {selectedInferenceModel?.supports_instruction ? (
-                  <label>
-                    Style instruction
-                    <textarea
-                      className="speech-script-panel__instruction"
-                      placeholder="Keep the tone breathy, unstable, and emotionally heightened."
-                      value={inferenceForm.instruct}
-                      onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
-                    />
-                  </label>
-                ) : null}
-              </section>
-
-              <aside className="speech-settings-panel">
-                <div className="speech-settings-panel__tabs">
-                  <button className={ttsSideView === "settings" ? "is-active" : ""} onClick={() => setTtsSideView("settings")} type="button">Settings</button>
-                  <button className={ttsSideView === "history" ? "is-active" : ""} onClick={() => setTtsSideView("history")} type="button">History</button>
                 </div>
-                {ttsSideView === "settings" ? (
-                  <div className="studio-settings-stack">
-                    <label>
-                      Model
-                      <select value={inferenceForm.model_id} onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}>
-                        <option value="">모델 선택</option>
-                        {ttsModels.map((model) => (
-                          <option key={model.key} value={model.model_id}>{displayModelName(model)}</option>
-                        ))}
-                      </select>
-                    </label>
-                    {selectedInferenceModel?.available_speakers?.length ? (
-                      <label>
-                        Speaker
-                        <select value={inferenceForm.speaker} onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}>
-                          {selectedInferenceModel.available_speakers.map((speaker) => (
-                            <option key={speaker} value={speaker}>{speaker}</option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    <label>
-                      Language
-                      <LanguageSelect value={inferenceForm.language} onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))} />
-                    </label>
-                    <label>
-                      Output name
-                      <input
-                        placeholder="예: mai-지친-대사"
-                        value={inferenceForm.output_name}
-                        onChange={(event) => setInferenceForm((prev) => ({ ...prev, output_name: event.target.value }))}
-                      />
-                    </label>
-                    {selectedInferenceMode === "voice_clone" ? (
-                      <details className="advanced-inline">
-                        <summary>Reference voice</summary>
-                        <label>
-                          Reference audio path
-                          <input value={inferenceForm.ref_audio_path} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
-                        </label>
-                        <label>
-                          Reference text
-                          <textarea value={inferenceForm.ref_text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
-                        </label>
-                        <ServerAudioPicker assets={generatedAudioAssets} selectedPath={inferenceForm.ref_audio_path} onSelect={handleSelectInferenceAsset} />
-                      </details>
-                    ) : null}
-                    <details className="advanced-inline">
-                      <summary>Advanced controls</summary>
-                      <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
-                    </details>
+              ) : null}
+
+              {/* Result / empty state — sits right beneath the script/style cards */}
+              {lastInferenceRecord ? (
+                <div className="rounded-lg border border-line bg-surface p-5 shadow-[0_1px_0_0_var(--line-subtle)]">
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="secondary"
+                        className="border-0 bg-accent-soft text-accent-ink font-mono text-[10px] uppercase tracking-allcaps"
+                      >
+                        {t("tts.result.latest")}
+                      </Badge>
+                      <h3 className="text-sm font-medium text-ink">{t("tts.result.title")}</h3>
+                    </div>
                   </div>
-                ) : (
-                  <div className="studio-history-stack">
-                    {history.slice(0, 6).map((record) => (
-                      <article className="studio-history-item" key={gallerySelectionKey(record)}>
-                        <strong>{getRecordDisplayTitle(record)}</strong>
-                        <audio controls src={mediaUrl(record.output_audio_url)} />
-                      </article>
-                    ))}
-                    {!history.length ? <p className="field-hint">아직 생성 이력이 없습니다.</p> : null}
+                  <AudioCard title={t("tts.result.subtitle")} record={lastInferenceRecord} />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-line bg-sunken/40 px-6 py-10 text-center">
+                  <div className="grid size-12 place-items-center rounded-full border border-line bg-surface">
+                    <AudioWaveform className="size-5 text-ink-subtle" />
                   </div>
-                )}
-              </aside>
+                  <p className="text-sm font-medium text-ink">{t("tts.empty.title")}</p>
+                  <p className="max-w-sm text-xs text-ink-muted">{t("tts.empty.body")}</p>
+                </div>
+              )}
             </div>
+
+            {/* Right column: settings / history */}
+            <aside className="self-start rounded-lg border border-line bg-surface shadow-[0_1px_0_0_var(--line-subtle)]">
+              <Tabs
+                value={ttsSideView}
+                onValueChange={(value) => setTtsSideView(value as typeof ttsSideView)}
+                className="flex flex-col"
+              >
+                <TabsList className="grid w-full grid-cols-2 rounded-b-none rounded-t-lg border-b border-line bg-transparent p-0 h-auto">
+                  <TabsTrigger
+                    value="settings"
+                    className="rounded-none border-b-2 border-transparent bg-transparent py-3 text-sm font-medium text-ink-muted shadow-none data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:text-ink data-[state=active]:shadow-none"
+                  >
+                    {t("tts.tab.settings")}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="history"
+                    className="rounded-none border-b-2 border-transparent bg-transparent py-3 text-sm font-medium text-ink-muted shadow-none data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:text-ink data-[state=active]:shadow-none"
+                  >
+                    {t("tts.tab.history")}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="settings" className="m-0 flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.model")}</Label>
+                    <Select
+                      value={inferenceForm.model_id || undefined}
+                      onValueChange={(value) =>
+                        setInferenceForm((prev) => ({ ...prev, model_id: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("tts.field.modelPlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ttsModels.map((model) => (
+                          <SelectItem key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedInferenceModel?.available_speakers?.length ? (
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("tts.field.speaker")}</Label>
+                      <Select
+                        value={inferenceForm.speaker || undefined}
+                        onValueChange={(value) =>
+                          setInferenceForm((prev) => ({ ...prev, speaker: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("tts.field.speakerPlaceholder")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {selectedInferenceModel.available_speakers.map((speaker) => (
+                            <SelectItem key={speaker} value={speaker}>
+                              {speaker}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language")}</Label>
+                    <LanguageSelect
+                      value={inferenceForm.language}
+                      onChange={(language) =>
+                        setInferenceForm((prev) => ({ ...prev, language }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="qwen-tts-output" className="text-xs font-medium text-ink-muted">
+                      {t("tts.field.outputName")}
+                    </Label>
+                    <Input
+                      id="qwen-tts-output"
+                      placeholder={t("tts.placeholder.outputName")}
+                      value={inferenceForm.output_name}
+                      onChange={(event) =>
+                        setInferenceForm((prev) => ({ ...prev, output_name: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  {selectedInferenceMode === "voice_clone" ? (
+                    <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                      <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                        {t("tts.advanced.referenceVoice")}
+                        <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                      </summary>
+                      <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">{t("tts.advanced.referenceAudio")}</Label>
+                          <Input
+                            value={inferenceForm.ref_audio_path}
+                            onChange={(event) =>
+                              setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">{t("tts.advanced.referenceText")}</Label>
+                          <Textarea
+                            value={inferenceForm.ref_text}
+                            onChange={(event) =>
+                              setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))
+                            }
+                            className="min-h-[64px] resize-y border-line bg-canvas"
+                          />
+                        </div>
+                        <ServerAudioPicker
+                          assets={generatedAudioAssets}
+                          selectedPath={inferenceForm.ref_audio_path}
+                          onSelect={handleSelectInferenceAsset}
+                        />
+                      </div>
+                    </details>
+                  ) : null}
+
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("tts.advanced.controls")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="border-t border-line px-3 py-3">
+                      <GenerationControlsEditor value={inferenceControls} onChange={setInferenceControls} />
+                    </div>
+                  </details>
+                </TabsContent>
+
+                <TabsContent value="history" className="m-0 p-0">
+                  <ScrollArea className="h-[420px]">
+                    <div className="flex flex-col gap-1 p-3">
+                      {history.length ? (
+                        history.slice(0, 12).map((record) => (
+                          <article
+                            key={gallerySelectionKey(record)}
+                            className="flex flex-col gap-2 rounded-md border border-transparent p-3 transition hover:border-line hover:bg-canvas"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <strong className="line-clamp-1 text-sm font-medium text-ink">
+                                {getRecordDisplayTitle(record)}
+                              </strong>
+                              <time className="shrink-0 text-[10px] font-mono uppercase tracking-wide text-ink-subtle">
+                                {formatShortDate(record.created_at)}
+                              </time>
+                            </div>
+                            <audio
+                              controls
+                              src={mediaUrl(record.output_audio_url)}
+                              className="h-8 w-full"
+                            />
+                          </article>
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+                          <Clock className="size-5 text-ink-subtle" />
+                          <p className="text-sm text-ink-muted">{t("tts.history.empty")}</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
+            </aside>
           </form>
-          {lastInferenceRecord ? (
-            <section className="panel">
-              <h3>생성 결과</h3>
-              <AudioCard title="방금 생성한 음성" record={lastInferenceRecord} />
-            </section>
-          ) : null}
         </section>
       ) : null}
 
       {activeTab === "design" ? (
-        <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-          <form className="panel" onSubmit={handleVoiceDesignSubmit}>
-            <h2>목소리 설계</h2>
-            <p className="field-hint">설명문으로 새 목소리를 만든 뒤, 마음에 드는 결과를 스타일 자산으로 저장합니다.</p>
-            <RecipeBar title="목소리 설명 템플릿" items={DESIGN_RECIPES} onApply={applyDesignRecipe} />
-            <div className="field-row">
-              <label>
-                모델
-                <select
-                  value={designForm.model_id}
-                  onChange={(event) => setDesignForm({ ...designForm, model_id: event.target.value })}
-                >
-                  {voiceDesignModels.map((model) => (
-                    <option key={model.key} value={model.model_id}>
-                      {displayModelName(model)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                파일 이름
-                <input
-                  placeholder="예: 차가운-여성-목소리"
-                  value={designForm.output_name}
-                  onChange={(event) => setDesignForm({ ...designForm, output_name: event.target.value })}
-                />
-              </label>
-            </div>
-            <label>
-              목소리 설명
-              <textarea
-                placeholder="예: Young Korean woman, cool, polished, and articulate. Keep the tone restrained and elegant."
-                value={designForm.instruct}
-                onChange={(event) => setDesignForm({ ...designForm, instruct: event.target.value })}
-              />
-            </label>
-            <label>
-              대사
-              <textarea
-                value={designForm.text}
-                onChange={(event) => setDesignForm({ ...designForm, text: event.target.value })}
-              />
-            </label>
-            <label>
-              언어
-              <LanguageSelect
-                value={designForm.language}
-                onChange={(language) => setDesignForm({ ...designForm, language })}
-              />
-            </label>
-            <details className="advanced-inline">
-              <summary>Advanced controls</summary>
-              <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
-            </details>
-            <button className="primary-button" disabled={loading} type="submit">
-              설계 음성 생성
-            </button>
-          </form>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("design.eyebrow", "VOICE DESIGN")}
+            eyebrowIcon={Wand2}
+            title={t("design.title", "목소리 설계")}
+            subtitle={t("design.subtitle", "설명문으로 새 목소리를 만들고, 마음에 드는 결과를 프리셋으로 저장합니다.")}
+            action={{
+              label: t("design.action.generate", "설계 음성 생성"),
+              formId: "voice-design-form",
+              disabled: loading,
+              loading,
+            }}
+          />
 
-          <aside className="panel">
-            <h3>프리셋으로 저장</h3>
-            <p className="field-hint">마음에 드는 설계 결과를 필요한 서비스의 프리셋으로 따로 저장합니다.</p>
-            <label>
-              프리셋 이름
-              <input value={presetForm.name} onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })} />
-            </label>
-            <label>
-              기본 언어
-              <LanguageSelect value={presetForm.language} onChange={(language) => setPresetForm({ ...presetForm, language })} />
-            </label>
-            <label>
-              메모
-              <textarea value={presetForm.notes} onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })} />
-            </label>
-            <div className="button-row">
-              <button className="primary-button" disabled={!lastDesignRecord || loading} onClick={() => void handleSaveDesignAsQwenPreset()} type="button">
-                Qwen 프리셋 저장
-              </button>
-              <button className="secondary-button" disabled={!lastDesignRecord || loading} onClick={() => void handleSaveDesignAsS2ProPreset()} type="button">
-                S2-Pro 프리셋 저장
-              </button>
+          <form
+            id="voice-design-form"
+            onSubmit={handleVoiceDesignSubmit}
+            className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]"
+          >
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard>
+                <RecipeBar
+                  title={t("design.recipes.title", "목소리 설명 템플릿")}
+                  items={DESIGN_RECIPES}
+                  onApply={applyDesignRecipe}
+                />
+              </WorkspaceCard>
+
+              <WorkspaceCard>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.model")}</Label>
+                    <Select
+                      value={designForm.model_id || undefined}
+                      onValueChange={(value) => setDesignForm({ ...designForm, model_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("tts.field.modelPlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {voiceDesignModels.map((model) => (
+                          <SelectItem key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="design-output" className="text-xs font-medium text-ink-muted">
+                      {t("design.field.filename", "파일 이름")}
+                    </Label>
+                    <Input
+                      id="design-output"
+                      placeholder={t("design.placeholder.filename", "예: 차가운-여성-목소리")}
+                      value={designForm.output_name}
+                      onChange={(event) => setDesignForm({ ...designForm, output_name: event.target.value })}
+                    />
+                  </div>
+                </div>
+              </WorkspaceCard>
+
+              <WorkspaceCard>
+                <Label htmlFor="design-instruct" className="mb-3 block text-sm font-medium">
+                  {t("design.field.description", "목소리 설명")}
+                </Label>
+                <Textarea
+                  id="design-instruct"
+                  placeholder="예: Young Korean woman, cool, polished, and articulate. Keep the tone restrained and elegant."
+                  value={designForm.instruct}
+                  onChange={(event) => setDesignForm({ ...designForm, instruct: event.target.value })}
+                  className="min-h-[120px] resize-y border-line bg-canvas focus-visible:border-accent-edge focus-visible:ring-accent-soft"
+                />
+              </WorkspaceCard>
+
+              <WorkspaceCard>
+                <Label htmlFor="design-text" className="mb-3 block text-sm font-medium">
+                  {t("design.field.script", "대사")}
+                </Label>
+                <Textarea
+                  id="design-text"
+                  value={designForm.text}
+                  onChange={(event) => setDesignForm({ ...designForm, text: event.target.value })}
+                  className="min-h-[120px] resize-y border-line bg-canvas text-base leading-relaxed focus-visible:border-accent-edge focus-visible:ring-accent-soft"
+                />
+                <div className="mt-4 flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language")}</Label>
+                  <LanguageSelect
+                    value={designForm.language}
+                    onChange={(language) => setDesignForm({ ...designForm, language })}
+                  />
+                </div>
+                <details className="group mt-4 rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    {t("tts.advanced.controls")}
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-line px-3 py-3">
+                    <GenerationControlsEditor value={designControls} onChange={setDesignControls} />
+                  </div>
+                </details>
+              </WorkspaceCard>
+
+              {lastDesignRecord ? (
+                <WorkspaceCard>
+                  <WorkspaceResultHeader
+                    title={t("design.result.title", "방금 생성한 설계 음성")}
+                    badge={t("tts.result.latest")}
+                  />
+                  <AudioCard
+                    title={t("design.result.subtitle", "설명문 기반 결과")}
+                    record={lastDesignRecord}
+                  />
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceEmptyState
+                  icon={AudioWaveform}
+                  title={t("design.empty.title", "아직 설계 음성이 없습니다.")}
+                  body={t("design.empty.body", "설명문과 대사를 입력하고 [설계 음성 생성]을 누르면 결과가 여기에 표시됩니다.")}
+                />
+              )}
             </div>
-            {lastDesignRecord ? (
-              <AudioCard
-                title="방금 생성한 설계 음성"
-                subtitle="설명문 기반 결과"
-                record={lastDesignRecord}
-              />
-            ) : null}
-          </aside>
-          </div>
-        </section>
+
+            <aside className="self-start">
+              <WorkspaceCard>
+                <div className="mb-4 flex items-center gap-2">
+                  <Save className="size-4 text-ink-muted" />
+                  <h3 className="text-sm font-medium text-ink">
+                    {t("design.preset.title", "프리셋으로 저장")}
+                  </h3>
+                </div>
+                <p className="mb-4 text-xs text-ink-muted">
+                  {t("design.preset.subtitle", "마음에 드는 설계 결과를 서비스별 프리셋으로 따로 저장합니다.")}
+                </p>
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">
+                      {t("design.preset.name", "프리셋 이름")}
+                    </Label>
+                    <Input
+                      value={presetForm.name}
+                      onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">
+                      {t("design.preset.language", "기본 언어")}
+                    </Label>
+                    <LanguageSelect
+                      value={presetForm.language}
+                      onChange={(language) => setPresetForm({ ...presetForm, language })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">
+                      {t("design.preset.notes", "메모")}
+                    </Label>
+                    <Textarea
+                      value={presetForm.notes}
+                      onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
+                      className="min-h-[64px] resize-y border-line bg-canvas"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      disabled={!lastDesignRecord || loading}
+                      onClick={() => void handleSaveDesignAsQwenPreset()}
+                    >
+                      {t("design.preset.saveQwen", "Qwen 프리셋 저장")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!lastDesignRecord || loading}
+                      onClick={() => void handleSaveDesignAsS2ProPreset()}
+                    >
+                      {t("design.preset.saveS2Pro", "S2-Pro 프리셋 저장")}
+                    </Button>
+                  </div>
+                </div>
+              </WorkspaceCard>
+            </aside>
+          </form>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "clone" ? (
-        <section className="workspace workspace--stacked">
-          <section className="panel builder-panel">
-            <div className="builder-header">
-              <div>
-                <span className="eyebrow eyebrow--soft">목소리 복제</span>
-                <h2>참조 음성으로 스타일 저장 또는 직접 복제</h2>
-                <p>프리셋으로 반복 사용할 스타일을 저장하거나, VoiceBox 모델로 바로 새 대사를 생성합니다.</p>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("clone.eyebrow", "VOICE CLONE")}
+            eyebrowIcon={Mic}
+            title={t("clone.title", "참조 음성으로 스타일 저장 또는 직접 복제")}
+            subtitle={t("clone.subtitle", "프리셋으로 반복 사용할 스타일을 저장하거나, VoiceBox 모델로 바로 새 대사를 생성합니다.")}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            {/* Step 1 */}
+            <WorkspaceCard className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">
+                  1
+                </span>
+                <h3 className="text-sm font-medium text-ink">{t("clone.step1.title", "참조 음성 선택")}</h3>
               </div>
-            </div>
 
-            <div className="builder-grid">
-              <section className="step-card">
-                <span className="step-card__index">1</span>
-                <h3>참조 음성 선택</h3>
-                <label className="upload-field">
-                  음성 파일 불러오기
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) {
-                        void handleUploadReference(file);
-                      }
-                    }}
-                  />
-                </label>
-                {uploadedRef ? (
-                  <div className="source-summary">
-                    <span className="meta-label">선택한 참조 음성</span>
-                    <strong>{uploadedRef.filename}</strong>
-                  </div>
-                ) : null}
-                <label>
-                  참조 텍스트
-                  <textarea
-                    placeholder="비워두면 서버가 자동으로 전사합니다."
-                    value={uploadRefText}
-                    onChange={(event) => setUploadRefText(event.target.value)}
-                  />
-                </label>
-                {uploadTranscriptMeta ? <p className="field-hint">{uploadTranscriptMeta}</p> : null}
-                <div className="button-row">
-                  <button className="secondary-button" onClick={handleTranscribeUploadText} type="button">
-                    다시 전사
-                  </button>
-                  {cloneEngine === "base_prompt" ? (
-                    <button className="primary-button" onClick={handleCreateCloneFromUpload} type="button">
-                      복제용 스타일 저장
-                    </button>
-                  ) : (
-                    <button className="primary-button" onClick={handleVoiceBoxCloneFromUpload} type="button">
-                      VoiceBox 복제 생성
-                    </button>
-                  )}
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("clone.step1.upload", "음성 파일 불러오기")}</Label>
+                <Input
+                  type="file"
+                  accept="audio/*"
+                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleUploadReference(file);
+                    }
+                  }}
+                />
+              </div>
+
+              {uploadedRef ? (
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
+                    {t("clone.step1.selected", "선택한 참조 음성")}
+                  </span>
+                  <p className="mt-1 truncate text-sm font-medium text-ink">{uploadedRef.filename}</p>
                 </div>
-              </section>
+              ) : null}
 
-              <section className="step-card">
-                <span className="step-card__index">2</span>
-                <label>
-                  Model
-                  <select value={selectedCloneModelId} onChange={(event) => handleSelectCloneModel(event.target.value)}>
-                    <option value="">Select model</option>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("clone.step1.refText", "참조 텍스트")}</Label>
+                <Textarea
+                  placeholder={t("clone.step1.refPlaceholder", "비워두면 서버가 자동으로 전사합니다.")}
+                  value={uploadRefText}
+                  onChange={(event) => setUploadRefText(event.target.value)}
+                  className="min-h-[80px] resize-y border-line bg-canvas"
+                />
+                {uploadTranscriptMeta ? (
+                  <p className="text-[11px] text-ink-subtle">{uploadTranscriptMeta}</p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={handleTranscribeUploadText} type="button">
+                  {t("clone.step1.retranscribe", "다시 전사")}
+                </Button>
+                {cloneEngine === "base_prompt" ? (
+                  <Button size="sm" onClick={handleCreateCloneFromUpload} type="button">
+                    {t("clone.step1.saveStyle", "복제용 스타일 저장")}
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={handleVoiceBoxCloneFromUpload} type="button">
+                    {t("clone.step1.voiceboxClone", "VoiceBox 복제 생성")}
+                  </Button>
+                )}
+              </div>
+            </WorkspaceCard>
+
+            {/* Step 2 */}
+            <WorkspaceCard className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">
+                  2
+                </span>
+                <h3 className="text-sm font-medium text-ink">{t("clone.step2.title", "엔진 / 모델")}</h3>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("tts.field.model")}</Label>
+                <Select
+                  value={selectedCloneModelId || undefined}
+                  onValueChange={(value) => handleSelectCloneModel(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("tts.field.modelPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
                     {cloneModelOptions.map((model) => (
-                      <option key={model.key} value={model.model_id}>
+                      <SelectItem key={model.key} value={model.model_id}>
                         {displayModelName(model)}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
-                </label>
-                {cloneEngine === "base_prompt" ? (
-                  <>
-                    <PromptSummaryCard title="복제 스타일 자산" prompt={uploadedClonePrompt} />
-                  </>
-                ) : (
-                  <div className="voicebox-inline-form">
-                    <label>
-                      대사
-                      <textarea value={voiceBoxCloneForm.text} onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, text: event.target.value })} />
-                    </label>
-                    <div className="field-row">
-                      <label>
-                        화자명
-                        <input value={voiceBoxCloneForm.speaker} onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, speaker: event.target.value })} />
-                      </label>
-                      <label>
-                        파일 이름
-                        <input value={voiceBoxCloneForm.output_name} onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, output_name: event.target.value })} />
-                      </label>
-                    </div>
-                    {lastVoiceBoxCloneRecord ? (
-                      <AudioCard title={getRecordDisplayTitle(lastVoiceBoxCloneRecord)} record={lastVoiceBoxCloneRecord} />
-                    ) : null}
-                  </div>
-                )}
-              </section>
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <section className="step-card">
-                <span className="step-card__index">3</span>
-                {cloneEngine === "base_prompt" ? (
-                  <>
-                    <h3>프리셋 저장</h3>
-                    <label>
-                      프리셋 이름
-                      <input
-                        value={presetForm.name}
-                        onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
+              {cloneEngine === "base_prompt" ? (
+                <PromptSummaryCard title={t("clone.step2.styleAsset", "복제 스타일 자산")} prompt={uploadedClonePrompt} />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
+                    <Textarea
+                      value={voiceBoxCloneForm.text}
+                      onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, text: event.target.value })}
+                      className="min-h-[80px] resize-y border-line bg-canvas"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("clone.step2.speakerName", "화자명")}</Label>
+                      <Input
+                        value={voiceBoxCloneForm.speaker}
+                        onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, speaker: event.target.value })}
                       />
-                    </label>
-                    <label>
-                      기본 언어
-                      <LanguageSelect
-                        value={presetForm.language}
-                        onChange={(language) => setPresetForm({ ...presetForm, language })}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
+                      <Input
+                        value={voiceBoxCloneForm.output_name}
+                        onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, output_name: event.target.value })}
                       />
-                    </label>
-                    <label>
-                      메모
-                      <textarea
-                        value={presetForm.notes}
-                        onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
-                      />
-                    </label>
-                    <button
-                      className="primary-button"
-                      disabled={!uploadedClonePrompt}
-                      onClick={() => void handleCreatePreset("upload")}
-                      type="button"
-                    >
-                      현재 스타일로 프리셋 저장
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <h3>생성 데이터 활용</h3>
-                    <p className="field-hint">VoiceBox로 만든 결과는 생성 갤러리에 저장되고, 필요하면 데이터셋 샘플로 이어서 쓸 수 있습니다.</p>
-                    <button
-                      className="secondary-button"
-                      disabled={!lastVoiceBoxCloneRecord}
-                      onClick={() => {
-                        if (!lastVoiceBoxCloneRecord) return;
-                        mergeDatasetSamples([{ audio_path: lastVoiceBoxCloneRecord.output_audio_path, text: lastVoiceBoxCloneRecord.input_text }]);
-                        setDatasetForm((prev) => ({ ...prev, ref_audio_path: prev.ref_audio_path || lastVoiceBoxCloneRecord.output_audio_path }));
-                        setActiveTab("dataset");
-                      }}
-                      type="button"
-                    >
-                      방금 결과를 데이터셋에 추가
-                    </button>
-                  </>
-                )}
-              </section>
-            </div>
-          </section>
-        </section>
+                    </div>
+                  </div>
+                  {lastVoiceBoxCloneRecord ? (
+                    <AudioCard title={getRecordDisplayTitle(lastVoiceBoxCloneRecord)} record={lastVoiceBoxCloneRecord} />
+                  ) : null}
+                </div>
+              )}
+            </WorkspaceCard>
+
+            {/* Step 3 */}
+            <WorkspaceCard className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">
+                  3
+                </span>
+                <h3 className="text-sm font-medium text-ink">
+                  {cloneEngine === "base_prompt"
+                    ? t("clone.step3.preset", "프리셋 저장")
+                    : t("clone.step3.useResult", "생성 데이터 활용")}
+                </h3>
+              </div>
+
+              {cloneEngine === "base_prompt" ? (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.preset.name", "프리셋 이름")}</Label>
+                    <Input
+                      value={presetForm.name}
+                      onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.preset.language", "기본 언어")}</Label>
+                    <LanguageSelect
+                      value={presetForm.language}
+                      onChange={(language) => setPresetForm({ ...presetForm, language })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.preset.notes", "메모")}</Label>
+                    <Textarea
+                      value={presetForm.notes}
+                      onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })}
+                      className="min-h-[64px] resize-y border-line bg-canvas"
+                    />
+                  </div>
+                  <Button
+                    disabled={!uploadedClonePrompt}
+                    onClick={() => void handleCreatePreset("upload")}
+                    type="button"
+                  >
+                    {t("clone.step3.savePreset", "현재 스타일로 프리셋 저장")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-ink-muted">
+                    {t("clone.step3.note", "VoiceBox로 만든 결과는 생성 갤러리에 저장되고, 필요하면 데이터셋 샘플로 이어서 쓸 수 있습니다.")}
+                  </p>
+                  <Button
+                    variant="outline"
+                    disabled={!lastVoiceBoxCloneRecord}
+                    onClick={() => {
+                      if (!lastVoiceBoxCloneRecord) return;
+                      mergeDatasetSamples([{ audio_path: lastVoiceBoxCloneRecord.output_audio_path, text: lastVoiceBoxCloneRecord.input_text }]);
+                      setDatasetForm((prev) => ({ ...prev, ref_audio_path: prev.ref_audio_path || lastVoiceBoxCloneRecord.output_audio_path }));
+                      setActiveTab("dataset");
+                    }}
+                    type="button"
+                  >
+                    {t("clone.step3.toDataset", "방금 결과를 데이터셋에 추가")}
+                  </Button>
+                </>
+              )}
+            </WorkspaceCard>
+          </div>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "projects" ? (
-        <section className="workspace workspace--stacked">
-          <section className="panel">
-            <h2>프리셋 기반 생성</h2>
-            <label>
-              프리셋
-              <select value={selectedHybridPresetId} onChange={(event) => { setSelectedHybridPresetId(event.target.value); setSelectedPresetId(event.target.value); }}>
-                <option value="">선택하세요</option>
-                {presets.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("projects.eyebrow", "PRESET PROJECTS")}
+            eyebrowIcon={FolderOpen}
+            title={t("projects.title", "프리셋 기반 생성")}
+            subtitle={t("projects.subtitle", "저장된 프리셋과 모델을 결합해 새 음성을 생성합니다.")}
+          />
+
+          <WorkspaceCard className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium text-ink-muted">{t("projects.field.preset", "프리셋")}</Label>
+              <Select
+                value={selectedHybridPresetId || undefined}
+                onValueChange={(value) => { setSelectedHybridPresetId(value); setSelectedPresetId(value); }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {selectedHybridPreset ? (
-              <article className="selected-audio-card">
-                <span className="meta-label">선택한 프리셋</span>
-                <strong>{selectedHybridPreset.name}</strong>
-                <p>{selectedHybridPreset.reference_text}</p>
+              <article className="rounded-md border border-line bg-canvas/60 p-3">
+                <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("projects.selected.label", "선택한 프리셋")}</span>
+                <strong className="mt-1 block text-sm font-medium text-ink">{selectedHybridPreset.name}</strong>
+                <p className="mt-1 text-xs text-ink-muted">{selectedHybridPreset.reference_text}</p>
               </article>
             ) : (
-              <p className="field-hint">먼저 저장된 프리셋을 고르세요.</p>
+              <p className="text-xs text-ink-muted">{t("projects.selected.hint", "먼저 저장된 프리셋을 고르세요.")}</p>
             )}
-            <div className="mini-tab-strip" role="tablist" aria-label="Preset generation mode">
-              <button className={presetWorkflow === "base" ? "mini-tab is-active" : "mini-tab"} onClick={() => setPresetWorkflow("base")} type="button">Base Preset</button>
-              <button className={presetWorkflow === "hybrid" ? "mini-tab is-active" : "mini-tab"} onClick={() => setPresetWorkflow("hybrid")} type="button">Base + Instruction</button>
-              <button className={presetWorkflow === "voicebox" ? "mini-tab is-active" : "mini-tab"} onClick={() => setPresetWorkflow("voicebox")} type="button">VoiceBox Preset</button>
-              <button className={presetWorkflow === "voicebox_instruct" ? "mini-tab is-active" : "mini-tab"} onClick={() => setPresetWorkflow("voicebox_instruct")} type="button">VoiceBox + Instruction</button>
-            </div>
 
-            <div className="workflow-panel">
-              {presetWorkflow === "base" ? (
-              <form className="inference-panel" onSubmit={(event) => { event.preventDefault(); void handleGenerateFromPreset(); }}>
-                <h3>Base 프리셋 생성</h3>
-                <label>
-                  Base 모델
-                  <select value={selectedBaseModelId} onChange={(event) => setSelectedBaseModelId(event.target.value)}>
-                    <option value="">선택하세요</option>
-                    {baseModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {displayModelName(model)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  대사
-                  <textarea value={presetGenerateText} onChange={(event) => setPresetGenerateText(event.target.value)} />
-                </label>
-                <label>
-                  파일 이름
-                  <input
-                    placeholder="예: 프리셋-첫-대사"
-                    value={presetOutputName}
-                    onChange={(event) => setPresetOutputName(event.target.value)}
-                  />
-                </label>
-                <details className="advanced-inline">
-                  <summary>Advanced controls</summary>
-                  <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
-                </details>
-                <button className="secondary-button" disabled={!selectedHybridPreset} type="submit">
-                  Base 프리셋 생성
-                </button>
-              </form>
-              ) : null}
+            <Tabs value={presetWorkflow} onValueChange={(value) => setPresetWorkflow(value as typeof presetWorkflow)} className="flex flex-col gap-4">
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 bg-canvas border border-line p-1 h-auto">
+                <TabsTrigger value="base" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">Base Preset</TabsTrigger>
+                <TabsTrigger value="hybrid" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">Base + Instruction</TabsTrigger>
+                <TabsTrigger value="voicebox" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">VoiceBox Preset</TabsTrigger>
+                <TabsTrigger value="voicebox_instruct" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">VoiceBox + Instruction</TabsTrigger>
+              </TabsList>
 
-              {presetWorkflow === "hybrid" ? (
-              <form className="inference-panel" onSubmit={handleHybridInferenceSubmit}>
-                <h3>Base + CustomVoice 지시 생성</h3>
-                <RecipeBar title="말투 템플릿" items={HYBRID_RECIPES} onApply={applyHybridRecipe} />
-                <div className="field-row">
-                  <label>
-                    스타일 분석 모델
-                    <select
-                      value={hybridForm.base_model_id}
-                      onChange={(event) => setHybridForm((prev) => ({ ...prev, base_model_id: event.target.value }))}
-                    >
-                      <option value="">선택하세요</option>
-                      {baseModels.map((model) => (
-                        <option key={model.key} value={model.model_id}>
-                          {displayModelName(model)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    말투 지시용 모델
-                    <select
-                      value={hybridForm.custom_model_id}
-                      onChange={(event) => setHybridForm((prev) => ({ ...prev, custom_model_id: event.target.value }))}
-                    >
-                      <option value="">선택하세요</option>
-                      {customVoiceCapableModels.map((model) => (
-                        <option key={model.key} value={model.model_id}>
-                          {displayModelName(model)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label>
-                  대사
-                  <textarea value={hybridForm.text} onChange={(event) => setHybridForm((prev) => ({ ...prev, text: event.target.value }))} />
-                </label>
-                <label>
-                  말투 지시
-                  <textarea
-                    placeholder="원하는 감정이나 분위기를 적어주세요."
-                    value={hybridForm.instruct}
-                    onChange={(event) => setHybridForm((prev) => ({ ...prev, instruct: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  파일 이름
-                  <input
-                    value={hybridForm.output_name}
-                    onChange={(event) => setHybridForm((prev) => ({ ...prev, output_name: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  언어
-                  <LanguageSelect
-                    value={hybridForm.language}
-                    onChange={(language) => setHybridForm((prev) => ({ ...prev, language }))}
-                  />
-                </label>
-                <details className="advanced-inline">
-                  <summary>Advanced controls</summary>
-                  <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
-                </details>
-                <button className="primary-button" disabled={loading || !selectedHybridPreset} type="submit">
-                  말투 지시 적용 생성
-                </button>
-              </form>
-              ) : null}
+              <TabsContent value="base" className="m-0">
+                <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); void handleGenerateFromPreset(); }}>
+                  <h3 className="text-sm font-medium text-ink">{t("projects.base.title", "Base 프리셋 생성")}</h3>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("projects.base.model", "Base 모델")}</Label>
+                    <Select value={selectedBaseModelId || undefined} onValueChange={(value) => setSelectedBaseModelId(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {baseModels.map((model) => (
+                          <SelectItem key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
+                    <Textarea value={presetGenerateText} onChange={(event) => setPresetGenerateText(event.target.value)} className="min-h-[80px] resize-y border-line bg-canvas" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
+                    <Input
+                      placeholder={t("projects.base.filenamePlaceholder", "예: 프리셋-첫-대사")}
+                      value={presetOutputName}
+                      onChange={(event) => setPresetOutputName(event.target.value)}
+                    />
+                  </div>
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("tts.advanced.controls", "Advanced controls")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="border-t border-line px-3 py-3">
+                      <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
+                    </div>
+                  </details>
+                  <Button variant="outline" disabled={!selectedHybridPreset} type="submit">
+                    {t("projects.base.submit", "Base 프리셋 생성")}
+                  </Button>
+                </form>
+              </TabsContent>
 
-              {presetWorkflow === "voicebox" ? (
-              <form className="inference-panel" onSubmit={handleGenerateVoiceBoxFromPreset}>
-                <h3>VoiceBox 프리셋 생성</h3>
-                <label>
-                  VoiceBox 모델
-                  <select value={voiceBoxPresetForm.model_id} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, model_id: event.target.value })}>
-                    <option value="">선택하세요</option>
-                    {voiceBoxModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {displayModelName(model)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  대사
-                  <textarea value={voiceBoxPresetForm.text} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, text: event.target.value })} />
-                </label>
-                <label>
-                  파일 이름
-                  <input value={voiceBoxPresetForm.output_name} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, output_name: event.target.value })} />
-                </label>
-                <details className="advanced-inline">
-                  <summary>Advanced controls</summary>
-                  <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
-                </details>
-                <button className="secondary-button" disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
-                  VoiceBox 프리셋 생성
-                </button>
-              </form>
-              ) : null}
+              <TabsContent value="hybrid" className="m-0">
+                <form className="flex flex-col gap-4" onSubmit={handleHybridInferenceSubmit}>
+                  <h3 className="text-sm font-medium text-ink">{t("projects.hybrid.title", "Base + CustomVoice 지시 생성")}</h3>
+                  <RecipeBar title={t("projects.hybrid.recipes", "말투 템플릿")} items={HYBRID_RECIPES} onApply={applyHybridRecipe} />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("projects.hybrid.styleModel", "스타일 분석 모델")}</Label>
+                      <Select
+                        value={hybridForm.base_model_id || undefined}
+                        onValueChange={(value) => setHybridForm((prev) => ({ ...prev, base_model_id: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {baseModels.map((model) => (
+                            <SelectItem key={model.key} value={model.model_id}>
+                              {displayModelName(model)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("projects.hybrid.instructModel", "말투 지시용 모델")}</Label>
+                      <Select
+                        value={hybridForm.custom_model_id || undefined}
+                        onValueChange={(value) => setHybridForm((prev) => ({ ...prev, custom_model_id: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customVoiceCapableModels.map((model) => (
+                            <SelectItem key={model.key} value={model.model_id}>
+                              {displayModelName(model)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
+                    <Textarea value={hybridForm.text} onChange={(event) => setHybridForm((prev) => ({ ...prev, text: event.target.value }))} className="min-h-[80px] resize-y border-line bg-canvas" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("projects.hybrid.instruction", "말투 지시")}</Label>
+                    <Textarea
+                      placeholder={t("projects.hybrid.instructionPlaceholder", "원하는 감정이나 분위기를 적어주세요.")}
+                      value={hybridForm.instruct}
+                      onChange={(event) => setHybridForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                      className="min-h-[80px] resize-y border-line bg-canvas"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
+                    <Input
+                      value={hybridForm.output_name}
+                      onChange={(event) => setHybridForm((prev) => ({ ...prev, output_name: event.target.value }))}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language", "언어")}</Label>
+                    <LanguageSelect
+                      value={hybridForm.language}
+                      onChange={(language) => setHybridForm((prev) => ({ ...prev, language }))}
+                    />
+                  </div>
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("tts.advanced.controls", "Advanced controls")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="border-t border-line px-3 py-3">
+                      <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
+                    </div>
+                  </details>
+                  <Button disabled={loading || !selectedHybridPreset} type="submit">
+                    {t("projects.hybrid.submit", "말투 지시 적용 생성")}
+                  </Button>
+                </form>
+              </TabsContent>
 
-              {presetWorkflow === "voicebox_instruct" ? (
-              <form className="inference-panel" onSubmit={handleGenerateVoiceBoxInstructFromPreset}>
-                <h3>VoiceBox 프리셋 + 말투 지시</h3>
-                <RecipeBar title="말투 템플릿" items={HYBRID_RECIPES} onApply={(item) => setVoiceBoxPresetInstructForm((prev) => ({ ...prev, instruct: item.instruction || prev.instruct, text: item.text || prev.text, language: item.language || prev.language }))} />
-                <label>
-                  VoiceBox 모델
-                  <select value={voiceBoxPresetInstructForm.model_id} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, model_id: event.target.value })}>
-                    <option value="">선택하세요</option>
-                    {voiceBoxModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {displayModelName(model)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  대사
-                  <textarea value={voiceBoxPresetInstructForm.text} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, text: event.target.value })} />
-                </label>
-                <label>
-                  말투 지시
-                  <textarea value={voiceBoxPresetInstructForm.instruct} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, instruct: event.target.value })} />
-                </label>
-                <label>
-                  파일 이름
-                  <input value={voiceBoxPresetInstructForm.output_name} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, output_name: event.target.value })} />
-                </label>
-                <details className="advanced-inline">
-                  <summary>Advanced controls</summary>
-                  <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
-                </details>
-                <button className="primary-button" disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
-                  VoiceBox 지시 생성
-                </button>
-              </form>
-              ) : null}
-            </div>
-          </section>
+              <TabsContent value="voicebox" className="m-0">
+                <form className="flex flex-col gap-4" onSubmit={handleGenerateVoiceBoxFromPreset}>
+                  <h3 className="text-sm font-medium text-ink">{t("projects.voicebox.title", "VoiceBox 프리셋 생성")}</h3>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("projects.voicebox.model", "VoiceBox 모델")}</Label>
+                    <Select value={voiceBoxPresetForm.model_id || undefined} onValueChange={(value) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, model_id: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {voiceBoxModels.map((model) => (
+                          <SelectItem key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
+                    <Textarea value={voiceBoxPresetForm.text} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, text: event.target.value })} className="min-h-[80px] resize-y border-line bg-canvas" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
+                    <Input value={voiceBoxPresetForm.output_name} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, output_name: event.target.value })} />
+                  </div>
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("tts.advanced.controls", "Advanced controls")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="border-t border-line px-3 py-3">
+                      <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
+                    </div>
+                  </details>
+                  <Button variant="outline" disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
+                    {t("projects.voicebox.submit", "VoiceBox 프리셋 생성")}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="voicebox_instruct" className="m-0">
+                <form className="flex flex-col gap-4" onSubmit={handleGenerateVoiceBoxInstructFromPreset}>
+                  <h3 className="text-sm font-medium text-ink">{t("projects.voiceboxInstruct.title", "VoiceBox 프리셋 + 말투 지시")}</h3>
+                  <RecipeBar title={t("projects.hybrid.recipes", "말투 템플릿")} items={HYBRID_RECIPES} onApply={(item) => setVoiceBoxPresetInstructForm((prev) => ({ ...prev, instruct: item.instruction || prev.instruct, text: item.text || prev.text, language: item.language || prev.language }))} />
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("projects.voicebox.model", "VoiceBox 모델")}</Label>
+                    <Select value={voiceBoxPresetInstructForm.model_id || undefined} onValueChange={(value) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, model_id: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {voiceBoxModels.map((model) => (
+                          <SelectItem key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
+                    <Textarea value={voiceBoxPresetInstructForm.text} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, text: event.target.value })} className="min-h-[80px] resize-y border-line bg-canvas" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("projects.hybrid.instruction", "말투 지시")}</Label>
+                    <Textarea value={voiceBoxPresetInstructForm.instruct} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, instruct: event.target.value })} className="min-h-[80px] resize-y border-line bg-canvas" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
+                    <Input value={voiceBoxPresetInstructForm.output_name} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, output_name: event.target.value })} />
+                  </div>
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("tts.advanced.controls", "Advanced controls")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="border-t border-line px-3 py-3">
+                      <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
+                    </div>
+                  </details>
+                  <Button disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
+                    {t("projects.voiceboxInstruct.submit", "VoiceBox 지시 생성")}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </WorkspaceCard>
 
           {lastHybridRecord || lastVoiceBoxPresetRecord || lastVoiceBoxPresetInstructRecord ? (
-            <section className="panel">
-              <h3>생성 결과</h3>
-              <div className="panel-grid">
-                {lastHybridRecord ? <AudioCard title="Base + CustomVoice 결과" subtitle={lastHybridRecord.mode} record={lastHybridRecord} /> : null}
-                {lastVoiceBoxPresetRecord ? <AudioCard title="VoiceBox 프리셋 결과" subtitle={lastVoiceBoxPresetRecord.mode} record={lastVoiceBoxPresetRecord} /> : null}
-                {lastVoiceBoxPresetInstructRecord ? <AudioCard title="VoiceBox 지시 결과" subtitle={lastVoiceBoxPresetInstructRecord.mode} record={lastVoiceBoxPresetInstructRecord} /> : null}
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("projects.result.title", "생성 결과")} badge={t("tts.result.latest")} />
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                {lastHybridRecord ? <AudioCard title={t("projects.result.hybrid", "Base + CustomVoice 결과")} subtitle={lastHybridRecord.mode} record={lastHybridRecord} /> : null}
+                {lastVoiceBoxPresetRecord ? <AudioCard title={t("projects.result.voicebox", "VoiceBox 프리셋 결과")} subtitle={lastVoiceBoxPresetRecord.mode} record={lastVoiceBoxPresetRecord} /> : null}
+                {lastVoiceBoxPresetInstructRecord ? <AudioCard title={t("projects.result.voiceboxInstruct", "VoiceBox 지시 결과")} subtitle={lastVoiceBoxPresetInstructRecord.mode} record={lastVoiceBoxPresetInstructRecord} /> : null}
               </div>
-            </section>
+            </WorkspaceCard>
           ) : null}
-        </section>
+        </WorkspaceShell>
       ) : null}
 
       {isS2ProTab(activeTab) ? (
-        <section className="workspace workspace--stacked">
-          <section className="s2pro-workspace">
-            {s2ProRuntime ? (
-              <span className={s2ProRuntime.server_running ? "runtime-pill is-ready" : "runtime-pill"}>
-                {s2ProRuntime.runtime_mode === "api"
-                  ? s2ProRuntime.api_key_configured
-                    ? "Fish Audio API"
-                    : "API key required"
-                  : s2ProRuntime.server_running
-                    ? "Local Fish Speech"
-                    : "Local offline"}{" "}
-                · {s2ProRuntime.model}
-              </span>
-            ) : (
-              <span className="runtime-pill">Runtime 확인 중</span>
-            )}
-            <form className="s2pro-form" onSubmit={handleS2ProSubmit}>
-              <div className="s2pro-form__main">
-                {currentS2ProMode === "tagged" ? (
-                  <>
-                    <div className="s2pro-section-heading">
-                      <span className="step-badge">1</span>
-                      <div>
-                        <h3>저장 목소리로 대사 만들기</h3>
-                        <p>저장한 목소리를 선택해 새 대사를 생성합니다.</p>
-                      </div>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("s2pro.eyebrow", "S2-PRO")}
+            eyebrowIcon={Mic}
+            title={
+              currentS2ProMode === "tagged" ? t("s2pro.tagged.title", "S2-Pro 태그 기반 생성")
+                : currentS2ProMode === "clone" ? t("s2pro.clone.title", "S2-Pro 목소리 저장")
+                : currentS2ProMode === "multi_speaker" ? t("s2pro.multi.title", "S2-Pro 다중 화자 대화")
+                : t("s2pro.multilingual.title", "S2-Pro 다국어 음성")
+            }
+            subtitle={
+              currentS2ProMode === "tagged" ? t("s2pro.tagged.subtitle", "저장한 목소리를 선택해 새 대사를 생성합니다.")
+                : currentS2ProMode === "clone" ? t("s2pro.clone.subtitle", "생성 갤러리 음성이나 업로드 파일을 재사용 가능한 목소리로 저장합니다.")
+                : currentS2ProMode === "multi_speaker" ? t("s2pro.multi.subtitle", "대사 안에 speaker tag를 넣어 장면을 나눕니다.")
+                : t("s2pro.multilingual.subtitle", "같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.")
+            }
+            action={{
+              label: t("s2pro.action.generate", "S2-Pro 생성"),
+              formId: "s2pro-form",
+              loading,
+            }}
+            meta={
+              s2ProRuntime ? (
+                <Badge variant="secondary" className={s2ProRuntime.server_running ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
+                  {s2ProRuntime.runtime_mode === "api"
+                    ? s2ProRuntime.api_key_configured
+                      ? "Fish Audio API"
+                      : "API key required"
+                    : s2ProRuntime.server_running
+                      ? "Local Fish Speech"
+                      : "Local offline"}{" · "}{s2ProRuntime.model}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-canvas text-ink-muted border-0">{t("s2pro.runtime.checking", "Runtime 확인 중")}</Badge>
+              )
+            }
+          />
+
+          <form id="s2pro-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]" onSubmit={handleS2ProSubmit}>
+            <div className="flex flex-col gap-5">
+              {currentS2ProMode === "tagged" ? (
+                <>
+                  <WorkspaceCard className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                      <h3 className="text-sm font-medium text-ink">{t("s2pro.tagged.step1", "저장 목소리로 대사 만들기")}</h3>
                     </div>
-                    <section className="s2pro-voice-selector">
-                      <label>
-                        Saved voice
-                        <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
-                          <option value="">저장 목소리 없이 기본 S2-Pro로 생성</option>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Saved voice</Label>
+                      <Select value={selectedS2VoiceId || undefined} onValueChange={(value) => setSelectedS2VoiceId(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("s2pro.tagged.defaultVoice", "저장 목소리 없이 기본 S2-Pro로 생성")} />
+                        </SelectTrigger>
+                        <SelectContent>
                           {s2ProVoices.map((voice) => (
-                            <option key={voice.id} value={voice.id}>
-                              {voice.name}
-                            </option>
+                            <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
                           ))}
-                        </select>
-                      </label>
-                      {selectedS2Voice ? (
-                        <div className="s2pro-selected-voice s2pro-selected-voice--wide">
-                          <strong>{selectedS2Voice.name}</strong>
-                          <span>{selectedS2Voice.reference_text || "저장된 참조 문장 없음"}</span>
-                          <audio controls src={mediaUrl(selectedS2Voice.reference_audio_url)} />
-                        </div>
-                      ) : (
-                        <div className="s2pro-empty-voice">
-                          <strong>목소리 저장을 먼저 하면 여기서 계속 재사용할 수 있습니다.</strong>
-                          <button className="secondary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
-                            목소리 저장으로 이동
-                          </button>
-                        </div>
-                      )}
-                    </section>
-                    <label>
-                      대사
-                      <textarea
-                        className="s2pro-textarea"
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedS2Voice ? (
+                      <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                        <strong className="text-sm font-medium text-ink">{selectedS2Voice.name}</strong>
+                        <span className="text-xs text-ink-muted">{selectedS2Voice.reference_text || t("s2pro.tagged.noText", "저장된 참조 문장 없음")}</span>
+                        <audio controls src={mediaUrl(selectedS2Voice.reference_audio_url)} className="w-full h-8" />
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-dashed border-line bg-sunken/40 p-3 flex flex-col items-start gap-2">
+                        <strong className="text-xs font-medium text-ink-muted">{t("s2pro.tagged.emptyHint", "목소리 저장을 먼저 하면 여기서 계속 재사용할 수 있습니다.")}</strong>
+                        <Button variant="outline" size="sm" onClick={() => openS2ProTab("s2pro_clone")} type="button">
+                          {t("s2pro.tagged.gotoSave", "목소리 저장으로 이동")}
+                        </Button>
+                      </div>
+                    )}
+                  </WorkspaceCard>
+                  <WorkspaceCard>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
+                      <Textarea
                         value={s2ProForm.text}
                         onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
+                        className="min-h-[120px] resize-y border-line bg-canvas"
                       />
-                    </label>
-                    <div className="s2pro-composer-dock">
-                      <details className="tag-popover s2pro-tag-popover">
-                        <summary>태그</summary>
-                        <div className="tag-popover__panel s2pro-tag-popover__panel">
-                          <p>대사 사이에 넣을 표현 태그를 고릅니다. 선택한 태그는 Text에 바로 삽입됩니다.</p>
-                          <input
-                            className="s2pro-tag-search"
-                            placeholder="Search tags, e.g. whisper, angry, pause"
-                            value={s2TagSearch}
-                            onChange={(event) => setS2TagSearch(event.target.value)}
-                          />
-                          <div className="s2pro-tag-library" aria-label="S2-Pro expression tag library">
-                            {filteredS2TagCategories.map((category) => (
-                              <section className="s2pro-tag-category" key={category.label}>
-                                <strong>{category.label}</strong>
-                                <div className="tag-cloud">
-                                  {category.tags.map((tag) => (
-                                    <button className="tag-chip" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
-                                      {tag}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            ))}
-                          </div>
-                        </div>
-                      </details>
-                      <span className="credit-indicator">{selectedS2Voice ? selectedS2Voice.name : "기본 S2-Pro voice"}</span>
-                      <span className="byte-counter">{new Blob([s2ProForm.text]).size} / 500 바이트</span>
-                      <button className="primary-button" type="submit">
-                        음성 생성
-                      </button>
                     </div>
-                  </>
-                ) : null}
+                    <details className="group mt-4 rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                      <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                        {t("s2pro.tagged.tags", "태그")}
+                        <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                      </summary>
+                      <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                        <p className="text-xs text-ink-muted">{t("s2pro.tagged.tagsHint", "대사 사이에 넣을 표현 태그를 고릅니다. 선택한 태그는 Text에 바로 삽입됩니다.")}</p>
+                        <Input
+                          placeholder={t("s2pro.tagged.tagSearch", "Search tags, e.g. whisper, angry, pause")}
+                          value={s2TagSearch}
+                          onChange={(event) => setS2TagSearch(event.target.value)}
+                        />
+                        <div className="flex flex-col gap-3" aria-label="S2-Pro expression tag library">
+                          {filteredS2TagCategories.map((category) => (
+                            <section key={category.label} className="flex flex-col gap-1.5">
+                              <strong className="text-xs font-medium text-ink-muted">{category.label}</strong>
+                              <div className="flex flex-wrap gap-1.5">
+                                {category.tags.map((tag) => (
+                                  <Button variant="outline" size="sm" className="h-7 text-xs" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
+                                    {tag}
+                                  </Button>
+                                ))}
+                              </div>
+                            </section>
+                          ))}
+                        </div>
+                      </div>
+                    </details>
+                    <div className="mt-3 flex items-center justify-between text-xs text-ink-muted">
+                      <span>{selectedS2Voice ? selectedS2Voice.name : t("s2pro.defaultVoice", "기본 S2-Pro voice")}</span>
+                      <span className="font-mono tabular-nums">{new Blob([s2ProForm.text]).size} / 500 바이트</span>
+                    </div>
+                  </WorkspaceCard>
+                </>
+              ) : null}
 
-                {currentS2ProMode === "clone" ? (
-                  <>
-                    <div className="s2pro-section-heading">
-                      <span className="step-badge">1</span>
+              {currentS2ProMode === "clone" ? (
+                <>
+                  <WorkspaceCard className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                      <h3 className="text-sm font-medium text-ink">{t("s2pro.clone.step1", "목소리 저장")}</h3>
+                    </div>
+                    <Tabs value={s2ProCloneSource} onValueChange={(value) => setS2ProCloneSource(value as typeof s2ProCloneSource)}>
+                      <TabsList className="grid w-full grid-cols-2 gap-1 bg-canvas border border-line p-1 h-auto">
+                        <TabsTrigger value="gallery" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">{t("s2pro.clone.fromGallery", "생성 갤러리에서 선택")}</TabsTrigger>
+                        <TabsTrigger value="upload" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">{t("s2pro.clone.upload", "새 파일 업로드")}</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="gallery" className="m-0 mt-3 flex flex-col gap-2">
+                        <strong className="text-sm font-medium text-ink">{t("s2pro.clone.galleryTitle", "생성한 음성 선택")}</strong>
+                        <span className="text-xs text-ink-muted">{t("s2pro.clone.galleryHint", "목소리 설계, Qwen, S2-Pro에서 만든 결과를 바로 목소리 자산으로 저장합니다.")}</span>
+                        <ServerAudioPicker assets={generatedAudioAssets} selectedPath={s2ProVoiceForm.reference_audio_path} onSelect={handleSelectS2ProReference} />
+                      </TabsContent>
+                      <TabsContent value="upload" className="m-0 mt-3 flex flex-col gap-2">
+                        <Label className="text-xs font-medium text-ink-muted">{t("s2pro.clone.uploadTitle", "참조 음성 업로드")}</Label>
+                        <p className="text-xs text-ink-muted">{t("s2pro.clone.uploadHint", "WAV, MP3, FLAC 파일을 선택하세요")}</p>
+                        <Input
+                          type="file"
+                          accept="audio/*"
+                          className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              void handleUploadS2ProReference(file);
+                            }
+                          }}
+                        />
+                        {s2ProUploadedRef ? (
+                          <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                            <strong className="text-sm font-medium text-ink">{s2ProUploadedRef.filename}</strong>
+                            <audio controls src={s2ProUploadedRef.url} className="w-full h-8" />
+                          </div>
+                        ) : null}
+                      </TabsContent>
+                    </Tabs>
+
+                    <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-3">
                       <div>
-                        <h3>목소리 저장</h3>
-                        <p>생성 갤러리 음성이나 업로드 파일을 재사용 가능한 목소리로 저장합니다.</p>
+                        <strong className="text-sm font-medium text-ink">{s2ProVoiceForm.reference_audio_path ? basenameFromPath(s2ProVoiceForm.reference_audio_path) : t("s2pro.clone.noRef", "선택된 참조 음성이 없습니다")}</strong>
+                        {s2ProVoiceForm.reference_audio_path ? <audio controls src={fileUrlFromPath(s2ProVoiceForm.reference_audio_path)} className="mt-2 w-full h-8" /> : null}
                       </div>
-                    </div>
-                    <div className="s2pro-clone-builder">
-                      <div className="s2pro-source-switch" aria-label="S2-Pro 목소리 저장 입력 방식">
-                        <button className={s2ProCloneSource === "gallery" ? "is-active" : ""} onClick={() => setS2ProCloneSource("gallery")} type="button">
-                          생성 갤러리에서 선택
-                        </button>
-                        <button className={s2ProCloneSource === "upload" ? "is-active" : ""} onClick={() => setS2ProCloneSource("upload")} type="button">
-                          새 파일 업로드
-                        </button>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Voice name</Label>
+                        <Input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
                       </div>
-
-                      {s2ProCloneSource === "gallery" ? (
-                        <section className="s2pro-source-panel">
-                          <div className="s2pro-source-panel__head">
-                            <strong>생성한 음성 선택</strong>
-                            <span>목소리 설계, Qwen, S2-Pro에서 만든 결과를 바로 목소리 자산으로 저장합니다.</span>
-                          </div>
-                          <ServerAudioPicker assets={generatedAudioAssets} selectedPath={s2ProVoiceForm.reference_audio_path} onSelect={handleSelectS2ProReference} />
-                        </section>
-                      ) : (
-                        <section className="s2pro-source-panel s2pro-upload-panel">
-                          <label className="s2pro-upload-drop">
-                            <span>참조 음성 업로드</span>
-                            <strong>WAV, MP3, FLAC 파일을 선택하세요</strong>
-                            <input
-                              accept="audio/*"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                if (file) {
-                                  void handleUploadS2ProReference(file);
-                                }
-                              }}
-                              type="file"
-                            />
-                          </label>
-                          {s2ProUploadedRef ? (
-                            <div className="s2pro-selected-reference">
-                              <strong>{s2ProUploadedRef.filename}</strong>
-                              <audio controls src={s2ProUploadedRef.url} />
-                            </div>
-                          ) : null}
-                        </section>
-                      )}
-
-                      <section className="s2pro-voice-meta">
-                        <div className="s2pro-selected-reference">
-                          <strong>{s2ProVoiceForm.reference_audio_path ? basenameFromPath(s2ProVoiceForm.reference_audio_path) : "선택된 참조 음성이 없습니다"}</strong>
-                          {s2ProVoiceForm.reference_audio_path ? <audio controls src={fileUrlFromPath(s2ProVoiceForm.reference_audio_path)} /> : null}
-                        </div>
-                        <label>
-                          Voice name
-                          <input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
-                        </label>
-                        <label>
-                          Runtime
-                          <select
-                            value={s2ProVoiceForm.runtime_source}
-                            onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
-                          >
-                            <option value="local">Local Fish Speech</option>
-                            <option value="api">Fish Audio API</option>
-                          </select>
-                        </label>
-                        <label className="s2pro-reference-transcript">
-                          Reference transcript
-                          <textarea
-                            placeholder="비워두지 말고 실제 참조 음성의 대사를 넣으세요."
-                            value={s2ProVoiceForm.reference_text}
-                            onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, reference_text: event.target.value })}
-                          />
-                        </label>
-                        <div className="button-row">
-                          <button className="primary-button" disabled={!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim()} onClick={() => handleCreateS2ProVoice()} type="button">
-                            목소리 저장
-                          </button>
-                        </div>
-                        <details className="advanced-inline">
-                          <summary>Advanced controls</summary>
-                          <div className="button-row">
-                            <button className="secondary-button" disabled={!s2ProVoiceForm.reference_audio_path} onClick={handleTranscribeS2ProReference} type="button">
-                              참조 텍스트 불러오기 / Whisper 전사
-                            </button>
-                            <label className="inline-check">
-                              <input
-                                checked={s2ProVoiceForm.create_qwen_prompt}
-                                onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: event.target.checked })}
-                                type="checkbox"
-                              />
-                              Qwen clone prompt도 함께 생성
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Runtime</Label>
+                        <Select
+                          value={s2ProVoiceForm.runtime_source || undefined}
+                          onValueChange={(value) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: value as "auto" | "local" | "api" })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="local">Local Fish Speech</SelectItem>
+                            <SelectItem value="api">Fish Audio API</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Reference transcript</Label>
+                        <Textarea
+                          placeholder={t("s2pro.clone.refPlaceholder", "비워두지 말고 실제 참조 음성의 대사를 넣으세요.")}
+                          value={s2ProVoiceForm.reference_text}
+                          onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, reference_text: event.target.value })}
+                          className="min-h-[80px] resize-y border-line bg-canvas"
+                        />
+                      </div>
+                      <Button disabled={!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim()} onClick={() => handleCreateS2ProVoice()} type="button">
+                        {t("s2pro.clone.save", "목소리 저장")}
+                      </Button>
+                      <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                          {t("tts.advanced.controls", "Advanced controls")}
+                          <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                        </summary>
+                        <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" disabled={!s2ProVoiceForm.reference_audio_path} onClick={handleTranscribeS2ProReference} type="button">
+                              {t("s2pro.clone.transcribe", "참조 텍스트 불러오기 / Whisper 전사")}
+                            </Button>
+                            <label className="flex items-center gap-2 text-xs text-ink-muted">
+                              <Switch checked={s2ProVoiceForm.create_qwen_prompt} onCheckedChange={(checked) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: checked })} />
+                              {t("s2pro.clone.qwenPrompt", "Qwen clone prompt도 함께 생성")}
                             </label>
                           </div>
-                          <p className="field-hint">
-                            생성 갤러리 음성은 저장된 생성 기록의 대사를 먼저 사용하고, 업로드 파일처럼 대사가 없는 경우에만 Whisper를 실행합니다.
+                          <p className="text-xs text-ink-muted">
+                            {t("s2pro.clone.transcribeHint", "생성 갤러리 음성은 저장된 생성 기록의 대사를 먼저 사용하고, 업로드 파일처럼 대사가 없는 경우에만 Whisper를 실행합니다.")}
                           </p>
-                        </details>
-                      </section>
+                        </div>
+                      </details>
                     </div>
-                    <div className="s2pro-section-heading">
-                      <span className="step-badge">2</span>
-                      <div>
-                        <h3>저장된 목소리</h3>
-                        <p>저장된 목소리를 선택해 테스트하거나 다른 생성 흐름으로 보냅니다.</p>
-                      </div>
+                  </WorkspaceCard>
+                  <WorkspaceCard className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">2</span>
+                      <h3 className="text-sm font-medium text-ink">{t("s2pro.clone.step2", "저장된 목소리")}</h3>
                     </div>
-                    <div className="s2pro-voice-grid">
+                    <p className="text-xs text-ink-muted">{t("s2pro.clone.step2Hint", "저장된 목소리를 선택해 테스트하거나 다른 생성 흐름으로 보냅니다.")}</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {s2ProVoices.map((voice) => (
-                        <article className={selectedS2VoiceId === voice.id ? "s2pro-voice-card is-selected" : "s2pro-voice-card"} key={voice.id}>
-                          <button onClick={() => setSelectedS2VoiceId(voice.id)} type="button">
-                            <strong>{voice.name}</strong>
-                            <span>
+                        <article key={voice.id} className={`rounded-md border p-3 flex flex-col gap-2 transition ${selectedS2VoiceId === voice.id ? "border-accent-edge bg-accent-soft/30" : "border-line bg-canvas/50 hover:border-line-strong"}`}>
+                          <button onClick={() => setSelectedS2VoiceId(voice.id)} type="button" className="text-left flex flex-col gap-0.5">
+                            <strong className="text-sm font-medium text-ink">{voice.name}</strong>
+                            <span className="text-xs text-ink-muted">
                               {voice.runtime_source === "api"
                                 ? "Fish Audio API voice"
                                 : voice.fish_reference_present
@@ -3753,1751 +4188,1105 @@ function StudioApp() {
                                   : "Fish server 재등록 필요"}
                             </span>
                           </button>
-                          <audio controls src={mediaUrl(voice.reference_audio_url)} />
-                          <div className="voice-card-actions">
-                            <button onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
-                              Qwen 복제로 보내기
-                            </button>
-                            <button onClick={() => useS2VoiceInQwen(voice, "tts")} type="button">
-                              Qwen TTS로 보내기
-                            </button>
+                          <audio controls src={mediaUrl(voice.reference_audio_url)} className="w-full h-8" />
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
+                              {t("s2pro.clone.toQwenClone", "Qwen 복제로 보내기")}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "tts")} type="button">
+                              {t("s2pro.clone.toQwenTts", "Qwen TTS로 보내기")}
+                            </Button>
                           </div>
                         </article>
                       ))}
                     </div>
-                    <label>
-                      저장 목소리 테스트 대사
-                      <textarea
-                        className="s2pro-textarea"
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("s2pro.clone.testText", "저장 목소리 테스트 대사")}</Label>
+                      <Textarea
                         value={s2ProForm.clone_text}
                         onChange={(event) => setS2ProForm({ ...s2ProForm, clone_text: event.target.value })}
+                        className="min-h-[80px] resize-y border-line bg-canvas"
                       />
-                    </label>
-                  </>
-                ) : null}
-
-                {currentS2ProMode === "multi_speaker" ? (
-                  <>
-                    <div className="s2pro-section-heading">
-                      <span className="step-badge">1</span>
-                      <div>
-                        <h3>저장 목소리로 대화 만들기</h3>
-                        <p>대사 안에 speaker tag를 넣어 장면을 나눕니다. 목소리 자산이 없으면 먼저 목소리를 저장하세요.</p>
-                      </div>
                     </div>
-                    <label>
-                      Saved voice
-                      <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
-                        <option value="">저장 목소리 선택</option>
-                        {s2ProVoices.map((voice) => (
-                          <option key={voice.id} value={voice.id}>
-                            {voice.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Speaker script
-                      <textarea
-                        className="s2pro-textarea s2pro-textarea--tall"
-                        value={s2ProForm.speaker_script}
-                        onChange={(event) => setS2ProForm({ ...s2ProForm, speaker_script: event.target.value })}
-                      />
-                    </label>
-                  </>
-                ) : null}
+                  </WorkspaceCard>
+                </>
+              ) : null}
 
-                {currentS2ProMode === "multilingual" ? (
-                  <>
-                    <div className="s2pro-section-heading">
-                      <span className="step-badge">1</span>
-                      <div>
-                        <h3>저장 목소리로 다국어 문장 읽기</h3>
-                        <p>같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.</p>
-                      </div>
-                    </div>
-                    <label>
-                      Saved voice
-                      <select value={selectedS2VoiceId} onChange={(event) => setSelectedS2VoiceId(event.target.value)}>
-                        <option value="">저장 목소리 없이 생성</option>
+              {currentS2ProMode === "multi_speaker" ? (
+                <WorkspaceCard className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                    <h3 className="text-sm font-medium text-ink">{t("s2pro.multi.step1", "저장 목소리로 대화 만들기")}</h3>
+                  </div>
+                  <p className="text-xs text-ink-muted">{t("s2pro.multi.hint", "대사 안에 speaker tag를 넣어 장면을 나눕니다. 목소리 자산이 없으면 먼저 목소리를 저장하세요.")}</p>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Saved voice</Label>
+                    <Select value={selectedS2VoiceId || undefined} onValueChange={(value) => setSelectedS2VoiceId(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("s2pro.multi.placeholder", "저장 목소리 선택")} />
+                      </SelectTrigger>
+                      <SelectContent>
                         {s2ProVoices.map((voice) => (
-                          <option key={voice.id} value={voice.id}>
-                            {voice.name}
-                          </option>
+                          <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
                         ))}
-                      </select>
-                    </label>
-                    <label>
-                      Text
-                      <textarea
-                        className="s2pro-textarea"
-                        value={s2ProForm.text}
-                        onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
-                      />
-                    </label>
-                  </>
-                ) : null}
-              </div>
-
-              <aside className="s2pro-form__side">
-                <div className="s2pro-side-title">
-                  <strong>Generation settings</strong>
-                  <span>{selectedS2Voice ? selectedS2Voice.name : "기본 S2-Pro voice"}</span>
-                </div>
-                <label>
-                  Runtime
-                  <select
-                    value={s2ProForm.runtime_source}
-                    onChange={(event) => setS2ProForm({ ...s2ProForm, runtime_source: event.target.value as "auto" | "local" | "api" })}
-                  >
-                    <option value="local">Local Fish Speech</option>
-                    <option value="api">Fish Audio API</option>
-                    <option value="auto">Auto from selected voice</option>
-                  </select>
-                </label>
-                <label>
-                  Output name
-                  <input value={s2ProForm.output_name} onChange={(event) => setS2ProForm({ ...s2ProForm, output_name: event.target.value })} />
-                </label>
-                <label>
-                  Language
-                  <LanguageSelect value={s2ProForm.language} onChange={(language) => setS2ProForm({ ...s2ProForm, language })} />
-                </label>
-                <details className="advanced-inline">
-                  <summary>Advanced controls</summary>
-                  <label>
-                    Inline style instruction
-                    <textarea
-                      value={s2ProForm.instruction}
-                      onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Speaker script</Label>
+                    <Textarea
+                      value={s2ProForm.speaker_script}
+                      onChange={(event) => setS2ProForm({ ...s2ProForm, speaker_script: event.target.value })}
+                      className="min-h-[200px] resize-y border-line bg-canvas"
                     />
-                    <span className="field-caption">문장 앞에 표현 태그를 더해 톤과 호흡을 보정합니다. 보통은 접어두고 필요할 때만 사용하세요.</span>
-                  </label>
-                  <div className="field-row">
-                    <label>
-                      Temperature
-                      <input value={s2ProForm.temperature} onChange={(event) => setS2ProForm({ ...s2ProForm, temperature: event.target.value })} />
-                    </label>
-                    <label>
-                      Top P
-                      <input value={s2ProForm.top_p} onChange={(event) => setS2ProForm({ ...s2ProForm, top_p: event.target.value })} />
-                    </label>
-                    <label>
-                      Max tokens
-                      <input value={s2ProForm.max_tokens} onChange={(event) => setS2ProForm({ ...s2ProForm, max_tokens: event.target.value })} />
-                    </label>
+                  </div>
+                </WorkspaceCard>
+              ) : null}
+
+              {currentS2ProMode === "multilingual" ? (
+                <WorkspaceCard className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                    <h3 className="text-sm font-medium text-ink">{t("s2pro.multilingual.step1", "저장 목소리로 다국어 문장 읽기")}</h3>
+                  </div>
+                  <p className="text-xs text-ink-muted">{t("s2pro.multilingual.hint", "같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.")}</p>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Saved voice</Label>
+                    <Select value={selectedS2VoiceId || undefined} onValueChange={(value) => setSelectedS2VoiceId(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("s2pro.multilingual.placeholder", "저장 목소리 없이 생성")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {s2ProVoices.map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Text</Label>
+                    <Textarea
+                      value={s2ProForm.text}
+                      onChange={(event) => setS2ProForm({ ...s2ProForm, text: event.target.value })}
+                      className="min-h-[120px] resize-y border-line bg-canvas"
+                    />
+                  </div>
+                </WorkspaceCard>
+              ) : null}
+
+              {lastS2ProRecord ? (
+                <WorkspaceCard>
+                  <WorkspaceResultHeader title={t("s2pro.result.title", "S2-Pro 생성 결과")} badge={t("tts.result.latest")} />
+                  <AudioCard title={t("s2pro.result.title", "S2-Pro 생성 결과")} subtitle={lastS2ProRecord.mode} record={lastS2ProRecord} />
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceEmptyState
+                  icon={AudioWaveform}
+                  title={t("s2pro.empty.title", "아직 생성된 S2-Pro 결과가 없습니다.")}
+                  body={t("s2pro.empty.body", "오른쪽 설정 후 [S2-Pro 생성]을 누르면 결과가 여기에 표시됩니다.")}
+                />
+              )}
+            </div>
+
+            <aside className="self-start">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <strong className="text-sm font-medium text-ink">{t("s2pro.settings.title", "Generation settings")}</strong>
+                  <span className="text-xs text-ink-muted">{selectedS2Voice ? selectedS2Voice.name : t("s2pro.defaultVoice", "기본 S2-Pro voice")}</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Runtime</Label>
+                  <Select
+                    value={s2ProForm.runtime_source || undefined}
+                    onValueChange={(value) => setS2ProForm({ ...s2ProForm, runtime_source: value as "auto" | "local" | "api" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="local">Local Fish Speech</SelectItem>
+                      <SelectItem value="api">Fish Audio API</SelectItem>
+                      <SelectItem value="auto">Auto from selected voice</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Output name</Label>
+                  <Input value={s2ProForm.output_name} onChange={(event) => setS2ProForm({ ...s2ProForm, output_name: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Language</Label>
+                  <LanguageSelect value={s2ProForm.language} onChange={(language) => setS2ProForm({ ...s2ProForm, language })} />
+                </div>
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    {t("tts.advanced.controls", "Advanced controls")}
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Inline style instruction</Label>
+                      <Textarea
+                        value={s2ProForm.instruction}
+                        onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
+                        className="min-h-[64px] resize-y border-line bg-canvas"
+                      />
+                      <span className="text-[11px] text-ink-subtle">{t("s2pro.instruction.caption", "문장 앞에 표현 태그를 더해 톤과 호흡을 보정합니다. 보통은 접어두고 필요할 때만 사용하세요.")}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Temperature</Label>
+                        <Input value={s2ProForm.temperature} onChange={(event) => setS2ProForm({ ...s2ProForm, temperature: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Top P</Label>
+                        <Input value={s2ProForm.top_p} onChange={(event) => setS2ProForm({ ...s2ProForm, top_p: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Max tokens</Label>
+                        <Input value={s2ProForm.max_tokens} onChange={(event) => setS2ProForm({ ...s2ProForm, max_tokens: event.target.value })} />
+                      </div>
+                    </div>
                   </div>
                 </details>
-                <button className="primary-button" type="submit">
-                  S2-Pro 생성
-                </button>
                 {selectedS2Voice ? (
-                  <div className="s2pro-selected-voice">
-                    <strong>{selectedS2Voice.name}</strong>
-                    <span>{selectedS2Voice.reference_id}</span>
+                  <div className="rounded-md border border-line bg-canvas/60 p-3">
+                    <strong className="text-sm font-medium text-ink">{selectedS2Voice.name}</strong>
+                    <p className="mt-1 text-xs text-ink-muted font-mono">{selectedS2Voice.reference_id}</p>
                   </div>
                 ) : null}
-              </aside>
-            </form>
-            {lastS2ProRecord ? (
-              <div className="result-stack">
-                <AudioCard title="S2-Pro 생성 결과" subtitle={lastS2ProRecord.mode} record={lastS2ProRecord} />
-              </div>
-            ) : null}
-          </section>
-        </section>
+              </WorkspaceCard>
+            </aside>
+          </form>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "effects" ? (
-        <section className="workspace workspace--stacked">
-          <section className="sound-effects-shell">
-            <div className="sound-effects-top">
-              <div>
-                <h2>사운드 효과</h2>
-                <p>영어 프롬프트와 길이, 강도를 직접 조절해 효과음을 생성합니다.</p>
-              </div>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("effects.eyebrow", "SOUND EFFECTS")}
+            eyebrowIcon={Volume2}
+            title={t("effects.title", "사운드 효과")}
+            subtitle={t("effects.subtitle", "영어 프롬프트와 길이, 강도를 직접 조절해 효과음을 생성합니다.")}
+            action={{
+              label: t("effects.action.generate", "생성"),
+              formId: "sound-effects-form",
+              disabled: loading || !soundEffectsAvailable,
+              loading,
+            }}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]">
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-3">
+                <Label className="text-xs font-medium text-ink-muted">{t("effects.search.label", "효과음 라이브러리")}</Label>
+                <Input
+                  placeholder={t("effects.search.placeholder", "효과음 검색")}
+                  value={audioEffectsSearch}
+                  onChange={(event) => setAudioEffectsSearch(event.target.value)}
+                />
+                <ScrollArea className="h-[360px]">
+                  <div className="flex flex-col gap-2 pr-3">
+                    {filteredSoundEffectLibrary.map((item) => (
+                      <article key={item.id} className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-canvas/50 p-3 transition hover:border-line-strong">
+                        <span className={`grid size-8 place-items-center rounded-full text-[10px] font-mono font-semibold shrink-0 ${item.profile === "mmaudio_nsfw" ? "bg-danger/20 text-danger" : "bg-accent-soft text-accent-ink"}`}>
+                          {item.profile === "mmaudio_nsfw" ? "19" : ""}
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <strong className="flex items-center gap-2 text-sm font-medium text-ink">
+                            {item.title}
+                            {item.profile === "mmaudio_nsfw" ? <Badge variant="secondary" className="bg-danger/20 text-danger text-[10px]">19+</Badge> : null}
+                          </strong>
+                          <p className="text-xs text-ink-muted line-clamp-1">{item.subtitle}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] text-ink-subtle">{item.duration}</span>
+                          <MiniWaveform />
+                          <Button variant="outline" size="sm" onClick={() => applySoundEffectRecipe(item)} type="button">
+                            {t("effects.usePrompt", "Use prompt")}
+                          </Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </WorkspaceCard>
+
+              {lastAudioToolResult?.kind === "sound_effect" && lastAudioToolResult.record ? (
+                <WorkspaceCard>
+                  <WorkspaceResultHeader title={t("effects.result.title", "방금 생성한 사운드 효과")} badge={t("tts.result.latest")} />
+                  <AudioCard title={t("effects.result.subtitle", "사운드 효과")} record={lastAudioToolResult.record} />
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceEmptyState
+                  icon={Volume2}
+                  title={t("effects.empty.title", "아직 생성된 사운드 효과가 없습니다.")}
+                  body={t("effects.empty.body", "프롬프트와 옵션을 설정한 뒤 [생성]을 누르면 결과가 여기에 표시됩니다.")}
+                />
+              )}
             </div>
 
-            <div className="sound-effects-search">
-              <input
-                placeholder="효과음 검색"
-                value={audioEffectsSearch}
-                onChange={(event) => setAudioEffectsSearch(event.target.value)}
-              />
-            </div>
-
-            <div className="sound-effects-list">
-              {filteredSoundEffectLibrary.map((item) => (
-                <article className="sound-effects-row" key={item.id}>
-                  <div className="sound-effects-row__main">
-                    <span className={`sound-effects-dot ${item.profile === "mmaudio_nsfw" ? "sound-effects-dot--nsfw" : `sound-effects-dot--${item.id}`}`}>
-                      {item.profile === "mmaudio_nsfw" ? "19" : ""}
-                    </span>
-                    <div>
-                      <strong>
-                        {item.title}
-                        {item.profile === "mmaudio_nsfw" ? <span className="sound-effects-badge">19+</span> : null}
-                      </strong>
-                      <p>{item.subtitle}</p>
+            <aside className="self-start">
+              <WorkspaceCard>
+                <form id="sound-effects-form" className="flex flex-col gap-4" onSubmit={handleSoundEffectSubmit}>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Prompt</Label>
+                    <Textarea
+                      placeholder={t("effects.prompt.placeholder", "Write the sound prompt in English.")}
+                      value={soundEffectForm.prompt}
+                      onChange={(event) => setSoundEffectForm({ ...soundEffectForm, prompt: event.target.value })}
+                      className="min-h-[80px] resize-y border-line bg-canvas"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("effects.field.model", "모델")}</Label>
+                    <Select
+                      value={soundEffectForm.model_profile || undefined}
+                      onValueChange={(value) => setSoundEffectForm({ ...soundEffectForm, model_profile: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mmaudio">MMAudio</SelectItem>
+                        <SelectItem value="mmaudio_nsfw">MMAudio NSFW</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("effects.field.duration", "길이(초)")}</Label>
+                      <Input
+                        value={soundEffectForm.duration_sec}
+                        onChange={(event) => setSoundEffectForm({ ...soundEffectForm, duration_sec: event.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("effects.field.intensity", "강도")}</Label>
+                      <Input
+                        value={soundEffectForm.intensity}
+                        onChange={(event) => setSoundEffectForm({ ...soundEffectForm, intensity: event.target.value })}
+                      />
                     </div>
                   </div>
-                  <div className="sound-effects-row__player">
-                    <span>{item.duration}</span>
-                    <MiniWaveform />
-                    <button className="icon-button" onClick={() => applySoundEffectRecipe(item)} type="button">
-                      Use prompt
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <form className="sound-effects-composer" onSubmit={handleSoundEffectSubmit}>
-              <div className="sound-effects-composer__label">Prompt</div>
-              <textarea
-                placeholder="Write the sound prompt in English."
-                value={soundEffectForm.prompt}
-                onChange={(event) => setSoundEffectForm({ ...soundEffectForm, prompt: event.target.value })}
-              />
-              <div className="field-row">
-                <label>
-                  모델
-                  <select
-                    value={soundEffectForm.model_profile}
-                    onChange={(event) => setSoundEffectForm({ ...soundEffectForm, model_profile: event.target.value })}
-                  >
-                    <option value="mmaudio">MMAudio</option>
-                    <option value="mmaudio_nsfw">MMAudio NSFW</option>
-                  </select>
-                </label>
-                <label>
-                  길이(초)
-                  <input
-                    value={soundEffectForm.duration_sec}
-                    onChange={(event) => setSoundEffectForm({ ...soundEffectForm, duration_sec: event.target.value })}
-                  />
-                </label>
-                <label>
-                  강도
-                  <input
-                    value={soundEffectForm.intensity}
-                    onChange={(event) => setSoundEffectForm({ ...soundEffectForm, intensity: event.target.value })}
-                  />
-                </label>
-              </div>
-              <details className="advanced-inline">
-                <summary>Advanced settings</summary>
-                <div className="field-row">
-                  <label>
-                    Seed
-                    <input
-                      placeholder="비우면 자동"
-                      value={soundEffectForm.seed}
-                      onChange={(event) => setSoundEffectForm({ ...soundEffectForm, seed: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Steps
-                    <input
-                      value={soundEffectForm.steps}
-                      onChange={(event) => setSoundEffectForm({ ...soundEffectForm, steps: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    CFG
-                    <input
-                      value={soundEffectForm.cfg_scale}
-                      onChange={(event) => setSoundEffectForm({ ...soundEffectForm, cfg_scale: event.target.value })}
-                    />
-                  </label>
-                </div>
-                <label>
-                  제외할 소리
-                  <textarea
-                    placeholder="예: speech, music, harsh clipping"
-                    value={soundEffectForm.negative_prompt}
-                    onChange={(event) => setSoundEffectForm({ ...soundEffectForm, negative_prompt: event.target.value })}
-                  />
-                </label>
-              </details>
-              <div className="sound-effects-composer__meta">
-                <span>{soundEffectsAvailable ? "MMAudio 기반 생성기 연결 상태를 사용합니다." : "사운드 효과 엔진이 아직 준비되지 않았습니다."}</span>
-                <button className="primary-button" disabled={loading || !soundEffectsAvailable} type="submit">
-                  생성
-                </button>
-              </div>
-            </form>
-            {lastAudioToolResult?.kind === "sound_effect" && lastAudioToolResult.record ? (
-              <section className="panel">
-                <h3>방금 생성한 사운드 효과</h3>
-                <AudioCard title="사운드 효과" record={lastAudioToolResult.record} />
-              </section>
-            ) : null}
-          </section>
-        </section>
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("effects.advanced", "Advanced settings")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Seed</Label>
+                          <Input
+                            placeholder={t("effects.seed.placeholder", "비우면 자동")}
+                            value={soundEffectForm.seed}
+                            onChange={(event) => setSoundEffectForm({ ...soundEffectForm, seed: event.target.value })}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Steps</Label>
+                          <Input
+                            value={soundEffectForm.steps}
+                            onChange={(event) => setSoundEffectForm({ ...soundEffectForm, steps: event.target.value })}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">CFG</Label>
+                          <Input
+                            value={soundEffectForm.cfg_scale}
+                            onChange={(event) => setSoundEffectForm({ ...soundEffectForm, cfg_scale: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("effects.negative", "제외할 소리")}</Label>
+                        <Textarea
+                          placeholder={t("effects.negative.placeholder", "예: speech, music, harsh clipping")}
+                          value={soundEffectForm.negative_prompt}
+                          onChange={(event) => setSoundEffectForm({ ...soundEffectForm, negative_prompt: event.target.value })}
+                          className="min-h-[64px] resize-y border-line bg-canvas"
+                        />
+                      </div>
+                    </div>
+                  </details>
+                  <p className="text-xs text-ink-muted">{soundEffectsAvailable ? t("effects.status.ready", "MMAudio 기반 생성기 연결 상태를 사용합니다.") : t("effects.status.unavailable", "사운드 효과 엔진이 아직 준비되지 않았습니다.")}</p>
+                </form>
+              </WorkspaceCard>
+            </aside>
+          </div>
+        </WorkspaceShell>
       ) : null}
 
       {isAceStepTab(activeTab) ? (
-        <section className="workspace workspace--stacked">
-          <section className="ace-step-shell">
-            {currentAceStepMode !== "text2music" && currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" ? (
-              <div className="panel ace-step-source-panel">
-                <h3>Source audio</h3>
-                <p className="text-muted">업로드, 직접 경로, 생성 갤러리 중 하나로 작업할 원본을 고릅니다.</p>
-                <label>
-                  Source audio path
-                  <input
-                    placeholder="data/uploads/... 또는 절대경로"
-                    value={aceStepAudioForm.src_audio}
-                    onChange={(event) => setAceStepAudioForm({ ...aceStepAudioForm, src_audio: event.target.value })}
-                  />
-                </label>
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    await runAction(async () => {
-                      const result = await api.uploadAudio(file);
-                      setAceStepAudioForm((prev) => ({ ...prev, src_audio: result.path }));
-                      setMessage(`${result.filename} 업로드 완료`);
-                    });
-                  }}
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("ace.eyebrow", "ACE-STEP 1.5")}
+            eyebrowIcon={
+              currentAceStepMode === "text2music" ? Music2 :
+              currentAceStepMode === "cover" ? Music :
+              currentAceStepMode === "extract" ? Layers :
+              currentAceStepMode === "lego" ? Drum : Music2
+            }
+            title={
+              currentAceStepMode === "text2music" ? t("ace.text2music.title", "ACE-Step 음악 생성")
+                : currentAceStepMode === "cover" ? t("ace.cover.title", "ACE-Step 커버 만들기")
+                : currentAceStepMode === "repaint" ? t("ace.repaint.title", "ACE-Step 구간 다시 만들기")
+                : currentAceStepMode === "extend" ? t("ace.extend.title", "ACE-Step 뒤를 이어붙이기")
+                : currentAceStepMode === "extract" ? t("ace.extract.title", "ACE-Step 트랙 분리")
+                : currentAceStepMode === "lego" ? t("ace.lego.title", "ACE-Step 트랙 추가")
+                : currentAceStepMode === "complete" ? t("ace.complete.title", "ACE-Step 부족한 트랙 채우기")
+                : currentAceStepMode === "understand" ? t("ace.understand.title", "ACE-Step 오디오 분석")
+                : currentAceStepMode === "create_sample" ? t("ace.create_sample.title", "ACE-Step 작곡 초안 생성")
+                : t("ace.format_sample.title", "ACE-Step 입력 정리")
+            }
+            subtitle={
+              currentAceStepMode === "text2music" ? t("ace.text2music.subtitle", "스타일 프롬프트와 가사를 바로 생성 요청으로 보내는 작곡 콘솔입니다.")
+                : currentAceStepMode === "cover" ? t("ace.cover.subtitle", "원본 오디오의 흐름은 남기고 장르, 악기 질감, 보컬 분위기를 새 프롬프트 쪽으로 바꿉니다.")
+                : currentAceStepMode === "repaint" ? t("ace.repaint.subtitle", "전체 곡을 버리지 않고, 타임라인에서 지정한 초 단위 구간만 새로 합성합니다.")
+                : currentAceStepMode === "extend" ? t("ace.extend.subtitle", "소스 오디오 뒤에 이어질 파트를 만듭니다.")
+                : currentAceStepMode === "extract" ? t("ace.extract.subtitle", "원본에서 보컬, 드럼, 베이스처럼 하나의 stem만 뽑아 새 파일로 저장합니다.")
+                : currentAceStepMode === "lego" ? t("ace.lego.subtitle", "기존 믹스는 유지하고, 선택한 악기나 보컬 lane 하나를 새로 얹습니다.")
+                : currentAceStepMode === "complete" ? t("ace.complete.subtitle", "드럼, 베이스, 보컬처럼 비어 있거나 약한 여러 트랙을 한 번에 보강합니다.")
+                : currentAceStepMode === "understand" ? t("ace.understand.subtitle", "오디오를 듣고 BPM, 키, 언어, 가사, 스타일 캡션을 추정해 다음 작곡 입력으로 재사용합니다.")
+                : currentAceStepMode === "create_sample" ? t("ace.create_sample.subtitle", "한 줄 아이디어를 스타일 설명과 가사 초안으로 펼칩니다.")
+                : t("ace.format_sample.subtitle", "Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬습니다.")
+            }
+          />
+
+          {currentAceStepMode !== "text2music" && currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" ? (
+            <WorkspaceCard className="flex flex-col gap-3">
+              <h3 className="text-sm font-medium text-ink">{t("ace.source.title", "Source audio")}</h3>
+              <p className="text-xs text-ink-muted">{t("ace.source.subtitle", "업로드, 직접 경로, 생성 갤러리 중 하나로 작업할 원본을 고릅니다.")}</p>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">Source audio path</Label>
+                <Input
+                  placeholder={t("ace.source.placeholder", "data/uploads/... 또는 절대경로")}
+                  value={aceStepAudioForm.src_audio}
+                  onChange={(event) => setAceStepAudioForm({ ...aceStepAudioForm, src_audio: event.target.value })}
                 />
-                <ServerAudioPicker assets={generatedAudioAssets} selectedPath={aceStepAudioForm.src_audio} onSelect={(asset) => setAceStepAudioForm({ src_audio: asset.path })} />
               </div>
-            ) : null}
+              <Input
+                type="file"
+                accept="audio/*"
+                className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  await runAction(async () => {
+                    const result = await api.uploadAudio(file);
+                    setAceStepAudioForm((prev) => ({ ...prev, src_audio: result.path }));
+                    setMessage(`${result.filename} 업로드 완료`);
+                  });
+                }}
+              />
+              <ServerAudioPicker assets={generatedAudioAssets} selectedPath={aceStepAudioForm.src_audio} onSelect={(asset) => setAceStepAudioForm({ src_audio: asset.path })} />
+            </WorkspaceCard>
+          ) : null}
 
-            {currentAceStepMode !== "text2music" ? (
-              <div className="panel ace-step-common-panel">
-                <h3>Model & LoRA</h3>
-                <p className="text-muted">모델을 비워두면 다운로드된 turbo 계열을 우선 사용합니다. LoRA는 특정 스타일을 더 강하게 입힐 때만 선택하세요.</p>
-                <div className="field-row">
-                  <label>
-                    DiT 모델
-                    <select
-                      value={aceStepCommonForm.config_path}
-                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, config_path: event.target.value })}
-                    >
-                      <option value="">자동 (turbo 우선)</option>
+          {currentAceStepMode !== "text2music" ? (
+            <WorkspaceCard className="flex flex-col gap-3">
+              <h3 className="text-sm font-medium text-ink">{t("ace.model.title", "Model & LoRA")}</h3>
+              <p className="text-xs text-ink-muted">{t("ace.model.subtitle", "모델을 비워두면 다운로드된 turbo 계열을 우선 사용합니다. LoRA는 특정 스타일을 더 강하게 입힐 때만 선택하세요.")}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">DiT {t("ace.model.label", "모델")}</Label>
+                  <Select
+                    value={aceStepCommonForm.config_path || undefined}
+                    onValueChange={(value) => setAceStepCommonForm({ ...aceStepCommonForm, config_path: value === "__auto__" ? "" : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("ace.model.autoTurbo", "자동 (turbo 우선)")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__auto__">{t("ace.model.autoTurbo", "자동 (turbo 우선)")}</SelectItem>
                       {(aceStepRuntime?.model_variants || []).map((variant) => (
-                        <option key={variant.name} value={variant.name}>
-                          {variant.name}
-                          {variant.available ? "" : " (다운로드 필요)"}
-                        </option>
+                        <SelectItem key={variant.name} value={variant.name}>
+                          {variant.name}{variant.available ? "" : " (다운로드 필요)"}
+                        </SelectItem>
                       ))}
-                    </select>
-                  </label>
-                  <label>
-                    5Hz LM
-                    <select
-                      value={aceStepCommonForm.lm_model_path}
-                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_model_path: event.target.value })}
-                    >
-                      <option value="">자동 (1.7B 우선)</option>
-                      {(aceStepRuntime?.lm_models || []).map((variant) => (
-                        <option key={variant.name} value={variant.name}>
-                          {variant.name}
-                          {variant.available ? "" : " (다운로드 필요)"}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="field-row">
-                  <label>
-                    LoRA 경로
-                    <select
-                      value={aceStepCommonForm.lora_path}
-                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_path: event.target.value })}
-                    >
-                      <option value="">사용 안 함</option>
-                      {(aceStepRuntime?.lora_adapters || []).map((lora) => (
-                        <option key={lora.path} value={lora.path}>
-                          {lora.relative_path || lora.name}
-                        </option>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">5Hz LM</Label>
+                  <Select
+                    value={aceStepCommonForm.lm_model_path || undefined}
+                    onValueChange={(value) => setAceStepCommonForm({ ...aceStepCommonForm, lm_model_path: value === "__auto__" ? "" : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("ace.lm.auto", "자동 (1.7B 우선)")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__auto__">{t("ace.lm.auto", "자동 (1.7B 우선)")}</SelectItem>
+                      {(aceStepRuntime?.lm_models || []).map((variant) => (
+                        <SelectItem key={variant.name} value={variant.name}>
+                          {variant.name}{variant.available ? "" : " (다운로드 필요)"}
+                        </SelectItem>
                       ))}
-                    </select>
-                  </label>
-                  <label>
-                    LoRA scale
-                    <input
-                      value={aceStepCommonForm.lora_scale}
-                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_scale: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Adapter name
-                    <input
-                      placeholder="예: voice / style"
-                      value={aceStepCommonForm.lora_adapter_name}
-                      onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_adapter_name: event.target.value })}
-                    />
-                  </label>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            ) : null}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">LoRA {t("ace.lora.path", "경로")}</Label>
+                  <Select
+                    value={aceStepCommonForm.lora_path || undefined}
+                    onValueChange={(value) => setAceStepCommonForm({ ...aceStepCommonForm, lora_path: value === "__none__" ? "" : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("ace.lora.none", "사용 안 함")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{t("ace.lora.none", "사용 안 함")}</SelectItem>
+                      {(aceStepRuntime?.lora_adapters || []).map((lora) => (
+                        <SelectItem key={lora.path} value={lora.path}>{lora.relative_path || lora.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">LoRA scale</Label>
+                  <Input value={aceStepCommonForm.lora_scale} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_scale: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Adapter name</Label>
+                  <Input
+                    placeholder={t("ace.lora.adapterPlaceholder", "예: voice / style")}
+                    value={aceStepCommonForm.lora_adapter_name}
+                    onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lora_adapter_name: event.target.value })}
+                  />
+                </div>
+              </div>
+            </WorkspaceCard>
+          ) : null}
 
-            {currentAceStepMode === "text2music" ? (
-              <form className="music-console" onSubmit={handleAceStepSubmit}>
-                <div className="music-console__head">
-                  <div>
-                    <span className="studio-page-head__eyebrow"><i /> ACE-Step 1.5</span>
-                    <h2>Composer</h2>
-                    <p>스타일 프롬프트와 가사를 바로 생성 요청으로 보내는 작곡 콘솔입니다.</p>
+          {currentAceStepMode === "text2music" ? (
+            <WorkspaceCard>
+            <form id="ace-text2music-form" className="flex flex-col gap-5" onSubmit={handleAceStepSubmit}>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">ACE-Step 1.5 · Composer</span>
+                    <h3 className="text-lg font-semibold text-ink">{t("ace.text2music.composer", "Composer")}</h3>
                   </div>
-                  <label className="music-console__name">
-                    Track name
-                    <input
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Track name</Label>
+                    <Input
                       value={aceStepForm.output_name}
                       onChange={(event) => setAceStepForm({ ...aceStepForm, output_name: event.target.value })}
                     />
-                  </label>
+                  </div>
                 </div>
 
-                <div className="music-preset-strip">
+                <div className="flex flex-wrap gap-2">
                   {ACE_STEP_STYLE_PRESETS.map((preset) => (
-                    <button
-                      className="pill-button"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-pill"
                       key={preset.label}
                       onClick={() => setAceStepForm((prev) => ({ ...prev, prompt: preset.prompt }))}
                       type="button"
                     >
                       {preset.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
 
-                <div className="music-arrangement">
-                  <section className="music-track music-track--prompt">
-                    <div className="music-track__label">
-                      <b>STYLE</b>
-                      <span>prompt lane</span>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <section className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <div className="flex items-baseline gap-2">
+                      <b className="text-xs font-mono uppercase tracking-allcaps text-accent-ink">STYLE</b>
+                      <span className="text-[10px] text-ink-subtle">prompt lane</span>
                     </div>
-                    <textarea
-                      className="music-track__input"
+                    <Textarea
+                      className="min-h-[120px] resize-y border-line bg-canvas"
                       value={aceStepForm.prompt}
                       onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
                     />
                   </section>
-                  <section className="music-track music-track--lyrics">
-                    <div className="music-track__label">
-                      <b>LYRICS</b>
-                      <span>vocal lane</span>
+                  <section className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <div className="flex items-baseline gap-2">
+                      <b className="text-xs font-mono uppercase tracking-allcaps text-accent-ink">LYRICS</b>
+                      <span className="text-[10px] text-ink-subtle">vocal lane</span>
                     </div>
-                    <textarea
-                      className="music-track__input"
+                    <Textarea
+                      className="min-h-[120px] resize-y border-line bg-canvas"
                       value={aceStepForm.lyrics}
                       onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
                     />
                   </section>
-                  <div className="music-wave-lane" aria-hidden="true">
+                </div>
+
+                <div className="relative h-12 overflow-hidden rounded-md border border-line bg-canvas/60" aria-hidden="true">
+                  <div className="flex h-full items-end justify-between gap-px px-1 py-1">
                     {aceComposerBars.map((height, index) => (
-                      <i key={`ace-wave-${index}`} style={{ height }} />
+                      <span key={`ace-wave-${index}`} className="block w-1 bg-accent/60" style={{ height }} />
                     ))}
-                  </div>
-                  <div className="music-spectrum" aria-hidden="true">
-                    {Array.from({ length: 72 }, (_, index) => (
-                      <span
-                        key={`ace-spectrum-${index}`}
-                        style={{
-                          height: 22 + Math.abs(Math.sin(index * 0.21) * 86) + (index % 6) * 4,
-                          opacity: 0.35 + ((index % 9) / 14),
-                        }}
-                      />
-                    ))}
-                    <b />
                   </div>
                 </div>
 
-                <div className="music-control-rack">
-                  <label>
-                    Duration
-                    <input
-                      value={aceStepForm.audio_duration}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, audio_duration: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Steps
-                    <input
-                      value={aceStepForm.infer_step}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, infer_step: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Guidance
-                    <input
-                      value={aceStepForm.guidance_scale}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Seed
-                    <input
-                      value={aceStepForm.manual_seeds}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, manual_seeds: event.target.value })}
-                    />
-                  </label>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Duration</Label>
+                    <Input value={aceStepForm.audio_duration} onChange={(event) => setAceStepForm({ ...aceStepForm, audio_duration: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Steps</Label>
+                    <Input value={aceStepForm.infer_step} onChange={(event) => setAceStepForm({ ...aceStepForm, infer_step: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Guidance</Label>
+                    <Input value={aceStepForm.guidance_scale} onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Seed</Label>
+                    <Input value={aceStepForm.manual_seeds} onChange={(event) => setAceStepForm({ ...aceStepForm, manual_seeds: event.target.value })} />
+                  </div>
                 </div>
 
-                <details className="advanced-inline music-advanced">
-                  <summary>Advanced controls</summary>
-                  <div className="field-row">
-                    <label>
-                      Scheduler
-                      <select
-                        value={aceStepForm.scheduler_type}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, scheduler_type: event.target.value })}
-                      >
-                        <option value="euler">euler</option>
-                        <option value="heun">heun</option>
-                        <option value="pingpong">pingpong</option>
-                      </select>
-                    </label>
-                    <label>
-                      CFG type
-                      <select
-                        value={aceStepForm.cfg_type}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, cfg_type: event.target.value })}
-                      >
-                        <option value="apg">apg</option>
-                        <option value="cfg">cfg</option>
-                      </select>
-                    </label>
-                    <label>
-                      Omega scale
-                      <input
-                        value={aceStepForm.omega_scale}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, omega_scale: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Guidance interval
-                      <input
-                        value={aceStepForm.guidance_interval}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_interval: event.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <div className="field-row">
-                    <label>
-                      Guidance decay
-                      <input
-                        value={aceStepForm.guidance_interval_decay}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_interval_decay: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Min guidance
-                      <input
-                        value={aceStepForm.min_guidance_scale}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, min_guidance_scale: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Text guidance
-                      <input
-                        value={aceStepForm.guidance_scale_text}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale_text: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Lyric guidance
-                      <input
-                        value={aceStepForm.guidance_scale_lyric}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale_lyric: event.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <div className="field-row">
-                    <label>
-                      OSS steps
-                      <input
-                        placeholder="예: 10,20"
-                        value={aceStepForm.oss_steps}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, oss_steps: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Device ID
-                      <input
-                        value={aceStepForm.device_id}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, device_id: event.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <div className="ace-step-toggle-grid">
-                    <label><input checked={aceStepForm.use_erg_tag} onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_tag: event.target.checked })} type="checkbox" /> ERG tag</label>
-                    <label><input checked={aceStepForm.use_erg_lyric} onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_lyric: event.target.checked })} type="checkbox" /> ERG lyric</label>
-                    <label><input checked={aceStepForm.use_erg_diffusion} onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: event.target.checked })} type="checkbox" /> ERG diffusion</label>
-                    <label><input checked={aceStepForm.bf16} onChange={(event) => setAceStepForm({ ...aceStepForm, bf16: event.target.checked })} type="checkbox" /> BF16</label>
-                    <label><input checked={aceStepForm.torch_compile} onChange={(event) => setAceStepForm({ ...aceStepForm, torch_compile: event.target.checked })} type="checkbox" /> torch.compile</label>
-                    <label><input checked={aceStepForm.cpu_offload} onChange={(event) => setAceStepForm({ ...aceStepForm, cpu_offload: event.target.checked })} type="checkbox" /> CPU offload</label>
-                    <label><input checked={aceStepForm.overlapped_decode} onChange={(event) => setAceStepForm({ ...aceStepForm, overlapped_decode: event.target.checked })} type="checkbox" /> Overlapped decode</label>
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    {t("tts.advanced.controls", "Advanced controls")}
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Scheduler</Label>
+                        <Select value={aceStepForm.scheduler_type || undefined} onValueChange={(value) => setAceStepForm({ ...aceStepForm, scheduler_type: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="euler">euler</SelectItem>
+                            <SelectItem value="heun">heun</SelectItem>
+                            <SelectItem value="pingpong">pingpong</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">CFG type</Label>
+                        <Select value={aceStepForm.cfg_type || undefined} onValueChange={(value) => setAceStepForm({ ...aceStepForm, cfg_type: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="apg">apg</SelectItem>
+                            <SelectItem value="cfg">cfg</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Omega scale</Label>
+                        <Input value={aceStepForm.omega_scale} onChange={(event) => setAceStepForm({ ...aceStepForm, omega_scale: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Guidance interval</Label>
+                        <Input value={aceStepForm.guidance_interval} onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_interval: event.target.value })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Guidance decay</Label>
+                        <Input value={aceStepForm.guidance_interval_decay} onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_interval_decay: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Min guidance</Label>
+                        <Input value={aceStepForm.min_guidance_scale} onChange={(event) => setAceStepForm({ ...aceStepForm, min_guidance_scale: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Text guidance</Label>
+                        <Input value={aceStepForm.guidance_scale_text} onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale_text: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Lyric guidance</Label>
+                        <Input value={aceStepForm.guidance_scale_lyric} onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale_lyric: event.target.value })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">OSS steps</Label>
+                        <Input
+                          placeholder={t("ace.oss.placeholder", "예: 10,20")}
+                          value={aceStepForm.oss_steps}
+                          onChange={(event) => setAceStepForm({ ...aceStepForm, oss_steps: event.target.value })}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Device ID</Label>
+                        <Input value={aceStepForm.device_id} onChange={(event) => setAceStepForm({ ...aceStepForm, device_id: event.target.value })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.use_erg_tag} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_tag: checked })} /> ERG tag</label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.use_erg_lyric} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_lyric: checked })} /> ERG lyric</label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.use_erg_diffusion} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: checked })} /> ERG diffusion</label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.bf16} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, bf16: checked })} /> BF16</label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.torch_compile} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, torch_compile: checked })} /> torch.compile</label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.cpu_offload} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, cpu_offload: checked })} /> CPU offload</label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.overlapped_decode} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, overlapped_decode: checked })} /> Overlapped decode</label>
+                    </div>
                   </div>
                 </details>
 
-                <div className="music-analysis">
-                  <div className="music-analysis__metric"><h6>Duration</h6><div className="v">{aceMetricValue(aceStepForm.audio_duration, "60")}<small>sec</small></div><div className="delta">target length</div></div>
-                  <div className="music-analysis__metric"><h6>Steps</h6><div className="v">{aceMetricValue(aceStepForm.infer_step, "27")}</div><div className="delta">diffusion</div></div>
-                  <div className="music-analysis__metric"><h6>Guidance</h6><div className="v">{aceMetricValue(aceStepForm.guidance_scale, "15")}</div><div className="delta">prompt strength</div></div>
-                  <div className="music-analysis__metric"><h6>Render</h6><div className="v">{aceStepForm.bf16 ? "BF16" : "FP32"}</div><div className="delta">{aceStepForm.cpu_offload ? "cpu offload" : "gpu first"}</div></div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-1">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Duration</span>
+                    <span className="text-base font-semibold text-ink">{aceMetricValue(aceStepForm.audio_duration, "60")}<small className="ml-1 text-xs text-ink-muted">sec</small></span>
+                    <span className="text-[10px] text-ink-subtle">target length</span>
+                  </div>
+                  <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-1">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Steps</span>
+                    <span className="text-base font-semibold text-ink">{aceMetricValue(aceStepForm.infer_step, "27")}</span>
+                    <span className="text-[10px] text-ink-subtle">diffusion</span>
+                  </div>
+                  <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-1">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Guidance</span>
+                    <span className="text-base font-semibold text-ink">{aceMetricValue(aceStepForm.guidance_scale, "15")}</span>
+                    <span className="text-[10px] text-ink-subtle">prompt strength</span>
+                  </div>
+                  <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-1">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Render</span>
+                    <span className="text-base font-semibold text-ink">{aceStepForm.bf16 ? "BF16" : "FP32"}</span>
+                    <span className="text-[10px] text-ink-subtle">{aceStepForm.cpu_offload ? "cpu offload" : "gpu first"}</span>
+                  </div>
                 </div>
 
-                <button className="primary-button music-render-button" disabled={loading || !aceStepAvailable} type="submit">
-                  음악 생성
-                </button>
+                <Button disabled={loading || !aceStepAvailable} type="submit" className="self-start">
+                  {t("ace.text2music.submit", "음악 생성")}
+                </Button>
               </form>
+            </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "cover" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepCoverSubmit}>
-                <h3>커버 만들기</h3>
-                <p className="text-muted">원본 오디오의 흐름은 남기고 장르, 악기 질감, 보컬 분위기를 새 프롬프트 쪽으로 바꿉니다.</p>
-                <div className="field-row">
-                  <label>
-                    Style prompt
-                    <textarea
-                      className="ace-step-textarea"
-                      value={aceStepForm.prompt}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Lyrics (선택)
-                    <textarea
-                      className="ace-step-textarea ace-step-textarea--lyrics"
-                      value={aceStepForm.lyrics}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className="field-row">
-                  <label>
-                    Cover strength (0=완전 새로, 1=원곡 가깝게)
-                    <input
-                      value={aceStepCoverForm.audio_cover_strength}
-                      onChange={(event) => setAceStepCoverForm({ ...aceStepCoverForm, audio_cover_strength: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Cover noise strength
-                    <input
-                      value={aceStepCoverForm.cover_noise_strength}
-                      onChange={(event) => setAceStepCoverForm({ ...aceStepCoverForm, cover_noise_strength: event.target.value })}
-                    />
-                  </label>
-                </div>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  Cover 생성
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepCoverSubmit}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
+                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Lyrics ({t("ace.optional", "선택")})</Label>
+                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.lyrics} onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("ace.cover.strength", "Cover strength (0=완전 새로, 1=원곡 가깝게)")}</Label>
+                      <Input value={aceStepCoverForm.audio_cover_strength} onChange={(event) => setAceStepCoverForm({ ...aceStepCoverForm, audio_cover_strength: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Cover noise strength</Label>
+                      <Input value={aceStepCoverForm.cover_noise_strength} onChange={(event) => setAceStepCoverForm({ ...aceStepCoverForm, cover_noise_strength: event.target.value })} />
+                    </div>
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.cover.submit", "Cover 생성")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "repaint" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepRepaintSubmit}>
-                <h3>구간 다시 만들기</h3>
-                <p className="text-muted">전체 곡을 버리지 않고, 타임라인에서 지정한 초 단위 구간만 새로 합성합니다.</p>
-                <div className="field-row">
-                  <label>
-                    Style prompt
-                    <textarea
-                      className="ace-step-textarea"
-                      value={aceStepForm.prompt}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Lyrics
-                    <textarea
-                      className="ace-step-textarea ace-step-textarea--lyrics"
-                      value={aceStepForm.lyrics}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className="field-row">
-                  <label>
-                    Repaint start (초)
-                    <input
-                      value={aceStepRepaintForm.repainting_start}
-                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repainting_start: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Repaint end (초, -1=끝까지)
-                    <input
-                      value={aceStepRepaintForm.repainting_end}
-                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repainting_end: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Mode
-                    <select
-                      value={aceStepRepaintForm.repaint_mode}
-                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_mode: event.target.value })}
-                    >
-                      <option value="conservative">conservative</option>
-                      <option value="balanced">balanced</option>
-                      <option value="aggressive">aggressive</option>
-                    </select>
-                  </label>
-                  <label>
-                    Strength (balanced 전용)
-                    <input
-                      value={aceStepRepaintForm.repaint_strength}
-                      onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_strength: event.target.value })}
-                    />
-                  </label>
-                </div>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  Repaint 생성
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepRepaintSubmit}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
+                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Lyrics</Label>
+                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.lyrics} onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("ace.repaint.start", "Repaint start (초)")}</Label>
+                      <Input value={aceStepRepaintForm.repainting_start} onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repainting_start: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("ace.repaint.end", "Repaint end (초, -1=끝까지)")}</Label>
+                      <Input value={aceStepRepaintForm.repainting_end} onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repainting_end: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Mode</Label>
+                      <Select value={aceStepRepaintForm.repaint_mode || undefined} onValueChange={(value) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_mode: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="conservative">conservative</SelectItem>
+                          <SelectItem value="balanced">balanced</SelectItem>
+                          <SelectItem value="aggressive">aggressive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("ace.repaint.strength", "Strength (balanced 전용)")}</Label>
+                      <Input value={aceStepRepaintForm.repaint_strength} onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_strength: event.target.value })} />
+                    </div>
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.repaint.submit", "Repaint 생성")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "extend" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepExtendSubmit}>
-                <h3>뒤를 이어붙이기</h3>
-                <p className="text-muted">소스 오디오 뒤에 이어질 파트를 만듭니다. 어떤 트랙을 이어갈지 콤마로 적습니다.</p>
-                <label>
-                  Style prompt
-                  <textarea
-                    className="ace-step-textarea"
-                    value={aceStepForm.prompt}
-                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Tracks (콤마로 구분)
-                  <input
-                    value={aceStepExtendForm.complete_tracks}
-                    onChange={(event) => setAceStepExtendForm({ ...aceStepExtendForm, complete_tracks: event.target.value })}
-                  />
-                </label>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  Extend 실행
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepExtendSubmit}>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
+                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("ace.extend.tracks", "Tracks (콤마로 구분)")}</Label>
+                    <Input value={aceStepExtendForm.complete_tracks} onChange={(event) => setAceStepExtendForm({ ...aceStepExtendForm, complete_tracks: event.target.value })} />
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.extend.submit", "Extend 실행")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "extract" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepExtractSubmit}>
-                <h3>트랙 하나만 분리하기</h3>
-                <p className="text-muted">원본에서 보컬, 드럼, 베이스처럼 하나의 stem만 뽑아 새 파일로 저장합니다.</p>
-                <label>
-                  Track
-                  <select
-                    value={aceStepExtractForm.extract_track}
-                    onChange={(event) => setAceStepExtractForm({ ...aceStepExtractForm, extract_track: event.target.value })}
-                  >
-                    {ACE_STEP_TRACK_OPTIONS.map((track) => (
-                      <option key={track} value={track}>
-                        {track}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  Extract
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepExtractSubmit}>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Track</Label>
+                    <Select value={aceStepExtractForm.extract_track || undefined} onValueChange={(value) => setAceStepExtractForm({ ...aceStepExtractForm, extract_track: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ACE_STEP_TRACK_OPTIONS.map((track) => (
+                          <SelectItem key={track} value={track}>{track}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.extract.submit", "Extract")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "lego" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepLegoSubmit}>
-                <h3>트랙 추가하기</h3>
-                <p className="text-muted">기존 믹스는 유지하고, 선택한 악기나 보컬 lane 하나를 새로 얹습니다.</p>
-                <label>
-                  Style prompt
-                  <textarea
-                    className="ace-step-textarea"
-                    value={aceStepForm.prompt}
-                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Track
-                  <select
-                    value={aceStepLegoForm.lego_track}
-                    onChange={(event) => setAceStepLegoForm({ ...aceStepLegoForm, lego_track: event.target.value })}
-                  >
-                    {ACE_STEP_TRACK_OPTIONS.map((track) => (
-                      <option key={track} value={track}>
-                        {track}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  Lego 추가
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepLegoSubmit}>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
+                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Track</Label>
+                    <Select value={aceStepLegoForm.lego_track || undefined} onValueChange={(value) => setAceStepLegoForm({ ...aceStepLegoForm, lego_track: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ACE_STEP_TRACK_OPTIONS.map((track) => (
+                          <SelectItem key={track} value={track}>{track}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.lego.submit", "Lego 추가")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "complete" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepCompleteSubmit}>
-                <h3>부족한 트랙 채우기</h3>
-                <p className="text-muted">드럼, 베이스, 보컬처럼 비어 있거나 약한 여러 트랙을 한 번에 보강합니다.</p>
-                <label>
-                  Style prompt
-                  <textarea
-                    className="ace-step-textarea"
-                    value={aceStepForm.prompt}
-                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Tracks (콤마로 구분)
-                  <input
-                    value={aceStepCompleteForm.complete_tracks}
-                    onChange={(event) => setAceStepCompleteForm({ ...aceStepCompleteForm, complete_tracks: event.target.value })}
-                  />
-                </label>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  Complete 실행
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepCompleteSubmit}>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
+                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("ace.complete.tracks", "Tracks (콤마로 구분)")}</Label>
+                    <Input value={aceStepCompleteForm.complete_tracks} onChange={(event) => setAceStepCompleteForm({ ...aceStepCompleteForm, complete_tracks: event.target.value })} />
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.complete.submit", "Complete 실행")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "understand" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepUnderstandSubmit}>
-                <h3>오디오 분석하기</h3>
-                <p className="text-muted">오디오를 듣고 BPM, 키, 언어, 가사, 스타일 캡션을 추정해 다음 작곡 입력으로 재사용합니다.</p>
-                <button className="primary-button" disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit">
-                  분석 실행
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepUnderstandSubmit}>
+                  <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
+                    {t("ace.understand.submit", "분석 실행")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "create_sample" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepCreateSampleSubmit}>
-                <h3>아이디어를 작곡 초안으로 바꾸기</h3>
-                <p className="text-muted">“비 오는 밤의 한국 시티팝” 같은 한 줄 아이디어를 스타일 설명과 가사 초안으로 펼칩니다.</p>
-                <label>
-                  Query
-                  <textarea
-                    className="ace-step-textarea"
-                    value={aceStepCreateSampleForm.query}
-                    onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, query: event.target.value })}
-                  />
-                </label>
-                <div className="field-row">
-                  <label>
-                    Vocal language (선택)
-                    <input
-                      placeholder="예: ko, en, ja"
-                      value={aceStepCreateSampleForm.vocal_language}
-                      onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, vocal_language: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={aceStepCreateSampleForm.instrumental}
-                      onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, instrumental: event.target.checked })}
-                    />
-                    Instrumental
-                  </label>
-                </div>
-                <button className="primary-button" disabled={loading || !aceStepAvailable} type="submit">
-                  샘플 만들기
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepCreateSampleSubmit}>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Query</Label>
+                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepCreateSampleForm.query} onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, query: event.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Vocal language ({t("ace.optional", "선택")})</Label>
+                      <Input
+                        placeholder={t("ace.create.vocalPlaceholder", "예: ko, en, ja")}
+                        value={aceStepCreateSampleForm.vocal_language}
+                        onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, vocal_language: event.target.value })}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 self-end text-xs text-ink-muted">
+                      <Switch
+                        checked={aceStepCreateSampleForm.instrumental}
+                        onCheckedChange={(checked) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, instrumental: checked })}
+                      />
+                      Instrumental
+                    </label>
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable} type="submit" className="self-start">
+                    {t("ace.create.submit", "샘플 만들기")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {currentAceStepMode === "format_sample" ? (
-              <form className="panel ace-step-task-form" onSubmit={handleAceStepFormatSampleSubmit}>
-                <h3>프롬프트와 가사를 정리하기</h3>
-                <p className="text-muted">
-                  이 기능은 오디오를 바꾸는 기능이 아닙니다. 현재 작곡 폼의 Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬고,
-                  정리된 결과를 다시 작곡 폼에 반영합니다.
-                </p>
-                <button className="primary-button" disabled={loading || !aceStepAvailable} type="submit">
-                  작곡 입력 정리
-                </button>
-              </form>
+              <WorkspaceCard>
+                <form className="flex flex-col gap-4" onSubmit={handleAceStepFormatSampleSubmit}>
+                  <p className="text-xs text-ink-muted">
+                    {t("ace.format.body", "이 기능은 오디오를 바꾸는 기능이 아닙니다. 현재 작곡 폼의 Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬고, 정리된 결과를 다시 작곡 폼에 반영합니다.")}
+                  </p>
+                  <Button disabled={loading || !aceStepAvailable} type="submit" className="self-start">
+                    {t("ace.format.submit", "작곡 입력 정리")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
             ) : null}
 
             {aceStepUnderstandResult ? (
-              <section className="panel">
-                <h3>분석 / 메타 결과</h3>
-                <ul className="ace-step-meta-list">
-                  <li>
-                    <strong>Caption:</strong> {aceStepUnderstandResult.caption || "-"}
+              <WorkspaceCard>
+                <WorkspaceResultHeader title={t("ace.understand.result", "분석 / 메타 결과")} />
+                <ul className="flex flex-col gap-2 text-sm">
+                  <li className="text-ink-muted">
+                    <strong className="text-ink">Caption:</strong> {aceStepUnderstandResult.caption || "-"}
                   </li>
-                  <li>
-                    <strong>BPM:</strong> {aceStepUnderstandResult.bpm ?? "-"} | <strong>Duration:</strong> {aceStepUnderstandResult.duration ?? "-"}s
+                  <li className="text-ink-muted">
+                    <strong className="text-ink">BPM:</strong> {aceStepUnderstandResult.bpm ?? "-"} | <strong className="text-ink">Duration:</strong> {aceStepUnderstandResult.duration ?? "-"}s
                   </li>
-                  <li>
-                    <strong>Key:</strong> {aceStepUnderstandResult.keyscale || "-"} | <strong>Time signature:</strong>{" "}
-                    {aceStepUnderstandResult.timesignature || "-"} | <strong>Language:</strong> {aceStepUnderstandResult.language || "-"}
+                  <li className="text-ink-muted">
+                    <strong className="text-ink">Key:</strong> {aceStepUnderstandResult.keyscale || "-"} | <strong className="text-ink">Time signature:</strong>{" "}
+                    {aceStepUnderstandResult.timesignature || "-"} | <strong className="text-ink">Language:</strong> {aceStepUnderstandResult.language || "-"}
                   </li>
-                  <li>
-                    <strong>Lyrics:</strong>
-                    <pre className="ace-step-meta-lyrics">{aceStepUnderstandResult.lyrics || "-"}</pre>
+                  <li className="text-ink-muted">
+                    <strong className="text-ink">Lyrics:</strong>
+                    <pre className="mt-1 max-h-60 overflow-auto rounded-md border border-line bg-canvas/60 p-2 text-xs font-mono whitespace-pre-wrap">{aceStepUnderstandResult.lyrics || "-"}</pre>
                   </li>
-                  {aceStepUnderstandResult.error ? <li className="text-error">Error: {aceStepUnderstandResult.error}</li> : null}
+                  {aceStepUnderstandResult.error ? <li className="text-danger">Error: {aceStepUnderstandResult.error}</li> : null}
                 </ul>
-              </section>
+              </WorkspaceCard>
             ) : null}
 
             {lastAceStepRecord ? (
-              <div className="result-stack">
+              <WorkspaceCard>
+                <WorkspaceResultHeader title={getRecordDisplayTitle(lastAceStepRecord)} badge="ACE-Step" />
                 <AudioCard title={getRecordDisplayTitle(lastAceStepRecord)} subtitle="ACE-Step" record={lastAceStepRecord} />
-              </div>
+              </WorkspaceCard>
             ) : null}
-          </section>
-        </section>
+        </WorkspaceShell>
       ) : null}
 
-      {activeTab === "applio_train" || activeTab === "applio_convert" ? (
-        <section className="workspace workspace--stacked">
-          {activeTab === "applio_train" ? (
-            <form className="panel voice-changer-panel" onSubmit={handleRvcTrainSubmit}>
-              <div className="section-heading">
-                <span className="step-badge">1</span>
-                <div>
-                  <h2>목표 목소리 모델 만들기</h2>
-                  <p>Applio/RVC는 참고 음성 하나를 바로 쓰는 방식이 아니라, 목표 목소리 데이터로 모델을 만든 뒤 변환에 사용합니다.</p>
-                </div>
-              </div>
-              <div className="rvc-train-hero">
-                <div>
-                  <strong>준비물</strong>
-                  <p>목표 목소리만 깨끗하게 들어 있는 WAV 폴더를 넣으세요. 같은 화자 음성 10분 이상을 권장합니다.</p>
-                </div>
-                <div>
-                  <strong>결과물</strong>
-                  <p>학습이 끝나면 `.pth` 모델과 `.index`가 생기고, 변환 탭의 목소리 목록에 나타납니다.</p>
-                </div>
-              </div>
-              <div className="field-row">
-                <label>
-                  모델 이름
-                  <input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, model_name: event.target.value })} />
-                  <span className="field-caption">예: mai-rvc, narrator-clean. 화면에는 이 이름으로 표시됩니다.</span>
-                </label>
-                <label>
-                  목표 목소리 폴더
-                  <input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
-                  <span className="field-caption">이 폴더 안의 WAV 파일들이 RVC 모델의 목표 음색이 됩니다.</span>
-                </label>
-              </div>
-              <div className="field-row">
-                <label>
-                  샘플레이트
-                  <select value={rvcTrainForm.sample_rate} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, sample_rate: event.target.value })}>
-                    <option value="40000">40k - 일반 권장</option>
-                    <option value="48000">48k - 고음질</option>
-                    <option value="32000">32k - 가벼움</option>
-                  </select>
-                </label>
-                <label>
-                  학습 에포크
-                  <input value={rvcTrainForm.total_epoch} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, total_epoch: event.target.value })} />
-                </label>
-                <label>
-                  배치 크기
-                  <input value={rvcTrainForm.batch_size} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, batch_size: event.target.value })} />
-                </label>
-              </div>
-              <details className="advanced-controls">
-                <summary>Advanced controls</summary>
-                <div className="field-row">
-                  <label>
-                    F0 method
-                    <select value={rvcTrainForm.f0_method} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, f0_method: event.target.value })}>
-                      <option value="rmvpe">rmvpe</option>
-                      <option value="fcpe">fcpe</option>
-                      <option value="crepe">crepe</option>
-                    </select>
-                  </label>
-                  <label>
-                    Content embedder
-                    <select value={rvcTrainForm.embedder_model} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, embedder_model: event.target.value })}>
-                      <option value="contentvec">contentvec</option>
-                      <option value="korean-hubert-base">korean-hubert-base</option>
-                      <option value="spin">spin</option>
-                      <option value="spin-v2">spin-v2</option>
-                    </select>
-                  </label>
-                  <label>
-                    CPU cores
-                    <input value={rvcTrainForm.cpu_cores} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cpu_cores: event.target.value })} />
-                  </label>
-                  <label>
-                    GPU
-                    <input value={rvcTrainForm.gpu} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, gpu: event.target.value })} />
-                  </label>
-                </div>
-                <div className="field-row">
-                  <label>
-                    Cut mode
-                    <select value={rvcTrainForm.cut_preprocess} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cut_preprocess: event.target.value })}>
-                      <option value="Automatic">Automatic</option>
-                      <option value="Simple">Simple</option>
-                      <option value="Skip">Skip</option>
-                    </select>
-                  </label>
-                  <label>
-                    Chunk length
-                    <input value={rvcTrainForm.chunk_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, chunk_len: event.target.value })} />
-                  </label>
-                  <label>
-                    Overlap
-                    <input value={rvcTrainForm.overlap_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, overlap_len: event.target.value })} />
-                  </label>
-                  <label>
-                    Index
-                    <select value={rvcTrainForm.index_algorithm} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, index_algorithm: event.target.value })}>
-                      <option value="Auto">Auto</option>
-                      <option value="Faiss">Faiss</option>
-                      <option value="KMeans">KMeans</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="field-row">
-                  <label className="checkbox-row">
-                    <input type="checkbox" checked={rvcTrainForm.noise_reduction} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, noise_reduction: event.target.checked })} />
-                    Noise reduction
-                  </label>
-                  <label>
-                    Clean strength
-                    <input value={rvcTrainForm.clean_strength} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, clean_strength: event.target.value })} />
-                  </label>
-                  <label className="checkbox-row">
-                    <input type="checkbox" checked={rvcTrainForm.checkpointing} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, checkpointing: event.target.checked })} />
-                    Memory-efficient training
-                  </label>
-                </div>
-              </details>
-              {lastRvcTrainingResult ? <p className="field-hint">{lastRvcTrainingResult}</p> : null}
-              <button className="primary-button" disabled={loading || !rvcTrainForm.model_name || !rvcTrainForm.dataset_path} type="submit">
-                RVC 모델 만들기
-              </button>
-            </form>
-          ) : null}
+      {activeTab === "applio_train" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("applio_train.eyebrow", "RVC TRAINING")}
+            eyebrowIcon={GitMerge}
+            title={t("applio_train.title", "목표 목소리 모델 만들기")}
+            subtitle={t("applio_train.subtitle", "Applio/RVC는 참고 음성 하나를 바로 쓰는 방식이 아니라, 목표 목소리 데이터로 모델을 만든 뒤 변환에 사용합니다.")}
+            action={{
+              label: t("applio_train.action.create", "RVC 모델 만들기"),
+              formId: "applio-train-form",
+              disabled: loading || !rvcTrainForm.model_name || !rvcTrainForm.dataset_path,
+              loading,
+            }}
+          />
 
-          {activeTab === "applio_convert" ? (
-            <div className="voice-changer-layout">
-              <section className="panel voice-changer-source">
-                <div className="section-heading">
-                  <span className="step-badge">1</span>
-                  <div>
-                    <h2>변환할 원본 오디오</h2>
-                    <p>말소리나 분리된 보컬을 넣고, 오른쪽에서 학습된 RVC 목소리를 선택합니다.</p>
-                  </div>
+          <WorkspaceCard>
+            <form id="applio-train-form" className="flex flex-col gap-4" onSubmit={handleRvcTrainSubmit}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-2">
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <strong className="text-sm font-medium text-ink">{t("applio_train.requirements", "준비물")}</strong>
+                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.requirementsBody", "목표 목소리만 깨끗하게 들어 있는 WAV 폴더를 넣으세요. 같은 화자 음성 10분 이상을 권장합니다.")}</p>
                 </div>
-                <label className="upload-field upload-field--compact">
-                  새 음성 업로드
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) {
-                        void handleAudioToolUpload(file);
-                      }
-                    }}
-                  />
-                </label>
-                <label>
-                  직접 경로 입력
-                  <input
-                    placeholder="data/generated/... 또는 /mnt/d/..."
-                    value={voiceChangerForm.audio_path}
-                    onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, audio_path: event.target.value })}
-                  />
-                </label>
-                {voiceChangerForm.audio_path ? (
-                  <div className="selected-source-card">
-                    <span className="meta-label">선택한 원본</span>
-                    <strong>{selectedVoiceChangerAsset?.filename || audioToolUpload?.filename || basenameFromPath(voiceChangerForm.audio_path)}</strong>
-                    <audio controls src={fileUrlFromPath(voiceChangerForm.audio_path)} />
-                  </div>
-                ) : (
-                  <p className="field-hint">업로드하거나 아래 목록에서 변환할 원본 음성을 선택하세요.</p>
-                )}
-                <ServerAudioPicker assets={generatedAudioAssets} selectedPath={voiceChangerForm.audio_path} onSelect={handleSelectAudioToolAsset} />
-              </section>
-
-              <form className="panel voice-changer-panel" onSubmit={handleVoiceChangerSubmit}>
-                <div className="section-heading">
-                  <span className="step-badge">2</span>
-                  <div>
-                    <h2>학습된 목소리로 변환</h2>
-                    <p>훈련 탭에서 만든 RVC 모델이나 다운로드한 RVC 모델을 선택합니다.</p>
-                  </div>
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <strong className="text-sm font-medium text-ink">{t("applio_train.outputs", "결과물")}</strong>
+                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.outputsBody", "학습이 끝나면 `.pth` 모델과 `.index`가 생기고, 변환 탭의 목소리 목록에 나타납니다.")}</p>
                 </div>
-                {!voiceChangerAvailable ? <p className="field-hint">사용 가능한 RVC 목소리 모델이 없습니다. 모델 다운로드나 RVC 학습을 먼저 실행해 주세요.</p> : null}
-                <label>
-                  바꿀 목소리
-                  <select value={voiceChangerForm.selected_model_id} onChange={(event) => handleSelectVoiceChangerModel(event.target.value)}>
-                    <option value="">목소리 선택</option>
-                    {voiceChangerModels.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {selectedVoiceChangerModel ? (
-                  <div className="voice-model-summary">
-                    <span className="voice-model-summary__avatar" aria-hidden="true" />
-                    <div>
-                      <span className="meta-label">선택한 목소리</span>
-                      <strong>{selectedVoiceChangerModel.label}</strong>
-                      <p>RVC 모델과 검색 인덱스를 사용해 원본 음성의 음색을 바꿉니다.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.modelName", "모델 이름")}</Label>
+                  <Input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, model_name: event.target.value })} />
+                  <span className="text-[11px] text-ink-subtle">{t("applio_train.modelNameHint", "예: mai-rvc, narrator-clean. 화면에는 이 이름으로 표시됩니다.")}</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.datasetPath", "목표 목소리 폴더")}</Label>
+                  <Input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
+                  <span className="text-[11px] text-ink-subtle">{t("applio_train.datasetHint", "이 폴더 안의 WAV 파일들이 RVC 모델의 목표 음색이 됩니다.")}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.sampleRate", "샘플레이트")}</Label>
+                  <Select value={rvcTrainForm.sample_rate || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, sample_rate: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="40000">40k - 일반 권장</SelectItem>
+                      <SelectItem value="48000">48k - 고음질</SelectItem>
+                      <SelectItem value="32000">32k - 가벼움</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.epochs", "학습 에포크")}</Label>
+                  <Input value={rvcTrainForm.total_epoch} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, total_epoch: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.batchSize", "배치 크기")}</Label>
+                  <Input value={rvcTrainForm.batch_size} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, batch_size: event.target.value })} />
+                </div>
+              </div>
+              <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                  {t("tts.advanced.controls", "Advanced controls")}
+                  <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                </summary>
+                <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">F0 method</Label>
+                      <Select value={rvcTrainForm.f0_method || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, f0_method: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="rmvpe">rmvpe</SelectItem>
+                          <SelectItem value="fcpe">fcpe</SelectItem>
+                          <SelectItem value="crepe">crepe</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Content embedder</Label>
+                      <Select value={rvcTrainForm.embedder_model || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, embedder_model: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="contentvec">contentvec</SelectItem>
+                          <SelectItem value="korean-hubert-base">korean-hubert-base</SelectItem>
+                          <SelectItem value="spin">spin</SelectItem>
+                          <SelectItem value="spin-v2">spin-v2</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">CPU cores</Label>
+                      <Input value={rvcTrainForm.cpu_cores} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cpu_cores: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">GPU</Label>
+                      <Input value={rvcTrainForm.gpu} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, gpu: event.target.value })} />
                     </div>
                   </div>
-                ) : null}
-                <div className="field-row">
-                  <label>
-                    음정 추적 방식
-                    <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
-                      <option value="rmvpe">RMVPE - 기본 권장</option>
-                      <option value="fcpe">FCPE - 빠른 처리</option>
-                      <option value="crepe">CREPE - 선율 민감</option>
-                    </select>
-                  </label>
-                  <label>
-                    음색 반영 강도
-                    <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
-                  </label>
-                  <label>
-                    발음 보존
-                    <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
-                  </label>
-                </div>
-                <details className="advanced-controls voice-changer-advanced">
-                  <summary>Advanced controls</summary>
-                  <div className="field-row">
-                    <label>
-                      RVC model path
-                      <input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Cut mode</Label>
+                      <Select value={rvcTrainForm.cut_preprocess || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, cut_preprocess: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Automatic">Automatic</SelectItem>
+                          <SelectItem value="Simple">Simple</SelectItem>
+                          <SelectItem value="Skip">Skip</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Chunk length</Label>
+                      <Input value={rvcTrainForm.chunk_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, chunk_len: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Overlap</Label>
+                      <Input value={rvcTrainForm.overlap_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, overlap_len: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Index</Label>
+                      <Select value={rvcTrainForm.index_algorithm || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, index_algorithm: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Auto">Auto</SelectItem>
+                          <SelectItem value="Faiss">Faiss</SelectItem>
+                          <SelectItem value="KMeans">KMeans</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label className="flex items-center gap-2 text-xs text-ink-muted">
+                      <Switch checked={rvcTrainForm.noise_reduction} onCheckedChange={(checked) => setRvcTrainForm({ ...rvcTrainForm, noise_reduction: checked })} />
+                      Noise reduction
                     </label>
-                    <label>
-                      Index path
-                      <input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Clean strength</Label>
+                      <Input value={rvcTrainForm.clean_strength} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, clean_strength: event.target.value })} />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted">
+                      <Switch checked={rvcTrainForm.checkpointing} onCheckedChange={(checked) => setRvcTrainForm({ ...rvcTrainForm, checkpointing: checked })} />
+                      Memory-efficient training
                     </label>
                   </div>
-                  <div className="field-row">
-                    <label>
-                      Pitch shift
-                      <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
-                    </label>
-                    <label>
-                      Clean strength
-                      <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
-                    </label>
-                    <label>
-                      Content embedder
-                      <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
-                        <option value="contentvec">contentvec</option>
-                        <option value="hubert">hubert</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="field-row">
-                    <label className="checkbox-row">
-                      <input type="checkbox" checked={voiceChangerForm.split_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, split_audio: event.target.checked })} />
-                      Split long audio
-                    </label>
-                    <label className="checkbox-row">
-                      <input type="checkbox" checked={voiceChangerForm.f0_autotune} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_autotune: event.target.checked })} />
-                      F0 autotune
-                    </label>
-                    <label className="checkbox-row">
-                      <input type="checkbox" checked={voiceChangerForm.clean_audio} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_audio: event.target.checked })} />
-                      Clean output audio
-                    </label>
-                  </div>
-                </details>
-                <button className="primary-button" disabled={loading || !voiceChangerAvailable || !voiceChangerForm.audio_path || !voiceChangerForm.model_path} type="submit">
-                  목소리 바꾸기
-                </button>
-              </form>
-            </div>
-          ) : null}
-
-          {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
-            <section className="panel">
-              <h2>방금 변환한 결과</h2>
-              <AudioCard title="Applio 변환 결과" record={lastAudioToolResult.record} />
-            </section>
-          ) : null}
-        </section>
-      ) : null}
-
-      {activeTab === "applio_batch" ? (
-        <section className="workspace workspace--stacked">
-          <div className="voice-changer-layout">
-            <section className="panel voice-changer-source">
-              <div className="section-heading">
-                <span className="step-badge">1</span>
-                <div>
-                  <h2>배치 변환할 오디오</h2>
-                  <p>생성 갤러리에서 여러 음성을 고르거나 새 파일을 업로드해 같은 RVC 모델로 한 번에 변환합니다.</p>
-                </div>
-              </div>
-              <label className="upload-field upload-field--compact">
-                배치에 파일 추가
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleApplioBatchUpload(file);
-                    }
-                  }}
-                />
-              </label>
-              <div className="field-row field-row--with-action">
-                <label>
-                  직접 경로 추가
-                  <input
-                    placeholder="data/generated/... 또는 /mnt/d/..."
-                    value={applioBatchManualPath}
-                    onChange={(event) => setApplioBatchManualPath(event.target.value)}
-                  />
-                </label>
-                <button className="secondary-button" onClick={addApplioBatchManualPath} type="button">
-                  경로 추가
-                </button>
-              </div>
-              <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addApplioBatchAsset} />
-            </section>
-
-            <form className="panel voice-changer-panel" onSubmit={handleVoiceChangerBatchSubmit}>
-              <div className="section-heading">
-                <span className="step-badge">2</span>
-                <div>
-                  <h2>같은 목소리로 일괄 변환</h2>
-                  <p>목소리 모델과 변환 설정은 단일 변환과 동일하게 적용됩니다.</p>
-                </div>
-              </div>
-              <div className="selected-source-card">
-                <span className="meta-label">선택된 오디오</span>
-                <strong>{applioBatchPaths.length}개</strong>
-                <div className="voice-card-actions">
-                  <button onClick={() => setApplioBatchPaths([])} type="button">목록 비우기</button>
-                </div>
-                <div className="audio-asset-list">
-                  {selectedApplioBatchAssets.map((asset) => (
-                    <article className="audio-asset-card is-selected" key={asset.path}>
-                      <div className="audio-asset-card__header">
-                        <div>
-                          <strong>{asset.filename}</strong>
-                          <span>{asset.source === "generated" ? "생성 갤러리" : "업로드"}</span>
-                        </div>
-                        <button className="secondary-button" onClick={() => setApplioBatchPaths((prev) => prev.filter((path) => path !== asset.path))} type="button">
-                          제거
-                        </button>
-                      </div>
-                      <audio controls className="audio-card__player" src={mediaUrl(asset.url)} />
-                    </article>
-                  ))}
-                  {selectedApplioBatchExternalPaths.map((path) => (
-                    <article className="audio-asset-card is-selected" key={path}>
-                      <div className="audio-asset-card__header">
-                        <div>
-                          <strong>{basenameFromPath(path)}</strong>
-                          <span>직접 경로</span>
-                        </div>
-                        <button className="secondary-button" onClick={() => setApplioBatchPaths((prev) => prev.filter((item) => item !== path))} type="button">
-                          제거
-                        </button>
-                      </div>
-                      {path.startsWith("data/") ? (
-                        <audio controls className="audio-card__player" src={fileUrlFromPath(path)} />
-                      ) : (
-                        <span className="field-hint">외부 경로는 변환 실행 시 백엔드가 직접 읽습니다.</span>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              </div>
-              <label>
-                바꿀 목소리
-                <select value={voiceChangerForm.selected_model_id} onChange={(event) => handleSelectVoiceChangerModel(event.target.value)}>
-                  <option value="">목소리 선택</option>
-                  {voiceChangerModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="field-row">
-                <label>
-                  음정 추적 방식
-                  <select value={voiceChangerForm.f0_method} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: event.target.value })}>
-                    <option value="rmvpe">RMVPE - 기본 권장</option>
-                    <option value="fcpe">FCPE - 빠른 처리</option>
-                    <option value="crepe">CREPE - 선율 민감</option>
-                  </select>
-                </label>
-                <label>
-                  음색 반영 강도
-                  <input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
-                </label>
-                <label>
-                  발음 보존
-                  <input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
-                </label>
-              </div>
-              <details className="advanced-controls voice-changer-advanced">
-                <summary>Advanced controls</summary>
-                <div className="field-row">
-                  <label>
-                    RVC model path
-                    <input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
-                  </label>
-                  <label>
-                    Index path
-                    <input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
-                  </label>
-                </div>
-                <div className="field-row">
-                  <label>
-                    Pitch shift
-                    <input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
-                  </label>
-                  <label>
-                    Clean strength
-                    <input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
-                  </label>
-                  <label>
-                    Content embedder
-                    <select value={voiceChangerForm.embedder_model} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: event.target.value })}>
-                      <option value="contentvec">contentvec</option>
-                      <option value="hubert">hubert</option>
-                    </select>
-                  </label>
                 </div>
               </details>
-              <button className="primary-button" disabled={loading || !voiceChangerAvailable || !applioBatchPaths.length || !voiceChangerForm.model_path} type="submit">
-                {applioBatchPaths.length}개 변환
-              </button>
+              {lastRvcTrainingResult ? <p className="text-xs text-ink-muted">{lastRvcTrainingResult}</p> : null}
             </form>
-          </div>
+          </WorkspaceCard>
 
-          {lastAudioToolResult?.kind === "voice_changer_batch" ? (
-            <section className="panel">
-              <h2>배치 변환 결과</h2>
-              <div className="audio-grid">
-                {lastAudioToolResult.assets.map((asset) => (
-                  <article className="audio-asset-card" key={asset.path}>
-                    <strong>{asset.filename}</strong>
-                    <audio controls src={mediaUrl(asset.url)} />
-                  </article>
-                ))}
-              </div>
-            </section>
+          {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("applio.result.title", "방금 변환한 결과")} badge={t("tts.result.latest")} />
+              <AudioCard title={t("applio.result.subtitle", "Applio 변환 결과")} record={lastAudioToolResult.record} />
+            </WorkspaceCard>
           ) : null}
-        </section>
+        </WorkspaceShell>
       ) : null}
 
-      {activeTab === "applio_blend" ? (
-        <section className="workspace workspace--stacked">
-          <form className="panel voice-changer-panel" onSubmit={handleVoiceModelBlendSubmit}>
-            <div className="section-heading">
-              <span className="step-badge">1</span>
-              <div>
-                <h2>두 RVC 모델을 섞어 새 목소리 만들기</h2>
-                <p>Applio Voice Blender처럼 모델 A와 모델 B의 가중치를 비율로 합쳐 새로운 `.pth` 모델을 만듭니다.</p>
+      {activeTab === "applio_convert" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("applio_convert.eyebrow", "RVC CONVERT")}
+            eyebrowIcon={GitMerge}
+            title={t("applio_convert.title", "학습된 목소리로 변환")}
+            subtitle={t("applio_convert.subtitle", "말소리나 분리된 보컬을 넣고, 학습된 RVC 목소리를 선택해 변환합니다.")}
+            action={{
+              label: t("applio_convert.action.run", "목소리 바꾸기"),
+              formId: "applio-convert-form",
+              disabled: loading || !voiceChangerAvailable || !voiceChangerForm.audio_path || !voiceChangerForm.model_path,
+              loading,
+            }}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <WorkspaceCard className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                <h3 className="text-sm font-medium text-ink">{t("applio_convert.source.title", "변환할 원본 오디오")}</h3>
               </div>
-            </div>
-            <label>
-              새 모델 이름
-              <input value={applioBlendForm.model_name} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_name: event.target.value })} />
-            </label>
-            <div className="field-row">
-              <label>
-                모델 A
-                <select value={applioBlendForm.model_path_a} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_path_a: event.target.value })}>
-                  <option value="">모델 선택</option>
-                  {voiceChangerModels.map((model) => (
-                    <option key={model.model_path} value={model.model_path}>{model.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                모델 B
-                <select value={applioBlendForm.model_path_b} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_path_b: event.target.value })}>
-                  <option value="">모델 선택</option>
-                  {voiceChangerModels.map((model) => (
-                    <option key={model.model_path} value={model.model_path}>{model.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                A 반영 비율
-                <input value={applioBlendForm.ratio} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, ratio: event.target.value })} />
-              </label>
-            </div>
-            <div className="voice-model-summary">
-              <span className="voice-model-summary__avatar" aria-hidden="true" />
-              <div>
-                <span className="meta-label">블렌딩 미리보기</span>
-                <strong>{selectedBlendModelA?.label || "모델 A"} + {selectedBlendModelB?.label || "모델 B"}</strong>
-                <p>비율 {applioBlendForm.ratio || "0.5"}는 모델 A 쪽 성향을 얼마나 강하게 둘지 결정합니다.</p>
-              </div>
-            </div>
-            {lastRvcTrainingResult ? <p className="field-hint">{lastRvcTrainingResult}</p> : null}
-            <button className="primary-button" disabled={loading || !applioBlendForm.model_name || !applioBlendForm.model_path_a || !applioBlendForm.model_path_b} type="submit">
-              모델 블렌딩
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {activeTab === "audio_editor" ? (
-        <section className="workspace workspace--stacked audio-editor-workspace">
-          <section className="audio-editor-console">
-            <div className="audio-editor-console__header">
-              <div>
-                <span className="eyebrow">AUDIO EDITOR</span>
-                <h2>구간을 고르고 바로 편집하기</h2>
-                <p>생성 갤러리, 업로드 파일, 직접 경로 중 하나를 골라 자르기, 페이드, 볼륨, 정규화를 적용합니다.</p>
-              </div>
-              <div className="audio-editor-source-tabs" role="tablist" aria-label="오디오 소스">
-                {(["gallery", "upload", "path"] as const).map((source) => (
-                  <button
-                    className={audioEditorSource === source ? "mini-tab is-active" : "mini-tab"}
-                    key={source}
-                    onClick={() => setAudioEditorSource(source)}
-                    type="button"
-                  >
-                    {source === "gallery" ? "생성 갤러리" : source === "upload" ? "파일 업로드" : "경로 입력"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="audio-editor-console__body">
-              <section className="audio-editor-source-panel">
-                {audioEditorSource === "gallery" ? (
-                  <>
-                    <h3>편집할 음성 선택</h3>
-                    <ServerAudioPicker assets={audioAssets} selectedPath={audioEditorForm.audio_path} onSelect={(asset) => {
-                      setAudioToolUpload(null);
-                      setAudioEditorForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || basenameFromPath(asset.filename) }));
-                      setAudioEditorDuration(0);
-                    }} />
-                  </>
-                ) : null}
-
-                {audioEditorSource === "upload" ? (
-                  <label className="upload-field upload-field--editor">
-                    <strong>새 오디오 파일 불러오기</strong>
-                    <span>WAV, FLAC, MP3 등 브라우저가 선택할 수 있는 오디오를 업로드합니다.</span>
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void handleAudioToolUpload(file);
-                          setAudioEditorSource("upload");
-                          setAudioEditorDuration(0);
-                        }
-                      }}
-                    />
-                  </label>
-                ) : null}
-
-                {audioEditorSource === "path" ? (
-                  <label className="editor-path-field">
-                    서버 오디오 경로
-                    <input
-                      placeholder="data/generated/.../voice.wav"
-                      value={audioEditorForm.audio_path}
-                      onChange={(event) => {
-                        setAudioEditorForm((prev) => ({ ...prev, audio_path: event.target.value }));
-                        setAudioEditorDuration(0);
-                      }}
-                    />
-                  </label>
-                ) : null}
-              </section>
-
-              <form className="audio-editor-stage" onSubmit={handleAudioEditSubmit}>
-                <div className="audio-editor-stage__top">
-                  <div>
-                    <span className="meta-label">SELECTED TAKE</span>
-                    <h3>{selectedAudioEditorAsset?.filename || audioToolUpload?.filename || basenameFromPath(audioEditorForm.audio_path) || "아직 선택된 오디오 없음"}</h3>
-                  </div>
-                  <label>
-                    저장 이름
-                    <input value={audioEditorForm.output_name} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, output_name: event.target.value })} />
-                  </label>
-                </div>
-
-                {audioEditorForm.audio_path ? (
-                  <audio
-                    className="audio-editor-player"
-                    controls
-                    onLoadedMetadata={(event) => setAudioEditorDuration(event.currentTarget.duration || 0)}
-                    src={selectedAudioEditorAsset ? mediaUrl(selectedAudioEditorAsset.url) : mediaUrl(fileUrlFromPath(audioEditorForm.audio_path))}
-                  />
-                ) : null}
-
-                <div className="audio-editor-waveform" aria-label="편집 구간">
-                  <div className="audio-editor-region" style={{ left: audioEditorRegionLeft, width: audioEditorRegionWidth }} />
-                  {audioEditorBars.map((height, index) => (
-                    <span key={`${audioEditorForm.audio_path}-${index}`} style={{ height }} />
-                  ))}
-                </div>
-
-                <div className="audio-editor-range-pair">
-                  <label>
-                    Start
-                    <input
-                      max={audioEditorDurationLimit}
-                      min="0"
-                      step="0.01"
-                      type="range"
-                      value={audioEditorStart}
-                      onChange={(event) => setAudioEditorForm((prev) => ({ ...prev, start_sec: event.target.value }))}
-                    />
-                    <input value={audioEditorForm.start_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, start_sec: event.target.value })} />
-                  </label>
-                  <label>
-                    End
-                    <input
-                      max={audioEditorDurationLimit}
-                      min="0"
-                      step="0.01"
-                      type="range"
-                      value={audioEditorEnd}
-                      onChange={(event) => setAudioEditorForm((prev) => ({ ...prev, end_sec: event.target.value }))}
-                    />
-                    <input placeholder="끝까지" value={audioEditorForm.end_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, end_sec: event.target.value })} />
-                  </label>
-                </div>
-
-                <div className="audio-editor-rack">
-                  <label>
-                    Gain dB
-                    <input min="-24" max="18" step="0.5" type="range" value={audioEditorForm.gain_db} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, gain_db: event.target.value })} />
-                    <input value={audioEditorForm.gain_db} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, gain_db: event.target.value })} />
-                  </label>
-                  <label>
-                    Fade in
-                    <input value={audioEditorForm.fade_in_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, fade_in_sec: event.target.value })} />
-                  </label>
-                  <label>
-                    Fade out
-                    <input value={audioEditorForm.fade_out_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, fade_out_sec: event.target.value })} />
-                  </label>
-                  <label>
-                    Sample rate
-                    <select value={audioEditorForm.sample_rate} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, sample_rate: event.target.value })}>
-                      <option value="24000">24 kHz</option>
-                      <option value="44100">44.1 kHz</option>
-                      <option value="48000">48 kHz</option>
-                    </select>
-                  </label>
-                  <label>
-                    Format
-                    <select value={audioEditorForm.output_format} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, output_format: event.target.value })}>
-                      <option value="wav">WAV</option>
-                      <option value="flac">FLAC</option>
-                      <option value="ogg">OGG</option>
-                    </select>
-                  </label>
-                  <label className="checkbox-line">
-                    <input checked={audioEditorForm.normalize} type="checkbox" onChange={(event) => setAudioEditorForm({ ...audioEditorForm, normalize: event.target.checked })} />
-                    Normalize peak
-                  </label>
-                  <label className="checkbox-line">
-                    <input checked={audioEditorForm.reverse} type="checkbox" onChange={(event) => setAudioEditorForm({ ...audioEditorForm, reverse: event.target.checked })} />
-                    Reverse
-                  </label>
-                </div>
-
-                <button className="primary-button" disabled={loading || !audioEditorForm.audio_path} type="submit">
-                  편집본 저장
-                </button>
-              </form>
-            </div>
-          </section>
-
-          {lastAudioToolResult?.kind === "audio_editor" && lastAudioToolResult.record ? (
-            <AudioCard title="편집 결과" subtitle="생성 갤러리에 저장됨" record={lastAudioToolResult.record} />
-          ) : null}
-        </section>
-      ) : null}
-
-      {activeTab === "audio_denoise" ? (
-        <section className="workspace workspace--stacked audio-editor-workspace">
-          <section className="audio-editor-console audio-denoise-console">
-            <div className="audio-editor-console__header">
-              <div>
-                <span className="eyebrow">VOICE CLEANUP</span>
-                <h2>노이즈를 줄이고 목소리만 또렷하게</h2>
-                <p>생성 갤러리, 업로드 파일, 서버 경로에서 음성을 가져와 배경 노이즈와 불필요한 대역을 정리합니다.</p>
-              </div>
-              <div className="audio-editor-source-tabs" role="tablist" aria-label="음성 정제 소스">
-                {(["gallery", "upload", "path"] as const).map((source) => (
-                  <button
-                    className={audioDenoiseSource === source ? "mini-tab is-active" : "mini-tab"}
-                    key={source}
-                    onClick={() => setAudioDenoiseSource(source)}
-                    type="button"
-                  >
-                    {source === "gallery" ? "생성 갤러리" : source === "upload" ? "파일 업로드" : "경로 입력"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="audio-editor-console__body">
-              <section className="audio-editor-source-panel">
-                {audioDenoiseSource === "gallery" ? (
-                  <>
-                    <h3>정제할 음성 선택</h3>
-                    <ServerAudioPicker assets={audioAssets} selectedPath={audioDenoiseForm.audio_path} onSelect={(asset) => {
-                      setAudioToolUpload(null);
-                      setAudioDenoiseForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || `clean-${basenameFromPath(asset.filename)}` }));
-                    }} />
-                  </>
-                ) : null}
-
-                {audioDenoiseSource === "upload" ? (
-                  <label className="upload-field upload-field--editor">
-                    <strong>새 오디오 파일 불러오기</strong>
-                    <span>노이즈를 줄일 원본 음성을 업로드합니다. 결과는 생성 갤러리에 저장됩니다.</span>
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void handleAudioToolUpload(file);
-                          setAudioDenoiseSource("upload");
-                        }
-                      }}
-                    />
-                  </label>
-                ) : null}
-
-                {audioDenoiseSource === "path" ? (
-                  <label className="editor-path-field">
-                    서버 오디오 경로
-                    <input
-                      placeholder="data/generated/.../voice.wav"
-                      value={audioDenoiseForm.audio_path}
-                      onChange={(event) => setAudioDenoiseForm((prev) => ({ ...prev, audio_path: event.target.value }))}
-                    />
-                  </label>
-                ) : null}
-              </section>
-
-              <form className="audio-editor-stage audio-denoise-stage" onSubmit={handleAudioDenoiseSubmit}>
-                <div className="audio-editor-stage__top">
-                  <div>
-                    <span className="meta-label">SOURCE VOICE</span>
-                    <h3>{selectedAudioDenoiseAsset?.filename || audioToolUpload?.filename || basenameFromPath(audioDenoiseForm.audio_path) || "아직 선택된 오디오 없음"}</h3>
-                  </div>
-                  <label>
-                    저장 이름
-                    <input value={audioDenoiseForm.output_name} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, output_name: event.target.value })} />
-                  </label>
-                </div>
-
-                {audioDenoiseForm.audio_path ? (
-                  <audio
-                    className="audio-editor-player"
-                    controls
-                    src={selectedAudioDenoiseAsset ? mediaUrl(selectedAudioDenoiseAsset.url) : mediaUrl(fileUrlFromPath(audioDenoiseForm.audio_path))}
-                  />
-                ) : null}
-
-                <div className="audio-editor-waveform audio-denoise-waveform" aria-label="정제 강도 미리보기">
-                  {audioDenoiseBars.map((height, index) => (
-                    <span key={`${audioDenoiseForm.audio_path}-${index}`} style={{ height }} />
-                  ))}
-                </div>
-
-                <div className="audio-editor-rack audio-denoise-rack">
-                  <label>
-                    Noise reduction
-                    <input min="0" max="1" step="0.01" type="range" value={audioDenoiseForm.strength} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, strength: event.target.value })} />
-                    <input value={audioDenoiseForm.strength} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, strength: event.target.value })} />
-                  </label>
-                  <label>
-                    Voice preserve
-                    <input min="0" max="1" step="0.01" type="range" value={audioDenoiseForm.voice_presence} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, voice_presence: event.target.value })} />
-                    <input value={audioDenoiseForm.voice_presence} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, voice_presence: event.target.value })} />
-                  </label>
-                  <label>
-                    Noise profile sec
-                    <input value={audioDenoiseForm.noise_profile_sec} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, noise_profile_sec: event.target.value })} />
-                  </label>
-                  <label>
-                    High-pass Hz
-                    <input value={audioDenoiseForm.highpass_hz} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, highpass_hz: event.target.value })} />
-                  </label>
-                  <label>
-                    Low-pass Hz
-                    <input value={audioDenoiseForm.lowpass_hz} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, lowpass_hz: event.target.value })} />
-                  </label>
-                  <label>
-                    Spectral floor
-                    <input value={audioDenoiseForm.spectral_floor} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, spectral_floor: event.target.value })} />
-                  </label>
-                  <label>
-                    Sample rate
-                    <select value={audioDenoiseForm.sample_rate} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, sample_rate: event.target.value })}>
-                      <option value="24000">24 kHz</option>
-                      <option value="44100">44.1 kHz</option>
-                      <option value="48000">48 kHz</option>
-                    </select>
-                  </label>
-                  <label>
-                    Format
-                    <select value={audioDenoiseForm.output_format} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, output_format: event.target.value })}>
-                      <option value="wav">WAV</option>
-                      <option value="flac">FLAC</option>
-                      <option value="ogg">OGG</option>
-                    </select>
-                  </label>
-                  <label className="checkbox-line">
-                    <input checked={audioDenoiseForm.normalize} type="checkbox" onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, normalize: event.target.checked })} />
-                    Normalize peak
-                  </label>
-                </div>
-
-                <button className="primary-button" disabled={loading || !audioDenoiseForm.audio_path} type="submit">
-                  정제본 저장
-                </button>
-              </form>
-            </div>
-          </section>
-
-          {lastAudioToolResult?.kind === "audio_denoise" && lastAudioToolResult.record ? (
-            <AudioCard title="정제 결과" subtitle="생성 갤러리에 저장됨" record={lastAudioToolResult.record} />
-          ) : null}
-        </section>
-      ) : null}
-
-      {activeTab === "separation" ? (
-        <section className="workspace workspace--stacked">
-          <div className="panel-grid">
-            <section className="panel">
-              <h2>분리할 오디오 선택</h2>
-              <p className="field-hint">파일을 업로드하거나 서버에 저장된 오디오를 골라 분리합니다.</p>
-              <label className="upload-field">
-                새 파일 업로드
-                <input
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.source.upload", "새 음성 업로드")}</Label>
+                <Input
                   type="file"
                   accept="audio/*"
+                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) {
@@ -5505,435 +5294,1246 @@ function StudioApp() {
                     }
                   }}
                 />
-              </label>
-              {audioToolUpload ? (
-                <div className="source-summary">
-                  <span className="meta-label">업로드한 파일</span>
-                  <strong>{audioToolUpload.filename}</strong>
-                </div>
-              ) : null}
-              <ServerAudioPicker assets={audioAssets} selectedPath={audioSeparationForm.audio_path} onSelect={handleSelectAudioToolAsset} />
-            </section>
-
-            <form className="panel" onSubmit={(event) => {
-              event.preventDefault();
-              void handleAudioSeparation();
-            }}>
-              <h2>오디오 분리</h2>
-              <p>AI stem separator로 보컬과 반주를 분리합니다. 안정적인 분리를 위해 10초 이상의 오디오를 사용하세요.</p>
-              {!audioSeparationAvailable ? <p className="field-hint">현재 이 기능은 비활성 상태입니다.</p> : null}
-              <div className="field-row">
-                <label>
-                  분리 모델
-                  <select value={audioSeparationForm.model_profile} onChange={(event) => setAudioSeparationForm({ ...audioSeparationForm, model_profile: event.target.value })}>
-                    <option value="roformer_vocals">Roformer vocals - 최신 보컬 분리</option>
-                    <option value="vocal_rvc">RVC vocal preset - Applio 변환용 보컬 추출</option>
-                    <option value="demucs_4stem">Demucs 4-stem - 보컬/드럼/베이스/기타</option>
-                  </select>
-                </label>
-                <label>
-                  출력 형식
-                  <select value={audioSeparationForm.output_format} onChange={(event) => setAudioSeparationForm({ ...audioSeparationForm, output_format: event.target.value })}>
-                    <option value="wav">WAV</option>
-                    <option value="flac">FLAC</option>
-                    <option value="ogg">OGG</option>
-                  </select>
-                </label>
               </div>
-              <article className="status-card">
-                <strong>현재 기본 모델</strong>
-                <p>audio-separator 0.44.1 모델 목록에서 보컬 분리 상위로 확인한 `vocals_mel_band_roformer.ckpt`를 기본으로 사용합니다. 모델 파일은 최초 실행 시 자동으로 내려받습니다.</p>
-              </article>
-              <button className="primary-button" disabled={loading || !audioSeparationForm.audio_path || !audioSeparationAvailable} type="submit">
-                분리 실행
-              </button>
-            </form>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.source.path", "직접 경로 입력")}</Label>
+                <Input
+                  placeholder="data/generated/... 또는 /mnt/d/..."
+                  value={voiceChangerForm.audio_path}
+                  onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, audio_path: event.target.value })}
+                />
+              </div>
+              {voiceChangerForm.audio_path ? (
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("applio_convert.source.selected", "선택한 원본")}</span>
+                  <strong className="mt-1 block text-sm font-medium text-ink">{selectedVoiceChangerAsset?.filename || audioToolUpload?.filename || basenameFromPath(voiceChangerForm.audio_path)}</strong>
+                  <audio controls src={fileUrlFromPath(voiceChangerForm.audio_path)} className="mt-2 w-full h-8" />
+                </div>
+              ) : (
+                <p className="text-xs text-ink-muted">{t("applio_convert.source.hint", "업로드하거나 아래 목록에서 변환할 원본 음성을 선택하세요.")}</p>
+              )}
+              <ServerAudioPicker assets={generatedAudioAssets} selectedPath={voiceChangerForm.audio_path} onSelect={handleSelectAudioToolAsset} />
+            </WorkspaceCard>
+
+            <WorkspaceCard>
+              <form id="applio-convert-form" className="flex flex-col gap-4" onSubmit={handleVoiceChangerSubmit}>
+                <div className="flex items-center gap-2">
+                  <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">2</span>
+                  <h3 className="text-sm font-medium text-ink">{t("applio_convert.target.title", "학습된 목소리로 변환")}</h3>
+                </div>
+                {!voiceChangerAvailable ? <p className="text-xs text-warn">{t("applio_convert.target.unavailable", "사용 가능한 RVC 목소리 모델이 없습니다. 모델 다운로드나 RVC 학습을 먼저 실행해 주세요.")}</p> : null}
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.target.voice", "바꿀 목소리")}</Label>
+                  <Select value={voiceChangerForm.selected_model_id || undefined} onValueChange={(value) => handleSelectVoiceChangerModel(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("applio_convert.target.placeholder", "목소리 선택")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voiceChangerModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>{model.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedVoiceChangerModel ? (
+                  <div className="rounded-md border border-line bg-canvas/60 p-3">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("applio_convert.target.selected", "선택한 목소리")}</span>
+                    <strong className="mt-1 block text-sm font-medium text-ink">{selectedVoiceChangerModel.label}</strong>
+                    <p className="mt-1 text-xs text-ink-muted">{t("applio_convert.target.note", "RVC 모델과 검색 인덱스를 사용해 원본 음성의 음색을 바꿉니다.")}</p>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.f0", "음정 추적 방식")}</Label>
+                    <Select value={voiceChangerForm.f0_method || undefined} onValueChange={(value) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="rmvpe">RMVPE - 기본 권장</SelectItem>
+                        <SelectItem value="fcpe">FCPE - 빠른 처리</SelectItem>
+                        <SelectItem value="crepe">CREPE - 선율 민감</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.indexRate", "음색 반영 강도")}</Label>
+                    <Input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.protect", "발음 보존")}</Label>
+                    <Input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
+                  </div>
+                </div>
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    {t("tts.advanced.controls", "Advanced controls")}
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">RVC model path</Label>
+                        <Input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Index path</Label>
+                        <Input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Pitch shift</Label>
+                        <Input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Clean strength</Label>
+                        <Input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Content embedder</Label>
+                        <Select value={voiceChangerForm.embedder_model || undefined} onValueChange={(value) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contentvec">contentvec</SelectItem>
+                            <SelectItem value="hubert">hubert</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={voiceChangerForm.split_audio} onCheckedChange={(checked) => setVoiceChangerForm({ ...voiceChangerForm, split_audio: checked })} />
+                        Split long audio
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={voiceChangerForm.f0_autotune} onCheckedChange={(checked) => setVoiceChangerForm({ ...voiceChangerForm, f0_autotune: checked })} />
+                        F0 autotune
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={voiceChangerForm.clean_audio} onCheckedChange={(checked) => setVoiceChangerForm({ ...voiceChangerForm, clean_audio: checked })} />
+                        Clean output audio
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              </form>
+            </WorkspaceCard>
           </div>
 
-          {lastAudioToolResult?.kind === "audio_separation" && lastAudioToolResult.assets?.length ? (
-            <section className="panel">
-              <h2>방금 분리한 결과</h2>
-              <div className="preset-list">
+          {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("applio.result.title", "방금 변환한 결과")} badge={t("tts.result.latest")} />
+              <AudioCard title={t("applio.result.subtitle", "Applio 변환 결과")} record={lastAudioToolResult.record} />
+            </WorkspaceCard>
+          ) : null}
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "applio_batch" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("applio_batch.eyebrow", "RVC BATCH")}
+            eyebrowIcon={GitMerge}
+            title={t("applio_batch.title", "같은 목소리로 일괄 변환")}
+            subtitle={t("applio_batch.subtitle", "여러 음성을 고르거나 업로드해 같은 RVC 모델로 한 번에 변환합니다.")}
+            action={{
+              label: t("applio_batch.action.run", "{n}개 변환").replace("{n}", String(applioBatchPaths.length)),
+              formId: "applio-batch-form",
+              disabled: loading || !voiceChangerAvailable || !applioBatchPaths.length || !voiceChangerForm.model_path,
+              loading,
+            }}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <WorkspaceCard className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                <h3 className="text-sm font-medium text-ink">{t("applio_batch.source.title", "배치 변환할 오디오")}</h3>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("applio_batch.source.upload", "배치에 파일 추가")}</Label>
+                <Input
+                  type="file"
+                  accept="audio/*"
+                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleApplioBatchUpload(file);
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("applio_batch.source.path", "직접 경로 추가")}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="data/generated/... 또는 /mnt/d/..."
+                    value={applioBatchManualPath}
+                    onChange={(event) => setApplioBatchManualPath(event.target.value)}
+                  />
+                  <Button variant="outline" size="sm" onClick={addApplioBatchManualPath} type="button">
+                    {t("applio_batch.source.add", "추가")}
+                  </Button>
+                </div>
+              </div>
+              <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addApplioBatchAsset} />
+            </WorkspaceCard>
+
+            <WorkspaceCard>
+              <form id="applio-batch-form" className="flex flex-col gap-4" onSubmit={handleVoiceChangerBatchSubmit}>
+                <div className="flex items-center gap-2">
+                  <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">2</span>
+                  <h3 className="text-sm font-medium text-ink">{t("applio_batch.target.title", "같은 목소리로 일괄 변환")}</h3>
+                </div>
+                <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-ink-muted">{t("applio_batch.selected", "선택된 오디오")}: <strong className="text-ink">{applioBatchPaths.length}{t("applio_batch.count", "개")}</strong></span>
+                    <Button variant="outline" size="sm" onClick={() => setApplioBatchPaths([])} type="button">{t("applio_batch.clear", "목록 비우기")}</Button>
+                  </div>
+                  <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                    {selectedApplioBatchAssets.map((asset) => (
+                      <article key={asset.path} className="rounded-md border border-line bg-surface p-2 flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <strong className="line-clamp-1 text-xs font-medium text-ink">{asset.filename}</strong>
+                          <span className="text-[10px] text-ink-subtle">{asset.source === "generated" ? t("applio_batch.gallery", "생성 갤러리") : t("applio_batch.upload", "업로드")}</span>
+                        </div>
+                        <audio controls className="h-7 max-w-[180px]" src={mediaUrl(asset.url)} />
+                        <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setApplioBatchPaths((prev) => prev.filter((path) => path !== asset.path))} type="button">
+                          {t("applio_batch.remove", "제거")}
+                        </Button>
+                      </article>
+                    ))}
+                    {selectedApplioBatchExternalPaths.map((path) => (
+                      <article key={path} className="rounded-md border border-line bg-surface p-2 flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <strong className="line-clamp-1 text-xs font-medium text-ink">{basenameFromPath(path)}</strong>
+                          <span className="text-[10px] text-ink-subtle">{t("applio_batch.directPath", "직접 경로")}</span>
+                        </div>
+                        {path.startsWith("data/") ? (
+                          <audio controls className="h-7 max-w-[180px]" src={fileUrlFromPath(path)} />
+                        ) : (
+                          <span className="text-[11px] text-ink-subtle">{t("applio_batch.externalPath", "외부 경로는 변환 실행 시 백엔드가 직접 읽습니다.")}</span>
+                        )}
+                        <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setApplioBatchPaths((prev) => prev.filter((item) => item !== path))} type="button">
+                          {t("applio_batch.remove", "제거")}
+                        </Button>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.target.voice", "바꿀 목소리")}</Label>
+                  <Select value={voiceChangerForm.selected_model_id || undefined} onValueChange={(value) => handleSelectVoiceChangerModel(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("applio_convert.target.placeholder", "목소리 선택")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voiceChangerModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>{model.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.f0", "음정 추적 방식")}</Label>
+                    <Select value={voiceChangerForm.f0_method || undefined} onValueChange={(value) => setVoiceChangerForm({ ...voiceChangerForm, f0_method: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="rmvpe">RMVPE - 기본 권장</SelectItem>
+                        <SelectItem value="fcpe">FCPE - 빠른 처리</SelectItem>
+                        <SelectItem value="crepe">CREPE - 선율 민감</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.indexRate", "음색 반영 강도")}</Label>
+                    <Input value={voiceChangerForm.index_rate} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_rate: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.protect", "발음 보존")}</Label>
+                    <Input value={voiceChangerForm.protect} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, protect: event.target.value })} />
+                  </div>
+                </div>
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    {t("tts.advanced.controls", "Advanced controls")}
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">RVC model path</Label>
+                        <Input value={voiceChangerForm.model_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, model_path: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Index path</Label>
+                        <Input value={voiceChangerForm.index_path} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, index_path: event.target.value })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Pitch shift</Label>
+                        <Input value={voiceChangerForm.pitch_shift_semitones} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, pitch_shift_semitones: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Clean strength</Label>
+                        <Input value={voiceChangerForm.clean_strength} onChange={(event) => setVoiceChangerForm({ ...voiceChangerForm, clean_strength: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Content embedder</Label>
+                        <Select value={voiceChangerForm.embedder_model || undefined} onValueChange={(value) => setVoiceChangerForm({ ...voiceChangerForm, embedder_model: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contentvec">contentvec</SelectItem>
+                            <SelectItem value="hubert">hubert</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </form>
+            </WorkspaceCard>
+          </div>
+
+          {lastAudioToolResult?.kind === "voice_changer_batch" ? (
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("applio_batch.result.title", "배치 변환 결과")} badge={t("tts.result.latest")} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {lastAudioToolResult.assets.map((asset) => (
-                  <article className="preset-card" key={`${asset.path}-${asset.label}`}>
-                    <strong>{asset.label}</strong>
-                    <audio controls className="audio-card__player" src={mediaUrl(asset.url)} />
+                  <article key={asset.path} className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <strong className="text-sm font-medium text-ink">{asset.filename}</strong>
+                    <audio controls className="w-full" src={mediaUrl(asset.url)} />
                   </article>
                 ))}
               </div>
-            </section>
+            </WorkspaceCard>
           ) : null}
-        </section>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "applio_blend" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("applio_blend.eyebrow", "RVC BLEND")}
+            eyebrowIcon={GitMerge}
+            title={t("applio_blend.title", "두 RVC 모델을 섞어 새 목소리 만들기")}
+            subtitle={t("applio_blend.subtitle", "Applio Voice Blender처럼 모델 A와 모델 B의 가중치를 비율로 합쳐 새로운 `.pth` 모델을 만듭니다.")}
+            action={{
+              label: t("applio_blend.action.run", "모델 블렌딩"),
+              formId: "applio-blend-form",
+              disabled: loading || !applioBlendForm.model_name || !applioBlendForm.model_path_a || !applioBlendForm.model_path_b,
+              loading,
+            }}
+          />
+
+          <WorkspaceCard>
+            <form id="applio-blend-form" className="flex flex-col gap-4" onSubmit={handleVoiceModelBlendSubmit}>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("applio_blend.modelName", "새 모델 이름")}</Label>
+                <Input value={applioBlendForm.model_name} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, model_name: event.target.value })} />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_blend.modelA", "모델 A")}</Label>
+                  <Select value={applioBlendForm.model_path_a || undefined} onValueChange={(value) => setApplioBlendForm({ ...applioBlendForm, model_path_a: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("applio_blend.placeholder", "모델 선택")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voiceChangerModels.map((model) => (
+                        <SelectItem key={model.model_path} value={model.model_path}>{model.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_blend.modelB", "모델 B")}</Label>
+                  <Select value={applioBlendForm.model_path_b || undefined} onValueChange={(value) => setApplioBlendForm({ ...applioBlendForm, model_path_b: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("applio_blend.placeholder", "모델 선택")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voiceChangerModels.map((model) => (
+                        <SelectItem key={model.model_path} value={model.model_path}>{model.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_blend.ratio", "A 반영 비율")}</Label>
+                  <Input value={applioBlendForm.ratio} onChange={(event) => setApplioBlendForm({ ...applioBlendForm, ratio: event.target.value })} />
+                </div>
+              </div>
+              <div className="rounded-md border border-line bg-canvas/60 p-3">
+                <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("applio_blend.preview", "블렌딩 미리보기")}</span>
+                <strong className="mt-1 block text-sm font-medium text-ink">{selectedBlendModelA?.label || t("applio_blend.modelA", "모델 A")} + {selectedBlendModelB?.label || t("applio_blend.modelB", "모델 B")}</strong>
+                <p className="mt-1 text-xs text-ink-muted">{t("applio_blend.note", "비율 {ratio}는 모델 A 쪽 성향을 얼마나 강하게 둘지 결정합니다.").replace("{ratio}", applioBlendForm.ratio || "0.5")}</p>
+              </div>
+              {lastRvcTrainingResult ? <p className="text-xs text-ink-muted">{lastRvcTrainingResult}</p> : null}
+            </form>
+          </WorkspaceCard>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "audio_editor" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("audio_editor.eyebrow", "AUDIO EDITOR")}
+            eyebrowIcon={Scissors}
+            title={t("audio_editor.title", "구간을 고르고 바로 편집하기")}
+            subtitle={t("audio_editor.subtitle", "생성 갤러리, 업로드 파일, 직접 경로 중 하나를 골라 자르기, 페이드, 볼륨, 정규화를 적용합니다.")}
+            action={{
+              label: t("audio_editor.action.save", "편집본 저장"),
+              formId: "audio-editor-form",
+              disabled: loading || !audioEditorForm.audio_path,
+              loading,
+            }}
+          />
+
+          <Tabs
+            value={audioEditorSource}
+            onValueChange={(value) => setAudioEditorSource(value as typeof audioEditorSource)}
+            className="flex flex-col gap-5"
+          >
+            <TabsList className="grid w-full grid-cols-3 gap-1 bg-surface border border-line p-1 h-auto">
+              <TabsTrigger value="gallery" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">{t("audio_source.gallery", "생성 갤러리")}</TabsTrigger>
+              <TabsTrigger value="upload" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">{t("audio_source.upload", "파일 업로드")}</TabsTrigger>
+              <TabsTrigger value="path" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">{t("audio_source.path", "경로 입력")}</TabsTrigger>
+            </TabsList>
+
+            <WorkspaceCard>
+              <TabsContent value="gallery" className="m-0 flex flex-col gap-3">
+                <h3 className="text-sm font-medium text-ink">{t("audio_editor.source.gallery.title", "편집할 음성 선택")}</h3>
+                <ServerAudioPicker assets={audioAssets} selectedPath={audioEditorForm.audio_path} onSelect={(asset) => {
+                  setAudioToolUpload(null);
+                  setAudioEditorForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || basenameFromPath(asset.filename) }));
+                  setAudioEditorDuration(0);
+                }} />
+              </TabsContent>
+              <TabsContent value="upload" className="m-0 flex flex-col gap-2">
+                <Label className="text-xs font-medium text-ink-muted">{t("audio_editor.source.upload.title", "새 오디오 파일 불러오기")}</Label>
+                <p className="text-xs text-ink-muted">{t("audio_editor.source.upload.hint", "WAV, FLAC, MP3 등 브라우저가 선택할 수 있는 오디오를 업로드합니다.")}</p>
+                <Input
+                  type="file"
+                  accept="audio/*"
+                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleAudioToolUpload(file);
+                      setAudioEditorSource("upload");
+                      setAudioEditorDuration(0);
+                    }
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="path" className="m-0 flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("audio_editor.source.path.title", "서버 오디오 경로")}</Label>
+                <Input
+                  placeholder="data/generated/.../voice.wav"
+                  value={audioEditorForm.audio_path}
+                  onChange={(event) => {
+                    setAudioEditorForm((prev) => ({ ...prev, audio_path: event.target.value }));
+                    setAudioEditorDuration(0);
+                  }}
+                />
+              </TabsContent>
+            </WorkspaceCard>
+          </Tabs>
+
+          <WorkspaceCard>
+            <form id="audio-editor-form" className="flex flex-col gap-4" onSubmit={handleAudioEditSubmit}>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("audio_editor.selected.label", "SELECTED TAKE")}</span>
+                  <h3 className="mt-1 text-sm font-medium text-ink">{selectedAudioEditorAsset?.filename || audioToolUpload?.filename || basenameFromPath(audioEditorForm.audio_path) || t("audio_editor.selected.empty", "아직 선택된 오디오 없음")}</h3>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("audio_editor.field.outputName", "저장 이름")}</Label>
+                  <Input value={audioEditorForm.output_name} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, output_name: event.target.value })} />
+                </div>
+              </div>
+
+              {audioEditorForm.audio_path ? (
+                <audio
+                  className="w-full"
+                  controls
+                  onLoadedMetadata={(event) => setAudioEditorDuration(event.currentTarget.duration || 0)}
+                  src={selectedAudioEditorAsset ? mediaUrl(selectedAudioEditorAsset.url) : mediaUrl(fileUrlFromPath(audioEditorForm.audio_path))}
+                />
+              ) : null}
+
+              <div className="relative h-16 overflow-hidden rounded-md border border-line bg-canvas/60" aria-label="편집 구간">
+                <div className="absolute top-0 h-full bg-accent/20 border-x border-accent" style={{ left: audioEditorRegionLeft, width: audioEditorRegionWidth }} />
+                <div className="flex h-full items-end justify-between gap-px px-1 py-2">
+                  {audioEditorBars.map((height, index) => (
+                    <span key={`${audioEditorForm.audio_path}-${index}`} className="block w-1 bg-ink-muted/60" style={{ height }} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Start</Label>
+                  <input
+                    max={audioEditorDurationLimit}
+                    min="0"
+                    step="0.01"
+                    type="range"
+                    value={audioEditorStart}
+                    onChange={(event) => setAudioEditorForm((prev) => ({ ...prev, start_sec: event.target.value }))}
+                    className="w-full accent-accent"
+                  />
+                  <Input value={audioEditorForm.start_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, start_sec: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">End</Label>
+                  <input
+                    max={audioEditorDurationLimit}
+                    min="0"
+                    step="0.01"
+                    type="range"
+                    value={audioEditorEnd}
+                    onChange={(event) => setAudioEditorForm((prev) => ({ ...prev, end_sec: event.target.value }))}
+                    className="w-full accent-accent"
+                  />
+                  <Input placeholder={t("audio_editor.field.endPlaceholder", "끝까지")} value={audioEditorForm.end_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, end_sec: event.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Gain dB</Label>
+                  <input min="-24" max="18" step="0.5" type="range" value={audioEditorForm.gain_db} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, gain_db: event.target.value })} className="w-full accent-accent" />
+                  <Input value={audioEditorForm.gain_db} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, gain_db: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Fade in</Label>
+                  <Input value={audioEditorForm.fade_in_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, fade_in_sec: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Fade out</Label>
+                  <Input value={audioEditorForm.fade_out_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, fade_out_sec: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Sample rate</Label>
+                  <Select value={audioEditorForm.sample_rate || undefined} onValueChange={(value) => setAudioEditorForm({ ...audioEditorForm, sample_rate: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24000">24 kHz</SelectItem>
+                      <SelectItem value="44100">44.1 kHz</SelectItem>
+                      <SelectItem value="48000">48 kHz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Format</Label>
+                  <Select value={audioEditorForm.output_format || undefined} onValueChange={(value) => setAudioEditorForm({ ...audioEditorForm, output_format: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="wav">WAV</SelectItem>
+                      <SelectItem value="flac">FLAC</SelectItem>
+                      <SelectItem value="ogg">OGG</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-3 justify-end">
+                  <label className="flex items-center gap-2 text-xs text-ink-muted">
+                    <Switch checked={audioEditorForm.normalize} onCheckedChange={(checked) => setAudioEditorForm({ ...audioEditorForm, normalize: checked })} />
+                    Normalize peak
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted">
+                    <Switch checked={audioEditorForm.reverse} onCheckedChange={(checked) => setAudioEditorForm({ ...audioEditorForm, reverse: checked })} />
+                    Reverse
+                  </label>
+                </div>
+              </div>
+            </form>
+          </WorkspaceCard>
+
+          {lastAudioToolResult?.kind === "audio_editor" && lastAudioToolResult.record ? (
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("audio_editor.result.title", "편집 결과")} badge={t("tts.result.latest")} />
+              <AudioCard title={t("audio_editor.result.title", "편집 결과")} subtitle={t("audio_editor.result.subtitle", "생성 갤러리에 저장됨")} record={lastAudioToolResult.record} />
+            </WorkspaceCard>
+          ) : null}
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "audio_denoise" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("audio_denoise.eyebrow", "VOICE CLEANUP")}
+            eyebrowIcon={AudioLines}
+            title={t("audio_denoise.title", "노이즈를 줄이고 목소리만 또렷하게")}
+            subtitle={t("audio_denoise.subtitle", "생성 갤러리, 업로드 파일, 서버 경로에서 음성을 가져와 배경 노이즈와 불필요한 대역을 정리합니다.")}
+            action={{
+              label: t("audio_denoise.action.save", "정제본 저장"),
+              formId: "audio-denoise-form",
+              disabled: loading || !audioDenoiseForm.audio_path,
+              loading,
+            }}
+          />
+
+          <Tabs
+            value={audioDenoiseSource}
+            onValueChange={(value) => setAudioDenoiseSource(value as typeof audioDenoiseSource)}
+            className="flex flex-col gap-5"
+          >
+            <TabsList className="grid w-full grid-cols-3 gap-1 bg-surface border border-line p-1 h-auto">
+              <TabsTrigger value="gallery" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">{t("audio_source.gallery", "생성 갤러리")}</TabsTrigger>
+              <TabsTrigger value="upload" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">{t("audio_source.upload", "파일 업로드")}</TabsTrigger>
+              <TabsTrigger value="path" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">{t("audio_source.path", "경로 입력")}</TabsTrigger>
+            </TabsList>
+
+            <WorkspaceCard>
+              <TabsContent value="gallery" className="m-0 flex flex-col gap-3">
+                <h3 className="text-sm font-medium text-ink">{t("audio_denoise.source.gallery.title", "정제할 음성 선택")}</h3>
+                <ServerAudioPicker assets={audioAssets} selectedPath={audioDenoiseForm.audio_path} onSelect={(asset) => {
+                  setAudioToolUpload(null);
+                  setAudioDenoiseForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || `clean-${basenameFromPath(asset.filename)}` }));
+                }} />
+              </TabsContent>
+              <TabsContent value="upload" className="m-0 flex flex-col gap-2">
+                <Label className="text-xs font-medium text-ink-muted">{t("audio_denoise.source.upload.title", "새 오디오 파일 불러오기")}</Label>
+                <p className="text-xs text-ink-muted">{t("audio_denoise.source.upload.hint", "노이즈를 줄일 원본 음성을 업로드합니다. 결과는 생성 갤러리에 저장됩니다.")}</p>
+                <Input
+                  type="file"
+                  accept="audio/*"
+                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleAudioToolUpload(file);
+                      setAudioDenoiseSource("upload");
+                    }
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="path" className="m-0 flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("audio_denoise.source.path.title", "서버 오디오 경로")}</Label>
+                <Input
+                  placeholder="data/generated/.../voice.wav"
+                  value={audioDenoiseForm.audio_path}
+                  onChange={(event) => setAudioDenoiseForm((prev) => ({ ...prev, audio_path: event.target.value }))}
+                />
+              </TabsContent>
+            </WorkspaceCard>
+          </Tabs>
+
+          <WorkspaceCard>
+            <form id="audio-denoise-form" className="flex flex-col gap-4" onSubmit={handleAudioDenoiseSubmit}>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("audio_denoise.selected.label", "SOURCE VOICE")}</span>
+                  <h3 className="mt-1 text-sm font-medium text-ink">{selectedAudioDenoiseAsset?.filename || audioToolUpload?.filename || basenameFromPath(audioDenoiseForm.audio_path) || t("audio_editor.selected.empty", "아직 선택된 오디오 없음")}</h3>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("audio_editor.field.outputName", "저장 이름")}</Label>
+                  <Input value={audioDenoiseForm.output_name} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, output_name: event.target.value })} />
+                </div>
+              </div>
+
+              {audioDenoiseForm.audio_path ? (
+                <audio
+                  className="w-full"
+                  controls
+                  src={selectedAudioDenoiseAsset ? mediaUrl(selectedAudioDenoiseAsset.url) : mediaUrl(fileUrlFromPath(audioDenoiseForm.audio_path))}
+                />
+              ) : null}
+
+              <div className="relative h-16 overflow-hidden rounded-md border border-line bg-canvas/60" aria-label="정제 강도 미리보기">
+                <div className="flex h-full items-end justify-between gap-px px-1 py-2">
+                  {audioDenoiseBars.map((height, index) => (
+                    <span key={`${audioDenoiseForm.audio_path}-${index}`} className="block w-1 bg-ink-muted/60" style={{ height }} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Noise reduction</Label>
+                  <input min="0" max="1" step="0.01" type="range" value={audioDenoiseForm.strength} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, strength: event.target.value })} className="w-full accent-accent" />
+                  <Input value={audioDenoiseForm.strength} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, strength: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Voice preserve</Label>
+                  <input min="0" max="1" step="0.01" type="range" value={audioDenoiseForm.voice_presence} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, voice_presence: event.target.value })} className="w-full accent-accent" />
+                  <Input value={audioDenoiseForm.voice_presence} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, voice_presence: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Noise profile sec</Label>
+                  <Input value={audioDenoiseForm.noise_profile_sec} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, noise_profile_sec: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">High-pass Hz</Label>
+                  <Input value={audioDenoiseForm.highpass_hz} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, highpass_hz: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Low-pass Hz</Label>
+                  <Input value={audioDenoiseForm.lowpass_hz} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, lowpass_hz: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Spectral floor</Label>
+                  <Input value={audioDenoiseForm.spectral_floor} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, spectral_floor: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Sample rate</Label>
+                  <Select value={audioDenoiseForm.sample_rate || undefined} onValueChange={(value) => setAudioDenoiseForm({ ...audioDenoiseForm, sample_rate: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24000">24 kHz</SelectItem>
+                      <SelectItem value="44100">44.1 kHz</SelectItem>
+                      <SelectItem value="48000">48 kHz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Format</Label>
+                  <Select value={audioDenoiseForm.output_format || undefined} onValueChange={(value) => setAudioDenoiseForm({ ...audioDenoiseForm, output_format: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="wav">WAV</SelectItem>
+                      <SelectItem value="flac">FLAC</SelectItem>
+                      <SelectItem value="ogg">OGG</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <label className="flex items-center gap-2 self-end text-xs text-ink-muted">
+                  <Switch checked={audioDenoiseForm.normalize} onCheckedChange={(checked) => setAudioDenoiseForm({ ...audioDenoiseForm, normalize: checked })} />
+                  Normalize peak
+                </label>
+              </div>
+            </form>
+          </WorkspaceCard>
+
+          {lastAudioToolResult?.kind === "audio_denoise" && lastAudioToolResult.record ? (
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("audio_denoise.result.title", "정제 결과")} badge={t("tts.result.latest")} />
+              <AudioCard title={t("audio_denoise.result.title", "정제 결과")} subtitle={t("audio_editor.result.subtitle", "생성 갤러리에 저장됨")} record={lastAudioToolResult.record} />
+            </WorkspaceCard>
+          ) : null}
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "separation" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("separation.eyebrow", "STEM SEPARATION")}
+            eyebrowIcon={Layers}
+            title={t("separation.title", "오디오 분리")}
+            subtitle={t("separation.subtitle", "AI stem separator로 보컬과 반주를 분리합니다. 안정적인 분리를 위해 10초 이상의 오디오를 사용하세요.")}
+            action={{
+              label: t("separation.action.run", "분리 실행"),
+              formId: "audio-separation-form",
+              disabled: loading || !audioSeparationForm.audio_path || !audioSeparationAvailable,
+              loading,
+            }}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <WorkspaceCard className="flex flex-col gap-3">
+              <h3 className="text-sm font-medium text-ink">{t("separation.source.title", "분리할 오디오 선택")}</h3>
+              <p className="text-xs text-ink-muted">{t("separation.source.hint", "파일을 업로드하거나 서버에 저장된 오디오를 골라 분리합니다.")}</p>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("separation.source.upload", "새 파일 업로드")}</Label>
+                <Input
+                  type="file"
+                  accept="audio/*"
+                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleAudioToolUpload(file);
+                    }
+                  }}
+                />
+              </div>
+              {audioToolUpload ? (
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("separation.source.uploaded", "업로드한 파일")}</span>
+                  <strong className="mt-1 block text-sm font-medium text-ink">{audioToolUpload.filename}</strong>
+                </div>
+              ) : null}
+              <ServerAudioPicker assets={audioAssets} selectedPath={audioSeparationForm.audio_path} onSelect={handleSelectAudioToolAsset} />
+            </WorkspaceCard>
+
+            <WorkspaceCard>
+              <form id="audio-separation-form" className="flex flex-col gap-4" onSubmit={(event) => {
+                event.preventDefault();
+                void handleAudioSeparation();
+              }}>
+                <h3 className="text-sm font-medium text-ink">{t("separation.config.title", "오디오 분리")}</h3>
+                {!audioSeparationAvailable ? <p className="text-xs text-warn">{t("separation.config.unavailable", "현재 이 기능은 비활성 상태입니다.")}</p> : null}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("separation.field.model", "분리 모델")}</Label>
+                    <Select value={audioSeparationForm.model_profile || undefined} onValueChange={(value) => setAudioSeparationForm({ ...audioSeparationForm, model_profile: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="roformer_vocals">Roformer vocals - 최신 보컬 분리</SelectItem>
+                        <SelectItem value="vocal_rvc">RVC vocal preset - Applio 변환용 보컬 추출</SelectItem>
+                        <SelectItem value="demucs_4stem">Demucs 4-stem - 보컬/드럼/베이스/기타</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("separation.field.format", "출력 형식")}</Label>
+                    <Select value={audioSeparationForm.output_format || undefined} onValueChange={(value) => setAudioSeparationForm({ ...audioSeparationForm, output_format: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="wav">WAV</SelectItem>
+                        <SelectItem value="flac">FLAC</SelectItem>
+                        <SelectItem value="ogg">OGG</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <article className="rounded-md border border-line bg-canvas/60 p-3">
+                  <strong className="text-sm font-medium text-ink">{t("separation.status.title", "현재 기본 모델")}</strong>
+                  <p className="mt-1 text-xs text-ink-muted">{t("separation.status.body", "audio-separator 0.44.1 모델 목록에서 보컬 분리 상위로 확인한 `vocals_mel_band_roformer.ckpt`를 기본으로 사용합니다. 모델 파일은 최초 실행 시 자동으로 내려받습니다.")}</p>
+                </article>
+              </form>
+            </WorkspaceCard>
+          </div>
+
+          {lastAudioToolResult?.kind === "audio_separation" && lastAudioToolResult.assets?.length ? (
+            <WorkspaceCard>
+              <WorkspaceResultHeader title={t("separation.result.title", "방금 분리한 결과")} badge={t("tts.result.latest")} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {lastAudioToolResult.assets.map((asset) => (
+                  <article key={`${asset.path}-${asset.label}`} className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <strong className="text-sm font-medium text-ink">{asset.label}</strong>
+                    <audio controls className="w-full" src={mediaUrl(asset.url)} />
+                  </article>
+                ))}
+              </div>
+            </WorkspaceCard>
+          ) : null}
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "dataset" ? (
-        <section className="workspace workspace--stacked">
-          <section className="panel finetune-flow">
-            <div className="finetune-stage__header">
-              <div>
-                <span className="eyebrow eyebrow--soft">데이터셋 만들기</span>
-                <h2>학습용 데이터셋 준비</h2>
-              </div>
-              <p>이 탭에서는 데이터셋만 만듭니다. 만들기가 끝나면 자동으로 학습 가능한 상태까지 준비하고, 학습은 다음 탭에서 시작합니다.</p>
-            </div>
-            <article className="status-card">
-              <strong>권장 샘플 수</strong>
-              <p>최소 20개 이상, 가능하면 50개 이상을 권장합니다. 문장 길이와 억양이 다양할수록 결과가 안정적입니다.</p>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("dataset.eyebrow", "DATASET BUILDER")}
+            eyebrowIcon={Database}
+            title={t("dataset.title", "학습용 데이터셋 준비")}
+            subtitle={t("dataset.subtitle", "이 탭에서는 데이터셋만 만듭니다. 만들기가 끝나면 자동으로 학습 가능한 상태까지 준비하고, 학습은 다음 탭에서 시작합니다.")}
+            action={{
+              label: t("dataset.action.save", "데이터셋 저장"),
+              onClick: () => void handleCreateDataset(),
+              loading,
+            }}
+          />
+
+          <WorkspaceCard className="flex flex-col gap-4">
+            <article className="rounded-md border border-line bg-canvas/60 p-3">
+              <strong className="text-sm font-medium text-ink">{t("dataset.recommend.title", "권장 샘플 수")}</strong>
+              <p className="mt-1 text-xs text-ink-muted">{t("dataset.recommend.body", "최소 20개 이상, 가능하면 50개 이상을 권장합니다. 문장 길이와 억양이 다양할수록 결과가 안정적입니다.")}</p>
             </article>
-            <div className="field-row">
-              <label>
-                데이터셋 이름
-                <input value={datasetForm.name} onChange={(event) => setDatasetForm({ ...datasetForm, name: event.target.value })} />
-              </label>
-              <label>
-                화자 이름
-                <input value={datasetForm.speaker_name} onChange={(event) => setDatasetForm({ ...datasetForm, speaker_name: event.target.value })} />
-              </label>
-            </div>
-
-            <div className="mini-tab-strip" role="tablist" aria-label="Dataset input source">
-              <button className={datasetInputMode === "gallery" ? "mini-tab is-active" : "mini-tab"} onClick={() => setDatasetInputMode("gallery")} type="button">
-                생성 갤러리에서 선택
-              </button>
-              <button className={datasetInputMode === "paths" ? "mini-tab is-active" : "mini-tab"} onClick={() => setDatasetInputMode("paths")} type="button">
-                경로로 불러오기
-              </button>
-            </div>
-
-            {datasetInputMode === "gallery" ? (
-              <div className="dataset-source-grid">
-                <section className="status-card">
-                  <strong>기준 음성</strong>
-                  <p>학습 결과를 대표할 기준 음성을 하나 고릅니다.</p>
-                  <ServerAudioPicker assets={generatedAudioAssets} selectedPath={datasetForm.ref_audio_path} onSelect={handleSelectDatasetReferenceAsset} />
-                  {selectedDatasetReferenceAsset ? (
-                    <article className="selected-audio-card">
-                      <span className="meta-label">선택한 기준 음성</span>
-                      <strong>{selectedDatasetReferenceAsset.filename}</strong>
-                      <audio controls className="audio-card__player" src={mediaUrl(selectedDatasetReferenceAsset.url)} />
-                    </article>
-                  ) : null}
-                </section>
-                <section className="status-card">
-                  <strong>샘플 음성</strong>
-                  <p>학습에 넣을 생성 음성을 계속 추가합니다.</p>
-                  <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={handleAddGeneratedAssetToDataset} />
-                  <div className="selected-sample-list">
-                    {selectedDatasetSampleAssets.length ? selectedDatasetSampleAssets.map(({ sample, index, asset }) => (
-                      <article className="selected-sample-row" key={`${sample.audio_path}-${index}`}>
-                        <div>
-                          <strong>{asset?.filename || basenameFromPath(sample.audio_path)}</strong>
-                          <span>{sample.text?.trim() || asset?.text_preview || "자동 전사 예정"}</span>
-                        </div>
-                        {asset ? <audio controls className="selected-sample-row__player" src={mediaUrl(asset.url)} /> : null}
-                        <button className="ghost-button" onClick={() => removeSampleRow(index)} type="button">
-                          삭제
-                        </button>
-                      </article>
-                    )) : <p className="field-hint">아직 선택한 샘플이 없습니다.</p>}
-                  </div>
-                </section>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("dataset.field.name", "데이터셋 이름")}</Label>
+                <Input value={datasetForm.name} onChange={(event) => setDatasetForm({ ...datasetForm, name: event.target.value })} />
               </div>
-            ) : (
-              <>
-                <label>
-                  기준 음성 경로
-                  <input
-                    placeholder="예: D:/my_tts_dataset/mai/ref/ref.wav"
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("dataset.field.speaker", "화자 이름")}</Label>
+                <Input value={datasetForm.speaker_name} onChange={(event) => setDatasetForm({ ...datasetForm, speaker_name: event.target.value })} />
+              </div>
+            </div>
+
+            <Tabs value={datasetInputMode} onValueChange={(value) => setDatasetInputMode(value as typeof datasetInputMode)}>
+              <TabsList className="grid w-full grid-cols-2 gap-1 bg-canvas border border-line p-1 h-auto">
+                <TabsTrigger value="gallery" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">{t("dataset.tab.gallery", "생성 갤러리에서 선택")}</TabsTrigger>
+                <TabsTrigger value="paths" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">{t("dataset.tab.paths", "경로로 불러오기")}</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="gallery" className="m-0 mt-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <section className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <strong className="text-sm font-medium text-ink">{t("dataset.gallery.refTitle", "기준 음성")}</strong>
+                    <p className="text-xs text-ink-muted">{t("dataset.gallery.refBody", "학습 결과를 대표할 기준 음성을 하나 고릅니다.")}</p>
+                    <ServerAudioPicker assets={generatedAudioAssets} selectedPath={datasetForm.ref_audio_path} onSelect={handleSelectDatasetReferenceAsset} />
+                    {selectedDatasetReferenceAsset ? (
+                      <article className="rounded-md border border-line bg-surface p-2">
+                        <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("dataset.gallery.refSelected", "선택한 기준 음성")}</span>
+                        <strong className="mt-1 block text-xs font-medium text-ink">{selectedDatasetReferenceAsset.filename}</strong>
+                        <audio controls className="mt-2 w-full h-8" src={mediaUrl(selectedDatasetReferenceAsset.url)} />
+                      </article>
+                    ) : null}
+                  </section>
+                  <section className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <strong className="text-sm font-medium text-ink">{t("dataset.gallery.samplesTitle", "샘플 음성")}</strong>
+                    <p className="text-xs text-ink-muted">{t("dataset.gallery.samplesBody", "학습에 넣을 생성 음성을 계속 추가합니다.")}</p>
+                    <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={handleAddGeneratedAssetToDataset} />
+                    <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                      {selectedDatasetSampleAssets.length ? selectedDatasetSampleAssets.map(({ sample, index, asset }) => (
+                        <article key={`${sample.audio_path}-${index}`} className="rounded-md border border-line bg-surface p-2 flex items-center gap-2">
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <strong className="line-clamp-1 text-xs font-medium text-ink">{asset?.filename || basenameFromPath(sample.audio_path)}</strong>
+                            <span className="text-[10px] text-ink-muted line-clamp-1">{sample.text?.trim() || asset?.text_preview || t("dataset.autoTranscribe", "자동 전사 예정")}</span>
+                          </div>
+                          {asset ? <audio controls className="h-7 max-w-[160px]" src={mediaUrl(asset.url)} /> : null}
+                          <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" onClick={() => removeSampleRow(index)} type="button">
+                            {t("dataset.delete", "삭제")}
+                          </Button>
+                        </article>
+                      )) : <p className="text-xs text-ink-muted">{t("dataset.gallery.noSelection", "아직 선택한 샘플이 없습니다.")}</p>}
+                    </div>
+                  </section>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="paths" className="m-0 mt-4 flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("dataset.paths.refPath", "기준 음성 경로")}</Label>
+                  <Input
+                    placeholder={t("dataset.paths.refPlaceholder", "예: D:/my_tts_dataset/mai/ref/ref.wav")}
                     value={datasetForm.ref_audio_path}
                     onChange={(event) => setDatasetForm({ ...datasetForm, ref_audio_path: normalizeDatasetPath(event.target.value) })}
                   />
-                </label>
-                <label>
-                  샘플 폴더 경로
-                  <input
-                    placeholder="예: D:/tts_data/mai_ko/wavs"
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("dataset.paths.folder", "샘플 폴더 경로")}</Label>
+                  <Input
+                    placeholder={t("dataset.paths.folderPlaceholder", "예: D:/tts_data/mai_ko/wavs")}
                     value={datasetSampleFolderPath}
                     onChange={(event) => setDatasetSampleFolderPath(normalizeDatasetPath(event.target.value))}
                   />
-                </label>
-                <details className="advanced-inline">
-                  <summary>직접 샘플 목록 붙여넣기</summary>
-                  <label>
-                    샘플 경로 일괄 입력
-                    <textarea
-                      className="bulk-path-textarea"
+                </div>
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    {t("dataset.paths.bulkTitle", "직접 샘플 목록 붙여넣기")}
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-line px-3 py-3 flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("dataset.paths.bulkLabel", "샘플 경로 일괄 입력")}</Label>
+                    <Textarea
+                      className="min-h-[120px] resize-y border-line bg-canvas font-mono text-xs"
                       placeholder={"D:/my_tts_dataset/mai/wavs/0001.wav | 첫 번째 문장\nD:/my_tts_dataset/mai/wavs/0002.wav"}
                       value={datasetBulkInput}
                       onChange={(event) => setDatasetBulkInput(event.target.value)}
                     />
-                  </label>
-                </details>
-                <div className="button-row">
-                  <button className="secondary-button" onClick={applyBulkDatasetPaths} type="button">
-                    직접 목록 반영
-                  </button>
-                  <button className="secondary-button" onClick={handleTranscribeAllDatasetSamples} type="button">
-                    비어 있는 텍스트 자동 채우기
-                  </button>
-                </div>
-              </>
-            )}
-            {datasetInputMode === "paths" && datasetSamples.some((sample) => sample.audio_path.trim()) ? (
-            <div className="selected-sample-list">
-              {datasetSamples.map((sample, index) => (
-                sample.audio_path.trim() ? (
-                <article className="selected-sample-row" key={`sample-${index}`}>
-                  <div>
-                    <strong>{basenameFromPath(sample.audio_path)}</strong>
-                    <span>{sample.text?.trim() || "자동 전사 예정"}</span>
                   </div>
-                  <button className="secondary-button" onClick={() => void handleTranscribeDatasetSample(index)} type="button">
-                    자동 전사
-                  </button>
-                  <button className="ghost-button" onClick={() => removeSampleRow(index)} type="button">
-                    삭제
-                  </button>
-                </article>
-                ) : null
-              ))}
-            </div>
-            ) : null}
-            <div className="button-row">
-              <button className="primary-button" onClick={() => void handleCreateDataset()} type="button">
-                데이터셋 저장
-              </button>
-            </div>
-            {lastCreatedDataset ? (
-              <article className="status-card status-card--ready">
-                <strong>{lastCreatedDataset.name}</strong>
-                <p>{lastCreatedDataset.sample_count}개 샘플 · 학습 가능</p>
-                <div className="button-row">
-                  <button className="secondary-button" onClick={() => { setSelectedDatasetId(lastCreatedDataset.id); setActiveTab("training"); }} type="button">
-                    학습 실행으로 이동
-                  </button>
+                </details>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={applyBulkDatasetPaths} type="button">
+                    {t("dataset.paths.applyBulk", "직접 목록 반영")}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleTranscribeAllDatasetSamples} type="button">
+                    {t("dataset.paths.autoFill", "비어 있는 텍스트 자동 채우기")}
+                  </Button>
                 </div>
+                {datasetSamples.some((sample) => sample.audio_path.trim()) ? (
+                  <div className="flex flex-col gap-2 mt-2">
+                    {datasetSamples.map((sample, index) => (
+                      sample.audio_path.trim() ? (
+                        <article key={`sample-${index}`} className="rounded-md border border-line bg-surface p-2 flex items-center gap-2">
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <strong className="line-clamp-1 text-xs font-medium text-ink">{basenameFromPath(sample.audio_path)}</strong>
+                            <span className="text-[10px] text-ink-muted line-clamp-1">{sample.text?.trim() || t("dataset.autoTranscribe", "자동 전사 예정")}</span>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => void handleTranscribeDatasetSample(index)} type="button">
+                            {t("dataset.autoTranscribeAction", "자동 전사")}
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" onClick={() => removeSampleRow(index)} type="button">
+                            {t("dataset.delete", "삭제")}
+                          </Button>
+                        </article>
+                      ) : null
+                    ))}
+                  </div>
+                ) : null}
+              </TabsContent>
+            </Tabs>
+
+            {lastCreatedDataset ? (
+              <article className="rounded-md border border-positive/40 bg-positive/10 p-3 flex flex-wrap items-center gap-3">
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  <strong className="text-sm font-medium text-ink">{lastCreatedDataset.name}</strong>
+                  <p className="text-xs text-ink-muted">{t("dataset.lastCreated.body", "{n}개 샘플 · 학습 가능").replace("{n}", String(lastCreatedDataset.sample_count))}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => { setSelectedDatasetId(lastCreatedDataset.id); setActiveTab("training"); }} type="button">
+                  {t("dataset.lastCreated.gotoTraining", "학습 실행으로 이동")}
+                </Button>
               </article>
             ) : null}
-          </section>
-        </section>
+          </WorkspaceCard>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "training" ? (
-        <section className="workspace workspace--stacked">
-          <section className="panel">
-            <h2>학습 실행</h2>
-            <p className="field-hint">학습할 데이터셋을 고르고, 모델과 화자 이름을 확인한 뒤 바로 시작합니다.</p>
-            <label>
-              사용할 데이터셋
-              <select value={selectedDatasetId} onChange={(event) => setSelectedDatasetId(event.target.value)}>
-                <option value="">선택하세요</option>
-                {datasets.map((dataset) => (
-                  <option key={dataset.id} value={dataset.id}>
-                    {dataset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("training.eyebrow", "TRAINING")}
+            eyebrowIcon={Cog}
+            title={t("training.title", "학습 실행")}
+            subtitle={t("training.subtitle", "학습할 데이터셋을 고르고, 모델과 화자 이름을 확인한 뒤 바로 시작합니다.")}
+            action={{
+              label: t("training.action.start", "학습 시작"),
+              onClick: handleCreateRun,
+              disabled: !datasetReadyForTraining,
+              loading,
+            }}
+          />
+
+          <WorkspaceCard className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium text-ink-muted">{t("training.field.dataset", "사용할 데이터셋")}</Label>
+              <Select value={selectedDatasetId || undefined} onValueChange={(value) => setSelectedDatasetId(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={dataset.id}>{dataset.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {selectedDataset ? (
-              <article className="selected-audio-card">
-                <span className="meta-label">선택한 데이터셋</span>
-                <strong>{selectedDataset.name}</strong>
-                <p>{selectedDataset.sample_count}개 샘플 · {datasetReadyForTraining ? "학습 가능" : "학습 전 준비 필요"}</p>
+              <article className="rounded-md border border-line bg-canvas/60 p-3">
+                <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("training.dataset.selected", "선택한 데이터셋")}</span>
+                <strong className="mt-1 block text-sm font-medium text-ink">{selectedDataset.name}</strong>
+                <p className="mt-1 text-xs text-ink-muted">{t("training.dataset.summary", "{n}개 샘플 · {state}").replace("{n}", String(selectedDataset.sample_count)).replace("{state}", datasetReadyForTraining ? t("training.dataset.ready", "학습 가능") : t("training.dataset.notReady", "학습 전 준비 필요"))}</p>
               </article>
             ) : null}
             {selectedDataset && !datasetReadyForTraining ? (
-              <article className="status-card">
-                <strong>학습 준비가 끝나지 않았습니다</strong>
-                <p>데이터셋 탭에서 다시 저장하면 학습용 준비까지 함께 진행됩니다.</p>
+              <article className="rounded-md border border-warn/40 bg-warn/10 p-3">
+                <strong className="text-sm font-medium text-ink">{t("training.notReady.title", "학습 준비가 끝나지 않았습니다")}</strong>
+                <p className="mt-1 text-xs text-ink-muted">{t("training.notReady.body", "데이터셋 탭에서 다시 저장하면 학습용 준비까지 함께 진행됩니다.")}</p>
               </article>
             ) : null}
-            <details className="advanced-inline" open>
-              <summary>학습 설정</summary>
-              <div className="field-row">
-                <label>
-                  학습 방식
-                  <select value={runForm.training_mode} onChange={(event) => setRunForm({ ...runForm, training_mode: event.target.value as FineTuneMode })}>
-                    <option value="base">Base</option>
-                    <option value="custom_voice">CustomVoice</option>
-                    <option value="voicebox">VoiceBox</option>
-                  </select>
-                </label>
-                <label>
-                  초기 모델
-                  <select value={runForm.init_model_path} onChange={(event) => setRunForm({ ...runForm, init_model_path: event.target.value })}>
-                    {trainingModelOptions.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {displayModelName(model)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  화자 이름
-                  <input value={runForm.speaker_name} onChange={(event) => setRunForm({ ...runForm, speaker_name: event.target.value })} />
-                </label>
-                <label>
-                  모델 이름
-                  <input
-                    placeholder="예: mai-korean-narrator"
-                    value={runForm.output_name}
-                    onChange={(event) => setRunForm({ ...runForm, output_name: event.target.value })}
-                  />
-                </label>
+            <h3 className="text-sm font-medium text-ink">{t("training.config.title", "학습 설정")}</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("training.field.mode", "학습 방식")}</Label>
+                <Select value={runForm.training_mode || undefined} onValueChange={(value) => setRunForm({ ...runForm, training_mode: value as FineTuneMode })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="base">Base</SelectItem>
+                    <SelectItem value="custom_voice">CustomVoice</SelectItem>
+                    <SelectItem value="voicebox">VoiceBox</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              {runForm.training_mode === "custom_voice" ? (
-                <label>
-                  목소리 기준 모델
-                  <select value={runForm.speaker_encoder_model_path} onChange={(event) => setRunForm({ ...runForm, speaker_encoder_model_path: event.target.value })}>
-                    {baseModels.map((model) => (
-                      <option key={model.key} value={model.model_id}>
-                        {displayModelName(model)}
-                      </option>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("training.field.initModel", "초기 모델")}</Label>
+                <Select value={runForm.init_model_path || undefined} onValueChange={(value) => setRunForm({ ...runForm, init_model_path: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {trainingModelOptions.map((model) => (
+                      <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
                     ))}
-                  </select>
-                </label>
-              ) : null}
-              <details className="advanced-inline">
-                <summary>고급 학습 설정</summary>
-                <div className="field-row">
-                  <label>
-                    토크나이저
-                    <select value={runForm.tokenizer_model_path} onChange={(event) => setRunForm({ ...runForm, tokenizer_model_path: event.target.value })}>
-                      {tokenizerModels.map((model) => (
-                        <option key={model.key} value={model.model_id}>
-                          {displayModelName(model)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    배치 크기
-                    <input type="number" value={runForm.batch_size} onChange={(event) => setRunForm({ ...runForm, batch_size: Number(event.target.value) })} />
-                  </label>
-                  <label>
-                    epoch
-                    <input type="number" value={runForm.num_epochs} onChange={(event) => setRunForm({ ...runForm, num_epochs: Number(event.target.value) })} />
-                  </label>
-                  <label>
-                    학습률
-                    <input type="number" step="0.000001" value={runForm.lr} onChange={(event) => setRunForm({ ...runForm, lr: Number(event.target.value) })} />
-                  </label>
-                </div>
-              </details>
-            </details>
-            <button className="primary-button" disabled={!datasetReadyForTraining} onClick={handleCreateRun} type="button">
-              학습 시작
-            </button>
-          </section>
-
-          <section className="panel">
-            <h3>학습 실행 기록</h3>
-            <div className="dataset-list">
-              {runs.map((run) => (
-                <article className="dataset-card" key={run.id}>
-                  <strong>{run.output_model_path.split("/").pop() || run.output_model_path}</strong>
-                  <span>{run.status}</span>
-                  <span>{run.speaker_name}</span>
-                  <span>{formatDate(run.created_at)}</span>
-                </article>
-              ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("dataset.field.speaker", "화자 이름")}</Label>
+                <Input value={runForm.speaker_name} onChange={(event) => setRunForm({ ...runForm, speaker_name: event.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("training.field.outputName", "모델 이름")}</Label>
+                <Input
+                  placeholder={t("training.field.outputPlaceholder", "예: mai-korean-narrator")}
+                  value={runForm.output_name}
+                  onChange={(event) => setRunForm({ ...runForm, output_name: event.target.value })}
+                />
+              </div>
             </div>
-          </section>
-        </section>
+            {runForm.training_mode === "custom_voice" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("training.field.encoder", "목소리 기준 모델")}</Label>
+                <Select value={runForm.speaker_encoder_model_path || undefined} onValueChange={(value) => setRunForm({ ...runForm, speaker_encoder_model_path: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {baseModels.map((model) => (
+                      <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                {t("training.advanced", "고급 학습 설정")}
+                <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+              </summary>
+              <div className="border-t border-line px-3 py-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("training.field.tokenizer", "토크나이저")}</Label>
+                  <Select value={runForm.tokenizer_model_path || undefined} onValueChange={(value) => setRunForm({ ...runForm, tokenizer_model_path: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {tokenizerModels.map((model) => (
+                        <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.batchSize", "배치 크기")}</Label>
+                  <Input type="number" value={runForm.batch_size} onChange={(event) => setRunForm({ ...runForm, batch_size: Number(event.target.value) })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">epoch</Label>
+                  <Input type="number" value={runForm.num_epochs} onChange={(event) => setRunForm({ ...runForm, num_epochs: Number(event.target.value) })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("training.field.lr", "학습률")}</Label>
+                  <Input type="number" step="0.000001" value={runForm.lr} onChange={(event) => setRunForm({ ...runForm, lr: Number(event.target.value) })} />
+                </div>
+              </div>
+            </details>
+          </WorkspaceCard>
+
+          <WorkspaceCard>
+            <WorkspaceResultHeader title={t("training.runs.title", "학습 실행 기록")} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {runs.length ? runs.map((run) => (
+                <article key={run.id} className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-1">
+                  <strong className="line-clamp-1 text-sm font-medium text-ink">{run.output_model_path.split("/").pop() || run.output_model_path}</strong>
+                  <Badge variant="secondary" className="self-start bg-canvas text-ink-muted text-[10px]">{run.status}</Badge>
+                  <span className="text-xs text-ink-muted">{run.speaker_name}</span>
+                  <span className="text-[10px] font-mono text-ink-subtle">{formatDate(run.created_at)}</span>
+                </article>
+              )) : (
+                <p className="text-xs text-ink-muted">{t("training.runs.empty", "아직 학습 실행 기록이 없습니다.")}</p>
+              )}
+            </div>
+          </WorkspaceCard>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "voicebox_fusion" ? (
-        <section className="workspace workspace--stacked">
-          <form className="panel" onSubmit={handleCreateVoiceBoxFusion}>
-            <h2>VoiceBox 융합</h2>
-            <div className="panel-grid">
-              {VOICEBOX_STEPS.map((step, index) => (
-                <article className="status-card" key={step.title}>
-                  <strong>{index + 1}. {step.title}</strong>
-                  <p>{step.description}</p>
-                </article>
-              ))}
-            </div>
-            <label>
-              CustomVoice 모델
-              <select value={voiceBoxFusionForm.input_checkpoint_path} onChange={(event) => setVoiceBoxFusionForm({ ...voiceBoxFusionForm, input_checkpoint_path: event.target.value })}>
-                <option value="">선택하세요</option>
-                {plainCustomVoiceModels.map((model) => (
-                  <option key={model.key} value={model.model_id}>
-                    {displayModelName(model)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Base encoder 모델
-              <select value={voiceBoxFusionForm.speaker_encoder_source_path} onChange={(event) => setVoiceBoxFusionForm({ ...voiceBoxFusionForm, speaker_encoder_source_path: event.target.value })}>
-                <option value="">선택하세요</option>
-                {baseModels.map((model) => (
-                  <option key={model.key} value={model.model_id}>
-                    {displayModelName(model)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              모델명
-              <input value={voiceBoxFusionForm.output_name} onChange={(event) => setVoiceBoxFusionForm({ ...voiceBoxFusionForm, output_name: event.target.value })} />
-            </label>
-            <button className="primary-button" type="submit">
-              VoiceBox 만들기
-            </button>
-          </form>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("voicebox_fusion.eyebrow", "VOICEBOX FUSION")}
+            eyebrowIcon={GitMerge}
+            title={t("voicebox_fusion.title", "VoiceBox 융합")}
+            subtitle={t("voicebox_fusion.subtitle", "CustomVoice 모델과 Base encoder를 합쳐 새로운 VoiceBox 모델을 만듭니다.")}
+            action={{
+              label: t("voicebox_fusion.action.create", "VoiceBox 만들기"),
+              formId: "voicebox-fusion-form",
+              loading,
+            }}
+          />
 
-          <section className="panel">
-            <h3>사용 가능한 모델</h3>
-            <div className="preset-list">
-              {voiceBoxModels.map((model) => (
-                <article className="preset-card" key={model.key}>
-                  <strong>{displayModelName(model)}</strong>
-                  <button className="secondary-button" onClick={() => { setVoiceBoxCloneForm((prev) => ({ ...prev, model_id: model.model_id, speaker: model.default_speaker || prev.speaker })); setCloneEngine("voicebox"); setActiveTab("clone"); }} type="button">
-                    복제에서 사용
-                  </button>
+          <WorkspaceCard>
+            <form id="voicebox-fusion-form" className="flex flex-col gap-4" onSubmit={handleCreateVoiceBoxFusion}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {VOICEBOX_STEPS.map((step, index) => (
+                  <article key={step.title} className="rounded-md border border-line bg-canvas/60 p-3">
+                    <strong className="text-sm font-medium text-ink">{index + 1}. {step.title}</strong>
+                    <p className="mt-1 text-xs text-ink-muted">{step.description}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("voicebox_fusion.field.customVoice", "CustomVoice 모델")}</Label>
+                <Select value={voiceBoxFusionForm.input_checkpoint_path || undefined} onValueChange={(value) => setVoiceBoxFusionForm({ ...voiceBoxFusionForm, input_checkpoint_path: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {plainCustomVoiceModels.map((model) => (
+                      <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("voicebox_fusion.field.baseEncoder", "Base encoder 모델")}</Label>
+                <Select value={voiceBoxFusionForm.speaker_encoder_source_path || undefined} onValueChange={(value) => setVoiceBoxFusionForm({ ...voiceBoxFusionForm, speaker_encoder_source_path: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {baseModels.map((model) => (
+                      <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("voicebox_fusion.field.outputName", "모델명")}</Label>
+                <Input value={voiceBoxFusionForm.output_name} onChange={(event) => setVoiceBoxFusionForm({ ...voiceBoxFusionForm, output_name: event.target.value })} />
+              </div>
+            </form>
+          </WorkspaceCard>
+
+          <WorkspaceCard>
+            <WorkspaceResultHeader title={t("voicebox_fusion.available.title", "사용 가능한 모델")} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {voiceBoxModels.length ? voiceBoxModels.map((model) => (
+                <article key={model.key} className="rounded-md border border-line bg-canvas/60 p-3 flex items-center justify-between gap-3">
+                  <strong className="line-clamp-1 text-sm font-medium text-ink">{displayModelName(model)}</strong>
+                  <Button variant="outline" size="sm" onClick={() => { setVoiceBoxCloneForm((prev) => ({ ...prev, model_id: model.model_id, speaker: model.default_speaker || prev.speaker })); setCloneEngine("voicebox"); setActiveTab("clone"); }} type="button">
+                    {t("voicebox_fusion.useInClone", "복제에서 사용")}
+                  </Button>
                 </article>
-              ))}
-              {!voiceBoxModels.length ? (
-                <p className="field-hint">아직 사용할 수 있는 VoiceBox 모델이 없습니다.</p>
-              ) : null}
+              )) : (
+                <p className="text-xs text-ink-muted">{t("voicebox_fusion.empty", "아직 사용할 수 있는 VoiceBox 모델이 없습니다.")}</p>
+              )}
             </div>
-          </section>
-        </section>
+          </WorkspaceCard>
+        </WorkspaceShell>
       ) : null}
 
       {activeTab === "guide" ? (
-        <section className="workspace workspace--stacked">
-          <section className="guide-hero">
-            <div>
-              <span className="eyebrow eyebrow--soft">사용 가이드</span>
-              <h2>작업별로 무엇을 어디서 하는지 정리했습니다</h2>
-              <p>Qwen 생성, Qwen 학습, VoiceBox, S2-Pro, 오디오 도구를 처음 쓰는 사람도 순서대로 따라갈 수 있게 묶었습니다.</p>
-            </div>
-          </section>
-          <section className="guide-doc-shell">
-            <nav className="guide-doc-nav" aria-label="Guide documents">
-              {GUIDE_SECTIONS.map((section) => (
-                <button
-                  className={selectedGuideSection.title === section.title ? "guide-doc-link is-active" : "guide-doc-link"}
-                  key={section.title}
-                  onClick={() => setActiveGuideTitle(section.title)}
-                  type="button"
-                >
-                  {section.title}
-                </button>
-              ))}
-            </nav>
-            <article className="guide-doc-page">
-              <span className="eyebrow eyebrow--soft">Guide</span>
-              <h3>{selectedGuideSection.title}</h3>
-              <p>{selectedGuideSection.summary}</p>
-              <ol>
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("guide.eyebrow", "USER GUIDE")}
+            eyebrowIcon={BookOpen}
+            title={t("guide.title", "작업별로 무엇을 어디서 하는지 정리했습니다")}
+            subtitle={t("guide.subtitle", "Qwen 생성, Qwen 학습, VoiceBox, S2-Pro, 오디오 도구를 처음 쓰는 사람도 순서대로 따라갈 수 있게 묶었습니다.")}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)]">
+            <aside className="self-start">
+              <WorkspaceCard className="flex flex-col gap-1 p-3">
+                <nav className="flex flex-col gap-1" aria-label="Guide documents">
+                  {GUIDE_SECTIONS.map((section) => (
+                    <button
+                      className={`rounded-md px-3 py-2 text-left text-sm transition ${selectedGuideSection.title === section.title ? "bg-accent-soft text-accent-ink font-medium" : "text-ink-muted hover:bg-canvas hover:text-ink"}`}
+                      key={section.title}
+                      onClick={() => setActiveGuideTitle(section.title)}
+                      type="button"
+                    >
+                      {section.title}
+                    </button>
+                  ))}
+                </nav>
+              </WorkspaceCard>
+            </aside>
+
+            <WorkspaceCard className="flex flex-col gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">Guide</span>
+              <h3 className="text-lg font-semibold text-ink">{selectedGuideSection.title}</h3>
+              <p className="text-sm text-ink-muted">{selectedGuideSection.summary}</p>
+              <ol className="mt-2 flex list-decimal flex-col gap-2 pl-5 text-sm text-ink-muted marker:text-ink-subtle marker:font-mono">
                 {selectedGuideSection.steps.map((step) => (
-                  <li key={step}>{step}</li>
+                  <li key={step} className="leading-relaxed">{step}</li>
                 ))}
               </ol>
-            </article>
-          </section>
-        </section>
+            </WorkspaceCard>
+          </div>
+        </WorkspaceShell>
       ) : null}
 
         </main>
@@ -5947,7 +6547,9 @@ export default function App() {
   return (
     <I18nProvider>
       <ThemeProvider>
-        <StudioApp />
+        <Providers>
+          <StudioApp />
+        </Providers>
       </ThemeProvider>
     </I18nProvider>
   );

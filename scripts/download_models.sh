@@ -138,15 +138,7 @@ echo
 echo "Downloaded model profile: ${PROFILE}"
 echo "Models stored in: ${MODELS_DIR}"
 
-FISH_SPEECH_REPO_URL="${FISH_SPEECH_REPO_URL:-https://github.com/fishaudio/fish-speech.git}"
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "s2pro" ]]; then
-  if [[ ! -d "${FISH_SPEECH_DIR}/.git" ]]; then
-    echo "Cloning Fish Speech -> ${FISH_SPEECH_DIR}"
-    git clone "${FISH_SPEECH_REPO_URL}" "${FISH_SPEECH_DIR}"
-  else
-    echo "Fish Speech already present at ${FISH_SPEECH_DIR}"
-  fi
-
   python - "${FISH_SPEECH_MODEL_DIR}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
 import shutil
 import sys
@@ -183,17 +175,9 @@ print("Fish Speech S2-Pro model download completed.")
 PY
 fi
 
-ACE_STEP_REPO_URL="${ACE_STEP_REPO_URL:-https://github.com/ace-step/ACE-Step-1.5.git}"
 ACE_STEP_VENV="${ACE_STEP_VENV:-${ROOT_DIR}/.venv-ace-step}"
 ACE_STEP_DOWNLOAD_PROFILE="${ACE_STEP_DOWNLOAD_PROFILE:-main}"
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "ace-step" ]]; then
-  if [[ ! -d "${ACE_STEP_DIR}/.git" ]]; then
-    echo "Cloning ACE-Step-1.5 -> ${ACE_STEP_DIR}"
-    git clone --depth 1 "${ACE_STEP_REPO_URL}" "${ACE_STEP_DIR}"
-  else
-    echo "ACE-Step already present at ${ACE_STEP_DIR}"
-  fi
-
   if [[ ! -d "${ACE_STEP_VENV}" ]]; then
     echo "Creating ACE-Step venv -> ${ACE_STEP_VENV}"
     python -m venv "${ACE_STEP_VENV}"
@@ -267,8 +251,6 @@ PY
   fi
 fi
 
-APPLIO_REPO_URL="${APPLIO_REPO_URL:-https://github.com/IAHispano/Applio.git}"
-MMAUDIO_REPO_URL="${MMAUDIO_REPO_URL:-https://github.com/hkchengrex/MMAudio.git}"
 APPLIO_DEFAULT_RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth}"
 APPLIO_DEFAULT_RVC_INDEX_URL="${APPLIO_DEFAULT_RVC_INDEX_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/index/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index}"
 APPLIO_DEFAULT_RVC_MODEL_FILENAME="${APPLIO_DEFAULT_RVC_MODEL_FILENAME:-yui-mix-pro-hq-40k.pth}"
@@ -276,20 +258,6 @@ APPLIO_DEFAULT_RVC_INDEX_FILENAME="${APPLIO_DEFAULT_RVC_INDEX_FILENAME:-added_IV
 APPLIO_SKIP_DEFAULT_RVC="${APPLIO_SKIP_DEFAULT_RVC:-0}"
 
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "core" ]]; then
-
-if [[ ! -d "${APPLIO_DIR}/.git" ]]; then
-  echo "Cloning Applio -> ${APPLIO_DIR}"
-  git clone "${APPLIO_REPO_URL}" "${APPLIO_DIR}"
-else
-  echo "Applio already present at ${APPLIO_DIR}"
-fi
-
-if [[ ! -d "${MMAUDIO_DIR}/.git" ]]; then
-  echo "Cloning MMAudio -> ${MMAUDIO_DIR}"
-  git clone "${MMAUDIO_REPO_URL}" "${MMAUDIO_DIR}"
-else
-  echo "MMAudio already present at ${MMAUDIO_DIR}"
-fi
 
 RVC_MODEL_URL="${APPLIO_RVC_MODEL_URL:-}"
 RVC_INDEX_URL="${APPLIO_RVC_INDEX_URL:-}"

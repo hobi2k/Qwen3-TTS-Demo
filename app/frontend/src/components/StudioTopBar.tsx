@@ -4,13 +4,11 @@ import { LOCALES, useTranslation } from "../lib/i18n";
 import { THEMES, useStudioTheme } from "../lib/theme";
 
 interface StudioTopBarProps {
-  onRender?: () => void;
   onShare?: () => void;
-  renderDisabled?: boolean;
   title?: string;
 }
 
-export function StudioTopBar({ onRender, onShare, renderDisabled = false, title = "Voice Studio" }: StudioTopBarProps) {
+export function StudioTopBar({ onShare, title = "Voice Studio" }: StudioTopBarProps) {
   const { t, locale, setLocale } = useTranslation();
   const { theme, setTheme } = useStudioTheme();
 
@@ -60,11 +58,6 @@ export function StudioTopBar({ onRender, onShare, renderDisabled = false, title 
       {onShare ? (
         <button className="studio-topbar__share" onClick={onShare} type="button">
           {t("action.copyLink")}
-        </button>
-      ) : null}
-      {onRender ? (
-        <button className="studio-topbar__render" disabled={renderDisabled} onClick={onRender} type="button">
-          ▶ {t("action.runCurrent")}
         </button>
       ) : null}
     </header>

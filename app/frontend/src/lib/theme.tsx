@@ -11,7 +11,6 @@ import {
 } from "react";
 
 export type Theme = "dark" | "storm" | "light";
-export type Density = "compact" | "normal" | "spacious";
 
 export const THEMES: { value: Theme; label: string; tone: "dark" | "light" }[] = [
   { value: "dark", label: "Onyx", tone: "dark" },
@@ -19,17 +18,12 @@ export const THEMES: { value: Theme; label: string; tone: "dark" | "light" }[] =
   { value: "light", label: "Bone", tone: "light" },
 ];
 
-export const DENSITIES: Density[] = ["compact", "normal", "spacious"];
-
 const THEME_KEY = "voicestudio.theme";
-const DENSITY_KEY = "voicestudio.density";
 const ACCENT_KEY = "voicestudio.accent";
 
 interface ThemeContextValue {
   theme: Theme;
   setTheme: (next: Theme) => void;
-  density: Density;
-  setDensity: (next: Density) => void;
   accentHue: number;
   setAccentHue: (next: number) => void;
 }
@@ -43,13 +37,6 @@ function readTheme(): Theme {
   return "dark";
 }
 
-function readDensity(): Density {
-  if (typeof window === "undefined") return "normal";
-  const stored = window.localStorage.getItem(DENSITY_KEY);
-  if (stored === "compact" || stored === "normal" || stored === "spacious") return stored;
-  return "normal";
-}
-
 function readAccent(): number {
   if (typeof window === "undefined") return 70;
   const stored = window.localStorage.getItem(ACCENT_KEY);
@@ -60,12 +47,10 @@ function readAccent(): number {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
-  const [density, setDensityState] = useState<Density>("normal");
   const [accentHue, setAccentHueState] = useState<number>(70);
 
   useEffect(() => {
     setThemeState(readTheme());
-    setDensityState(readDensity());
     setAccentHueState(readAccent());
   }, []);
 
@@ -74,11 +59,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute("data-theme", theme);
     document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
   }, [theme]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.documentElement.setAttribute("data-density", density);
-  }, [density]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -97,13 +77,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const setDensity = useCallback((next: Density) => {
-    setDensityState(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(DENSITY_KEY, next);
-    }
-  }, []);
-
   const setAccentHue = useCallback((next: number) => {
     setAccentHueState(next);
     if (typeof window !== "undefined") {
@@ -112,8 +85,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ theme, setTheme, density, setDensity, accentHue, setAccentHue }),
-    [theme, setTheme, density, setDensity, accentHue, setAccentHue],
+    () => ({ theme, setTheme, accentHue, setAccentHue }),
+    [theme, setTheme, accentHue, setAccentHue],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -125,8 +98,6 @@ export function useStudioTheme() {
     return {
       theme: "dark" as Theme,
       setTheme: () => {},
-      density: "normal" as Density,
-      setDensity: () => {},
       accentHue: 70,
       setAccentHue: () => {},
     };

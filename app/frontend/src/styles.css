@@ -70,10 +70,6 @@
   --vs-danger: oklch(0.7 0.18 25);
 }
 
-[data-density="compact"] { --vs-density: 0.85; }
-[data-density="normal"]  { --vs-density: 1; }
-[data-density="spacious"] { --vs-density: 1.15; }
-
 :root {
   --font-sans: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --text-strong: var(--vs-ink);
@@ -4382,20 +4378,12 @@ body {
   background: transparent;
 }
 
-[data-density="compact"] .app-shell {
-  grid-template-columns: 220px minmax(0, 1fr);
-}
-
-[data-density="spacious"] .app-shell {
-  grid-template-columns: 280px minmax(0, 1fr);
-}
-
 .page-main {
   min-height: 0;
   height: calc(100vh - 52px);
   overflow: auto;
   gap: 20px;
-  padding: calc(22px * var(--vs-density, 1)) clamp(18px, 2vw, 34px) 48px;
+  padding: 22px clamp(18px, 2vw, 34px) 48px;
   background:
     linear-gradient(var(--vs-grid) 1px, transparent 1px) 0 0/24px 24px,
     linear-gradient(90deg, var(--vs-grid) 1px, transparent 1px) 0 0/24px 24px,
@@ -4772,16 +4760,6 @@ details > summary {
   height: calc(100vh - 52px);
   min-height: 0;
   background: transparent;
-}
-
-[data-density="compact"] .app-shell {
-  grid-template-columns: 224px minmax(0, 1fr) 330px;
-  grid-template-rows: minmax(0, 1fr) 74px;
-}
-
-[data-density="spacious"] .app-shell {
-  grid-template-columns: 268px minmax(0, 1fr) 390px;
-  grid-template-rows: minmax(0, 1fr) 92px;
 }
 
 .sidebar.studio-nav {
@@ -5321,20 +5299,10 @@ textarea {
 
 /* Final workspace pass: no global inspector, no bottom transport.
    Result playback and downloads live inside each feature or the gallery. */
-.app-shell,
-[data-density="compact"] .app-shell,
-[data-density="spacious"] .app-shell {
+.app-shell {
   grid-template-columns: clamp(220px, 15.5vw, 268px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "nav canvas";
-}
-
-[data-density="compact"] .app-shell {
-  grid-template-columns: 220px minmax(0, 1fr);
-}
-
-[data-density="spacious"] .app-shell {
-  grid-template-columns: 280px minmax(0, 1fr);
 }
 
 .page-main {

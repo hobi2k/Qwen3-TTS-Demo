@@ -1,0 +1,226 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Custom variants — `dark:` matches both dark themes (Onyx & Storm). */
+@custom-variant dark (&:where([data-theme="dark"] *, [data-theme="storm"] *, [data-theme="dark"], [data-theme="storm"]));
+@custom-variant theme-onyx (&:where([data-theme="dark"] *, [data-theme="dark"]));
+@custom-variant theme-storm (&:where([data-theme="storm"] *, [data-theme="storm"]));
+@custom-variant theme-bone (&:where([data-theme="light"] *, [data-theme="light"]));
+
+@theme inline {
+  /* Color tokens — bound at runtime via the variables below. */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-overlay: var(--overlay);
+  --color-sunken: var(--sunken);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-ink-on-accent: var(--ink-on-accent);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-line-subtle: var(--line-subtle);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-edge: var(--accent-edge);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-positive: var(--positive);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  /* ShadCN aliases — let ShadCN primitives resolve directly. */
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--elevated);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--ink-on-accent);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--sunken);
+  --color-muted-foreground: var(--ink-muted);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--ink-on-accent);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+  --color-chart-1: oklch(0.78 0.16 var(--accent-hue, 70));
+  --color-chart-2: oklch(0.7 0.14 calc(var(--accent-hue, 70) + 60));
+  --color-chart-3: oklch(0.62 0.12 calc(var(--accent-hue, 70) + 120));
+  --color-chart-4: oklch(0.74 0.13 calc(var(--accent-hue, 70) + 180));
+  --color-chart-5: oklch(0.68 0.15 calc(var(--accent-hue, 70) + 240));
+
+  /* Typography scale */
+  --font-sans:
+    "Pretendard Variable", "Pretendard", "Noto Sans JP", "Noto Sans KR",
+    "Inter", "Apple SD Gothic Neo", "Hiragino Sans", "Meiryo", system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "SFMono-Regular", "Menlo", "Consolas", monospace;
+
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.8125rem; /* 13 */
+  --text-base: 0.875rem; /* 14 */
+  --text-md: 0.9375rem; /* 15 */
+  --text-lg: 1.0625rem; /* 17 */
+  --text-xl: 1.25rem; /* 20 */
+  --text-2xl: 1.5rem; /* 24 */
+  --text-display: 2rem; /* 32 */
+
+  --tracking-tight: -0.012em;
+  --tracking-snug: -0.006em;
+  --tracking-base: 0em;
+  --tracking-wide: 0.04em;
+  --tracking-allcaps: 0.08em;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-base: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+  --radius: var(--radius-md);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+
+  /* Elevation */
+  --shadow-1: 0 1px 0 0 var(--line-subtle), 0 0 0 1px var(--line-subtle);
+  --shadow-2: 0 6px 18px -8px oklch(0 0 0 / 0.18), 0 2px 6px -2px oklch(0 0 0 / 0.08);
+  --shadow-3: 0 24px 48px -16px oklch(0 0 0 / 0.32), 0 6px 16px -4px oklch(0 0 0 / 0.16);
+  --shadow-focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent-edge);
+
+  /* Layout primitives */
+  --shell-sidebar-w: clamp(220px, 15.5vw, 268px);
+  --shell-topbar-h: 52px;
+  --shell-content-max: 1320px;
+}
+
+/* ─── Theme: Onyx (default dark) ─────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  --canvas: oklch(0.18 0.005 240);
+  --surface: oklch(0.22 0.005 240);
+  --elevated: oklch(0.25 0.006 240);
+  --overlay: oklch(0.12 0.005 240 / 0.72);
+  --sunken: oklch(0.15 0.005 240);
+
+  --ink: oklch(0.96 0.005 240);
+  --ink-muted: oklch(0.78 0.008 240);
+  --ink-subtle: oklch(0.6 0.008 240);
+  --ink-on-accent: oklch(0.16 0.04 var(--accent-hue, 70));
+
+  --line: oklch(1 0 0 / 0.08);
+  --line-strong: oklch(1 0 0 / 0.16);
+  --line-subtle: oklch(1 0 0 / 0.04);
+
+  --accent-hue: 70;
+  --accent: oklch(0.78 0.16 var(--accent-hue));
+  --accent-soft: oklch(0.78 0.16 var(--accent-hue) / 0.16);
+  --accent-edge: oklch(0.78 0.16 var(--accent-hue) / 0.45);
+  --accent-ink: oklch(0.18 0.04 var(--accent-hue));
+
+  --positive: oklch(0.78 0.15 150);
+  --warn: oklch(0.82 0.16 65);
+  --danger: oklch(0.7 0.18 25);
+}
+
+/* ─── Theme: Storm (deep blue dark) ──────────────────────────── */
+:root[data-theme="storm"] {
+  --canvas: oklch(0.2 0.03 250);
+  --surface: oklch(0.24 0.035 250);
+  --elevated: oklch(0.27 0.04 250);
+  --overlay: oklch(0.13 0.04 250 / 0.72);
+  --sunken: oklch(0.17 0.035 250);
+
+  --ink: oklch(0.96 0.012 240);
+  --ink-muted: oklch(0.78 0.02 240);
+  --ink-subtle: oklch(0.6 0.025 240);
+  --ink-on-accent: oklch(0.16 0.04 var(--accent-hue, 70));
+
+  --line: oklch(1 0.01 240 / 0.1);
+  --line-strong: oklch(1 0.01 240 / 0.18);
+  --line-subtle: oklch(1 0.01 240 / 0.05);
+
+  --positive: oklch(0.78 0.15 150);
+  --warn: oklch(0.82 0.16 65);
+  --danger: oklch(0.72 0.18 25);
+}
+
+/* ─── Theme: Bone (warm light) ───────────────────────────────── */
+:root[data-theme="light"] {
+  --canvas: oklch(0.97 0.004 80);
+  --surface: oklch(0.99 0.003 80);
+  --elevated: oklch(1 0 0);
+  --overlay: oklch(0.18 0.005 80 / 0.36);
+  --sunken: oklch(0.94 0.005 80);
+
+  --ink: oklch(0.18 0.008 80);
+  --ink-muted: oklch(0.4 0.008 80);
+  --ink-subtle: oklch(0.55 0.008 80);
+  --ink-on-accent: oklch(0.16 0.04 var(--accent-hue, 70));
+
+  --line: oklch(0.18 0.008 80 / 0.1);
+  --line-strong: oklch(0.18 0.008 80 / 0.2);
+  --line-subtle: oklch(0.18 0.008 80 / 0.05);
+
+  --positive: oklch(0.55 0.15 150);
+  --warn: oklch(0.7 0.16 65);
+  --danger: oklch(0.55 0.2 25);
+}
+
+/* Base reset compatible with raw CSS coexistence. */
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "ss02", "cv01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: var(--radius-sm);
+  }
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--ink);
+  }
+}
+
+/* Locale-aware font priority — Pretendard first for ko, Noto Sans JP first for ja. */
+:root[lang="ja"] body,
+[lang="ja"] {
+  font-family:
+    "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Pretendard Variable", "Pretendard", "Inter", system-ui, sans-serif;
+}
+
+:root[lang="en"] body,
+[lang="en"] {
+  font-family:
+    "Inter", "Pretendard Variable", "Pretendard", "Noto Sans JP",
+    system-ui, sans-serif;
+}

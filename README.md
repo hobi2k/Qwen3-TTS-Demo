@@ -112,9 +112,10 @@ VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리
 Qwen3-TTS-Demo/
   Qwen3-TTS/                 # upstream reference repo
   vendor/
-    Applio/                  # tracked source
-    MMAudio/                 # tracked source
-    ACE-Step/                # optional local ACE-Step checkout
+    Applio/                  # vendored (tracked in this repo)
+    MMAudio/                 # vendored (tracked in this repo)
+    fish-speech/             # vendored (tracked in this repo)
+    ACE-Step/                # vendored (tracked in this repo)
   app/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript
@@ -269,7 +270,7 @@ data/datasets/mai_ko_full/
 - `S2-Pro 대화 생성`: `<|speaker:0|>`, `<|speaker:1|>` 형태의 화자 태그로 대화 생성
 - `S2-Pro 다국어 TTS`: S2-Pro의 80개 이상 언어 지원 방향에 맞춘 다국어 생성
 
-기본은 로컬 Fish Speech입니다. `./scripts/download_models.sh s2pro`로 Fish Speech 코드와 `fishaudio/s2-pro` 모델을 로컬에 받고, `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄운 뒤 웹 UI에서 생성합니다. 필요하면 `FISH_AUDIO_API_KEY`를 `.env`에 넣고 S2-Pro 화면의 `Runtime`을 `Fish Audio API`로 바꿔 hosted API도 사용할 수 있습니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
+기본은 로컬 Fish Speech입니다. Fish Speech 코드는 이미 `vendor/fish-speech/`에 vendored 되어 있고, `./scripts/download_models.sh s2pro`로 `fishaudio/s2-pro` 모델 weight만 받은 뒤 `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄워 웹 UI에서 생성합니다. 필요하면 `FISH_AUDIO_API_KEY`를 `.env`에 넣고 S2-Pro 화면의 `Runtime`을 `Fish Audio API`로 바꿔 hosted API도 사용할 수 있습니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
 
 ## 빠른 시작
 
@@ -325,7 +326,7 @@ BACKEND_PORT=<BACKEND_PORT> npm run dev
 - `ensurepip` 복구
 - `uv sync`
 - `uv pip install hf_transfer certifi`
-- `vendor/Applio`, `vendor/MMAudio` 준비
+- `vendor/Applio`, `vendor/MMAudio` 의 선택적 requirements 설치 (소스 자체는 이 레포에 vendored)
 - `app/backend/.env` 생성
 - `ffmpeg`, `sox` 점검
 
@@ -340,7 +341,7 @@ BACKEND_PORT=<BACKEND_PORT> npm run dev
 - Applio/RVC 데모 모델과 index
 - MMAudio 일반/NSFW 효과음 모델
 - Stem separator 모델
-- ACE-Step-1.5 소스, 전용 `.venv-ace-step`, 음악 생성 checkpoint
+- 전용 `.venv-ace-step`, ACE-Step-1.5 음악 생성 checkpoint (소스는 이 레포에 vendored)
 
 ACE-Step은 메인 `.venv`와 의존성이 달라 별도 `.venv-ace-step`에 설치합니다.
 스크립트는 `uv pip install --python .venv-ace-step/bin/python -e vendor/ACE-Step`를 우선 사용하고,

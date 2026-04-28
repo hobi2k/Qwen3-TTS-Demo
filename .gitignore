@@ -205,7 +205,6 @@ app/backend/.venv*/
 .cache/
 models/
 models/**
-vendor/ACE-Step/
 !vendor/fish-speech/fish_speech/models/
 !vendor/fish-speech/fish_speech/models/**
 data/models/

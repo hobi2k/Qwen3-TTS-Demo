@@ -1,4 +1,9 @@
 import type { AudioAsset, AudioToolJob, GenerationRecord, ModelInfo } from "./types";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useTranslation } from "./i18n";
 
 export type TabKey =
   | "home"
@@ -921,6 +926,58 @@ export function serializeGenerationControls(value: GenerationControlsForm): Reco
   };
 }
 
+function ControlField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
+      <Label className="font-mono text-[10px] font-medium uppercase tracking-allcaps text-ink-subtle">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function ControlSection({
+  title,
+  toggle,
+  children,
+}: {
+  title: string;
+  toggle?: { checked: boolean; onChange: (next: boolean) => void; label?: string };
+  children: React.ReactNode;
+}) {
+  const dimmed = toggle ? !toggle.checked : false;
+  return (
+    <section className="flex flex-col gap-3 rounded-md border border-line bg-canvas/40 p-3">
+      <header className="flex items-center justify-between gap-2">
+        <h4 className="font-mono text-[10px] font-semibold uppercase tracking-allcaps text-ink-muted">
+          {title}
+        </h4>
+        {toggle ? (
+          <label className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-ink-subtle">
+            {toggle.label ?? (toggle.checked ? "ON" : "OFF")}
+            <Switch checked={toggle.checked} onCheckedChange={toggle.onChange} />
+          </label>
+        ) : null}
+      </header>
+      <div
+        className={`flex flex-col gap-3 transition-opacity ${dimmed ? "pointer-events-none opacity-40" : ""}`}
+        aria-disabled={dimmed || undefined}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
 export function GenerationControlsEditor({
   value,
   onChange,
@@ -928,62 +985,121 @@ export function GenerationControlsEditor({
   value: GenerationControlsForm;
   onChange: (next: GenerationControlsForm) => void;
 }) {
+  const { t } = useTranslation();
+  const numberInput = "h-8 border-line bg-canvas font-mono text-xs tabular-nums";
   return (
-    <div className="advanced-controls">
-      <div className="advanced-controls__grid">
-        <label>
-          Seed
-          <input value={value.seed} onChange={(event) => onChange({ ...value, seed: event.target.value })} />
+    <div className="flex flex-col gap-3">
+      {/* Generation core */}
+      <ControlSection title={t("tts.controls.generationGroup", "Generation")}>
+        <div className="grid grid-cols-2 gap-3">
+          <ControlField label={t("tts.controls.seed", "Seed")}>
+            <Input
+              value={value.seed}
+              onChange={(event) => onChange({ ...value, seed: event.target.value })}
+              className={numberInput}
+              inputMode="numeric"
+            />
+          </ControlField>
+          <ControlField label={t("tts.controls.maxTokens", "Max new tokens")}>
+            <Input
+              value={value.max_new_tokens}
+              onChange={(event) => onChange({ ...value, max_new_tokens: event.target.value })}
+              className={numberInput}
+              inputMode="numeric"
+            />
+          </ControlField>
+        </div>
+        <label className="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-xs text-ink hover:border-line-strong">
+          <span className="font-medium">{t("tts.controls.nonStreaming", "Non-streaming mode")}</span>
+          <Switch
+            checked={value.non_streaming_mode}
+            onCheckedChange={(next) => onChange({ ...value, non_streaming_mode: next })}
+          />
         </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={value.non_streaming_mode} onChange={(event) => onChange({ ...value, non_streaming_mode: event.target.checked })} />
-          Non-streaming mode
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={value.do_sample} onChange={(event) => onChange({ ...value, do_sample: event.target.checked })} />
-          Sampling
-        </label>
-        <label>
-          Top K
-          <input value={value.top_k} onChange={(event) => onChange({ ...value, top_k: event.target.value })} />
-        </label>
-        <label>
-          Top P
-          <input value={value.top_p} onChange={(event) => onChange({ ...value, top_p: event.target.value })} />
-        </label>
-        <label>
-          Temperature
-          <input value={value.temperature} onChange={(event) => onChange({ ...value, temperature: event.target.value })} />
-        </label>
-        <label>
-          Repetition penalty
-          <input value={value.repetition_penalty} onChange={(event) => onChange({ ...value, repetition_penalty: event.target.value })} />
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={value.subtalker_dosample} onChange={(event) => onChange({ ...value, subtalker_dosample: event.target.checked })} />
-          Subtalker sampling
-        </label>
-        <label>
-          Subtalker Top K
-          <input value={value.subtalker_top_k} onChange={(event) => onChange({ ...value, subtalker_top_k: event.target.value })} />
-        </label>
-        <label>
-          Subtalker Top P
-          <input value={value.subtalker_top_p} onChange={(event) => onChange({ ...value, subtalker_top_p: event.target.value })} />
-        </label>
-        <label>
-          Subtalker temperature
-          <input value={value.subtalker_temperature} onChange={(event) => onChange({ ...value, subtalker_temperature: event.target.value })} />
-        </label>
-        <label>
-          Max new tokens
-          <input value={value.max_new_tokens} onChange={(event) => onChange({ ...value, max_new_tokens: event.target.value })} />
-        </label>
-      </div>
-      <label>
-        Extra generate kwargs
-        <textarea className="json-textarea" value={value.extra_generate_kwargs} onChange={(event) => onChange({ ...value, extra_generate_kwargs: event.target.value })} />
-      </label>
+      </ControlSection>
+
+      {/* Sampling — main */}
+      <ControlSection
+        title={t("tts.controls.sampling", "Sampling")}
+        toggle={{
+          checked: value.do_sample,
+          onChange: (next) => onChange({ ...value, do_sample: next }),
+        }}
+      >
+        <div className="grid grid-cols-3 gap-3">
+          <ControlField label={t("tts.controls.topK", "Top K")}>
+            <Input
+              value={value.top_k}
+              onChange={(event) => onChange({ ...value, top_k: event.target.value })}
+              className={numberInput}
+            />
+          </ControlField>
+          <ControlField label={t("tts.controls.topP", "Top P")}>
+            <Input
+              value={value.top_p}
+              onChange={(event) => onChange({ ...value, top_p: event.target.value })}
+              className={numberInput}
+            />
+          </ControlField>
+          <ControlField label={t("tts.controls.temperature", "Temp")}>
+            <Input
+              value={value.temperature}
+              onChange={(event) => onChange({ ...value, temperature: event.target.value })}
+              className={numberInput}
+            />
+          </ControlField>
+        </div>
+        <ControlField label={t("tts.controls.repetition", "Repetition penalty")}>
+          <Input
+            value={value.repetition_penalty}
+            onChange={(event) => onChange({ ...value, repetition_penalty: event.target.value })}
+            className={numberInput}
+          />
+        </ControlField>
+      </ControlSection>
+
+      {/* Subtalker */}
+      <ControlSection
+        title={t("tts.controls.subtalkerGroup", "Subtalker")}
+        toggle={{
+          checked: value.subtalker_dosample,
+          onChange: (next) => onChange({ ...value, subtalker_dosample: next }),
+        }}
+      >
+        <div className="grid grid-cols-3 gap-3">
+          <ControlField label={t("tts.controls.topK", "Top K")}>
+            <Input
+              value={value.subtalker_top_k}
+              onChange={(event) => onChange({ ...value, subtalker_top_k: event.target.value })}
+              className={numberInput}
+            />
+          </ControlField>
+          <ControlField label={t("tts.controls.topP", "Top P")}>
+            <Input
+              value={value.subtalker_top_p}
+              onChange={(event) => onChange({ ...value, subtalker_top_p: event.target.value })}
+              className={numberInput}
+            />
+          </ControlField>
+          <ControlField label={t("tts.controls.temperature", "Temp")}>
+            <Input
+              value={value.subtalker_temperature}
+              onChange={(event) => onChange({ ...value, subtalker_temperature: event.target.value })}
+              className={numberInput}
+            />
+          </ControlField>
+        </div>
+      </ControlSection>
+
+      {/* Extra kwargs */}
+      <ControlField label={t("tts.controls.extraKwargs", "Extra generate kwargs")}>
+        <Textarea
+          value={value.extra_generate_kwargs}
+          onChange={(event) => onChange({ ...value, extra_generate_kwargs: event.target.value })}
+          className="min-h-[64px] resize-y border-line bg-canvas font-mono text-xs"
+          placeholder="{}"
+        />
+      </ControlField>
     </div>
   );
 }
