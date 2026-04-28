@@ -24,6 +24,26 @@ git clone <your-repo-url> Qwen3-TTS-Demo
 cd Qwen3-TTS-Demo
 ```
 
+## 1-1. 한 번에 준비하기
+
+WSL/Linux에서는 아래 명령 하나로 백엔드 설정, 모델 다운로드, 프런트 설치/빌드를 순서대로 실행할 수 있습니다.
+
+```bash
+./scripts/bootstrap_all.sh
+```
+
+프로필을 지정할 수도 있습니다.
+
+```bash
+./scripts/bootstrap_all.sh core      # Qwen 핵심 모델만
+./scripts/bootstrap_all.sh s2pro     # Fish Speech S2-Pro만
+./scripts/bootstrap_all.sh ace-step  # ACE-Step만
+```
+
+이 스크립트는 `uv`, `npm`이 이미 설치되어 있다고 가정합니다. `ffmpeg`, `sox`는 시스템 패키지라 자동 설치하지 않고 `setup_backend.sh`에서 경고만 표시합니다.
+
+수동으로 나눠 실행하고 싶으면 아래 2~6단계를 그대로 따르면 됩니다.
+
 ## 2. 백엔드 준비
 
 macOS / Linux:

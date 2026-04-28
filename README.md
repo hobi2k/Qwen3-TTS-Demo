@@ -59,6 +59,34 @@
 - S2-Pro 작업실: [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)
 - ACE-Step 작곡: [docs/cookbook/22-ace-step-music.md](docs/cookbook/22-ace-step-music.md)
 
+## Clone 후 전체 준비
+
+WSL/Linux 기준으로는 아래 한 명령이 백엔드 환경, 모델/툴 자산 다운로드, 프런트 의존성 설치와 빌드까지 순서대로 실행합니다.
+
+```bash
+./scripts/bootstrap_all.sh
+```
+
+가볍게 Qwen 핵심 모델만 준비하려면:
+
+```bash
+./scripts/bootstrap_all.sh core
+```
+
+S2-Pro만 준비하려면:
+
+```bash
+./scripts/bootstrap_all.sh s2pro
+```
+
+ACE-Step만 준비하려면:
+
+```bash
+./scripts/bootstrap_all.sh ace-step
+```
+
+사전 요구 사항은 `uv`, `Node.js 18+`, `npm`, `ffmpeg`, `sox`입니다. `ffmpeg`와 `sox`는 스크립트가 경고만 띄우며 자동 설치하지 않습니다.
+
 VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리합니다.
 
 - 1단계 plain `CustomVoice` 학습:

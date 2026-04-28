@@ -698,6 +698,38 @@ class AudioConvertRequest(BaseModel):
     mono: bool = True
 
 
+class AudioEditRequest(BaseModel):
+    """오디오 구간 편집과 기본 마스터링 요청 스키마다."""
+
+    audio_path: str = Field(..., min_length=1)
+    output_name: Optional[str] = None
+    start_sec: float = Field(0.0, ge=0.0)
+    end_sec: Optional[float] = Field(default=None, gt=0.0)
+    gain_db: float = Field(0.0, ge=-48.0, le=24.0)
+    fade_in_sec: float = Field(0.0, ge=0.0, le=30.0)
+    fade_out_sec: float = Field(0.0, ge=0.0, le=30.0)
+    normalize: bool = True
+    reverse: bool = False
+    output_format: str = "wav"
+    sample_rate: int = Field(44100, ge=8000, le=96000)
+
+
+class AudioDenoiseRequest(BaseModel):
+    """음성 노이즈 제거와 기본 정제 요청 스키마다."""
+
+    audio_path: str = Field(..., min_length=1)
+    output_name: Optional[str] = None
+    strength: float = Field(0.55, ge=0.0, le=1.0)
+    noise_profile_sec: float = Field(0.6, ge=0.05, le=5.0)
+    spectral_floor: float = Field(0.08, ge=0.0, le=0.5)
+    highpass_hz: float = Field(70.0, ge=0.0, le=1000.0)
+    lowpass_hz: float = Field(16000.0, ge=1000.0, le=48000.0)
+    voice_presence: float = Field(0.35, ge=0.0, le=1.0)
+    normalize: bool = True
+    output_format: str = "wav"
+    sample_rate: int = Field(44100, ge=8000, le=96000)
+
+
 class AudioSeparationRequest(BaseModel):
     """AI stem separator 기반 오디오 분리 요청 스키마다."""
 

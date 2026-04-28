@@ -12,6 +12,8 @@ import type {
   AceStepUnderstandResponse,
   AudioTranscriptionResponse,
   AudioConvertRequest,
+  AudioDenoiseRequest,
+  AudioEditRequest,
   AudioSeparationRequest,
   AudioToolCapability,
   AudioToolJob,
@@ -480,6 +482,22 @@ export const api = {
 
   convertAudio(payload: AudioConvertRequest): Promise<AudioToolResponse> {
     return request<AudioToolResponse>("/api/audio-tools/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  editAudio(payload: AudioEditRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  denoiseAudio(payload: AudioDenoiseRequest): Promise<AudioToolResponse> {
+    return request<AudioToolResponse>("/api/audio-tools/denoise", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

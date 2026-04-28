@@ -667,6 +667,34 @@ export interface AudioConvertRequest {
   mono: boolean;
 }
 
+export interface AudioEditRequest {
+  audio_path: string;
+  output_name?: string;
+  start_sec: number;
+  end_sec?: number;
+  gain_db: number;
+  fade_in_sec: number;
+  fade_out_sec: number;
+  normalize: boolean;
+  reverse: boolean;
+  output_format: string;
+  sample_rate: number;
+}
+
+export interface AudioDenoiseRequest {
+  audio_path: string;
+  output_name?: string;
+  strength: number;
+  noise_profile_sec: number;
+  spectral_floor: number;
+  highpass_hz: number;
+  lowpass_hz: number;
+  voice_presence: number;
+  normalize: boolean;
+  output_format: string;
+  sample_rate: number;
+}
+
 export interface AudioSeparationRequest {
   audio_path: string;
   model_profile: string;

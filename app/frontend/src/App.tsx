@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { I18nProvider, useTranslation } from "./lib/i18n";
+import { ThemeProvider } from "./lib/theme";
+import { StudioTopBar } from "./components/StudioTopBar";
 
 import { api } from "./lib/api";
 import {
@@ -21,9 +24,9 @@ import {
   GUIDE_SECTIONS,
   HYBRID_RECIPES,
   LanguageSelect,
+  mediaUrl,
   MiniWaveform,
   normalizeDatasetPath,
-  PageHeader,
   parseDatasetSampleBulkInput,
   PRODUCT_PAGES,
   RecipeBar,
@@ -240,6 +243,63 @@ function gallerySelectionKey(record: GenerationRecord): string {
   return `${record.id}::${record.output_audio_path}`;
 }
 
+function galleryAccentForMode(mode: string): string {
+  if (mode.includes("ace")) return "music";
+  if (mode.includes("sound")) return "effect";
+  if (mode.includes("voice_changer") || mode.includes("audio_separation")) return "audio";
+  if (mode.includes("clone") || mode.includes("voicebox")) return "voice";
+  if (mode.includes("design")) return "design";
+  return "speech";
+}
+
+function formatShortDate(value: string): string {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function recordLanguageLabel(record: GenerationRecord): string {
+  const language = (record.language || record.meta?.language || "auto").toString();
+  const labels: Record<string, string> = {
+    ko: "KO",
+    korean: "KO",
+    en: "EN",
+    english: "EN",
+    ja: "JA",
+    japanese: "JA",
+    auto: "AUTO",
+  };
+  return labels[language.toLowerCase()] || language.toUpperCase();
+}
+
+function getRecordModelLabel(record: GenerationRecord): string {
+  const model = record.meta?.model_id || record.meta?.model || record.meta?.model_profile || record.meta?.runtime_source || "";
+  return typeof model === "string" && model.trim() ? basenameFromPath(model).replace(/\.[^.]+$/, "") : getModeLabel(record.mode);
+}
+
+function makeWaveBars(seed: string, count = 48): number[] {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) % 9973;
+  }
+  return Array.from({ length: count }, (_, index) => {
+    const value = Math.sin((hash + index * 19) * 0.31) + Math.cos((hash + index * 7) * 0.17);
+    return 18 + Math.round(Math.abs(value) * 18 + ((index % 7) * 2));
+  });
+}
+
+function aceMetricValue(value: string, fallback: string): string {
+  return value?.toString().trim() || fallback;
+}
+
 function guessMatchingCustomVoiceModel(
   presetBaseModelId: string,
   availableModels: ModelInfo[],
@@ -255,7 +315,8 @@ function guessMatchingCustomVoiceModel(
   return matched?.model_id || fallbackModelId;
 }
 
-export default function App() {
+function StudioApp() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [voiceGalleryView, setVoiceGalleryView] = useState<"trained" | "qwen" | "s2pro" | "rvc">("trained");
   const [activeGuideTitle, setActiveGuideTitle] = useState<string>(GUIDE_SECTIONS[0]?.title || "");
@@ -551,6 +612,35 @@ export default function App() {
     sample_rate: "24000",
     mono: true,
   });
+  const [audioEditorSource, setAudioEditorSource] = useState<"gallery" | "upload" | "path">("gallery");
+  const [audioEditorDuration, setAudioEditorDuration] = useState(0);
+  const [audioEditorForm, setAudioEditorForm] = useState({
+    audio_path: "",
+    output_name: "edited-audio",
+    start_sec: "0",
+    end_sec: "",
+    gain_db: "0",
+    fade_in_sec: "0.02",
+    fade_out_sec: "0.02",
+    normalize: true,
+    reverse: false,
+    output_format: "wav",
+    sample_rate: "44100",
+  });
+  const [audioDenoiseSource, setAudioDenoiseSource] = useState<"gallery" | "upload" | "path">("gallery");
+  const [audioDenoiseForm, setAudioDenoiseForm] = useState({
+    audio_path: "",
+    output_name: "clean-voice",
+    strength: "0.55",
+    noise_profile_sec: "0.6",
+    spectral_floor: "0.08",
+    highpass_hz: "70",
+    lowpass_hz: "16000",
+    voice_presence: "0.35",
+    normalize: true,
+    output_format: "wav",
+    sample_rate: "44100",
+  });
   const [audioSeparationForm, setAudioSeparationForm] = useState({
     audio_path: "",
     model_profile: "roformer_vocals",
@@ -586,6 +676,10 @@ export default function App() {
       return;
     }
     bootstrapLoadedRef.current = true;
+    const tab = new URLSearchParams(window.location.search).get("tab") as TabKey | null;
+    if (tab && Object.prototype.hasOwnProperty.call(PRODUCT_PAGES, tab)) {
+      setActiveTab(tab);
+    }
     refreshAll().catch((error: Error) => {
       setMessage(error.message);
     });
@@ -801,6 +895,23 @@ export default function App() {
   const lastCreatedDataset = datasets.find((dataset) => dataset.id === lastCreatedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
+  const selectedAudioEditorAsset = audioAssets.find((asset) => asset.path === audioEditorForm.audio_path) ?? null;
+  const selectedAudioDenoiseAsset = audioAssets.find((asset) => asset.path === audioDenoiseForm.audio_path) ?? null;
+  const audioEditorBars = makeWaveBars(
+    `${audioEditorForm.audio_path}|${audioEditorForm.start_sec}|${audioEditorForm.end_sec}|${audioEditorForm.gain_db}`,
+    96,
+  );
+  const audioEditorDurationLimit = Math.max(audioEditorDuration || 0, Number(audioEditorForm.end_sec || "0"), Number(audioEditorForm.start_sec || "0"), 1);
+  const audioEditorStart = Math.min(audioEditorDurationLimit, Math.max(0, Number(audioEditorForm.start_sec || "0")));
+  const audioEditorEnd = audioEditorForm.end_sec.trim()
+    ? Math.min(audioEditorDurationLimit, Math.max(audioEditorStart, Number(audioEditorForm.end_sec || "0")))
+    : audioEditorDurationLimit;
+  const audioEditorRegionLeft = `${(audioEditorStart / audioEditorDurationLimit) * 100}%`;
+  const audioEditorRegionWidth = `${Math.max(1, ((audioEditorEnd - audioEditorStart) / audioEditorDurationLimit) * 100)}%`;
+  const audioDenoiseBars = makeWaveBars(
+    `${audioDenoiseForm.audio_path}|${audioDenoiseForm.strength}|${audioDenoiseForm.highpass_hz}|${audioDenoiseForm.lowpass_hz}`,
+    96,
+  );
   const audioToolCapabilityMap = new Map(audioToolCapabilities.map((capability) => [capability.key, capability]));
   const audioAssetByPath = new Map(audioAssets.map((asset) => [asset.path, asset]));
   const assetTextByPath = new Map(
@@ -812,10 +923,37 @@ export default function App() {
   const aceStepAvailable = audioToolCapabilityMap.get("ace_step")?.available ?? false;
   const aceStepNotes = audioToolCapabilityMap.get("ace_step")?.notes || "";
   const pageMeta = PRODUCT_PAGES[activeTab];
+  const pageTitle = t(`page.${activeTab}.title`, pageMeta.title);
+  const pageDescription = t(`page.${activeTab}.description`, pageMeta.description);
   const selectedGuideSection = GUIDE_SECTIONS.find((section) => section.title === activeGuideTitle) ?? GUIDE_SECTIONS[0];
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
   const currentAceStepMode = isAceStepTab(activeTab) ? ACE_STEP_TAB_TO_MODE[activeTab] : aceStepMode;
+  const aceComposerBars = makeWaveBars(`${aceStepForm.prompt}|${aceStepForm.lyrics}|${aceStepForm.audio_duration}`, 72);
+  const galleryStats = {
+    total: history.length,
+    speech: history.filter((record) => galleryAccentForMode(record.mode) === "speech" || galleryAccentForMode(record.mode) === "voice").length,
+    music: history.filter((record) => galleryAccentForMode(record.mode) === "music").length,
+    audio: history.filter((record) => ["audio", "effect"].includes(galleryAccentForMode(record.mode))).length,
+  };
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
+  const activeStudioModel =
+    selectedInferenceModel ??
+    voiceDesignModels.find((model) => model.model_id === designForm.model_id) ??
+    preferredVoiceBoxModel ??
+    preferredInferenceModel ??
+    visibleModels[0] ??
+    null;
+  const activeVoiceName =
+    selectedS2Voice?.name ||
+    activeStudioModel?.default_speaker ||
+    inferenceForm.speaker ||
+    "Mai";
+  const activeModelLabel = activeStudioModel ? displayModelName(activeStudioModel) : "No model";
+  const activeModelFamily =
+    activeStudioModel?.model_family ||
+    activeStudioModel?.category ||
+    (isS2ProTab(activeTab) ? "S2-Pro" : isAceStepTab(activeTab) ? "ACE-Step" : "Voice Studio");
+  const latestGalleryItem = history[0] ?? null;
   const s2VoiceProjects = s2ProVoices.map((voice) => {
     const relatedHistory = history.filter((record) => {
       const metaReferenceId = String(record.meta?.reference_id || record.meta?.s2_reference_id || record.meta?.voice_id || "");
@@ -965,13 +1103,6 @@ export default function App() {
     }));
   }
 
-  function applyTtsTag(tag: string) {
-    setInferenceForm((prev) => ({
-      ...prev,
-      text: prev.text.trim() ? `${prev.text.trim()} ${tag}` : tag,
-    }));
-  }
-
   function handleSelectS2ProReference(asset: AudioAsset) {
     setS2ProForm((prev) => ({
       ...prev,
@@ -1026,7 +1157,7 @@ export default function App() {
         id: voice.id,
         filename: basenameFromPath(voice.reference_audio_path),
         path: voice.reference_audio_path,
-        url: voice.reference_audio_url,
+        url: mediaUrl(voice.reference_audio_url),
       });
       setUploadRefText(voice.reference_text);
       setActiveTab("clone");
@@ -1088,15 +1219,15 @@ export default function App() {
     });
   }
 
-  function handleS2ProSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleS2ProSubmit(event?: FormEvent) {
+    event?.preventDefault();
     const textByMode =
       currentS2ProMode === "clone"
         ? s2ProForm.clone_text
         : currentS2ProMode === "multi_speaker"
           ? s2ProForm.speaker_script
           : s2ProForm.text;
-    runAction(async () => {
+    await runAction(async () => {
       const response = await api.generateS2Pro({
         mode: currentS2ProMode,
         runtime_source: s2ProForm.runtime_source,
@@ -1163,8 +1294,8 @@ export default function App() {
     });
   }
 
-  async function handleSoundEffectSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleSoundEffectSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.generateSoundEffect({
         prompt: soundEffectForm.prompt,
@@ -1182,8 +1313,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.generateAceStepMusic({
         output_name: aceStepForm.output_name,
@@ -1255,8 +1386,8 @@ export default function App() {
     }
   }
 
-  async function handleAceStepCoverSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepCoverSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.aceStepCover({
         ...aceStepCommonPayload(),
@@ -1270,8 +1401,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepRepaintSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepRepaintSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.aceStepRepaint({
         ...aceStepCommonPayload(),
@@ -1287,8 +1418,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepExtendSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepExtendSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.aceStepExtend({
         ...aceStepCommonPayload(),
@@ -1301,8 +1432,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepExtractSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepExtractSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.aceStepExtract({
         ...aceStepCommonPayload(),
@@ -1315,8 +1446,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepLegoSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepLegoSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.aceStepLego({
         ...aceStepCommonPayload(),
@@ -1329,8 +1460,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepCompleteSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepCompleteSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const response = await api.aceStepComplete({
         ...aceStepCommonPayload(),
@@ -1343,8 +1474,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepUnderstandSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepUnderstandSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.aceStepUnderstand({
         src_audio: aceStepAudioForm.src_audio,
@@ -1357,8 +1488,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepCreateSampleSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepCreateSampleSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.aceStepCreateSample({
         query: aceStepCreateSampleForm.query,
@@ -1379,8 +1510,8 @@ export default function App() {
     });
   }
 
-  async function handleAceStepFormatSampleSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAceStepFormatSampleSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.aceStepFormatSample({
         caption: aceStepForm.prompt,
@@ -1413,6 +1544,8 @@ export default function App() {
       setAudioToolUpload(result);
       setVoiceChangerForm((prev) => ({ ...prev, audio_path: result.path }));
       setAudioConvertForm((prev) => ({ ...prev, audio_path: result.path }));
+      setAudioEditorForm((prev) => ({ ...prev, audio_path: result.path, output_name: prev.output_name || basenameFromPath(result.filename) }));
+      setAudioDenoiseForm((prev) => ({ ...prev, audio_path: result.path, output_name: prev.output_name || `clean-${basenameFromPath(result.filename)}` }));
       setAudioSeparationForm((prev) => ({ ...prev, audio_path: result.path }));
       setMessage(`${result.filename} 파일을 불러왔습니다.`);
     });
@@ -1422,6 +1555,8 @@ export default function App() {
     setAudioToolUpload(null);
     setVoiceChangerForm((prev) => ({ ...prev, audio_path: asset.path }));
     setAudioConvertForm((prev) => ({ ...prev, audio_path: asset.path }));
+    setAudioEditorForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || basenameFromPath(asset.filename) }));
+    setAudioDenoiseForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || `clean-${basenameFromPath(asset.filename)}` }));
     setAudioSeparationForm((prev) => ({ ...prev, audio_path: asset.path }));
     setMessage(`${asset.filename} 파일을 작업 입력으로 선택했습니다.`);
   }
@@ -1467,8 +1602,8 @@ export default function App() {
     }));
   }
 
-  async function handleVoiceChangerSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleVoiceChangerSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.changeVoice({
         audio_path: voiceChangerForm.audio_path,
@@ -1490,8 +1625,8 @@ export default function App() {
     });
   }
 
-  async function handleRvcTrainSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleRvcTrainSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.trainRvcModel({
         model_name: rvcTrainForm.model_name,
@@ -1518,8 +1653,8 @@ export default function App() {
     });
   }
 
-  async function handleVoiceChangerBatchSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleVoiceChangerBatchSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.changeVoiceBatch({
         audio_paths: applioBatchPaths,
@@ -1541,8 +1676,8 @@ export default function App() {
     });
   }
 
-  async function handleVoiceModelBlendSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleVoiceModelBlendSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.blendVoiceModels({
         model_name: applioBlendForm.model_name,
@@ -1593,8 +1728,60 @@ export default function App() {
     });
   }
 
-  async function handleVoiceDesignSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleAudioEditSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    if (!audioEditorForm.audio_path.trim()) {
+      setMessage("편집할 오디오를 먼저 선택하세요.");
+      return;
+    }
+    await runAction(async () => {
+      const result = await api.editAudio({
+        audio_path: audioEditorForm.audio_path,
+        output_name: audioEditorForm.output_name || undefined,
+        start_sec: Math.max(0, Number(audioEditorForm.start_sec || "0")),
+        end_sec: audioEditorForm.end_sec.trim() ? Math.max(0, Number(audioEditorForm.end_sec)) : undefined,
+        gain_db: Number(audioEditorForm.gain_db || "0"),
+        fade_in_sec: Math.max(0, Number(audioEditorForm.fade_in_sec || "0")),
+        fade_out_sec: Math.max(0, Number(audioEditorForm.fade_out_sec || "0")),
+        normalize: audioEditorForm.normalize,
+        reverse: audioEditorForm.reverse,
+        output_format: audioEditorForm.output_format,
+        sample_rate: Number(audioEditorForm.sample_rate || "44100"),
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("편집한 오디오를 생성 갤러리에 저장했습니다.");
+    });
+  }
+
+  async function handleAudioDenoiseSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    if (!audioDenoiseForm.audio_path.trim()) {
+      setMessage("정제할 오디오를 먼저 선택하세요.");
+      return;
+    }
+    await runAction(async () => {
+      const result = await api.denoiseAudio({
+        audio_path: audioDenoiseForm.audio_path,
+        output_name: audioDenoiseForm.output_name || undefined,
+        strength: Number(audioDenoiseForm.strength || "0.55"),
+        noise_profile_sec: Number(audioDenoiseForm.noise_profile_sec || "0.6"),
+        spectral_floor: Number(audioDenoiseForm.spectral_floor || "0.08"),
+        highpass_hz: Number(audioDenoiseForm.highpass_hz || "70"),
+        lowpass_hz: Number(audioDenoiseForm.lowpass_hz || "16000"),
+        voice_presence: Number(audioDenoiseForm.voice_presence || "0.35"),
+        normalize: audioDenoiseForm.normalize,
+        output_format: audioDenoiseForm.output_format,
+        sample_rate: Number(audioDenoiseForm.sample_rate || "44100"),
+      });
+      setLastAudioToolResult(result);
+      await refreshAll();
+      setMessage("정제한 음성을 생성 갤러리에 저장했습니다.");
+    });
+  }
+
+  async function handleVoiceDesignSubmit(event?: FormEvent) {
+    event?.preventDefault();
     await runAction(async () => {
       const result = await api.generateVoiceDesign({
         model_id: designForm.model_id || undefined,
@@ -1606,33 +1793,82 @@ export default function App() {
       });
       setLastDesignRecord(result.record);
       setSelectedDesignSampleId(result.record.id);
+      setPresetForm((prev) => ({
+        ...prev,
+        name: prev.name || result.record.meta?.display_name?.toString() || designForm.output_name || "voice-design-preset",
+        language: result.record.language || prev.language,
+      }));
       await refreshAll();
       setMessage("새 목소리 설계를 완료했습니다.");
     });
   }
 
-  async function handleCreateCloneFromDesign() {
+  function getDesignPresetName(generationId: string): string {
+    if (!lastDesignRecord) return `design-${generationId}`;
+    return (
+      presetForm.name.trim() ||
+      lastDesignRecord.meta?.display_name?.toString() ||
+      basenameFromPath(lastDesignRecord.output_audio_path).replace(/\.[^.]+$/, "") ||
+      `design-${generationId}`
+    );
+  }
+
+  async function handleSaveDesignAsQwenPreset() {
     const generationId = selectedDesignSampleId || lastDesignRecord?.id || "";
-    if (!generationId) {
-      setMessage("먼저 디자인 샘플을 선택해주세요.");
+    if (!generationId || !lastDesignRecord) {
+      setMessage("먼저 목소리 설계 음성을 생성해주세요.");
       return;
     }
     if (!selectedBaseModelId) {
-      setMessage("먼저 스타일 분석 모델을 선택해주세요.");
+      setMessage("Qwen 프리셋을 만들 기본 모델이 아직 준비되지 않았습니다.");
       return;
     }
     await runAction(async () => {
-      const result = await api.createCloneFromSample({
+      const presetName = getDesignPresetName(generationId);
+
+      const prompt = await api.createCloneFromSample({
         generation_id: generationId,
         model_id: selectedBaseModelId,
       });
-      setSelectedClonePrompt(result);
-      setPresetForm((prev) => ({ ...prev, name: prev.name || `design-${result.id}` }));
-      setDatasetForm((prev) => ({
-        ...prev,
-        ref_audio_path: result.reference_audio_path,
-      }));
-      setMessage("디자인 샘플에서 목소리 스타일을 만들었습니다.");
+
+      await api.createPreset({
+        name: presetName,
+        source_type: "voice_design",
+        language: presetForm.language,
+        base_model: prompt.base_model,
+        reference_text: prompt.reference_text,
+        reference_audio_path: prompt.reference_audio_path,
+        clone_prompt_path: prompt.prompt_path,
+        notes: presetForm.notes,
+      });
+
+      setSelectedClonePrompt(prompt);
+      await refreshAll();
+      setMessage("Qwen 프리셋을 저장했습니다.");
+    });
+  }
+
+  async function handleSaveDesignAsS2ProPreset() {
+    const generationId = selectedDesignSampleId || lastDesignRecord?.id || "";
+    if (!generationId || !lastDesignRecord) {
+      setMessage("먼저 목소리 설계 음성을 생성해주세요.");
+      return;
+    }
+    await runAction(async () => {
+      const presetName = getDesignPresetName(generationId);
+
+      const s2Voice = await api.createS2ProVoice({
+        name: presetName,
+        runtime_source: s2ProVoiceForm.runtime_source,
+        reference_audio_path: lastDesignRecord.output_audio_path,
+        reference_text: lastDesignRecord.input_text,
+        language: presetForm.language,
+        notes: presetForm.notes || "목소리 설계 결과에서 저장한 S2-Pro 목소리",
+        create_qwen_prompt: false,
+      });
+      setSelectedS2VoiceId(s2Voice.id);
+      await refreshAll();
+      setMessage("S2-Pro 목소리 프리셋을 저장했습니다.");
     });
   }
 
@@ -1738,18 +1974,36 @@ export default function App() {
       return;
     }
 
-    setHybridForm((prev) => ({
-      ...prev,
-      base_model_id: selectedHybridPreset.base_model || prev.base_model_id || preferredStockBaseModel?.model_id || "",
-      custom_model_id: guessMatchingCustomVoiceModel(
+    setHybridForm((prev) => {
+      const nextBaseModelId = selectedHybridPreset.base_model || prev.base_model_id || preferredStockBaseModel?.model_id || "";
+      const nextCustomModelId = guessMatchingCustomVoiceModel(
         selectedHybridPreset.base_model,
         customVoiceCapableModels,
         prev.custom_model_id || preferredHybridCustomModel?.model_id || "",
-      ),
-      language: selectedHybridPreset.language || prev.language,
-      ref_audio_path: selectedHybridPreset.reference_audio_path,
-      ref_text: selectedHybridPreset.reference_text,
-    }));
+      );
+      const nextLanguage = selectedHybridPreset.language || prev.language;
+      const nextRefAudioPath = selectedHybridPreset.reference_audio_path;
+      const nextRefText = selectedHybridPreset.reference_text;
+
+      if (
+        prev.base_model_id === nextBaseModelId &&
+        prev.custom_model_id === nextCustomModelId &&
+        prev.language === nextLanguage &&
+        prev.ref_audio_path === nextRefAudioPath &&
+        prev.ref_text === nextRefText
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        base_model_id: nextBaseModelId,
+        custom_model_id: nextCustomModelId,
+        language: nextLanguage,
+        ref_audio_path: nextRefAudioPath,
+        ref_text: nextRefText,
+      };
+    });
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
 
   async function handleGenerateFromPreset() {
@@ -1772,8 +2026,8 @@ export default function App() {
     });
   }
 
-  async function handleGenerateVoiceBoxFromPreset(event: FormEvent) {
-    event.preventDefault();
+  async function handleGenerateVoiceBoxFromPreset(event?: FormEvent) {
+    event?.preventDefault();
     if (!selectedHybridPreset) {
       setMessage("프리셋을 선택해주세요.");
       return;
@@ -1801,8 +2055,8 @@ export default function App() {
     });
   }
 
-  async function handleGenerateVoiceBoxInstructFromPreset(event: FormEvent) {
-    event.preventDefault();
+  async function handleGenerateVoiceBoxInstructFromPreset(event?: FormEvent) {
+    event?.preventDefault();
     if (!selectedHybridPreset) {
       setMessage("프리셋을 선택해주세요.");
       return;
@@ -1943,8 +2197,8 @@ export default function App() {
     });
   }
 
-  async function handleCreateVoiceBoxFusion(event: FormEvent) {
-    event.preventDefault();
+  async function handleCreateVoiceBoxFusion(event?: FormEvent) {
+    event?.preventDefault();
     if (!voiceBoxFusionForm.input_checkpoint_path || !voiceBoxFusionForm.speaker_encoder_source_path) {
       setMessage("VoiceBox로 합칠 CustomVoice 모델과 Base encoder 모델을 선택해주세요.");
       return;
@@ -1981,8 +2235,8 @@ export default function App() {
     setMessage(`${parsed.length}개 경로를 샘플 목록에 반영했습니다.`);
   }
 
-  async function handleModelInferenceSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleModelInferenceSubmit(event?: FormEvent) {
+    event?.preventDefault();
     if (!selectedInferenceModel) {
       setMessage("먼저 추론할 모델을 선택해주세요.");
       return;
@@ -2008,8 +2262,8 @@ export default function App() {
     });
   }
 
-  async function handleHybridInferenceSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleHybridInferenceSubmit(event?: FormEvent) {
+    event?.preventDefault();
     if (!hybridForm.base_model_id || !hybridForm.custom_model_id || !hybridForm.ref_audio_path.trim()) {
       setMessage("선택한 프리셋의 기준 정보가 아직 준비되지 않았습니다. 프리셋을 다시 선택해주세요.");
       return;
@@ -2043,195 +2297,266 @@ export default function App() {
     setMessage(`추론 참조 음성으로 ${asset.filename}을(를) 선택했습니다.`);
   }
 
+  const renderableTabs = new Set<TabKey>([
+    "design",
+    "tts",
+    "clone",
+    "projects",
+    "s2pro_tagged",
+    "s2pro_clone",
+    "s2pro_multi_speaker",
+    "s2pro_multilingual",
+    "effects",
+    "audio_editor",
+    "audio_denoise",
+    "separation",
+    "applio_train",
+    "applio_convert",
+    "applio_batch",
+    "applio_blend",
+    "ace_music",
+    "ace_cover",
+    "ace_repaint",
+    "ace_extend",
+    "ace_extract",
+    "ace_lego",
+    "ace_complete",
+    "ace_understand",
+    "ace_create_sample",
+    "ace_format_sample",
+    "dataset",
+    "training",
+    "voicebox_fusion",
+  ]);
+  const canRunCurrentTab = renderableTabs.has(activeTab);
+
+  async function handleShareWorkspace() {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setMessage("현재 작업 링크를 클립보드에 복사했습니다.");
+    } catch {
+      setMessage(url);
+    }
+  }
+
+  async function handleRunCurrentTab() {
+    if (!canRunCurrentTab) {
+      return;
+    }
+
+    if (activeTab === "design") return handleVoiceDesignSubmit();
+    if (activeTab === "tts") return handleModelInferenceSubmit();
+    if (activeTab === "clone") return handleCreateCloneFromUpload();
+    if (activeTab === "projects") {
+      if (selectedHybridPreset && hybridForm.custom_model_id) return handleHybridInferenceSubmit();
+      return handleGenerateFromPreset();
+    }
+    if (isS2ProTab(activeTab)) return handleS2ProSubmit();
+    if (activeTab === "effects") return handleSoundEffectSubmit();
+    if (activeTab === "audio_editor") return handleAudioEditSubmit();
+    if (activeTab === "audio_denoise") return handleAudioDenoiseSubmit();
+    if (activeTab === "separation") return handleAudioSeparation();
+    if (activeTab === "applio_train") return handleRvcTrainSubmit();
+    if (activeTab === "applio_convert") return handleVoiceChangerSubmit();
+    if (activeTab === "applio_batch") return handleVoiceChangerBatchSubmit();
+    if (activeTab === "applio_blend") return handleVoiceModelBlendSubmit();
+    if (activeTab === "ace_music") return handleAceStepSubmit();
+    if (activeTab === "ace_cover") return handleAceStepCoverSubmit();
+    if (activeTab === "ace_repaint") return handleAceStepRepaintSubmit();
+    if (activeTab === "ace_extend") return handleAceStepExtendSubmit();
+    if (activeTab === "ace_extract") return handleAceStepExtractSubmit();
+    if (activeTab === "ace_lego") return handleAceStepLegoSubmit();
+    if (activeTab === "ace_complete") return handleAceStepCompleteSubmit();
+    if (activeTab === "ace_understand") return handleAceStepUnderstandSubmit();
+    if (activeTab === "ace_create_sample") return handleAceStepCreateSampleSubmit();
+    if (activeTab === "ace_format_sample") return handleAceStepFormatSampleSubmit();
+    if (activeTab === "dataset") return handleCreateDataset();
+    if (activeTab === "training") return handleCreateRun();
+    if (activeTab === "voicebox_fusion") return handleCreateVoiceBoxFusion();
+  }
+
   return (
+    <>
+    <StudioTopBar
+      onRender={canRunCurrentTab ? handleRunCurrentTab : undefined}
+      onShare={handleShareWorkspace}
+      renderDisabled={loading}
+      title={pageTitle}
+    />
     <div className="page-shell">
       <div className="app-shell">
-        <aside className="sidebar">
-          <div className="sidebar__brand">
-            <div className="sidebar__brand-row">
-              <div className="brand-mark" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-              <strong>Voice Studio</strong>
-            </div>
-          </div>
-
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">홈</span>
-            <button className={activeTab === "home" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("home")} type="button">
-              <span>홈</span>
+        <aside className="sidebar studio-nav">
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.workspace")}</span></div>
+            <button className={activeTab === "home" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("home")} type="button">
+              <span>{t("tab.home")}</span>
             </button>
-            <button className={activeTab === "voices" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("voices")} type="button">
-              <span>나의 목소리들</span>
+            <button className={activeTab === "voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voices")} type="button">
+              <span>{t("tab.voices")}</span>
             </button>
-            <button className={activeTab === "gallery" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("gallery")} type="button">
-              <span>생성 갤러리</span>
+            <button className={activeTab === "gallery" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("gallery")} type="button">
+              <span>{t("tab.gallery")}</span>
             </button>
           </div>
 
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">Qwen</span>
-            <button className={activeTab === "design" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("design")} type="button">
-              <span>목소리 설계</span>
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.qwen")}</span></div>
+            <button className={activeTab === "design" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("design")} type="button">
+              <span>{t("tab.design")}</span>
             </button>
-            <button className={activeTab === "tts" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("tts")} type="button">
-              <span>텍스트 음성 변환</span>
+            <button className={activeTab === "tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("tts")} type="button">
+              <span>{t("tab.tts")}</span>
             </button>
-            <button className={activeTab === "clone" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("clone")} type="button">
-              <span>목소리 복제</span>
+            <button className={activeTab === "clone" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("clone")} type="button">
+              <span>{t("tab.clone")}</span>
             </button>
-            <button className={activeTab === "projects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("projects")} type="button">
-              <span>프리셋 기반 생성</span>
-            </button>
-          </div>
-
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">S2-Pro</span>
-            <button className={activeTab === "s2pro_tagged" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_tagged")} type="button">
-              <span>텍스트 음성 변환</span>
-            </button>
-            <button className={activeTab === "s2pro_clone" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_clone")} type="button">
-              <span>목소리 저장</span>
-            </button>
-            <button className={activeTab === "s2pro_multi_speaker" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multi_speaker")} type="button">
-              <span>대화 생성</span>
-            </button>
-            <button className={activeTab === "s2pro_multilingual" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
-              <span>다국어 TTS</span>
+            <button className={activeTab === "projects" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("projects")} type="button">
+              <span>{t("tab.projects")}</span>
             </button>
           </div>
 
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">MMAudio</span>
-            <button className={activeTab === "effects" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("effects")} type="button">
-              <span>사운드 효과</span>
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.s2pro")}</span></div>
+            <button className={activeTab === "s2pro_tagged" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openS2ProTab("s2pro_tagged")} type="button">
+              <span>{t("tab.s2pro_tagged")}</span>
+            </button>
+            <button className={activeTab === "s2pro_clone" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openS2ProTab("s2pro_clone")} type="button">
+              <span>{t("tab.s2pro_clone")}</span>
+            </button>
+            <button className={activeTab === "s2pro_multi_speaker" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openS2ProTab("s2pro_multi_speaker")} type="button">
+              <span>{t("tab.s2pro_multi_speaker")}</span>
+            </button>
+            <button className={activeTab === "s2pro_multilingual" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
+              <span>{t("tab.s2pro_multilingual")}</span>
             </button>
           </div>
 
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">Applio</span>
-            <button className={activeTab === "separation" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("separation")} type="button">
-              <span>오디오 분리</span>
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.audiolab")}</span></div>
+            <button className={activeTab === "effects" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("effects")} type="button">
+              <span>{t("tab.effects")}</span>
             </button>
-            <button className={activeTab === "applio_train" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_train")} type="button">
-              <span>RVC 모델 학습</span>
+            <button className={activeTab === "audio_editor" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("audio_editor")} type="button">
+              <span>{t("tab.audio_editor")}</span>
             </button>
-            <button className={activeTab === "applio_convert" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_convert")} type="button">
-              <span>단일 변환</span>
+            <button className={activeTab === "audio_denoise" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("audio_denoise")} type="button">
+              <span>{t("tab.audio_denoise")}</span>
             </button>
-            <button className={activeTab === "applio_batch" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_batch")} type="button">
-              <span>배치 변환</span>
+            <button className={activeTab === "separation" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("separation")} type="button">
+              <span>{t("tab.separation")}</span>
             </button>
-            <button className={activeTab === "applio_blend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("applio_blend")} type="button">
-              <span>모델 블렌딩</span>
+            <button className={activeTab === "applio_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("applio_train")} type="button">
+              <span>{t("tab.applio_train")}</span>
             </button>
-          </div>
-
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">Music</span>
-            <button className={activeTab === "ace_music" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_music")} type="button">
-              <span>작곡</span>
+            <button className={activeTab === "applio_convert" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("applio_convert")} type="button">
+              <span>{t("tab.applio_convert")}</span>
             </button>
-            <button className={activeTab === "ace_cover" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_cover")} type="button">
-              <span>커버</span>
+            <button className={activeTab === "applio_batch" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("applio_batch")} type="button">
+              <span>{t("tab.applio_batch")}</span>
             </button>
-            <button className={activeTab === "ace_repaint" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_repaint")} type="button">
-              <span>구간 수정</span>
-            </button>
-            <button className={activeTab === "ace_extend" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_extend")} type="button">
-              <span>이어붙이기</span>
-            </button>
-            <button className={activeTab === "ace_extract" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_extract")} type="button">
-              <span>스템 추출</span>
-            </button>
-            <button className={activeTab === "ace_lego" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_lego")} type="button">
-              <span>트랙 추가</span>
-            </button>
-            <button className={activeTab === "ace_complete" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_complete")} type="button">
-              <span>트랙 채우기</span>
-            </button>
-            <button className={activeTab === "ace_understand" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_understand")} type="button">
-              <span>오디오 분석</span>
-            </button>
-            <button className={activeTab === "ace_create_sample" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_create_sample")} type="button">
-              <span>아이디어 만들기</span>
-            </button>
-            <button className={activeTab === "ace_format_sample" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => openAceStepTab("ace_format_sample")} type="button">
-              <span>프롬프트 정리</span>
+            <button className={activeTab === "applio_blend" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("applio_blend")} type="button">
+              <span>{t("tab.applio_blend")}</span>
             </button>
           </div>
 
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">Qwen 학습</span>
-            <button className={activeTab === "dataset" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("dataset")} type="button">
-              <span>데이터셋 만들기</span>
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.music")}</span></div>
+            <button className={activeTab === "ace_music" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_music")} type="button">
+              <span>{t("tab.ace_music")}</span>
+              <span className="studio-nav__chip">10</span>
             </button>
-            <button className={activeTab === "training" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("training")} type="button">
-              <span>학습 실행</span>
+            <button className={activeTab === "ace_cover" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_cover")} type="button">
+              <span>{t("tab.ace_cover")}</span>
             </button>
-            <button className={activeTab === "voicebox_fusion" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("voicebox_fusion")} type="button">
-              <span>VoiceBox 융합</span>
+            <button className={activeTab === "ace_repaint" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_repaint")} type="button">
+              <span>{t("tab.ace_repaint")}</span>
+            </button>
+            <button className={activeTab === "ace_extend" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_extend")} type="button">
+              <span>{t("tab.ace_extend")}</span>
+            </button>
+            <button className={activeTab === "ace_extract" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_extract")} type="button">
+              <span>{t("tab.ace_extract")}</span>
+            </button>
+            <button className={activeTab === "ace_lego" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_lego")} type="button">
+              <span>{t("tab.ace_lego")}</span>
+            </button>
+            <button className={activeTab === "ace_complete" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_complete")} type="button">
+              <span>{t("tab.ace_complete")}</span>
+            </button>
+            <button className={activeTab === "ace_understand" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_understand")} type="button">
+              <span>{t("tab.ace_understand")}</span>
+            </button>
+            <button className={activeTab === "ace_create_sample" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_create_sample")} type="button">
+              <span>{t("tab.ace_create_sample")}</span>
+            </button>
+            <button className={activeTab === "ace_format_sample" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_format_sample")} type="button">
+              <span>{t("tab.ace_format_sample")}</span>
             </button>
           </div>
 
-          <div className="sidebar__section">
-            <span className="sidebar__section-title">도움말</span>
-            <button className={activeTab === "guide" ? "sidebar-link is-active" : "sidebar-link"} onClick={() => setActiveTab("guide")} type="button">
-              <span>가이드</span>
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.training")}</span></div>
+            <button className={activeTab === "dataset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("dataset")} type="button">
+              <span>{t("tab.dataset")}</span>
+            </button>
+            <button className={activeTab === "training" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("training")} type="button">
+              <span>{t("tab.train")}</span>
+            </button>
+            <button className={activeTab === "voicebox_fusion" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voicebox_fusion")} type="button">
+              <span>{t("tab.fuse")}</span>
+            </button>
+          </div>
+
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.help")}</span></div>
+            <button className={activeTab === "guide" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("guide")} type="button">
+              <span>{t("tab.guide")}</span>
             </button>
           </div>
         </aside>
 
         <main className="page-main">
-          <div className="topbar">
-            <strong>{activeTab === "home" ? "홈" : pageMeta.title}</strong>
-          </div>
           {activeTab === "home" ? (
             <header className="hero">
               <div className="hero__copy">
-                <span className="hero__section-label">기능</span>
-                <h1>오늘 필요한 작업을 바로 시작하세요</h1>
-                <p>텍스트 음성 변환, 목소리 복제, 목소리 설계, 프리셋 반복 생성, 학습 작업을 사용자 흐름에 맞게 나눴습니다.</p>
+                <span className="hero__section-label">{t("home.eyebrow")}</span>
+                <h1>{t("home.title")}</h1>
+                <p>{t("home.description")}</p>
               </div>
               <div className="spotlight-grid">
                 <SpotlightCard
-                  eyebrow="설계"
-                  title="목소리 설계"
-                  description="설명문만으로 새 목소리를 만든 뒤 스타일 자산으로 저장합니다."
-                  actionLabel="목소리 설계"
+                  eyebrow={t("home.card.design.eyebrow")}
+                  title={t("home.card.design.title")}
+                  description={t("home.card.design.description")}
+                  actionLabel={t("tab.design")}
                   onAction={() => setActiveTab("design")}
                 />
                 <SpotlightCard
-                  eyebrow="복제"
-                  title="목소리 복제"
-                  description="참조 음성에서 스타일을 추출하고 저장합니다."
-                  actionLabel="목소리 복제"
+                  eyebrow={t("home.card.clone.eyebrow")}
+                  title={t("home.card.clone.title")}
+                  description={t("home.card.clone.description")}
+                  actionLabel={t("tab.clone")}
                   onAction={() => setActiveTab("clone")}
                 />
                 <SpotlightCard
-                  eyebrow="생성"
-                  title="텍스트 음성 변환"
-                  description="기본 설정으로 바로 들어보고, 필요할 때만 고급 제어를 엽니다."
-                  actionLabel="텍스트 음성 변환"
+                  eyebrow={t("home.card.tts.eyebrow")}
+                  title={t("home.card.tts.title")}
+                  description={t("home.card.tts.description")}
+                  actionLabel={t("tab.tts")}
                   onAction={() => setActiveTab("tts")}
                 />
                 <SpotlightCard
-                  eyebrow="프로젝트"
-                  title="프리셋 기반 생성"
-                  description="저장한 스타일을 그대로 쓰거나 말투 지시를 얹어 다시 생성합니다."
-                  actionLabel="프리셋 기반 생성"
+                  eyebrow={t("home.card.projects.eyebrow")}
+                  title={t("home.card.projects.title")}
+                  description={t("home.card.projects.description")}
+                  actionLabel={t("tab.projects")}
                   onAction={() => setActiveTab("projects")}
                 />
               </div>
             </header>
-          ) : (
-            <PageHeader title={pageMeta.title} description={pageMeta.description} />
-          )}
+          ) : null}
 
           {message ? <div className="message-banner">{message}</div> : null}
       {activeTab === "voices" ? (
@@ -2431,7 +2756,7 @@ export default function App() {
                           <span>Qwen 연결 {relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)}개</span>
                           <span>{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</span>
                         </div>
-                        <audio controls src={voice.reference_audio_url} />
+                        <audio controls src={mediaUrl(voice.reference_audio_url)} />
                       </div>
                       <div className="voice-project-actions">
                         <button className="secondary-button" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
@@ -2524,54 +2849,78 @@ export default function App() {
       ) : null}
 
       {activeTab === "gallery" ? (
-        <section className="workspace workspace--stacked">
-          <section className="panel gallery-panel">
-            <div className="gallery-toolbar">
-              <div>
-                <h2>생성 갤러리</h2>
-                <p>결과를 듣고, 필요한 항목만 내려받거나 정리합니다.</p>
+        <section className="gallery-studio">
+          <div className="gallery-studio__header">
+            <div>
+              <span className="studio-page-head__eyebrow"><i /> {t("gallery.eyebrow")}</span>
+              <h2>{t("gallery.title")}</h2>
+              <p>{t("gallery.description")}</p>
+            </div>
+            <div className="gallery-stats" aria-label="생성 통계">
+              <span><b>{galleryStats.total}</b>{t("gallery.total")}</span>
+              <span><b>{galleryStats.speech}</b>{t("gallery.speech")}</span>
+              <span><b>{galleryStats.music}</b>{t("gallery.music")}</span>
+              <span><b>{galleryStats.audio}</b>{t("gallery.audio")}</span>
+            </div>
+          </div>
+
+          <section className="gallery-console">
+            <div className="gallery-console__toolbar">
+              <div className="gallery-console__selection">
+                <strong>{selectedGalleryIds.length ? t("gallery.selectedCount").replace("{count}", String(selectedGalleryIds.length)) : t("gallery.noneSelected")}</strong>
+                <span>{t("gallery.selectionHint")}</span>
               </div>
               <div className="gallery-toolbar__actions">
                 <button className="secondary-button" disabled={!history.length} onClick={() => setSelectedGalleryIds(history.map((record) => gallerySelectionKey(record)))} type="button">
-                  모두 선택
+                  {t("action.selectAll")}
                 </button>
                 <button className="secondary-button" disabled={!selectedGalleryIds.length} onClick={() => setSelectedGalleryIds([])} type="button">
-                  선택 해제
+                  {t("action.clearSelection")}
                 </button>
-                <button className="secondary-button" disabled={!selectedGalleryIds.length} onClick={handleDeleteSelectedHistory} type="button">
-                  선택 삭제
+                <button className="secondary-button icon-button--danger" disabled={!selectedGalleryIds.length} onClick={handleDeleteSelectedHistory} type="button">
+                  {t("action.deleteSelection")}
                 </button>
               </div>
             </div>
-            <div className="gallery-list">
+            <div className="gallery-render-list">
               {history.length ? history.map((record) => {
                 const selectionKey = gallerySelectionKey(record);
+                const accent = galleryAccentForMode(record.mode);
+                const waveBars = makeWaveBars(selectionKey, 54);
                 return (
-                <article className={selectedGalleryIds.includes(selectionKey) ? "gallery-row is-selected" : "gallery-row"} key={selectionKey}>
+                <article className={selectedGalleryIds.includes(selectionKey) ? `render-row render-row--${accent} is-selected` : `render-row render-row--${accent}`} key={selectionKey}>
                   <label className="gallery-row__select" aria-label={`${getRecordDisplayTitle(record)} 선택`}>
                     <input checked={selectedGalleryIds.includes(selectionKey)} onChange={() => toggleGallerySelection(selectionKey)} type="checkbox" />
                     <span />
                   </label>
-                  <div className="gallery-row__title">
+                  <div className="render-row__title">
+                    <small>{getModeLabel(record.mode)} · {recordLanguageLabel(record)}</small>
                     <strong>{getRecordDisplayTitle(record)}</strong>
-                    <span>{getModeLabel(record.mode)} · {formatDate(record.created_at)}</span>
+                    <span>{getRecordModelLabel(record)}</span>
                   </div>
-                  <div className="gallery-row__wave" aria-hidden="true">
-                    <MiniWaveform dense />
+                  <div className="render-row__wave" aria-hidden="true">
+                    {waveBars.map((height, index) => (
+                      <i key={`${selectionKey}-${index}`} style={{ height }} />
+                    ))}
                   </div>
-                  <audio controls src={record.output_audio_url} className="gallery-row__player" />
-                  <div className="gallery-row__actions">
-                    <a className="icon-button" href={record.output_audio_url} download={getAudioDownloadName(record)} aria-label="다운로드">
-                      내려받기
+                  <time className="render-row__date">{formatShortDate(record.created_at)}</time>
+                  <audio controls src={mediaUrl(record.output_audio_url)} className="render-row__player" />
+                  <div className="render-row__actions">
+                    <a className="secondary-button" href={mediaUrl(record.output_audio_url)} download={getAudioDownloadName(record)} aria-label="다운로드">
+                      {t("action.download")}
                     </a>
-                    <button className="icon-button icon-button--danger" onClick={() => void handleDeleteHistoryRecord(record.id)} type="button">
-                      삭제
+                    <button className="secondary-button icon-button--danger" onClick={() => void handleDeleteHistoryRecord(record.id)} type="button">
+                      {t("action.delete")}
                     </button>
                   </div>
                 </article>
                 );
               }) : (
-                <p className="field-hint">아직 생성한 음성이 없습니다.</p>
+                <div className="gallery-empty-state">
+                  <strong>{t("gallery.emptyTitle")}</strong>
+                  <p>{t("gallery.emptyDescription")}</p>
+                  <button className="primary-button" onClick={() => setActiveTab("tts")} type="button">{t("action.firstVoice")}</button>
+                </div>
               )}
             </div>
           </section>
@@ -2579,108 +2928,82 @@ export default function App() {
       ) : null}
 
       {activeTab === "tts" ? (
-        <section className="workspace workspace--stacked">
-          <form className={ttsSettingsOpen ? "fish-tts-shell" : "fish-tts-shell is-panel-closed"} onSubmit={handleModelInferenceSubmit}>
-            <section className="fish-tts-editor">
-              <div className="fish-editor-card">
-                <div className="fish-editor-card__top">
-                  <span className="drag-handle" aria-hidden="true">⋮⋮</span>
+        <section className="workspace workspace--stacked studio-workspace">
+          <form className="speech-console speech-console--qwen" onSubmit={handleModelInferenceSubmit}>
+            <div className="speech-console__header">
+              <div>
+                <span className="studio-page-head__eyebrow"><i />QWEN · SPEECH</span>
+                <h2>Text → Speech</h2>
+                <p>Qwen 모델, 화자, 말투 지시, 샘플링 값을 골라 바로 생성합니다.</p>
+              </div>
+              <button className="studio-cta" disabled={loading || !selectedInferenceModel} type="submit">
+                음성 생성
+              </button>
+            </div>
+
+            <div className="speech-console__grid">
+              <section className="speech-script-panel">
+                <div className="speech-script-panel__toolbar">
                   <span className="voice-pill">
                     <span className="voice-pill__avatar">{(inferenceForm.speaker || selectedInferenceModel?.label || "V").slice(0, 1)}</span>
                     <span>{inferenceForm.speaker || (selectedInferenceModel ? displayModelName(selectedInferenceModel) : "목소리 선택")}</span>
                   </span>
-                  <button className="icon-button" onClick={() => setTtsSettingsOpen((open) => !open)} type="button">
-                    {ttsSettingsOpen ? "설정 접기" : "설정 열기"}
-                  </button>
+                  <span className="byte-counter">{new Blob([inferenceForm.text]).size} / 500 bytes</span>
                 </div>
-                <textarea
-                  className="fish-editor-textarea"
-                  placeholder="[laugh]와 같은 오디오 태그를 사용하여 텍스트를 입력하고 표현력 있는 음성으로 변환..."
-                  value={inferenceForm.text}
-                  onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))}
-                />
-              </div>
-
-              {selectedInferenceModel?.supports_instruction ? (
-                <label className="fish-instruction-strip">
-                  Instruction
+                <label>
+                  Text
                   <textarea
-                    placeholder="Keep the tone breathy, unstable, and emotionally heightened."
-                    value={inferenceForm.instruct}
-                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                    className="speech-script-panel__textarea"
+                    placeholder="생성할 대사를 입력하세요."
+                    value={inferenceForm.text}
+                    onChange={(event) => setInferenceForm((prev) => ({ ...prev, text: event.target.value }))}
                   />
                 </label>
-              ) : null}
+                {selectedInferenceModel?.supports_instruction ? (
+                  <label>
+                    Style instruction
+                    <textarea
+                      className="speech-script-panel__instruction"
+                      placeholder="Keep the tone breathy, unstable, and emotionally heightened."
+                      value={inferenceForm.instruct}
+                      onChange={(event) => setInferenceForm((prev) => ({ ...prev, instruct: event.target.value }))}
+                    />
+                  </label>
+                ) : null}
+              </section>
 
-              <div className="fish-composer-dock">
-                <details className="tag-popover">
-                  <summary>태그</summary>
-                  <div className="tag-popover__panel">
-                    <p>S2 방식의 bracket tag를 대사에 삽입합니다. 필요한 표현은 직접 `[natural language tag]`로 써도 됩니다.</p>
-                    {S2_PRO_TAG_CATEGORIES.slice(0, 3).map((category) => (
-                      <section key={category.label}>
-                        <strong>{category.label}</strong>
-                        <div className="tag-cloud">
-                          {category.tags.slice(0, 18).map((tag) => (
-                            <button className="tag-chip" key={tag} onClick={() => applyTtsTag(tag)} type="button">
-                              {tag}
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                </details>
-                <span className="credit-indicator">로컬 생성</span>
-                <span className="byte-counter">{new Blob([inferenceForm.text]).size} / 500 바이트</span>
-                <button className="primary-button" disabled={loading || !selectedInferenceModel} type="submit">
-                  음성 생성
-                </button>
-              </div>
-            </section>
-
-            {ttsSettingsOpen ? (
-              <aside className="studio-side-panel">
-                <div className="studio-side-tabs">
-                  <button className={ttsSideView === "settings" ? "is-active" : ""} onClick={() => setTtsSideView("settings")} type="button">
-                    설정
-                  </button>
-                  <button className={ttsSideView === "history" ? "is-active" : ""} onClick={() => setTtsSideView("history")} type="button">
-                    역사
-                  </button>
+              <aside className="speech-settings-panel">
+                <div className="speech-settings-panel__tabs">
+                  <button className={ttsSideView === "settings" ? "is-active" : ""} onClick={() => setTtsSideView("settings")} type="button">Settings</button>
+                  <button className={ttsSideView === "history" ? "is-active" : ""} onClick={() => setTtsSideView("history")} type="button">History</button>
                 </div>
-
                 {ttsSideView === "settings" ? (
                   <div className="studio-settings-stack">
                     <label>
-                      TTS 모델
+                      Model
                       <select value={inferenceForm.model_id} onChange={(event) => setInferenceForm((prev) => ({ ...prev, model_id: event.target.value }))}>
-                        <option value="">선택하세요</option>
+                        <option value="">모델 선택</option>
                         {ttsModels.map((model) => (
-                          <option key={model.key} value={model.model_id}>
-                            {displayModelName(model)}
-                          </option>
+                          <option key={model.key} value={model.model_id}>{displayModelName(model)}</option>
                         ))}
                       </select>
                     </label>
                     {selectedInferenceModel?.available_speakers?.length ? (
                       <label>
-                        목소리
+                        Speaker
                         <select value={inferenceForm.speaker} onChange={(event) => setInferenceForm((prev) => ({ ...prev, speaker: event.target.value }))}>
                           {selectedInferenceModel.available_speakers.map((speaker) => (
-                            <option key={speaker} value={speaker}>
-                              {speaker}
-                            </option>
+                            <option key={speaker} value={speaker}>{speaker}</option>
                           ))}
                         </select>
                       </label>
                     ) : null}
                     <label>
-                      언어
+                      Language
                       <LanguageSelect value={inferenceForm.language} onChange={(language) => setInferenceForm((prev) => ({ ...prev, language }))} />
                     </label>
                     <label>
-                      파일 이름
+                      Output name
                       <input
                         placeholder="예: mai-지친-대사"
                         value={inferenceForm.output_name}
@@ -2691,11 +3014,11 @@ export default function App() {
                       <details className="advanced-inline">
                         <summary>Reference voice</summary>
                         <label>
-                          참조 음성 경로
+                          Reference audio path
                           <input value={inferenceForm.ref_audio_path} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_audio_path: event.target.value }))} />
                         </label>
                         <label>
-                          참조 음성 문장
+                          Reference text
                           <textarea value={inferenceForm.ref_text} onChange={(event) => setInferenceForm((prev) => ({ ...prev, ref_text: event.target.value }))} />
                         </label>
                         <ServerAudioPicker assets={generatedAudioAssets} selectedPath={inferenceForm.ref_audio_path} onSelect={handleSelectInferenceAsset} />
@@ -2711,14 +3034,14 @@ export default function App() {
                     {history.slice(0, 6).map((record) => (
                       <article className="studio-history-item" key={gallerySelectionKey(record)}>
                         <strong>{getRecordDisplayTitle(record)}</strong>
-                        <audio controls src={record.output_audio_url} />
+                        <audio controls src={mediaUrl(record.output_audio_url)} />
                       </article>
                     ))}
                     {!history.length ? <p className="field-hint">아직 생성 이력이 없습니다.</p> : null}
                   </div>
                 )}
               </aside>
-            ) : null}
+            </div>
           </form>
           {lastInferenceRecord ? (
             <section className="panel">
@@ -2791,14 +3114,8 @@ export default function App() {
           </form>
 
           <aside className="panel">
-            <h3>설계 결과를 스타일로 저장</h3>
-            <p className="field-hint">방금 만든 설계 결과만 바로 스타일 자산으로 저장합니다.</p>
-            <div className="button-row">
-              <button className="primary-button" disabled={!lastDesignRecord} onClick={handleCreateCloneFromDesign} type="button">
-                방금 결과를 스타일로 저장
-              </button>
-            </div>
-            <PromptSummaryCard title="설계 스타일 자산" prompt={selectedClonePrompt} />
+            <h3>프리셋으로 저장</h3>
+            <p className="field-hint">마음에 드는 설계 결과를 필요한 서비스의 프리셋으로 따로 저장합니다.</p>
             <label>
               프리셋 이름
               <input value={presetForm.name} onChange={(event) => setPresetForm({ ...presetForm, name: event.target.value })} />
@@ -2811,45 +3128,20 @@ export default function App() {
               메모
               <textarea value={presetForm.notes} onChange={(event) => setPresetForm({ ...presetForm, notes: event.target.value })} />
             </label>
-            <button className="secondary-button" disabled={!selectedClonePrompt} onClick={() => void handleCreatePreset("design")} type="button">
-              현재 설계 스타일을 프리셋으로 저장
-            </button>
+            <div className="button-row">
+              <button className="primary-button" disabled={!lastDesignRecord || loading} onClick={() => void handleSaveDesignAsQwenPreset()} type="button">
+                Qwen 프리셋 저장
+              </button>
+              <button className="secondary-button" disabled={!lastDesignRecord || loading} onClick={() => void handleSaveDesignAsS2ProPreset()} type="button">
+                S2-Pro 프리셋 저장
+              </button>
+            </div>
             {lastDesignRecord ? (
               <AudioCard
                 title="방금 생성한 설계 음성"
                 subtitle="설명문 기반 결과"
                 record={lastDesignRecord}
               />
-            ) : null}
-            {lastDesignRecord ? (
-              <div className="button-row">
-                <button
-                  className="secondary-button"
-                  onClick={() => {
-                    setVoiceBoxCloneForm((prev) => ({
-                      ...prev,
-                      ref_audio_path: lastDesignRecord.output_audio_path,
-                      ref_text: lastDesignRecord.input_text,
-                    }));
-                    setCloneEngine("voicebox");
-                    setActiveTab("clone");
-                  }}
-                  type="button"
-                >
-                  VoiceBox 복제에 사용
-                </button>
-                <button
-                  className="secondary-button"
-                  onClick={() => {
-                    mergeDatasetSamples([{ audio_path: lastDesignRecord.output_audio_path, text: lastDesignRecord.input_text }]);
-                    setDatasetForm((prev) => ({ ...prev, ref_audio_path: lastDesignRecord.output_audio_path }));
-                    setActiveTab("dataset");
-                  }}
-                  type="button"
-                >
-                  데이터셋에 추가
-                </button>
-              </div>
             ) : null}
           </aside>
           </div>
@@ -3262,7 +3554,7 @@ export default function App() {
                       <span className="step-badge">1</span>
                       <div>
                         <h3>저장 목소리로 대사 만들기</h3>
-                        <p>Voice Design이 아니라, 저장된 voice asset을 골라 새 문장을 읽히는 흐름입니다.</p>
+                        <p>저장한 목소리를 선택해 새 대사를 생성합니다.</p>
                       </div>
                     </div>
                     <section className="s2pro-voice-selector">
@@ -3281,7 +3573,7 @@ export default function App() {
                         <div className="s2pro-selected-voice s2pro-selected-voice--wide">
                           <strong>{selectedS2Voice.name}</strong>
                           <span>{selectedS2Voice.reference_text || "저장된 참조 문장 없음"}</span>
-                          <audio controls src={selectedS2Voice.reference_audio_url} />
+                          <audio controls src={mediaUrl(selectedS2Voice.reference_audio_url)} />
                         </div>
                       ) : (
                         <div className="s2pro-empty-voice">
@@ -3293,7 +3585,7 @@ export default function App() {
                       )}
                     </section>
                     <label>
-                      Text
+                      대사
                       <textarea
                         className="s2pro-textarea"
                         value={s2ProForm.text}
@@ -3304,7 +3596,7 @@ export default function App() {
                       <details className="tag-popover s2pro-tag-popover">
                         <summary>태그</summary>
                         <div className="tag-popover__panel s2pro-tag-popover__panel">
-                          <p>S2-Pro는 bracket 태그를 대사 안에서 표현 지시로 읽습니다. 필요한 태그를 눌러 Text에 넣으세요.</p>
+                          <p>대사 사이에 넣을 표현 태그를 고릅니다. 선택한 태그는 Text에 바로 삽입됩니다.</p>
                           <input
                             className="s2pro-tag-search"
                             placeholder="Search tags, e.g. whisper, angry, pause"
@@ -3333,17 +3625,6 @@ export default function App() {
                         음성 생성
                       </button>
                     </div>
-                    <div className="s2pro-inline-actions">
-                      <button className="secondary-button" onClick={() => openS2ProTab("s2pro_clone")} type="button">
-                        새 목소리 저장
-                      </button>
-                      <button className="secondary-button" onClick={() => setS2ProForm((prev) => ({ ...prev, text: `${prev.text.trim()} [breath]` }))} type="button">
-                        [breath] 넣기
-                      </button>
-                      <button className="secondary-button" onClick={() => setS2ProForm((prev) => ({ ...prev, text: `${prev.text.trim()} [laugh]` }))} type="button">
-                        [laugh] 넣기
-                      </button>
-                    </div>
                   </>
                 ) : null}
 
@@ -3353,7 +3634,7 @@ export default function App() {
                       <span className="step-badge">1</span>
                       <div>
                         <h3>목소리 저장</h3>
-                        <p>생성 갤러리 음성이나 새 업로드 파일을 저장 목소리로 만들고, 이후 S2-Pro와 Qwen에서 재사용합니다.</p>
+                        <p>생성 갤러리 음성이나 업로드 파일을 재사용 가능한 목소리로 저장합니다.</p>
                       </div>
                     </div>
                     <div className="s2pro-clone-builder">
@@ -3456,7 +3737,7 @@ export default function App() {
                       <span className="step-badge">2</span>
                       <div>
                         <h3>저장된 목소리</h3>
-                        <p>여기서 선택한 목소리는 S2-Pro TTS와 Qwen 복제 흐름으로 바로 이어집니다.</p>
+                        <p>저장된 목소리를 선택해 테스트하거나 다른 생성 흐름으로 보냅니다.</p>
                       </div>
                     </div>
                     <div className="s2pro-voice-grid">
@@ -3472,7 +3753,7 @@ export default function App() {
                                   : "Fish server 재등록 필요"}
                             </span>
                           </button>
-                          <audio controls src={voice.reference_audio_url} />
+                          <audio controls src={mediaUrl(voice.reference_audio_url)} />
                           <div className="voice-card-actions">
                             <button onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
                               Qwen 복제로 보내기
@@ -3590,9 +3871,7 @@ export default function App() {
                       value={s2ProForm.instruction}
                       onChange={(event) => setS2ProForm({ ...s2ProForm, instruction: event.target.value })}
                     />
-                    <span className="field-caption">
-                      Native S2-Pro parameter가 아니라, 생성 시 대사 앞에 bracket tag로 합쳐 넣는 보조 입력입니다.
-                    </span>
+                    <span className="field-caption">문장 앞에 표현 태그를 더해 톤과 호흡을 보정합니다. 보통은 접어두고 필요할 때만 사용하세요.</span>
                   </label>
                   <div className="field-row">
                     <label>
@@ -3861,9 +4140,23 @@ export default function App() {
             ) : null}
 
             {currentAceStepMode === "text2music" ? (
-            <form className="ace-step-composer" onSubmit={handleAceStepSubmit}>
-              <div className="ace-step-main">
-                <div className="ace-step-preset-row ace-step-preset-row--inline">
+              <form className="music-console" onSubmit={handleAceStepSubmit}>
+                <div className="music-console__head">
+                  <div>
+                    <span className="studio-page-head__eyebrow"><i /> ACE-Step 1.5</span>
+                    <h2>Composer</h2>
+                    <p>스타일 프롬프트와 가사를 바로 생성 요청으로 보내는 작곡 콘솔입니다.</p>
+                  </div>
+                  <label className="music-console__name">
+                    Track name
+                    <input
+                      value={aceStepForm.output_name}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, output_name: event.target.value })}
+                    />
+                  </label>
+                </div>
+
+                <div className="music-preset-strip">
                   {ACE_STEP_STYLE_PRESETS.map((preset) => (
                     <button
                       className="pill-button"
@@ -3875,33 +4168,50 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <label>
-                  Track name
-                  <input
-                    value={aceStepForm.output_name}
-                    onChange={(event) => setAceStepForm({ ...aceStepForm, output_name: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Style prompt
-                  <textarea
-                    className="ace-step-textarea"
-                    value={aceStepForm.prompt}
-                    onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Lyrics
-                  <textarea
-                    className="ace-step-textarea ace-step-textarea--lyrics"
-                    value={aceStepForm.lyrics}
-                    onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
-                  />
-                </label>
-              </div>
 
-              <aside className="ace-step-controls">
-                <div className="field-row">
+                <div className="music-arrangement">
+                  <section className="music-track music-track--prompt">
+                    <div className="music-track__label">
+                      <b>STYLE</b>
+                      <span>prompt lane</span>
+                    </div>
+                    <textarea
+                      className="music-track__input"
+                      value={aceStepForm.prompt}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
+                    />
+                  </section>
+                  <section className="music-track music-track--lyrics">
+                    <div className="music-track__label">
+                      <b>LYRICS</b>
+                      <span>vocal lane</span>
+                    </div>
+                    <textarea
+                      className="music-track__input"
+                      value={aceStepForm.lyrics}
+                      onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
+                    />
+                  </section>
+                  <div className="music-wave-lane" aria-hidden="true">
+                    {aceComposerBars.map((height, index) => (
+                      <i key={`ace-wave-${index}`} style={{ height }} />
+                    ))}
+                  </div>
+                  <div className="music-spectrum" aria-hidden="true">
+                    {Array.from({ length: 72 }, (_, index) => (
+                      <span
+                        key={`ace-spectrum-${index}`}
+                        style={{
+                          height: 22 + Math.abs(Math.sin(index * 0.21) * 86) + (index % 6) * 4,
+                          opacity: 0.35 + ((index % 9) / 14),
+                        }}
+                      />
+                    ))}
+                    <b />
+                  </div>
+                </div>
+
+                <div className="music-control-rack">
                   <label>
                     Duration
                     <input
@@ -3916,8 +4226,6 @@ export default function App() {
                       onChange={(event) => setAceStepForm({ ...aceStepForm, infer_step: event.target.value })}
                     />
                   </label>
-                </div>
-                <div className="field-row">
                   <label>
                     Guidance
                     <input
@@ -3933,7 +4241,8 @@ export default function App() {
                     />
                   </label>
                 </div>
-                <details className="advanced-inline">
+
+                <details className="advanced-inline music-advanced">
                   <summary>Advanced controls</summary>
                   <div className="field-row">
                     <label>
@@ -3957,8 +4266,6 @@ export default function App() {
                         <option value="cfg">cfg</option>
                       </select>
                     </label>
-                  </div>
-                  <div className="field-row">
                     <label>
                       Omega scale
                       <input
@@ -3989,8 +4296,6 @@ export default function App() {
                         onChange={(event) => setAceStepForm({ ...aceStepForm, min_guidance_scale: event.target.value })}
                       />
                     </label>
-                  </div>
-                  <div className="field-row">
                     <label>
                       Text guidance
                       <input
@@ -4024,69 +4329,27 @@ export default function App() {
                     </label>
                   </div>
                   <div className="ace-step-toggle-grid">
-                    <label>
-                      <input
-                        checked={aceStepForm.use_erg_tag}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_tag: event.target.checked })}
-                        type="checkbox"
-                      />
-                      ERG tag
-                    </label>
-                    <label>
-                      <input
-                        checked={aceStepForm.use_erg_lyric}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_lyric: event.target.checked })}
-                        type="checkbox"
-                      />
-                      ERG lyric
-                    </label>
-                    <label>
-                      <input
-                        checked={aceStepForm.use_erg_diffusion}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: event.target.checked })}
-                        type="checkbox"
-                      />
-                      ERG diffusion
-                    </label>
-                    <label>
-                      <input
-                        checked={aceStepForm.bf16}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, bf16: event.target.checked })}
-                        type="checkbox"
-                      />
-                      BF16
-                    </label>
-                    <label>
-                      <input
-                        checked={aceStepForm.torch_compile}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, torch_compile: event.target.checked })}
-                        type="checkbox"
-                      />
-                      torch.compile
-                    </label>
-                    <label>
-                      <input
-                        checked={aceStepForm.cpu_offload}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, cpu_offload: event.target.checked })}
-                        type="checkbox"
-                      />
-                      CPU offload
-                    </label>
-                    <label>
-                      <input
-                        checked={aceStepForm.overlapped_decode}
-                        onChange={(event) => setAceStepForm({ ...aceStepForm, overlapped_decode: event.target.checked })}
-                        type="checkbox"
-                      />
-                      Overlapped decode
-                    </label>
+                    <label><input checked={aceStepForm.use_erg_tag} onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_tag: event.target.checked })} type="checkbox" /> ERG tag</label>
+                    <label><input checked={aceStepForm.use_erg_lyric} onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_lyric: event.target.checked })} type="checkbox" /> ERG lyric</label>
+                    <label><input checked={aceStepForm.use_erg_diffusion} onChange={(event) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: event.target.checked })} type="checkbox" /> ERG diffusion</label>
+                    <label><input checked={aceStepForm.bf16} onChange={(event) => setAceStepForm({ ...aceStepForm, bf16: event.target.checked })} type="checkbox" /> BF16</label>
+                    <label><input checked={aceStepForm.torch_compile} onChange={(event) => setAceStepForm({ ...aceStepForm, torch_compile: event.target.checked })} type="checkbox" /> torch.compile</label>
+                    <label><input checked={aceStepForm.cpu_offload} onChange={(event) => setAceStepForm({ ...aceStepForm, cpu_offload: event.target.checked })} type="checkbox" /> CPU offload</label>
+                    <label><input checked={aceStepForm.overlapped_decode} onChange={(event) => setAceStepForm({ ...aceStepForm, overlapped_decode: event.target.checked })} type="checkbox" /> Overlapped decode</label>
                   </div>
                 </details>
-                <button className="primary-button" disabled={loading || !aceStepAvailable} type="submit">
+
+                <div className="music-analysis">
+                  <div className="music-analysis__metric"><h6>Duration</h6><div className="v">{aceMetricValue(aceStepForm.audio_duration, "60")}<small>sec</small></div><div className="delta">target length</div></div>
+                  <div className="music-analysis__metric"><h6>Steps</h6><div className="v">{aceMetricValue(aceStepForm.infer_step, "27")}</div><div className="delta">diffusion</div></div>
+                  <div className="music-analysis__metric"><h6>Guidance</h6><div className="v">{aceMetricValue(aceStepForm.guidance_scale, "15")}</div><div className="delta">prompt strength</div></div>
+                  <div className="music-analysis__metric"><h6>Render</h6><div className="v">{aceStepForm.bf16 ? "BF16" : "FP32"}</div><div className="delta">{aceStepForm.cpu_offload ? "cpu offload" : "gpu first"}</div></div>
+                </div>
+
+                <button className="primary-button music-render-button" disabled={loading || !aceStepAvailable} type="submit">
                   음악 생성
                 </button>
-              </aside>
-            </form>
+              </form>
             ) : null}
 
             {currentAceStepMode === "cover" ? (
@@ -4735,7 +4998,7 @@ export default function App() {
                           제거
                         </button>
                       </div>
-                      <audio controls className="audio-card__player" src={asset.url} />
+                      <audio controls className="audio-card__player" src={mediaUrl(asset.url)} />
                     </article>
                   ))}
                   {selectedApplioBatchExternalPaths.map((path) => (
@@ -4830,7 +5093,7 @@ export default function App() {
                 {lastAudioToolResult.assets.map((asset) => (
                   <article className="audio-asset-card" key={asset.path}>
                     <strong>{asset.filename}</strong>
-                    <audio controls src={asset.url} />
+                    <audio controls src={mediaUrl(asset.url)} />
                   </article>
                 ))}
               </div>
@@ -4890,6 +5153,337 @@ export default function App() {
               모델 블렌딩
             </button>
           </form>
+        </section>
+      ) : null}
+
+      {activeTab === "audio_editor" ? (
+        <section className="workspace workspace--stacked audio-editor-workspace">
+          <section className="audio-editor-console">
+            <div className="audio-editor-console__header">
+              <div>
+                <span className="eyebrow">AUDIO EDITOR</span>
+                <h2>구간을 고르고 바로 편집하기</h2>
+                <p>생성 갤러리, 업로드 파일, 직접 경로 중 하나를 골라 자르기, 페이드, 볼륨, 정규화를 적용합니다.</p>
+              </div>
+              <div className="audio-editor-source-tabs" role="tablist" aria-label="오디오 소스">
+                {(["gallery", "upload", "path"] as const).map((source) => (
+                  <button
+                    className={audioEditorSource === source ? "mini-tab is-active" : "mini-tab"}
+                    key={source}
+                    onClick={() => setAudioEditorSource(source)}
+                    type="button"
+                  >
+                    {source === "gallery" ? "생성 갤러리" : source === "upload" ? "파일 업로드" : "경로 입력"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="audio-editor-console__body">
+              <section className="audio-editor-source-panel">
+                {audioEditorSource === "gallery" ? (
+                  <>
+                    <h3>편집할 음성 선택</h3>
+                    <ServerAudioPicker assets={audioAssets} selectedPath={audioEditorForm.audio_path} onSelect={(asset) => {
+                      setAudioToolUpload(null);
+                      setAudioEditorForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || basenameFromPath(asset.filename) }));
+                      setAudioEditorDuration(0);
+                    }} />
+                  </>
+                ) : null}
+
+                {audioEditorSource === "upload" ? (
+                  <label className="upload-field upload-field--editor">
+                    <strong>새 오디오 파일 불러오기</strong>
+                    <span>WAV, FLAC, MP3 등 브라우저가 선택할 수 있는 오디오를 업로드합니다.</span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void handleAudioToolUpload(file);
+                          setAudioEditorSource("upload");
+                          setAudioEditorDuration(0);
+                        }
+                      }}
+                    />
+                  </label>
+                ) : null}
+
+                {audioEditorSource === "path" ? (
+                  <label className="editor-path-field">
+                    서버 오디오 경로
+                    <input
+                      placeholder="data/generated/.../voice.wav"
+                      value={audioEditorForm.audio_path}
+                      onChange={(event) => {
+                        setAudioEditorForm((prev) => ({ ...prev, audio_path: event.target.value }));
+                        setAudioEditorDuration(0);
+                      }}
+                    />
+                  </label>
+                ) : null}
+              </section>
+
+              <form className="audio-editor-stage" onSubmit={handleAudioEditSubmit}>
+                <div className="audio-editor-stage__top">
+                  <div>
+                    <span className="meta-label">SELECTED TAKE</span>
+                    <h3>{selectedAudioEditorAsset?.filename || audioToolUpload?.filename || basenameFromPath(audioEditorForm.audio_path) || "아직 선택된 오디오 없음"}</h3>
+                  </div>
+                  <label>
+                    저장 이름
+                    <input value={audioEditorForm.output_name} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, output_name: event.target.value })} />
+                  </label>
+                </div>
+
+                {audioEditorForm.audio_path ? (
+                  <audio
+                    className="audio-editor-player"
+                    controls
+                    onLoadedMetadata={(event) => setAudioEditorDuration(event.currentTarget.duration || 0)}
+                    src={selectedAudioEditorAsset ? mediaUrl(selectedAudioEditorAsset.url) : mediaUrl(fileUrlFromPath(audioEditorForm.audio_path))}
+                  />
+                ) : null}
+
+                <div className="audio-editor-waveform" aria-label="편집 구간">
+                  <div className="audio-editor-region" style={{ left: audioEditorRegionLeft, width: audioEditorRegionWidth }} />
+                  {audioEditorBars.map((height, index) => (
+                    <span key={`${audioEditorForm.audio_path}-${index}`} style={{ height }} />
+                  ))}
+                </div>
+
+                <div className="audio-editor-range-pair">
+                  <label>
+                    Start
+                    <input
+                      max={audioEditorDurationLimit}
+                      min="0"
+                      step="0.01"
+                      type="range"
+                      value={audioEditorStart}
+                      onChange={(event) => setAudioEditorForm((prev) => ({ ...prev, start_sec: event.target.value }))}
+                    />
+                    <input value={audioEditorForm.start_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, start_sec: event.target.value })} />
+                  </label>
+                  <label>
+                    End
+                    <input
+                      max={audioEditorDurationLimit}
+                      min="0"
+                      step="0.01"
+                      type="range"
+                      value={audioEditorEnd}
+                      onChange={(event) => setAudioEditorForm((prev) => ({ ...prev, end_sec: event.target.value }))}
+                    />
+                    <input placeholder="끝까지" value={audioEditorForm.end_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, end_sec: event.target.value })} />
+                  </label>
+                </div>
+
+                <div className="audio-editor-rack">
+                  <label>
+                    Gain dB
+                    <input min="-24" max="18" step="0.5" type="range" value={audioEditorForm.gain_db} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, gain_db: event.target.value })} />
+                    <input value={audioEditorForm.gain_db} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, gain_db: event.target.value })} />
+                  </label>
+                  <label>
+                    Fade in
+                    <input value={audioEditorForm.fade_in_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, fade_in_sec: event.target.value })} />
+                  </label>
+                  <label>
+                    Fade out
+                    <input value={audioEditorForm.fade_out_sec} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, fade_out_sec: event.target.value })} />
+                  </label>
+                  <label>
+                    Sample rate
+                    <select value={audioEditorForm.sample_rate} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, sample_rate: event.target.value })}>
+                      <option value="24000">24 kHz</option>
+                      <option value="44100">44.1 kHz</option>
+                      <option value="48000">48 kHz</option>
+                    </select>
+                  </label>
+                  <label>
+                    Format
+                    <select value={audioEditorForm.output_format} onChange={(event) => setAudioEditorForm({ ...audioEditorForm, output_format: event.target.value })}>
+                      <option value="wav">WAV</option>
+                      <option value="flac">FLAC</option>
+                      <option value="ogg">OGG</option>
+                    </select>
+                  </label>
+                  <label className="checkbox-line">
+                    <input checked={audioEditorForm.normalize} type="checkbox" onChange={(event) => setAudioEditorForm({ ...audioEditorForm, normalize: event.target.checked })} />
+                    Normalize peak
+                  </label>
+                  <label className="checkbox-line">
+                    <input checked={audioEditorForm.reverse} type="checkbox" onChange={(event) => setAudioEditorForm({ ...audioEditorForm, reverse: event.target.checked })} />
+                    Reverse
+                  </label>
+                </div>
+
+                <button className="primary-button" disabled={loading || !audioEditorForm.audio_path} type="submit">
+                  편집본 저장
+                </button>
+              </form>
+            </div>
+          </section>
+
+          {lastAudioToolResult?.kind === "audio_editor" && lastAudioToolResult.record ? (
+            <AudioCard title="편집 결과" subtitle="생성 갤러리에 저장됨" record={lastAudioToolResult.record} />
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeTab === "audio_denoise" ? (
+        <section className="workspace workspace--stacked audio-editor-workspace">
+          <section className="audio-editor-console audio-denoise-console">
+            <div className="audio-editor-console__header">
+              <div>
+                <span className="eyebrow">VOICE CLEANUP</span>
+                <h2>노이즈를 줄이고 목소리만 또렷하게</h2>
+                <p>생성 갤러리, 업로드 파일, 서버 경로에서 음성을 가져와 배경 노이즈와 불필요한 대역을 정리합니다.</p>
+              </div>
+              <div className="audio-editor-source-tabs" role="tablist" aria-label="음성 정제 소스">
+                {(["gallery", "upload", "path"] as const).map((source) => (
+                  <button
+                    className={audioDenoiseSource === source ? "mini-tab is-active" : "mini-tab"}
+                    key={source}
+                    onClick={() => setAudioDenoiseSource(source)}
+                    type="button"
+                  >
+                    {source === "gallery" ? "생성 갤러리" : source === "upload" ? "파일 업로드" : "경로 입력"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="audio-editor-console__body">
+              <section className="audio-editor-source-panel">
+                {audioDenoiseSource === "gallery" ? (
+                  <>
+                    <h3>정제할 음성 선택</h3>
+                    <ServerAudioPicker assets={audioAssets} selectedPath={audioDenoiseForm.audio_path} onSelect={(asset) => {
+                      setAudioToolUpload(null);
+                      setAudioDenoiseForm((prev) => ({ ...prev, audio_path: asset.path, output_name: prev.output_name || `clean-${basenameFromPath(asset.filename)}` }));
+                    }} />
+                  </>
+                ) : null}
+
+                {audioDenoiseSource === "upload" ? (
+                  <label className="upload-field upload-field--editor">
+                    <strong>새 오디오 파일 불러오기</strong>
+                    <span>노이즈를 줄일 원본 음성을 업로드합니다. 결과는 생성 갤러리에 저장됩니다.</span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void handleAudioToolUpload(file);
+                          setAudioDenoiseSource("upload");
+                        }
+                      }}
+                    />
+                  </label>
+                ) : null}
+
+                {audioDenoiseSource === "path" ? (
+                  <label className="editor-path-field">
+                    서버 오디오 경로
+                    <input
+                      placeholder="data/generated/.../voice.wav"
+                      value={audioDenoiseForm.audio_path}
+                      onChange={(event) => setAudioDenoiseForm((prev) => ({ ...prev, audio_path: event.target.value }))}
+                    />
+                  </label>
+                ) : null}
+              </section>
+
+              <form className="audio-editor-stage audio-denoise-stage" onSubmit={handleAudioDenoiseSubmit}>
+                <div className="audio-editor-stage__top">
+                  <div>
+                    <span className="meta-label">SOURCE VOICE</span>
+                    <h3>{selectedAudioDenoiseAsset?.filename || audioToolUpload?.filename || basenameFromPath(audioDenoiseForm.audio_path) || "아직 선택된 오디오 없음"}</h3>
+                  </div>
+                  <label>
+                    저장 이름
+                    <input value={audioDenoiseForm.output_name} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, output_name: event.target.value })} />
+                  </label>
+                </div>
+
+                {audioDenoiseForm.audio_path ? (
+                  <audio
+                    className="audio-editor-player"
+                    controls
+                    src={selectedAudioDenoiseAsset ? mediaUrl(selectedAudioDenoiseAsset.url) : mediaUrl(fileUrlFromPath(audioDenoiseForm.audio_path))}
+                  />
+                ) : null}
+
+                <div className="audio-editor-waveform audio-denoise-waveform" aria-label="정제 강도 미리보기">
+                  {audioDenoiseBars.map((height, index) => (
+                    <span key={`${audioDenoiseForm.audio_path}-${index}`} style={{ height }} />
+                  ))}
+                </div>
+
+                <div className="audio-editor-rack audio-denoise-rack">
+                  <label>
+                    Noise reduction
+                    <input min="0" max="1" step="0.01" type="range" value={audioDenoiseForm.strength} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, strength: event.target.value })} />
+                    <input value={audioDenoiseForm.strength} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, strength: event.target.value })} />
+                  </label>
+                  <label>
+                    Voice preserve
+                    <input min="0" max="1" step="0.01" type="range" value={audioDenoiseForm.voice_presence} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, voice_presence: event.target.value })} />
+                    <input value={audioDenoiseForm.voice_presence} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, voice_presence: event.target.value })} />
+                  </label>
+                  <label>
+                    Noise profile sec
+                    <input value={audioDenoiseForm.noise_profile_sec} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, noise_profile_sec: event.target.value })} />
+                  </label>
+                  <label>
+                    High-pass Hz
+                    <input value={audioDenoiseForm.highpass_hz} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, highpass_hz: event.target.value })} />
+                  </label>
+                  <label>
+                    Low-pass Hz
+                    <input value={audioDenoiseForm.lowpass_hz} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, lowpass_hz: event.target.value })} />
+                  </label>
+                  <label>
+                    Spectral floor
+                    <input value={audioDenoiseForm.spectral_floor} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, spectral_floor: event.target.value })} />
+                  </label>
+                  <label>
+                    Sample rate
+                    <select value={audioDenoiseForm.sample_rate} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, sample_rate: event.target.value })}>
+                      <option value="24000">24 kHz</option>
+                      <option value="44100">44.1 kHz</option>
+                      <option value="48000">48 kHz</option>
+                    </select>
+                  </label>
+                  <label>
+                    Format
+                    <select value={audioDenoiseForm.output_format} onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, output_format: event.target.value })}>
+                      <option value="wav">WAV</option>
+                      <option value="flac">FLAC</option>
+                      <option value="ogg">OGG</option>
+                    </select>
+                  </label>
+                  <label className="checkbox-line">
+                    <input checked={audioDenoiseForm.normalize} type="checkbox" onChange={(event) => setAudioDenoiseForm({ ...audioDenoiseForm, normalize: event.target.checked })} />
+                    Normalize peak
+                  </label>
+                </div>
+
+                <button className="primary-button" disabled={loading || !audioDenoiseForm.audio_path} type="submit">
+                  정제본 저장
+                </button>
+              </form>
+            </div>
+          </section>
+
+          {lastAudioToolResult?.kind === "audio_denoise" && lastAudioToolResult.record ? (
+            <AudioCard title="정제 결과" subtitle="생성 갤러리에 저장됨" record={lastAudioToolResult.record} />
+          ) : null}
         </section>
       ) : null}
 
@@ -4963,7 +5557,7 @@ export default function App() {
                 {lastAudioToolResult.assets.map((asset) => (
                   <article className="preset-card" key={`${asset.path}-${asset.label}`}>
                     <strong>{asset.label}</strong>
-                    <audio controls className="audio-card__player" src={asset.url} />
+                    <audio controls className="audio-card__player" src={mediaUrl(asset.url)} />
                   </article>
                 ))}
               </div>
@@ -5016,7 +5610,7 @@ export default function App() {
                     <article className="selected-audio-card">
                       <span className="meta-label">선택한 기준 음성</span>
                       <strong>{selectedDatasetReferenceAsset.filename}</strong>
-                      <audio controls className="audio-card__player" src={selectedDatasetReferenceAsset.url} />
+                      <audio controls className="audio-card__player" src={mediaUrl(selectedDatasetReferenceAsset.url)} />
                     </article>
                   ) : null}
                 </section>
@@ -5031,7 +5625,7 @@ export default function App() {
                           <strong>{asset?.filename || basenameFromPath(sample.audio_path)}</strong>
                           <span>{sample.text?.trim() || asset?.text_preview || "자동 전사 예정"}</span>
                         </div>
-                        {asset ? <audio controls className="selected-sample-row__player" src={asset.url} /> : null}
+                        {asset ? <audio controls className="selected-sample-row__player" src={mediaUrl(asset.url)} /> : null}
                         <button className="ghost-button" onClick={() => removeSampleRow(index)} type="button">
                           삭제
                         </button>
@@ -5345,5 +5939,16 @@ export default function App() {
         </main>
       </div>
     </div>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <I18nProvider>
+      <ThemeProvider>
+        <StudioApp />
+      </ThemeProvider>
+    </I18nProvider>
   );
 }

@@ -9,6 +9,8 @@ export type TabKey =
   | "design"
   | "projects"
   | "effects"
+  | "audio_editor"
+  | "audio_denoise"
   | "applio_train"
   | "applio_convert"
   | "applio_batch"
@@ -89,6 +91,16 @@ export const PRODUCT_PAGES = {
     label: "사운드 효과",
     title: "사운드 효과",
     description: "영문 프롬프트로 효과음을 생성합니다.",
+  },
+  audio_editor: {
+    label: "오디오 편집",
+    title: "오디오 편집",
+    description: "생성/업로드/경로 오디오를 잘라내고 페이드, 볼륨, 정규화를 적용합니다.",
+  },
+  audio_denoise: {
+    label: "음성 정제",
+    title: "음성 정제",
+    description: "배경 노이즈, 저역 럼블, 고역 히스를 줄여 목소리를 더 또렷하게 만듭니다.",
   },
   applio_train: {
     label: "RVC 모델 학습",
@@ -705,6 +717,8 @@ export function getModeLabel(mode: string): string {
     voice_changer: "Applio 단일 변환",
     voice_changer_batch: "Applio 배치 변환",
     audio_converter: "오디오 변환",
+    audio_editor: "오디오 편집",
+    audio_denoise: "음성 정제",
     audio_separation: "오디오 분리",
     audio_translation: "전사/번역",
   };
@@ -729,6 +743,8 @@ export function getAudioToolJobLabel(kind: string): string {
     voice_changer: "Applio 단일 변환",
     voice_changer_batch: "Applio 배치 변환",
     audio_converter: "오디오 변환",
+    audio_editor: "오디오 편집",
+    audio_denoise: "음성 정제",
     audio_separation: "오디오 분리",
     audio_translation: "전사/번역",
   };
@@ -828,11 +844,34 @@ export function TargetLanguageSelect({
 
 export function fileUrlFromPath(value: string): string {
   if (!value) return "";
-  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
+  if (value.startsWith("http://") || value.startsWith("https://")) {
     return value;
   }
   const normalized = value.replace(/\\/g, "/");
-  return normalized.startsWith("data/") ? `/files/${normalized.slice(5)}` : `/files/${normalized}`;
+  const filePath = normalized.startsWith("data/") ? `/files/${normalized.slice(5)}` : normalized.startsWith("/") ? normalized : `/files/${normalized}`;
+  return mediaUrl(filePath);
+}
+
+export function mediaUrl(value: string): string {
+  if (!value) return "";
+  if (value.startsWith("http://") || value.startsWith("https://") || !value.startsWith("/")) {
+    return value;
+  }
+
+  const configuredBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+  if (configuredBase) {
+    return `${configuredBase}${value}`;
+  }
+
+  if (typeof window === "undefined") {
+    return value;
+  }
+
+  if (value.startsWith("/files/") && window.location.port && window.location.port !== "8190") {
+    return `http://127.0.0.1:8190${value}`;
+  }
+
+  return value;
 }
 
 export function createGenerationControls(mode: GenerationModeKey): GenerationControlsForm {
@@ -958,6 +997,8 @@ export function AudioCard({
   subtitle?: string;
   record: GenerationRecord;
 }) {
+  const audioUrl = mediaUrl(record.output_audio_url);
+
   return (
     <article className="audio-card">
       <div className="audio-card__header">
@@ -967,13 +1008,13 @@ export function AudioCard({
         </div>
         <div className="audio-card__actions">
           <span>{formatDate(record.created_at)}</span>
-          <a className="secondary-button button-link" href={record.output_audio_url} download={getAudioDownloadName(record)}>
+          <a className="secondary-button button-link" href={audioUrl} download={getAudioDownloadName(record)}>
             다운로드
           </a>
         </div>
       </div>
       <p className="audio-card__text">{record.input_text}</p>
-      <audio controls src={record.output_audio_url} className="audio-card__player" />
+      <audio controls src={audioUrl} className="audio-card__player" />
       <div className="audio-card__meta">
         <span>{getModeLabel(record.mode)}</span>
         <span>{record.language}</span>
@@ -1014,7 +1055,7 @@ export function ServerAudioPicker({
               선택
             </button>
           </div>
-          <audio controls className="audio-card__player" src={asset.url} />
+          <audio controls className="audio-card__player" src={mediaUrl(asset.url)} />
           {asset.text_preview ? <p className="audio-asset-card__preview">{asset.text_preview}</p> : null}
         </article>
       ))}

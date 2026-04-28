@@ -44,6 +44,8 @@ from .schemas import (
     AceStepUnderstandResponse,
     AudioAsset,
     AudioConvertRequest,
+    AudioDenoiseRequest,
+    AudioEditRequest,
     AudioSeparationRequest,
     AudioToolAsset,
     AudioToolCapability,
@@ -1723,6 +1725,20 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
             notes=stem_separator_engine.availability_notes(),
         ),
         AudioToolCapability(
+            key="audio_editor",
+            label="오디오 편집",
+            description="구간 자르기, 페이드, 게인, 정규화 같은 기본 편집을 적용합니다.",
+            available=True,
+            notes="로컬 soundfile/librosa 기반 편집입니다. 결과는 생성 갤러리에 저장됩니다.",
+        ),
+        AudioToolCapability(
+            key="audio_denoise",
+            label="음성 정제",
+            description="스펙트럴 게이트, 저역 컷, 고역 히스 완화로 음성 배경 노이즈를 줄입니다.",
+            available=True,
+            notes="GPU 없이 로컬 DSP로 처리합니다. 강도를 높이면 노이즈는 줄지만 숨소리와 잔향도 함께 줄 수 있습니다.",
+        ),
+        AudioToolCapability(
             key="ace_step",
             label="ACE-Step 작곡",
             description="ACE-Step으로 태그와 가사를 바탕으로 완성형 음악을 생성합니다.",
@@ -2825,6 +2841,243 @@ def convert_audio(payload: AudioConvertRequest) -> AudioToolResponse:
         kind="audio_converter",
         status="completed",
         message="Audio conversion completed.",
+        assets=[asset],
+        record=record,
+    )
+
+
+@app.post("/api/audio-tools/edit", response_model=AudioToolResponse)
+def edit_audio(payload: AudioEditRequest) -> AudioToolResponse:
+    """오디오를 실제로 잘라내고 기본 마스터링 값을 적용해 새 파일로 저장한다."""
+
+    source_path = resolve_audio_absolute_path(payload.audio_path)
+    waveform, sample_rate = sf.read(str(source_path), dtype="float32", always_2d=False)
+    if waveform.size == 0:
+        raise HTTPException(status_code=422, detail="Audio file is empty.")
+
+    total_samples = waveform.shape[0]
+    start_sample = min(total_samples, int(round(payload.start_sec * sample_rate)))
+    end_sec = payload.end_sec if payload.end_sec is not None else total_samples / sample_rate
+    end_sample = min(total_samples, max(start_sample + 1, int(round(end_sec * sample_rate))))
+    edited = np.asarray(waveform[start_sample:end_sample], dtype=np.float32).copy()
+    if edited.size == 0:
+        raise HTTPException(status_code=422, detail="Selected audio range is empty.")
+
+    if payload.gain_db:
+        edited *= float(10 ** (payload.gain_db / 20.0))
+
+    def apply_linear_fade(audio: np.ndarray, seconds: float, *, fade_in: bool) -> np.ndarray:
+        fade_samples = min(audio.shape[0], int(round(seconds * sample_rate)))
+        if fade_samples <= 1:
+            return audio
+        ramp = np.linspace(0.0, 1.0, fade_samples, dtype=np.float32)
+        if not fade_in:
+            ramp = ramp[::-1]
+        if audio.ndim > 1:
+            ramp = ramp[:, None]
+        if fade_in:
+            audio[:fade_samples] *= ramp
+        else:
+            audio[-fade_samples:] *= ramp
+        return audio
+
+    edited = apply_linear_fade(edited, payload.fade_in_sec, fade_in=True)
+    edited = apply_linear_fade(edited, payload.fade_out_sec, fade_in=False)
+
+    if payload.reverse:
+        edited = edited[::-1].copy()
+
+    if payload.normalize:
+        peak = float(np.max(np.abs(edited)))
+        if peak > 0:
+            edited *= 0.98 / peak
+
+    if payload.sample_rate != sample_rate:
+        edited = librosa.resample(edited, orig_sr=sample_rate, target_sr=payload.sample_rate, axis=0)
+        sample_rate = payload.sample_rate
+
+    edited = np.clip(edited, -1.0, 1.0)
+    extension = audio_tool_format_or_422(payload.output_format)
+    label = payload.output_name or f"edit {asset_stem(payload.audio_path) or 'audio'}"
+    output_path = generated_audio_path("audio-editor", label, extension)
+    sf.write(str(output_path), edited, sample_rate)
+    duration_sec = edited.shape[0] / sample_rate
+    record = write_audio_tool_generation_record(
+        mode="audio_editor",
+        text=label,
+        language="N/A",
+        audio_path=output_path,
+        meta={
+            "tool_kind": "audio_editor",
+            "source_audio_path": payload.audio_path,
+            "start_sec": payload.start_sec,
+            "end_sec": payload.end_sec,
+            "duration_sec": duration_sec,
+            "gain_db": payload.gain_db,
+            "fade_in_sec": payload.fade_in_sec,
+            "fade_out_sec": payload.fade_out_sec,
+            "normalize": payload.normalize,
+            "reverse": payload.reverse,
+            "sample_rate": sample_rate,
+            "output_format": extension,
+        },
+    )
+    asset = create_audio_tool_asset(output_path, "edited audio")
+    save_audio_tool_job(
+        kind="audio_editor",
+        input_summary=f"edit {basename_for_asset(payload.audio_path)}",
+        message="Audio edit completed.",
+        assets=[asset],
+    )
+    return AudioToolResponse(
+        kind="audio_editor",
+        status="completed",
+        message="Audio edit completed.",
+        assets=[asset],
+        record=record,
+    )
+
+
+def _band_limit_audio(waveform: np.ndarray, sample_rate: int, *, highpass_hz: float, lowpass_hz: float) -> np.ndarray:
+    """간단한 FFT 마스크로 저역 럼블과 고역 히스를 완만하게 줄인다."""
+
+    if waveform.size == 0:
+        return waveform
+    nyquist = sample_rate / 2.0
+    lowpass = min(max(lowpass_hz, 0.0), nyquist)
+    highpass = min(max(highpass_hz, 0.0), nyquist)
+    if highpass <= 0 and lowpass >= nyquist:
+        return waveform
+
+    def filter_channel(channel: np.ndarray) -> np.ndarray:
+        spectrum = np.fft.rfft(channel.astype(np.float32))
+        freqs = np.fft.rfftfreq(channel.shape[0], d=1.0 / sample_rate)
+        mask = np.ones_like(freqs, dtype=np.float32)
+        if highpass > 0:
+            mask[freqs < highpass] = 0.08
+        if lowpass < nyquist:
+            mask[freqs > lowpass] = 0.12
+        return np.fft.irfft(spectrum * mask, n=channel.shape[0]).astype(np.float32)
+
+    if waveform.ndim == 1:
+        return filter_channel(waveform)
+    return np.stack([filter_channel(waveform[:, channel]) for channel in range(waveform.shape[1])], axis=1)
+
+
+def _spectral_gate_channel(
+    channel: np.ndarray,
+    sample_rate: int,
+    *,
+    strength: float,
+    noise_profile_sec: float,
+    spectral_floor: float,
+    voice_presence: float,
+) -> np.ndarray:
+    """첫 구간을 노이즈 프로파일로 삼아 부드러운 spectral gate를 적용한다."""
+
+    if channel.size < 16:
+        return channel.astype(np.float32)
+    n_fft = 2048 if channel.size >= 2048 else 512
+    hop_length = max(128, n_fft // 4)
+    stft = librosa.stft(channel.astype(np.float32), n_fft=n_fft, hop_length=hop_length)
+    magnitude = np.abs(stft)
+    phase = np.exp(1j * np.angle(stft))
+    frame_count = max(1, min(magnitude.shape[1], int(round(noise_profile_sec * sample_rate / hop_length))))
+    noise_profile = np.percentile(magnitude[:, :frame_count], 70, axis=1, keepdims=True)
+    threshold = noise_profile * (1.2 + strength * 3.2)
+    soft_mask = magnitude / (magnitude + threshold + 1e-8)
+    soft_mask = np.clip(soft_mask ** (1.0 + strength * 1.6), spectral_floor, 1.0)
+    # 음성 대역의 에너지가 남아 있는 프레임은 과도하게 눌리지 않게 보존한다.
+    voiced_floor = spectral_floor + (voice_presence * 0.22)
+    soft_mask = np.maximum(soft_mask, voiced_floor)
+    cleaned = librosa.istft(magnitude * soft_mask * phase, hop_length=hop_length, length=channel.shape[0])
+    return cleaned.astype(np.float32)
+
+
+@app.post("/api/audio-tools/denoise", response_model=AudioToolResponse)
+def denoise_audio(payload: AudioDenoiseRequest) -> AudioToolResponse:
+    """음성 파일의 배경 노이즈와 불필요한 대역을 줄여 새 파일로 저장한다."""
+
+    source_path = resolve_audio_absolute_path(payload.audio_path)
+    waveform, sample_rate = sf.read(str(source_path), dtype="float32", always_2d=False)
+    if waveform.size == 0:
+        raise HTTPException(status_code=422, detail="Audio file is empty.")
+
+    audio = np.asarray(waveform, dtype=np.float32)
+    audio = audio - np.mean(audio, axis=0, keepdims=True)
+    audio = _band_limit_audio(audio, sample_rate, highpass_hz=payload.highpass_hz, lowpass_hz=payload.lowpass_hz)
+
+    if audio.ndim == 1:
+        cleaned = _spectral_gate_channel(
+            audio,
+            sample_rate,
+            strength=payload.strength,
+            noise_profile_sec=payload.noise_profile_sec,
+            spectral_floor=payload.spectral_floor,
+            voice_presence=payload.voice_presence,
+        )
+    else:
+        cleaned = np.stack(
+            [
+                _spectral_gate_channel(
+                    audio[:, channel],
+                    sample_rate,
+                    strength=payload.strength,
+                    noise_profile_sec=payload.noise_profile_sec,
+                    spectral_floor=payload.spectral_floor,
+                    voice_presence=payload.voice_presence,
+                )
+                for channel in range(audio.shape[1])
+            ],
+            axis=1,
+        )
+
+    if payload.sample_rate != sample_rate:
+        cleaned = librosa.resample(cleaned, orig_sr=sample_rate, target_sr=payload.sample_rate, axis=0)
+        sample_rate = payload.sample_rate
+
+    if payload.normalize:
+        peak = float(np.max(np.abs(cleaned)))
+        if peak > 0:
+            cleaned = cleaned * (0.98 / peak)
+
+    cleaned = np.clip(cleaned, -1.0, 1.0)
+    extension = audio_tool_format_or_422(payload.output_format)
+    label = payload.output_name or f"clean {asset_stem(payload.audio_path) or 'audio'}"
+    output_path = generated_audio_path("audio-denoise", label, extension)
+    sf.write(str(output_path), cleaned, sample_rate)
+    duration_sec = cleaned.shape[0] / sample_rate
+    record = write_audio_tool_generation_record(
+        mode="audio_denoise",
+        text=label,
+        language="N/A",
+        audio_path=output_path,
+        meta={
+            "tool_kind": "audio_denoise",
+            "source_audio_path": payload.audio_path,
+            "strength": payload.strength,
+            "noise_profile_sec": payload.noise_profile_sec,
+            "spectral_floor": payload.spectral_floor,
+            "highpass_hz": payload.highpass_hz,
+            "lowpass_hz": payload.lowpass_hz,
+            "voice_presence": payload.voice_presence,
+            "normalize": payload.normalize,
+            "sample_rate": sample_rate,
+            "duration_sec": duration_sec,
+            "output_format": extension,
+        },
+    )
+    asset = create_audio_tool_asset(output_path, "cleaned voice")
+    save_audio_tool_job(
+        kind="audio_denoise",
+        input_summary=f"clean {basename_for_asset(payload.audio_path)}",
+        message="Voice cleanup completed.",
+        assets=[asset],
+    )
+    return AudioToolResponse(
+        kind="audio_denoise",
+        status="completed",
+        message="Voice cleanup completed.",
         assets=[asset],
         record=record,
     )
