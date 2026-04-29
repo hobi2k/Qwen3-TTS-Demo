@@ -166,7 +166,7 @@ data/generated/plain-vs-voicebox-quality/20260425-041354
 | plain_customvoice | 0.9679 | 0.9693 | 0.9600 | 0.033984 | 454.3639 |
 | voicebox | 0.9652 | 0.9630 | 1.2800 | 0.010750 | 947.1604 |
 
-Whisper large-v3 전사:
+Qwen3-ASR 전사:
 
 - plain CustomVoice: 4개 중 3개 target similarity `1.000`, neutral만 `0.947`
 - VoiceBox: 4개 모두 target similarity `1.000`
@@ -255,7 +255,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 - `Adafactor`는 품질을 자동으로 올리는 optimizer가 아닙니다.
 - 목적은 16GB GPU에서 optimizer state 메모리를 줄여 학습을 끝까지 완료하는 것입니다.
-- 최종 품질은 반드시 Whisper 전사, speaker similarity, 실제 청취로 다시 확인해야 합니다.
+- 최종 품질은 반드시 Qwen3-ASR 전사, speaker similarity, 실제 청취로 다시 확인해야 합니다.
 
 ## 8. 현재 기준 결론
 

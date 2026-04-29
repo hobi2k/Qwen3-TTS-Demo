@@ -83,7 +83,7 @@ python scripts/validate_speech_quality.py \
 
 - 루트 `.venv`가 준비되어 있어야 합니다.
 - 백엔드가 실제 모델 모드로 실행 중이어야 합니다.
-- `data/models/whisper-large-v3`가 준비되어 있어야 합니다.
+- `data/models/Qwen3-ASR-1.7B` 또는 `data/models/Qwen3-ASR-0.6B`가 준비되어 있어야 합니다.
 - 기준 참조 음성은 로컬 파일 경로로 존재해야 합니다.
 
 권장 순서:
@@ -295,7 +295,7 @@ data/generated/quality-validation/20260412-153000/
 
 1. `GET /api/health`가 `runtime_mode=real`인지 확인합니다.
 2. `GET /api/models` 또는 `GET /api/bootstrap`에서 원하는 stock / fine-tuned 모델이 보이는지 확인합니다.
-3. `data/models/whisper-large-v3`가 준비되어 있는지 확인합니다.
+3. `data/models/Qwen3-ASR-1.7B` 또는 `data/models/Qwen3-ASR-0.6B`가 준비되어 있는지 확인합니다.
 4. 참조 음성 경로가 실제 파일인지 확인합니다.
 5. 특정 체크포인트만 점검하고 싶다면 `--base-ft-model-id`, `--customvoice-ft-model-id` 같은 명시적 인자를 사용합니다.
 

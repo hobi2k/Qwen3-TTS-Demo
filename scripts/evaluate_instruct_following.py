@@ -1,7 +1,7 @@
 """Evaluate instruct-following behavior for Qwen3-TTS custom voice checkpoints.
 
 This script generates the same text with multiple instruct prompts, transcribes
-the results with local Whisper, and reports simple acoustic metrics so we can
+the results with local Qwen3-ASR, and reports simple acoustic metrics so we can
 compare whether a fine-tuned checkpoint still reacts to instruct changes.
 """
 
@@ -17,7 +17,9 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-from transformers import pipeline
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ASR_MODEL = REPO_ROOT / "data" / "models" / "Qwen3-ASR-1.7B"
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--text", required=True)
     parser.add_argument("--language", default="ja")
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--whisper-model", required=True)
+    parser.add_argument("--asr-model", default=str(DEFAULT_ASR_MODEL))
     return parser.parse_args()
 
 
@@ -62,26 +64,35 @@ def load_qwen_model(model_path: str):
 
 
 def build_transcriber(model_path: str):
-    """Create a Whisper transcription pipeline.
+    """Create a Qwen3-ASR transcription model.
 
     Args:
-        model_path: Local Whisper model directory.
+        model_path: Qwen3-ASR model id or local model directory.
 
     Returns:
-        Configured ASR pipeline.
+        Configured Qwen3-ASR model.
     """
 
-    asr = pipeline(
-        task="automatic-speech-recognition",
-        model=model_path,
-        device=0,
-        dtype=torch.float16,
+    from qwen_asr import Qwen3ASRModel
+
+    attn_implementation = "flash_attention_2" if torch.cuda.is_available() and importlib.util.find_spec("flash_attn") else "sdpa"
+    return Qwen3ASRModel.from_pretrained(
+        model_path,
+        dtype=torch.bfloat16,
+        device_map="cuda:0" if torch.cuda.is_available() else "cpu",
+        attn_implementation=attn_implementation,
+        max_new_tokens=512,
     )
-    if hasattr(asr, "model") and hasattr(asr.model, "generation_config"):
-        generation_config = asr.model.generation_config
-        if hasattr(generation_config, "forced_decoder_ids"):
-            generation_config.forced_decoder_ids = None
-    return asr
+
+
+def transcribe_audio(asr, audio_path: Path) -> str:
+    """Transcribe one generated sample with Qwen3-ASR."""
+
+    results = asr.transcribe(audio=str(audio_path), language=None)
+    result = results[0] if isinstance(results, list) and results else results
+    if isinstance(result, dict):
+        return str(result.get("text", "")).strip()
+    return str(getattr(result, "text", "")).strip()
 
 
 def summarize_audio(audio_path: Path) -> dict[str, float]:
@@ -117,7 +128,7 @@ def main() -> None:
     }
 
     tts = load_qwen_model(args.model_path)
-    asr = build_transcriber(args.whisper_model)
+    asr = build_transcriber(args.asr_model)
     results: list[dict[str, object]] = []
 
     for prompt_name, instruct in prompts.items():
@@ -131,7 +142,7 @@ def main() -> None:
         sf.write(output_path, np.asarray(wavs[0], dtype=np.float32), sample_rate)
 
         metrics = summarize_audio(output_path)
-        transcript = asr(str(output_path), generate_kwargs={"task": "transcribe"})["text"].strip()
+        transcript = transcribe_audio(asr, output_path)
 
         item = {
             "label": args.label,

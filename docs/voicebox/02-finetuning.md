@@ -128,7 +128,7 @@ QWEN_DEMO_GRAD_ACCUM_STEPS=1
 ```
 
 `Adafactor`는 품질 향상용 설정이 아니라, 메모리 피크를 낮춰 학습을 완료하기 위한 안정화 선택입니다.
-품질은 반드시 생성 wav, Whisper 전사, speaker similarity, 실제 청취로 따로 판정합니다.
+품질은 반드시 생성 wav, Qwen3-ASR 전사, speaker similarity, 실제 청취로 따로 판정합니다.
 
 ## 보조 경로: bootstrap
 

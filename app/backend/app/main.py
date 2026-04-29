@@ -24,6 +24,7 @@ from .ace_step import AceStepComposer, AceStepError
 from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
 from .fish_speech import (
     FishSpeechError,
+    S2ProEngine,
     fish_speech_status,
     generate_s2_pro_audio,
     list_s2_pro_references,
@@ -118,6 +119,7 @@ load_dotenv(BACKEND_DIR / ".env")
 
 storage = Storage(REPO_ROOT)
 engine = QwenDemoEngine(storage)
+s2_pro_engine = S2ProEngine(REPO_ROOT)
 voice_changer = ApplioVoiceChanger(REPO_ROOT)
 mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
 stem_separator_engine = StemSeparatorEngine(REPO_ROOT)
@@ -1123,18 +1125,18 @@ def ensure_real_prepared_dataset(dataset: JsonDict, device: str) -> JsonDict:
     return dataset
 
 
-def transcribe_audio_or_raise(audio_path: str) -> AudioTranscriptionResponse:
+def transcribe_audio_or_raise(audio_path: str, model_id: Optional[str] = None) -> AudioTranscriptionResponse:
     """저장된 음성 파일을 전사하고 HTTP 오류로 정규화한다.
 
     Args:
         audio_path: 프로젝트 루트 기준 상대 경로 또는 절대 경로.
 
     Returns:
-        Whisper 전사 결과 응답 모델.
+        ASR 전사 결과 응답 모델.
     """
 
     try:
-        result = engine.transcribe_reference_audio(audio_path)
+        result = engine.transcribe_reference_audio(audio_path, model_id=model_id)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except Exception as error:
@@ -1162,7 +1164,7 @@ def run_generation_or_http(generator: Any) -> Any:
 
 
 def resolve_reference_text(reference_audio_path: str, reference_text: Optional[str]) -> str:
-    """참조 텍스트를 정리하고 비어 있으면 Whisper 전사를 사용한다.
+    """참조 텍스트를 정리하고 비어 있으면 Qwen3-ASR 전사를 사용한다.
 
     Args:
         reference_audio_path: 참조 음성 파일 경로.
@@ -1780,6 +1782,13 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
             available=ace_step_composer.is_available(),
             notes=ace_step_composer.availability_notes(),
         ),
+        AudioToolCapability(
+            key="s2_pro",
+            label="S2-Pro 음성 생성",
+            description="S2-Pro 엔진으로 저장 목소리, 태그 기반 TTS, 대화, 다국어 음성을 생성합니다.",
+            available=s2_pro_engine.is_available(),
+            notes=s2_pro_engine.availability_notes(),
+        ),
     ]
 
 
@@ -1969,6 +1978,8 @@ def health() -> HealthResponse:
         attention_implementation=engine.resolve_attention_implementation(),
         recommended_instruction_language="English",
         data_dir=str(storage.data_dir),
+        asr_provider="qwen3-asr",
+        default_asr_model=engine.resolve_transcription_model_id(),
     )
 
 
@@ -1990,6 +2001,7 @@ def bootstrap() -> BootstrapResponse:
         audio_tool_capabilities=audio_tool_capabilities(),
         audio_tool_jobs=list_audio_tool_jobs(),
         voice_changer_models=list_voice_changer_models(),
+        asr_models=engine.supported_asr_models(),
     )
 
 
@@ -2030,9 +2042,16 @@ def list_speakers() -> List[Dict[str, str]]:
     return engine.supported_speakers()
 
 
+@app.get("/api/asr/models")
+def list_asr_models() -> List[Dict[str, str]]:
+    """전사 UI에서 선택할 수 있는 Qwen3-ASR 모델 목록을 반환한다."""
+
+    return engine.supported_asr_models()
+
+
 @app.post("/api/transcriptions/reference-audio", response_model=AudioTranscriptionResponse)
 def transcribe_reference_audio(payload: AudioTranscriptionRequest) -> AudioTranscriptionResponse:
-    """저장된 참조 음성을 Whisper로 전사한다.
+    """저장된 참조 음성을 Qwen3-ASR로 전사한다.
 
     Args:
         payload: 전사할 음성 경로 요청.
@@ -2041,7 +2060,7 @@ def transcribe_reference_audio(payload: AudioTranscriptionRequest) -> AudioTrans
         전사 텍스트와 메타데이터.
     """
 
-    return transcribe_audio_or_raise(payload.audio_path)
+    return transcribe_audio_or_raise(payload.audio_path, model_id=payload.model_id)
 
 
 @app.get("/api/history", response_model=List[GenerationRecord])
@@ -3178,7 +3197,7 @@ def separate_audio(payload: AudioSeparationRequest) -> AudioToolResponse:
 
 @app.post("/api/audio-tools/translate", response_model=AudioToolResponse)
 def translate_audio(payload: AudioTranslateRequest) -> AudioToolResponse:
-    """Whisper 전사와 선택적 재합성을 묶은 번역 보조 흐름."""
+    """Qwen3-ASR 전사와 선택적 재합성을 묶은 번역 보조 흐름."""
 
     transcript = transcribe_audio_or_raise(payload.audio_path)
     translated_text = payload.translated_text.strip()
@@ -3283,7 +3302,7 @@ def get_s2pro_voice_record(voice_id: str) -> S2ProVoiceRecord:
 
 @app.get("/api/s2-pro/capabilities", response_model=S2ProRuntimeResponse)
 def s2_pro_capabilities() -> S2ProRuntimeResponse:
-    """Return local S2-Pro runtime readiness and supported feature groups."""
+    """Return S2-Pro engine readiness and supported feature groups."""
 
     status = fish_speech_status(check_server=True)
     return S2ProRuntimeResponse(
@@ -3293,7 +3312,7 @@ def s2_pro_capabilities() -> S2ProRuntimeResponse:
             "voice_clone",
             "multi_speaker",
             "multilingual_tts",
-            "local_http_runtime",
+            "managed_local_engine",
             "hosted_fish_audio_api",
         ],
     )
@@ -3576,7 +3595,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
 
     if ref_audio_path and not ref_text and not voice_clone_prompt_path:
         # 업로드 직후 바로 합성하는 경우도 자연스럽게 동작하도록
-        # 참조 텍스트가 비어 있으면 서버가 Whisper 전사를 보완한다.
+        # 참조 텍스트가 비어 있으면 서버가 Qwen3-ASR 전사를 보완한다.
         ref_text = resolve_reference_text(ref_audio_path, ref_text)
 
     if not voice_clone_prompt_path and not (ref_audio_path and ref_text):

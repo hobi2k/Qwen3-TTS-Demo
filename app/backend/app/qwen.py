@@ -40,7 +40,7 @@ class QwenDemoEngine:
         self._qwen_available = False
         self._torch: Optional[Any] = None
         self._Qwen3TTSModel: Optional[Any] = None
-        self._transcription_pipeline: Optional[Any] = None
+        self._transcription_models: Dict[str, Any] = {}
         self._models: Dict[str, Any] = {}
         self._bootstrap()
         configured_simulation = os.getenv("QWEN_DEMO_SIMULATION")
@@ -169,18 +169,54 @@ class QwenDemoEngine:
             return "flash_attention_2"
         return "sdpa"
 
-    def resolve_transcription_model_id(self) -> str:
-        """Whisper 전사에 사용할 모델 식별자를 계산한다."""
+    def supported_asr_models(self) -> List[Dict[str, str]]:
+        """프런트엔드에서 선택 가능한 Qwen3-ASR 모델 목록을 반환한다."""
 
-        configured = os.getenv("QWEN_DEMO_TRANSCRIBE_MODEL")
+        return [
+            {
+                "id": "Qwen/Qwen3-ASR-1.7B",
+                "label": "Qwen3-ASR 1.7B",
+                "description": "높은 정확도 우선. 참조 텍스트 자동 채움의 기본값.",
+            },
+            {
+                "id": "Qwen/Qwen3-ASR-0.6B",
+                "label": "Qwen3-ASR 0.6B",
+                "description": "가벼운 전사와 빠른 확인용.",
+            },
+        ]
+
+    def resolve_transcription_model_id(self, requested_model_id: Optional[str] = None) -> str:
+        """Qwen3-ASR 전사에 사용할 모델 식별자를 계산한다."""
+
+        aliases = {
+            "qwen3-asr-1.7b": "Qwen/Qwen3-ASR-1.7B",
+            "qwen/qwen3-asr-1.7b": "Qwen/Qwen3-ASR-1.7B",
+            "1.7b": "Qwen/Qwen3-ASR-1.7B",
+            "qwen3-asr-0.6b": "Qwen/Qwen3-ASR-0.6B",
+            "qwen/qwen3-asr-0.6b": "Qwen/Qwen3-ASR-0.6B",
+            "0.6b": "Qwen/Qwen3-ASR-0.6B",
+        }
+        local_dirs = {
+            "Qwen/Qwen3-ASR-1.7B": self.storage.repo_root / "data" / "models" / "Qwen3-ASR-1.7B",
+            "Qwen/Qwen3-ASR-0.6B": self.storage.repo_root / "data" / "models" / "Qwen3-ASR-0.6B",
+        }
+
+        def normalize(value: str) -> str:
+            resolved = aliases.get(value.strip().lower(), value.strip())
+            local_path = local_dirs.get(resolved)
+            if local_path and local_path.exists():
+                return str(local_path)
+            return resolved
+
+        requested = (requested_model_id or "").strip()
+        if requested:
+            return normalize(requested)
+
+        configured = os.getenv("QWEN_DEMO_ASR_MODEL")
         if configured:
-            return configured
+            return normalize(configured)
 
-        local_path = self.storage.repo_root / "data" / "models" / "whisper-large-v3"
-        if local_path.exists():
-            return str(local_path)
-
-        return "openai/whisper-large-v3"
+        return normalize("Qwen/Qwen3-ASR-1.7B")
 
     def _transcription_fallback_text(self, audio_path: str) -> str:
         """전사 모델을 쓸 수 없을 때 파일명 기반 안내 텍스트를 만든다."""
@@ -191,43 +227,39 @@ class QwenDemoEngine:
             return f"[auto-transcript placeholder] {normalized}"
         return "[auto-transcript placeholder]"
 
-    def _get_transcription_pipeline(self) -> Any:
-        """Whisper ASR 파이프라인을 캐시에서 재사용하거나 새로 준비한다.
+    def _get_transcription_model(self, model_id: str) -> Any:
+        """Qwen3-ASR 모델을 캐시에서 재사용하거나 새로 준비한다.
 
         Returns:
-            로드된 transformers ASR 파이프라인.
+            로드된 Qwen3-ASR 모델.
         """
 
-        if self._transcription_pipeline is not None:
-            return self._transcription_pipeline
+        if model_id in self._transcription_models:
+            return self._transcription_models[model_id]
 
-        from transformers import pipeline  # type: ignore
+        try:
+            from qwen_asr import Qwen3ASRModel  # type: ignore
+        except Exception as error:
+            raise RuntimeError("qwen-asr 패키지가 설치되어 있지 않습니다. `uv sync`를 다시 실행하세요.") from error
 
-        model_id = self.resolve_transcription_model_id()
-        device: int | str = -1
-        dtype = None
+        if self._torch is None:
+            try:
+                import torch  # type: ignore
 
-        if self._torch is not None:
-            if bool(self._torch.cuda.is_available()):
-                device = 0
-                dtype = getattr(self._torch, "float16", None)
-            else:
-                mps_backend = getattr(self._torch.backends, "mps", None)
-                if mps_backend is not None and bool(mps_backend.is_available()):
-                    device = "mps"
-                    dtype = getattr(self._torch, "float16", None)
+                self._torch = torch
+            except Exception as error:
+                raise RuntimeError("Qwen3-ASR 전사를 사용하려면 torch가 필요합니다.") from error
 
-        self._transcription_pipeline = pipeline(
-            task="automatic-speech-recognition",
-            model=model_id,
-            device=device,
+        dtype = getattr(self._torch, "bfloat16", None)
+        model = Qwen3ASRModel.from_pretrained(
+            model_id,
             dtype=dtype,
+            device_map=self.resolve_device(),
+            attn_implementation=self.resolve_attention_implementation(),
+            max_new_tokens=int(os.getenv("QWEN_DEMO_ASR_MAX_NEW_TOKENS", "512")),
         )
-        if hasattr(self._transcription_pipeline, "model") and hasattr(self._transcription_pipeline.model, "generation_config"):
-            generation_config = self._transcription_pipeline.model.generation_config
-            if hasattr(generation_config, "forced_decoder_ids"):
-                generation_config.forced_decoder_ids = None
-        return self._transcription_pipeline
+        self._transcription_models[model_id] = model
+        return model
 
     def supported_speakers(self) -> List[Dict[str, str]]:
         """데모 UI에 노출할 기본 화자 목록을 반환한다.
@@ -248,8 +280,8 @@ class QwenDemoEngine:
             {"speaker": "Sohee", "nativeLanguage": "Korean", "description": "Warm Korean female voice with rich emotion."},
         ]
 
-    def transcribe_reference_audio(self, audio_path: str) -> Dict[str, Any]:
-        """저장된 음성 파일을 Whisper로 전사한다.
+    def transcribe_reference_audio(self, audio_path: str, model_id: Optional[str] = None) -> Dict[str, Any]:
+        """저장된 음성 파일을 Qwen3-ASR로 전사한다.
 
         Args:
             audio_path: 프로젝트 루트 기준 상대 경로 또는 절대 경로.
@@ -270,38 +302,32 @@ class QwenDemoEngine:
                 "text": self._transcription_fallback_text(audio_path),
                 "language": None,
                 "simulation": True,
-                "model_id": None,
+                "model_id": self.resolve_transcription_model_id(model_id),
+                "provider": "qwen3-asr",
             }
 
-        pipeline_runner = self._get_transcription_pipeline()
-        pipeline_input: Any = str(absolute_path)
-
-        if sf is not None:
-            try:
-                audio_array, sample_rate = sf.read(str(absolute_path), dtype="float32")
-                if isinstance(audio_array, np.ndarray) and audio_array.ndim > 1:
-                    audio_array = audio_array.mean(axis=1)
-                pipeline_input = {
-                    "raw": np.asarray(audio_array, dtype=np.float32),
-                    "sampling_rate": int(sample_rate),
-                }
-            except Exception:
-                # `soundfile`로 읽기 실패하면 기존 filename 경로 방식을 마지막으로 시도한다.
-                pipeline_input = str(absolute_path)
-
-        result = pipeline_runner(
-            pipeline_input,
-            generate_kwargs={"task": "transcribe"},
+        resolved_model_id = self.resolve_transcription_model_id(model_id)
+        asr_model = self._get_transcription_model(resolved_model_id)
+        results = asr_model.transcribe(
+            audio=str(absolute_path),
+            language=None,
         )
-        text = str(result.get("text", "")).strip()
+        result = results[0] if isinstance(results, list) and results else results
+        if isinstance(result, dict):
+            text = str(result.get("text", "")).strip()
+            language = result.get("language")
+        else:
+            text = str(getattr(result, "text", "")).strip()
+            language = getattr(result, "language", None)
         if not text:
-            raise RuntimeError("Whisper did not return any transcript.")
+            raise RuntimeError("Qwen3-ASR did not return any transcript.")
 
         return {
             "text": text,
-            "language": result.get("language"),
+            "language": language,
             "simulation": False,
-            "model_id": self.resolve_transcription_model_id(),
+            "model_id": resolved_model_id,
+            "provider": "qwen3-asr",
         }
 
     def _fake_wave(self, text: str, destination: Path, variant: str) -> int:

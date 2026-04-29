@@ -517,7 +517,7 @@ function CloneCanvas() {
               {[
                 { k: "Resample → 22050 Hz",       s: "done" },
                 { k: "Trim silence + RMS norm",   s: "done" },
-                { k: "Whisper transcribe (KO)",   s: "done", v: "「조용한 방에서 사흘 밤을 녹음했어요…」" },
+                { k: "Qwen3-ASR transcribe (KO)", s: "done", v: "「조용한 방에서 사흘 밤을 녹음했어요…」" },
                 { k: "Speaker encoder (4096-d)",  s: "done", v: "embedding cosine 0.971 vs Mai-base" },
                 { k: "Style probe (12 axes)",     s: "active" },
                 { k: "Persist to data/clone-prompts/", s: "queued" },
@@ -561,7 +561,7 @@ function CloneCanvas() {
                       }}>{row.s}</small>
                     </div>
                     {row.v && <div style={{
-                      fontFamily: row.k.includes("Whisper") ? "var(--font-ui)" : "var(--font-mono)",
+                      fontFamily: row.k.includes("Qwen3-ASR") ? "var(--font-ui)" : "var(--font-mono)",
                       fontSize: 11, color: "var(--muted)",
                       marginTop: 3,
                     }}>{row.v}</div>}

@@ -7,6 +7,14 @@ export interface HealthResponse {
   attention_implementation: string;
   recommended_instruction_language: string;
   data_dir: string;
+  asr_provider: string;
+  default_asr_model: string;
+}
+
+export interface AsrModelInfo {
+  id: string;
+  label: string;
+  description: string;
 }
 
 export interface ModelInfo {
@@ -213,6 +221,7 @@ export interface BootstrapResponse {
   audio_tool_capabilities: AudioToolCapability[];
   audio_tool_jobs: AudioToolJob[];
   voice_changer_models: VoiceChangerModelInfo[];
+  asr_models: AsrModelInfo[];
 }
 
 export interface CloneFromSampleRequest {
@@ -250,6 +259,7 @@ export interface AudioTranscriptionResponse {
   language?: string | null;
   simulation: boolean;
   model_id?: string | null;
+  provider: string;
 }
 
 export interface CreateDatasetRequest {
@@ -301,6 +311,7 @@ export interface VoiceBoxCloneRequest extends GenerationRequestExtras {
 
 export interface S2ProRuntimeResponse {
   available: boolean;
+  notes: string;
   server_running: boolean;
   source: string;
   endpoint_url: string;
@@ -317,12 +328,14 @@ export interface S2ProRuntimeResponse {
   runtime_mode: "local" | "api";
   api_key_configured: boolean;
   available_runtimes: Array<"local" | "api">;
+  managed_server: boolean;
+  auto_start: boolean;
   features: string[];
 }
 
 export interface S2ProGenerateRequest {
   mode: "tagged" | "clone" | "multi_speaker" | "multilingual";
-  runtime_source?: "auto" | "local" | "api";
+  runtime_source?: "local" | "api";
   text: string;
   language: string;
   output_name?: string;
@@ -366,7 +379,7 @@ export interface S2ProVoiceRecord {
 
 export interface S2ProVoiceCreateRequest {
   name: string;
-  runtime_source?: "auto" | "local" | "api";
+  runtime_source?: "local" | "api";
   reference_audio_path: string;
   reference_text: string;
   language: string;

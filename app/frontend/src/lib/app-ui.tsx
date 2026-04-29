@@ -1,4 +1,5 @@
 import type { AudioAsset, AudioToolJob, GenerationRecord, ModelInfo } from "./types";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -241,7 +242,7 @@ export const S2_PRO_MODES = [
     id: "tagged",
     label: "Voice TTS",
     title: "저장 목소리로 대사 만들기",
-    description: "저장한 목소리 또는 참조 음성으로 대사를 읽히고, 필요할 때만 [laugh], [whispers] 같은 표현 태그를 넣습니다.",
+    description: "저장한 목소리 또는 참조 음성으로 대사를 읽히고, 필요할 때만 [laugh], [low voice] 같은 표현 태그를 넣습니다.",
   },
   {
     id: "clone",
@@ -348,9 +349,7 @@ export const S2_PRO_TAG_CATEGORIES = [
       "[sob]",
       "[sobbing]",
       "[crying loudly]",
-      "[whisper]",
-      "[whispers]",
-      "[whispering]",
+      "[murmur]",
       "[murmur]",
       "[shout]",
       "[shouting]",
@@ -432,7 +431,7 @@ export const S2_PRO_FEATURES = [
   "Inline expression tags",
   "Dialogue scripts",
   "Multilingual voices",
-  "Local or API runtime",
+  "Local or API provider",
 ] as const;
 
 export type GuidePromptExample = {
@@ -536,8 +535,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         example: "Shaken by fear and anger at the same time. Add unstable breathing and a trembling tone.",
       },
       {
-        label: "비밀 / 속삭임",
-        example: "Hushed, intimate, almost whispered. Slow tempo, breathy onset, no projection.",
+        label: "비밀 / 낮은 목소리",
+        example: "Hushed, intimate, and very quiet. Slow tempo, breathy onset, no projection.",
       },
     ],
     tips: [
@@ -550,8 +549,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     title: "S2-Pro 태그 레퍼런스",
     summary: "Fish Speech S2-Pro는 텍스트 안에 [bracket] 태그를 넣어 단어 단위로 표현을 제어합니다. 정해진 목록 + 자유 텍스트 모두 가능 (15,000+ 학습된 태그).",
     body: [
-      "태그는 대사 중간에 그대로 끼워 넣습니다. 예: `오늘은 [sigh] 그냥 집에 갈래. [whisper] 너만 알고 있어.` 모델이 태그 위치 직후의 단어/구절에 해당 표현을 적용합니다.",
-      "정의된 카테고리 외에 [whisper in small voice], [professional broadcast tone], [pitch up] 같은 자유 기술도 학습된 임베딩에 매핑됩니다 — 영어로 명확하게 적으면 대부분 작동합니다.",
+      "태그는 대사 중간에 그대로 끼워 넣습니다. 예: `오늘은 [sigh] 그냥 집에 갈래. [low voice] 너만 알고 있어.` 모델이 태그 위치 직후의 단어/구절에 해당 표현을 적용합니다.",
+      "정의된 카테고리 외에 [low voice], [professional broadcast tone], [pitch up] 같은 자유 기술도 학습된 임베딩에 매핑됩니다. 영어로 명확하게 적으면 대부분 작동합니다.",
       "주의: 태그 남발하면 결과가 깨집니다. 한 문장에 1~2개가 적절. Voice Design처럼 태그를 \"감독 디렉션\"이라 생각하세요.",
     ],
     tags: [
@@ -566,7 +565,6 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       { tag: "[panting]", meaning: "헐떡임" },
       { tag: "[clearing throat]", meaning: "목 가다듬기" },
       { tag: "[tsk]", meaning: "혀 차기" },
-      { tag: "[whisper]", meaning: "속삭임" },
       { tag: "[low voice]", meaning: "낮은 목소리" },
       { tag: "[shouting]", meaning: "외침" },
       { tag: "[screaming]", meaning: "비명" },
@@ -739,7 +737,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     title: "목소리 복제",
     summary: "참조 음성에서 스타일을 추출해 저장하거나, VoiceBox 모델로 바로 복제합니다.",
     steps: [
-      "Step 1: 참조 음성 업로드 + 참조 텍스트(비우면 Whisper 자동 전사).",
+      "Step 1: 참조 음성 업로드 + 참조 텍스트(비우면 선택한 Qwen3-ASR 모델로 자동 전사).",
       "Step 2: 엔진/모델 선택 — Base는 clone prompt 추출용, VoiceBox는 직접 복제용.",
       "Step 3: Base 엔진이면 Qwen 스타일 또는 S2-Pro 보이스로 저장. VoiceBox면 결과를 데이터셋으로 보낼지 선택.",
     ],
@@ -754,7 +752,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     steps: [
       "선행 작업: 사이드바 > 보이스 저장에서 참조 음성을 reusable voice로 등록.",
       "Tagged TTS 진입 → 저장 보이스 선택.",
-      "Text에 대사. 표현 디테일이 필요한 자리에 `[whisper]`, `[laughing]`, `[sigh]` 같은 태그 삽입.",
+      "Text에 대사. 표현 디테일이 필요한 자리에 `[low voice]`, `[laughing]`, `[sigh]` 같은 태그 삽입.",
       "결과를 들어보며 태그 위치/종류 조정. 태그 1~2개로 시작 → 점진적으로 추가.",
     ],
     tips: [
@@ -876,7 +874,7 @@ const GUIDE_SECTIONS_EN: GuideSection[] = [
       { label: "Cold pressure", example: "Cold, firm, and restrained. Keep the emotion suppressed and press the line forward." },
       { label: "Near anger", example: "On the verge of exploding. Sharp, rough, and clipped, with hard sentence endings." },
       { label: "Fear and anger", example: "Shaken by fear and anger at the same time. Add unstable breathing and a trembling tone." },
-      { label: "Secret whisper", example: "Hushed, intimate, almost whispered. Slow tempo, breathy onset, no projection." },
+      { label: "Secret low voice", example: "Hushed, intimate, and very quiet. Slow tempo, breathy onset, no projection." },
     ],
     tips: [
       "Put the spoken words in Text and the acting direction in instruct.",
@@ -888,8 +886,8 @@ const GUIDE_SECTIONS_EN: GuideSection[] = [
     title: "S2-Pro Tag Reference",
     summary: "Fish Speech S2-Pro can use [bracket] tags inside text to control local expression.",
     body: [
-      "Place tags directly in the script, for example: `Today [sigh] I just want to go home. [whisper] Keep this between us.`",
-      "Free-form English tags can also work, such as [professional broadcast tone] or [whisper in small voice].",
+      "Place tags directly in the script, for example: `Today [sigh] I just want to go home. [low voice] Keep this between us.`",
+      "Free-form English tags can also work, such as [professional broadcast tone] or [low voice].",
       "Use tags sparingly. One or two tags per sentence is usually enough.",
     ],
     tags: GUIDE_SECTIONS[2].tags?.map((entry) => ({
@@ -906,7 +904,6 @@ const GUIDE_SECTIONS_EN: GuideSection[] = [
         "[panting]": "panting breath",
         "[clearing throat]": "clears throat",
         "[tsk]": "tongue click",
-        "[whisper]": "whisper",
         "[low voice]": "low voice",
         "[shouting]": "shouting",
         "[screaming]": "screaming",
@@ -1035,7 +1032,7 @@ const GUIDE_SECTIONS_EN: GuideSection[] = [
     title: "Voice Clone",
     summary: "Use reference audio to create a reusable preset, or use VoiceBox for direct cloning.",
     steps: [
-      "Upload reference audio and confirm the reference text. If empty, Whisper transcription can fill it.",
+      "Upload reference audio and confirm the reference text. If empty, the selected Qwen3-ASR model can fill it.",
       "Choose the engine/model. Base creates the internal clone asset for a preset; VoiceBox generates directly.",
       "In Base mode, save the current style as a preset. Enable the S2-Pro option if you also need an S2-Pro preset.",
     ],
@@ -1050,7 +1047,7 @@ const GUIDE_SECTIONS_EN: GuideSection[] = [
     steps: [
       "First save a reusable voice in S2-Pro Voice Save.",
       "Open Tagged TTS and choose a saved voice.",
-      "Insert tags such as `[whisper]`, `[laughing]`, or `[sigh]` where expression should change.",
+      "Insert tags such as `[low voice]`, `[laughing]`, or `[sigh]` where expression should change.",
       "Listen and adjust tag placement gradually.",
     ],
     tips: [
@@ -1197,12 +1194,12 @@ const JA_GUIDE_TRANSLATIONS: Record<string, Partial<GuideSection>> = {
   },
   "Voice Clone": {
     summary: "参照音声から再利用可能なプリセットを作るか、VoiceBox で直接複製します。",
-    steps: ["参照音声をアップロードし、参照テキストを確認します。空なら Whisper で自動転写できます。", "エンジン/モデルを選びます。Base はプリセット用の内部 clone asset を作り、VoiceBox は直接生成します。", "Base では現在のスタイルをプリセット保存します。S2-Pro も必要なら同時作成を有効にします。"],
+    steps: ["参照音声をアップロードし、参照テキストを確認します。空なら選択した Qwen3-ASR モデルで自動文字起こしできます。", "エンジン/モデルを選びます。Base はプリセット用の内部 clone asset を作り、VoiceBox は直接生成します。", "Base では現在のスタイルをプリセット保存します。S2-Pro も必要なら同時作成を有効にします。"],
     tips: ["5〜15秒程度の、1人がきれいに話している音声が最適です。", "複数の演技トーンを1つの参照クリップに混ぜないでください。"],
   },
   "S2-Pro Text-to-Speech": {
     summary: "保存済み S2-Pro ボイスで生成し、bracket タグで表現を制御します。",
-    steps: ["先に S2-Pro 音声保存で再利用ボイスを作ります。", "Tagged TTS を開いて保存ボイスを選びます。", "表現を変えたい位置に `[whisper]`、`[laughing]`、`[sigh]` などを入れます。", "聞きながらタグの位置と種類を少しずつ調整します。"],
+    steps: ["先に S2-Pro 音声保存で再利用ボイスを作ります。", "Tagged TTS を開いて保存ボイスを選びます。", "表現を変えたい位置に `[low voice]`、`[laughing]`、`[sigh]` などを入れます。", "聞きながらタグの位置と種類を少しずつ調整します。"],
     tips: ["タグ候補は S2-Pro タグリファレンスを参照します。", "発話テキストが日本語や韓国語でも、タグは英語で書くのが安定します。"],
   },
   "S2-Pro Multilingual / Dialogue": {
@@ -1271,7 +1268,7 @@ const GUIDE_SECTIONS_JA: GuideSection[] = [
     title: "S2-Pro タグリファレンス",
     summary: "Fish Speech S2-Pro はテキスト内の [bracket] タグで局所的な表現を制御できます。",
     body: [
-      "タグは台詞の中に直接入れます。例: `今日は [sigh] もう帰りたい。 [whisper] これは内緒だよ。`",
+      "タグは台詞の中に直接入れます。例: `今日は [sigh] もう帰りたい。 [low voice] これは内緒だよ。`",
       "[professional broadcast tone] のような自由形式の英語タグも使えます。",
       "タグを入れすぎると崩れやすいので、1文に1〜2個から始めます。",
     ],
@@ -1954,32 +1951,62 @@ export function ServerAudioPicker({
   selectedPath: string;
   onSelect: (asset: AudioAsset) => void;
 }) {
+  const { t } = useTranslation();
+
   if (assets.length === 0) {
     return (
-      <div className="result-card result-card--empty">
-        <strong>서버 오디오가 없습니다</strong>
-        <p>먼저 음성을 생성하거나 업로드한 뒤 여기서 선택할 수 있습니다.</p>
+      <div className="rounded-md border border-dashed border-line bg-sunken/40 p-4 text-center">
+        <strong className="block text-sm font-medium text-ink">
+          {t("serverAudio.empty.title", "서버 오디오가 없습니다")}
+        </strong>
+        <p className="mt-1 text-xs text-ink-muted">
+          {t("serverAudio.empty.body", "먼저 음성을 생성하거나 업로드한 뒤 여기서 선택할 수 있습니다.")}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="audio-asset-list">
-      {assets.map((asset) => (
-        <article className={asset.path === selectedPath ? "audio-asset-card is-selected" : "audio-asset-card"} key={asset.id}>
-          <div className="audio-asset-card__header">
-            <div>
-              <strong>{asset.filename}</strong>
-              <span>{asset.source === "generated" ? "생성된 음성" : "업로드된 음성"}</span>
+    <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+      {assets.map((asset) => {
+        const isSelected = asset.path === selectedPath;
+        return (
+          <article
+            key={asset.id}
+            className={`rounded-md border p-3 transition ${
+              isSelected
+                ? "border-accent-edge bg-accent-soft/40"
+                : "border-line bg-canvas/60 hover:border-line-strong hover:bg-canvas"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <strong className="truncate text-sm font-medium text-ink">{asset.filename}</strong>
+                <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
+                  {asset.source === "generated"
+                    ? t("serverAudio.source.generated", "생성된 음성")
+                    : t("serverAudio.source.uploaded", "업로드된 음성")}
+                </span>
+              </div>
+              <Button
+                variant={isSelected ? "default" : "outline"}
+                size="sm"
+                onClick={() => onSelect(asset)}
+                type="button"
+                className="shrink-0"
+              >
+                {isSelected
+                  ? t("serverAudio.selected", "선택됨")
+                  : t("serverAudio.select", "선택")}
+              </Button>
             </div>
-            <button className="secondary-button" onClick={() => onSelect(asset)} type="button">
-              선택
-            </button>
-          </div>
-          <audio controls className="audio-card__player" src={mediaUrl(asset.url)} />
-          {asset.text_preview ? <p className="audio-asset-card__preview">{asset.text_preview}</p> : null}
-        </article>
-      ))}
+            <audio controls className="mt-2 h-8 w-full" src={mediaUrl(asset.url)} />
+            {asset.text_preview ? (
+              <p className="mt-2 line-clamp-2 text-xs text-ink-muted">{asset.text_preview}</p>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }

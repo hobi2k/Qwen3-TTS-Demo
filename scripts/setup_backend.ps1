@@ -64,7 +64,7 @@ try {
     & ffmpeg -version | Out-Null
 }
 catch {
-    Write-Warning "ffmpeg is not installed. Whisper transcription can fail without ffmpeg in PATH."
+    Write-Warning "ffmpeg is not installed. Qwen3-ASR transcription can fail without ffmpeg in PATH."
     Write-Warning "On Windows, install ffmpeg with winget/choco/scoop and add it to PATH."
 }
 
@@ -200,5 +200,7 @@ Write-Host "Backend setup complete."
 Write-Host "Next steps:"
 Write-Host "  1. Edit $EnvPath if needed"
 Write-Host "  2. Run .\scripts\download_models.ps1"
+Write-Host "     For S2-Pro only: .\scripts\download_models.ps1 s2pro"
+Write-Host "     S2-Pro local engine is started by the backend when first used."
 Write-Host "  3. Start backend with:"
 Write-Host "     cd app\backend; ..\..\.venv\Scripts\Activate.ps1; uvicorn app.main:app --reload"

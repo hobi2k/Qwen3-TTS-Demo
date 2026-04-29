@@ -120,7 +120,7 @@ Qwen3-TTS-Demo/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript
   data/
-    models/                  # downloaded Qwen/Whisper models
+    models/                  # downloaded Qwen/Qwen3-ASR models
     rvc-models/              # local RVC model assets, gitignored
     uploads/                 # uploaded source audio
     generated/               # generated audio + metadata
@@ -270,7 +270,21 @@ data/datasets/mai_ko_full/
 - `S2-Pro 대화 생성`: `<|speaker:0|>`, `<|speaker:1|>` 형태의 화자 태그로 대화 생성
 - `S2-Pro 다국어 TTS`: S2-Pro의 80개 이상 언어 지원 방향에 맞춘 다국어 생성
 
-기본은 로컬 Fish Speech입니다. Fish Speech 코드는 이미 `vendor/fish-speech/`에 vendored 되어 있고, `./scripts/download_models.sh s2pro`로 `fishaudio/s2-pro` 모델 weight만 받은 뒤 `./scripts/serve_s2_pro.sh`로 로컬 `/v1/tts` 서버를 띄워 웹 UI에서 생성합니다. 필요하면 `FISH_AUDIO_API_KEY`를 `.env`에 넣고 S2-Pro 화면의 `Runtime`을 `Fish Audio API`로 바꿔 hosted API도 사용할 수 있습니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
+기본은 `Local S2-Pro`입니다. Fish Speech 코드는 `vendor/fish-speech/`에 vendored 되어 있고, `./scripts/download_models.sh s2pro`로 `fishaudio/s2-pro` 모델 weight를 받은 뒤에는 웹 UI에서 생성/저장을 실행할 때 백엔드가 필요한 로컬 엔진 프로세스를 자동으로 실행합니다. 사용자가 별도 S2-Pro 서버를 먼저 켜는 구조가 아니라, `MMAudio`, `Applio`, `ACE-Step`처럼 백엔드 wrapper가 capability와 lifecycle을 관리하는 구조입니다.
+
+필요하면 `FISH_AUDIO_API_KEY`를 `.env`에 넣고 S2-Pro 화면의 `Provider`를 `Fish Audio API`로 바꿔 hosted API도 사용할 수 있습니다. Fish Speech는 메인 Qwen `.venv`와 섞지 않고 별도 `.venv-fish-speech`에서 실행합니다.
+
+S2-Pro 관련 핵심 `.env` 값:
+
+```env
+S2_PRO_RUNTIME=local
+S2_PRO_AUTO_START=1
+FISH_SPEECH_SERVER_URL=http://127.0.0.1:8080
+FISH_SPEECH_MODEL=s2-pro
+FISH_AUDIO_API_KEY=
+```
+
+상세 provider/환경변수/문제 해결은 [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)와 [app/backend/.env.example](app/backend/.env.example)에 정리했습니다.
 
 ## 빠른 시작
 
@@ -336,7 +350,8 @@ BACKEND_PORT=<BACKEND_PORT> npm run dev
 - `Qwen3-TTS-12Hz-0.6B/1.7B-Base`
 - `Qwen3-TTS-12Hz-0.6B/1.7B-CustomVoice`
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
-- `whisper-large-v3`
+- `Qwen3-ASR-1.7B`
+- `Qwen3-ASR-0.6B`
 - Fish Speech S2-Pro 로컬 모델
 - Applio/RVC 데모 모델과 index
 - MMAudio 일반/NSFW 효과음 모델

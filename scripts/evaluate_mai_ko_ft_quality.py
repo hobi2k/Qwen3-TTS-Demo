@@ -28,7 +28,7 @@ import numpy as np
 import soundfile as sf
 import torch
 from safetensors.torch import load_file
-from transformers import AutoConfig, pipeline
+from transformers import AutoConfig
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +44,7 @@ DEFAULT_REFERENCE_AUDIO = REPO_ROOT / "data" / "datasets" / "mai_ko_full" / "aud
 DEFAULT_REFERENCE_TEXT = "그래서 말인데, 올해는 요괴도 인간도 함께 즐길 수 있게 「미카와 축제」를 제대로 열어보려고"
 DEFAULT_EVAL_TEXT = "오늘은 정말 힘들었어. 언제쯤 끝날까?"
 DEFAULT_LANGUAGE = "Korean"
-DEFAULT_WHISPER = REPO_ROOT / "data" / "models" / "whisper-large-v3"
+DEFAULT_ASR_MODEL = REPO_ROOT / "data" / "models" / "Qwen3-ASR-1.7B"
 DEFAULT_SPEAKER_ENCODER_SOURCE = REPO_ROOT / "data" / "models" / "Qwen3-TTS-12Hz-1.7B-Base"
 
 
@@ -82,7 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--text", default=DEFAULT_EVAL_TEXT)
     parser.add_argument("--language", default=DEFAULT_LANGUAGE)
     parser.add_argument("--speaker", default="mai")
-    parser.add_argument("--whisper-model", default=str(DEFAULT_WHISPER))
+    parser.add_argument("--asr-model", default=str(DEFAULT_ASR_MODEL))
     parser.add_argument("--speaker-encoder-source", default=str(DEFAULT_SPEAKER_ENCODER_SOURCE))
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--suite", choices=["base_ft", "customvoice_ft", "all"], default="all")
@@ -137,28 +137,35 @@ def load_qwen_model(model_path: str) -> Qwen3TTSModel:
 
 
 def build_transcriber(model_path: str):
-    """Create a local Whisper transcription pipeline.
+    """Create a local Qwen3-ASR transcription model.
 
     Args:
-        model_path: Local Whisper model directory.
+        model_path: Qwen3-ASR model id or local model directory.
 
     Returns:
-        Configured automatic speech recognition pipeline.
+        Configured Qwen3-ASR model.
     """
 
-    device = 0 if torch.cuda.is_available() else -1
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    asr = pipeline(
-        task="automatic-speech-recognition",
-        model=model_path,
-        device=device,
-        dtype=dtype,
+    from qwen_asr import Qwen3ASRModel
+
+    device_map, _ = runtime_dtype()
+    return Qwen3ASRModel.from_pretrained(
+        model_path,
+        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        device_map=device_map,
+        attn_implementation=attention_backend(),
+        max_new_tokens=512,
     )
-    if hasattr(asr, "model") and hasattr(asr.model, "generation_config"):
-        generation_config = asr.model.generation_config
-        if hasattr(generation_config, "forced_decoder_ids"):
-            generation_config.forced_decoder_ids = None
-    return asr
+
+
+def transcribe_audio(transcriber: Any, audio_path: Path) -> str:
+    """Transcribe one generated sample with Qwen3-ASR."""
+
+    results = transcriber.transcribe(audio=str(audio_path), language=None)
+    result = results[0] if isinstance(results, list) and results else results
+    if isinstance(result, dict):
+        return str(result.get("text", "")).strip()
+    return str(getattr(result, "text", "")).strip()
 
 
 def load_speaker_encoder(model_path: str) -> Qwen3TTSSpeakerEncoder:
@@ -209,7 +216,7 @@ def transcript_similarity(expected: str, actual: str) -> float:
 
     Args:
         expected: Intended text.
-        actual: Whisper transcript.
+        actual: ASR transcript.
 
     Returns:
         ``0.0`` to ``1.0`` similarity ratio.
@@ -436,7 +443,7 @@ def run_variant(
         reference_audio: Dataset reference audio.
         reference_text: Transcript for stock Base clone reference.
         prompts: Instruct prompts to test.
-        transcriber: Whisper pipeline.
+        transcriber: Qwen3-ASR model.
         speaker_encoder: Speaker encoder for timbre similarity.
         suite: Suite name such as ``base_ft`` or ``customvoice_ft``.
 
@@ -465,7 +472,7 @@ def run_variant(
         output_path = output_dir / suite / variant["variant"] / f"{prompt_name}.wav"
         save_audio(output_path, np.asarray(wavs[0], dtype=np.float32), sample_rate)
 
-        transcript = str(transcriber(str(output_path), generate_kwargs={"task": "transcribe"})["text"]).strip()
+        transcript = transcribe_audio(transcriber, output_path)
         metrics = summarize_audio(output_path)
         similarity = compute_speaker_similarity(speaker_encoder, reference_audio, output_path)
 
@@ -595,7 +602,7 @@ def main() -> None:
     output_root = Path(args.output_root) / datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     output_root.mkdir(parents=True, exist_ok=True)
 
-    transcriber = build_transcriber(args.whisper_model)
+    transcriber = build_transcriber(args.asr_model)
     speaker_encoder = load_speaker_encoder(args.speaker_encoder_source)
     prompts = prompt_pack()
 

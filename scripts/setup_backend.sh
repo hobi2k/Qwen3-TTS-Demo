@@ -38,7 +38,7 @@ fi
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "Warning: ffmpeg is not installed."
-  echo "Whisper transcription can fail without ffmpeg in PATH."
+  echo "Qwen3-ASR transcription can fail without ffmpeg in PATH."
   echo "On macOS run: brew install ffmpeg"
   echo "On Ubuntu run: sudo apt-get install ffmpeg"
 fi
@@ -127,6 +127,6 @@ echo "Next steps:"
 echo "  1. Edit ${BACKEND_DIR}/.env if needed"
 echo "  2. Run ./scripts/download_models.sh"
 echo "     For S2-Pro only: ./scripts/download_models.sh s2pro"
-echo "     Then start local S2-Pro server: ./scripts/serve_s2_pro.sh"
+echo "     S2-Pro local engine is started by the backend when first used."
 echo "  3. Start backend with:"
 echo "     cd ${BACKEND_DIR} && source ../../.venv/bin/activate && uvicorn app.main:app --reload"

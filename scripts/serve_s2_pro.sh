@@ -89,5 +89,5 @@ if [[ -n "${FISH_SPEECH_API_KEY:-}" ]]; then
   ARGS+=("--api-key" "${FISH_SPEECH_API_KEY}")
 fi
 
-echo "Starting local Fish Speech S2-Pro server on ${FISH_SPEECH_HOST}:${FISH_SPEECH_PORT}"
+echo "Starting local Fish Speech S2-Pro engine on ${FISH_SPEECH_HOST}:${FISH_SPEECH_PORT}"
 python "${ARGS[@]}"

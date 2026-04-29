@@ -8,9 +8,12 @@ user explicitly selects it, to the hosted Fish Audio API.
 from __future__ import annotations
 
 import os
+import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import msgpack
 import requests
@@ -37,6 +40,14 @@ RuntimeSource = Optional[str]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+_managed_s2_pro_process: Optional[subprocess.Popen[str]] = None
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = (os.getenv(name) or "").strip().lower()
+    if not value:
+        return default
+    return value not in {"0", "false", "no", "off"}
 
 
 def _join_tts_endpoint(base_url: str) -> str:
@@ -155,7 +166,7 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
         if check_server and not api_key_configured:
             server_error = "FISH_AUDIO_API_KEY가 설정되지 않았습니다."
     elif check_server and config is not None:
-        health_url = config.endpoint_url.rsplit("/v1/tts", 1)[0].rstrip("/") + "/v1/health"
+        health_url = _local_health_url(config)
         try:
             response = requests.get(health_url, timeout=2.0)
             server_running = response.ok
@@ -164,7 +175,7 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
         except RequestException as exc:
             server_error = str(exc)
 
-    return {
+    status = {
         "available": api_key_configured if config and config.source == "fish_audio_api" else repo_root.exists() and model_dir.exists(),
         "server_running": server_running,
         "source": config.source if config else "",
@@ -182,7 +193,22 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
         "runtime_mode": "api" if config and config.source == "fish_audio_api" else "local",
         "api_key_configured": api_key_configured,
         "available_runtimes": ["local", "api"],
+        "managed_server": config.source == "local_fish_speech_server" if config else False,
+        "auto_start": _env_flag("S2_PRO_AUTO_START", True),
     }
+    if status["runtime_mode"] == "api":
+        status["notes"] = (
+            f"Fish Audio API provider ready: {status['model']}"
+            if status["api_key_configured"]
+            else "Fish Audio API provider selected, but FISH_AUDIO_API_KEY is not configured."
+        )
+    elif not status["repo_ready"]:
+        status["notes"] = f"Fish Speech source is missing: {status['repo_root']}"
+    elif not status["model_ready"]:
+        status["notes"] = f"S2-Pro model files are missing under {status['model_dir']}"
+    else:
+        status["notes"] = f"Local S2-Pro engine ready: {status['model']}"
+    return status
 
 
 def fish_speech_ready() -> bool:
@@ -196,7 +222,29 @@ def fish_speech_availability_notes() -> str:
     """Human-readable runtime availability summary."""
 
     status = fish_speech_status()
-    return f"{status['source']} -> {status['endpoint_url']} · model_dir={status['model_dir']}"
+    if status["runtime_mode"] == "api":
+        if status["api_key_configured"]:
+            return f"Fish Audio API provider ready: {status['model']}"
+        return "Fish Audio API provider selected, but FISH_AUDIO_API_KEY is not configured."
+    if not status["repo_ready"]:
+        return f"Fish Speech source is missing: {status['repo_root']}"
+    if not status["model_ready"]:
+        return f"S2-Pro model files are missing under {status['model_dir']}"
+    return f"Local S2-Pro engine ready: {status['model']}"
+
+
+class S2ProEngine:
+    """Backend-managed S2-Pro engine, matching the other local tool wrappers."""
+
+    def __init__(self, repo_root: Path):
+        self.repo_root = repo_root
+
+    def is_available(self) -> bool:
+        status = fish_speech_status()
+        return bool(status["available"] and (status["api_key_configured"] if status["runtime_mode"] == "api" else status["repo_ready"] and status["model_ready"]))
+
+    def availability_notes(self) -> str:
+        return fish_speech_availability_notes()
 
 
 def _response_error(response: requests.Response) -> str:
@@ -227,6 +275,88 @@ def _server_base_url(config: FishSpeechConfig) -> str:
     """Return the local Fish Speech HTTP server root."""
 
     return config.endpoint_url.rsplit("/v1/tts", 1)[0].rstrip("/")
+
+
+def _local_health_url(config: FishSpeechConfig) -> str:
+    """Return the local Fish Speech health-check URL."""
+
+    return f"{_server_base_url(config)}/v1/health"
+
+
+def _local_server_running(config: FishSpeechConfig, *, timeout: float = 2.0) -> bool:
+    """Return whether the configured local Fish Speech server is reachable."""
+
+    try:
+        response = requests.get(_local_health_url(config), timeout=timeout)
+        return response.ok
+    except RequestException:
+        return False
+
+
+def _managed_server_env(config: FishSpeechConfig) -> Dict[str, str]:
+    """Build environment variables for the managed Fish Speech server process."""
+
+    env = os.environ.copy()
+    parsed = urlparse(config.server_url)
+    env.setdefault("FISH_SPEECH_REPO_ROOT", str(fish_speech_repo_root()))
+    env.setdefault("FISH_SPEECH_MODEL_DIR", str(fish_speech_model_dir()))
+    env.setdefault("FISH_SPEECH_HOST", parsed.hostname or "127.0.0.1")
+    env.setdefault("FISH_SPEECH_PORT", str(parsed.port or 8080))
+    return env
+
+
+def ensure_local_s2_pro_server(config: FishSpeechConfig) -> None:
+    """Start local Fish Speech lazily so S2-Pro behaves like other tools."""
+
+    global _managed_s2_pro_process
+
+    if config.source == "fish_audio_api":
+        return
+    if _local_server_running(config):
+        return
+    if not _env_flag("S2_PRO_AUTO_START", True):
+        raise FishSpeechError(
+            "Local S2-Pro 엔진 자동 시작이 꺼져 있습니다. S2_PRO_AUTO_START=1로 두거나 Provider를 Fish Audio API로 바꾸세요."
+        )
+
+    repo_root = fish_speech_repo_root()
+    model_dir = fish_speech_model_dir()
+    script_path = REPO_ROOT / "scripts" / "serve_s2_pro.sh"
+    if not (repo_root / "tools" / "api_server.py").exists():
+        raise FishSpeechError(f"Fish Speech source is missing: {repo_root}. Run ./scripts/download_models.sh s2pro first.")
+    if not (model_dir / "codec.pth").exists():
+        raise FishSpeechError(f"S2-Pro model weights are missing: {model_dir}. Run ./scripts/download_models.sh s2pro first.")
+    if not script_path.exists():
+        raise FishSpeechError(f"S2-Pro server launcher not found: {script_path}")
+
+    if _managed_s2_pro_process is None or _managed_s2_pro_process.poll() is not None:
+        log_dir = REPO_ROOT / "data" / "runtime"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "fish-speech-s2-pro.log"
+        log_handle = log_path.open("a", encoding="utf-8")
+        _managed_s2_pro_process = subprocess.Popen(
+            [str(script_path)],
+            cwd=str(REPO_ROOT),
+            env=_managed_server_env(config),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+    timeout_sec = float(os.getenv("S2_PRO_START_TIMEOUT_SEC") or "120")
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        if _local_server_running(config, timeout=2.0):
+            return
+        if _managed_s2_pro_process and _managed_s2_pro_process.poll() is not None:
+            raise FishSpeechError(
+                "Fish Speech S2-Pro 서버 시작에 실패했습니다. data/runtime/fish-speech-s2-pro.log를 확인하세요."
+            )
+        time.sleep(1.0)
+
+    raise FishSpeechError(
+        "Fish Speech S2-Pro 서버가 시간 내에 준비되지 않았습니다. data/runtime/fish-speech-s2-pro.log를 확인하세요."
+    )
 
 
 def _json_headers(config: FishSpeechConfig) -> Dict[str, str]:
@@ -315,6 +445,8 @@ def register_s2_pro_reference(
             audio_path=audio_path,
             reference_text=reference_text,
         )
+
+    ensure_local_s2_pro_server(config)
 
     url = f"{_server_base_url(config)}/v1/references/add?format=json"
     try:
@@ -465,6 +597,7 @@ def generate_s2_pro_audio(
         raise FishSpeechError("Fish Speech 로컬 런타임 설정을 확인하세요.")
     if config.source == "fish_audio_api" and not config.api_key:
         raise FishSpeechError("Fish Audio API를 사용하려면 FISH_AUDIO_API_KEY를 설정하세요.")
+    ensure_local_s2_pro_server(config)
     ids = [item.strip() for item in (reference_ids or []) if item.strip()]
     payload = _base_payload(
         text=text,

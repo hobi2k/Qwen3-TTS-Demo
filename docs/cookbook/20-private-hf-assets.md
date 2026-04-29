@@ -9,7 +9,7 @@
 현재 프로젝트는 아래 외부 자산에 의존합니다.
 
 - Qwen3-TTS stock 모델과 tokenizer
-- Whisper large v3
+- Qwen3-ASR 1.7B / 0.6B
 - Applio/RVC 기본 `.pth + .index`
 - MMAudio NSFW checkpoint
 - Stem Separator checkpoint와 YAML
@@ -38,7 +38,8 @@ models/
   Qwen3-TTS-12Hz-0.6B-CustomVoice/
   Qwen3-TTS-12Hz-1.7B-CustomVoice/
   Qwen3-TTS-12Hz-1.7B-VoiceDesign/
-  whisper-large-v3/
+  Qwen3-ASR-1.7B/
+  Qwen3-ASR-0.6B/
 rvc-models/
   yui-mix-pro-hq-40k.pth
   added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index
@@ -69,7 +70,7 @@ ace-step/
 ./.venv/bin/python scripts/prepare_private_hf_assets.py
 ```
 
-Qwen/Whisper mirror까지 포함해서 준비:
+Qwen/Qwen3-ASR mirror까지 포함해서 준비:
 
 ```bash
 ./.venv/bin/python scripts/prepare_private_hf_assets.py --include-public-models
@@ -98,7 +99,7 @@ export HF_TOKEN=...
   --upload
 ```
 
-Qwen/Whisper mirror까지 업로드:
+Qwen/Qwen3-ASR mirror까지 업로드:
 
 ```bash
 ./.venv/bin/python scripts/prepare_private_hf_assets.py \
@@ -118,7 +119,7 @@ export PRIVATE_ASSET_REVISION=main
 ./scripts/download_models.sh
 ```
 
-Qwen/Whisper 모델도 개인 mirror에서 받으려면:
+Qwen/Qwen3-ASR 모델도 개인 mirror에서 받으려면:
 
 ```bash
 export PRIVATE_ASSET_REPO_ID=<your-hf-username>/qwen3-tts-demo-assets
@@ -131,7 +132,7 @@ export QWEN_USE_PRIVATE_ASSET_REPO=1
 
 - `PRIVATE_ASSET_REPO_ID`가 있으면 RVC, MMAudio NSFW, Stem Separator, Fish Speech S2-Pro 자산을 개인 repo에서 먼저 찾습니다.
 - 개인 repo에 파일이 없으면 기존 public URL 또는 `audio-separator` 다운로드 경로로 되돌아갑니다.
-- `QWEN_USE_PRIVATE_ASSET_REPO=1`이면 Qwen/Whisper 모델도 `models/<model-dir>/...` mirror에서 받습니다.
+- `QWEN_USE_PRIVATE_ASSET_REPO=1`이면 Qwen/Qwen3-ASR 모델도 `models/<model-dir>/...` mirror에서 받습니다.
 - S2-Pro는 `fish-speech/s2-pro/...` mirror에서 받습니다.
 - ACE-Step은 `ace-step/...` mirror에서 받아 `data/models/ace-step`에 복구합니다.
 - 모델과 생성물 폴더는 gitignore 대상입니다.

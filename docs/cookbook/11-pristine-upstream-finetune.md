@@ -124,7 +124,7 @@ QWEN_DEMO_OPTIMIZER=adafactor
 ```
 
 `Adafactor` is a memory-stability choice, not a quality guarantee. Quality still
-needs generated wav review, Whisper transcription, and speaker-similarity checks.
+needs generated wav review, Qwen3-ASR transcription, and speaker-similarity checks.
 
 ## What to keep untouched
 

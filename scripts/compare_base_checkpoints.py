@@ -75,7 +75,7 @@ def request_json(session: requests.Session, method: str, api_base: str, path: st
 
 
 def transcribe_generated_audio(session: requests.Session, api_base: str, audio_path: str) -> str:
-    """Transcribe a generated output file through the backend Whisper route.
+    """Transcribe a generated output file through the backend Qwen3-ASR route.
 
     Args:
         session: Shared requests session.
@@ -83,7 +83,7 @@ def transcribe_generated_audio(session: requests.Session, api_base: str, audio_p
         audio_path: Project-relative generated audio path.
 
     Returns:
-        Whisper transcription text.
+        Qwen3-ASR transcription text.
     """
 
     response = request_json(

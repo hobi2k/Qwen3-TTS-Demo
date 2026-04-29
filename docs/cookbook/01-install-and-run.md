@@ -97,7 +97,8 @@ Windows PowerShell:
 - `Qwen3-TTS-12Hz-0.6B/1.7B-Base`
 - `Qwen3-TTS-12Hz-0.6B/1.7B-CustomVoice`
 - `Qwen3-TTS-12Hz-1.7B-VoiceDesign`
-- `whisper-large-v3`
+- `Qwen3-ASR-1.7B`
+- `Qwen3-ASR-0.6B`
 - Fish Speech S2-Pro:
   `data/models/fish-speech/s2-pro`
 - 기본 RVC `.pth + .index`
@@ -116,7 +117,7 @@ export PRIVATE_ASSET_REVISION=main
 ./scripts/download_models.sh
 ```
 
-Qwen/Whisper 모델까지 개인 mirror에서 받으려면:
+Qwen/Qwen3-ASR 모델까지 개인 mirror에서 받으려면:
 
 ```bash
 export QWEN_USE_PRIVATE_ASSET_REPO=1
@@ -162,76 +163,139 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 
 ## 4. `.env` 확인
 
-기본 템플릿은 [app/backend/.env.example](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/.env.example)입니다.
+기본 템플릿은 [app/backend/.env.example](../../app/backend/.env.example)입니다. `setup_backend.sh` / `setup_backend.ps1`는 `app/backend/.env`가 없을 때 이 템플릿을 복사합니다.
 
 주요 변수:
 
+### Qwen
+
 - `QWEN_DEMO_SIMULATION`
+  `0`이면 실제 모델을 사용합니다. UI/API smoke test만 할 때는 `1`로 둘 수 있습니다.
 - `QWEN_DEMO_DEVICE`
+  비워 두면 `cuda:0`, `mps`, `cpu`를 자동 선택합니다.
 - `QWEN_DEMO_ATTN_IMPL`
+  비워 두면 환경에 따라 `flash_attention_2` 또는 `sdpa`를 선택합니다.
 - `QWEN_DEMO_CUSTOM_MODEL`
 - `QWEN_DEMO_DESIGN_MODEL`
 - `QWEN_DEMO_BASE_MODEL`
 - `QWEN_DEMO_TOKENIZER_MODEL`
+  비워 두면 `data/models/*`에서 자동으로 찾습니다.
+- `QWEN_DEMO_ASR_MODEL`
+  참조 텍스트 자동 입력에 사용할 Qwen3-ASR 모델을 직접 지정할 때 씁니다.
+  기본값은 `Qwen/Qwen3-ASR-1.7B`이며, 빠른 확인용으로 `Qwen/Qwen3-ASR-0.6B` 또는 `0.6b`를 지정할 수 있습니다.
+- `QWEN_DEMO_ASR_MAX_NEW_TOKENS`
+  Qwen3-ASR 전사의 최대 생성 토큰 수입니다. 기본값은 `512`입니다.
+
+### 외부 오디오 도구 공통
+
 - `APPLIO_REPO_ROOT`
 - `MMAUDIO_REPO_ROOT`
+- `FISH_SPEECH_REPO_ROOT`
+- `ACE_STEP_REPO_ROOT`
+  비워 두면 `vendor/*` 아래 체크아웃을 씁니다.
 - `APPLIO_PYTHON_EXECUTABLE`
 - `MMAUDIO_PYTHON_EXECUTABLE`
+  특수한 가상환경을 직접 지정할 때만 씁니다.
+
+### Applio / RVC
+
+- `APPLIO_MODEL_DIR`
+- `APPLIO_MODEL_PATH`
+- `APPLIO_INDEX_PATH`
 - `APPLIO_RVC_MODEL_URL`
 - `APPLIO_RVC_INDEX_URL`
+  기본 demo RVC pair가 아닌 다른 모델을 다운로드할 때 씁니다.
+
+### MMAudio
+
 - `MMAUDIO_MODEL_URL`
 - `MMAUDIO_CONFIG_URL`
+- `MMAUDIO_COMMAND_TEMPLATE`
 - `MMAUDIO_NSFW_MODEL_URL`
 - `MMAUDIO_NSFW_COMMAND_TEMPLATE`
-- `FISH_SPEECH_REPO_ROOT`
+
+### S2-Pro
+
+- `S2_PRO_RUNTIME`
+  기본 provider입니다. `local` 또는 `api`.
+- `S2_PRO_AUTO_START`
+  `1`이면 백엔드가 Local S2-Pro 엔진을 자동 시작합니다.
+- `S2_PRO_START_TIMEOUT_SEC`
+  Local S2-Pro 엔진 readiness 대기 시간입니다.
 - `FISH_SPEECH_MODEL_DIR`
 - `FISH_SPEECH_SERVER_URL`
 - `FISH_SPEECH_MODEL`
+- `FISH_SPEECH_TIMEOUT_SEC`
+- `FISH_SPEECH_HOST`
+- `FISH_SPEECH_PORT`
+- `FISH_SPEECH_VENV`
+- `FISH_SPEECH_PYTHON`
 - `FISH_SPEECH_TORCH_VERSION`
 - `FISH_SPEECH_TORCH_PROFILE`
-- `S2_PRO_RUNTIME`
+  로컬 Fish Speech 전용 venv와 torch/CUDA line을 조절합니다.
 - `FISH_AUDIO_API_KEY`
 - `FISH_AUDIO_API_URL`
 - `FISH_AUDIO_MODEL`
+  Fish Audio API provider를 쓸 때만 API key가 필요합니다.
+
+### ACE-Step
+
 - `ACE_STEP_REPO_ROOT`
 - `ACE_STEP_PYTHON`
 - `ACE_STEP_CHECKPOINT_PATH`
+- `ACE_STEP_LORA_DIR`
+- `ACE_STEP_VENV`
+- `ACE_STEP_DOWNLOAD_PROFILE`
+
+### Private asset mirror
+
+- `PRIVATE_ASSET_REPO_ID`
+- `PRIVATE_ASSET_REVISION`
+- `QWEN_USE_PRIVATE_ASSET_REPO`
+- `HF_HUB_ENABLE_HF_TRANSFER`
+- `HF_TOKEN`
 
 현재 기준 원칙:
 
 - 절대경로를 기본값으로 쓰지 않습니다.
 - `QWEN_DEMO_CUSTOM_MODEL`, `QWEN_DEMO_BASE_MODEL` 등을 비워 두면 `data/models/*`를 자동으로 찾습니다.
-- 개발 머신마다 다른 경로를 `.env`에 박아두지 않는 쪽이 맞습니다.
+- 개발 머신마다 다른 경로는 `app/backend/.env`에만 두고, `.env.example`에는 넣지 않습니다.
+- API key는 프런트에 두지 않습니다. Fish Audio API key는 백엔드 `.env`의 `FISH_AUDIO_API_KEY`만 사용합니다.
 
-## 4-1. S2-Pro 런타임 실행
+## 4-1. S2-Pro Provider
 
-S2-Pro 기본값은 로컬 Fish Speech 서버입니다. 이 경로는 API 비용 없이 로컬 GPU로 생성합니다.
+S2-Pro 기본값은 `Local S2-Pro`입니다. 이 경로는 API 비용 없이 로컬 GPU로 생성하고, 사용자가 별도 서버를 직접 켜는 구조가 아닙니다.
 
 ```bash
 ./scripts/download_models.sh s2pro
-./scripts/serve_s2_pro.sh
 ```
+
+모델 다운로드 후에는 FastAPI 백엔드만 실행하면 됩니다. S2-Pro 생성 또는 목소리 저장 요청이 들어오면 백엔드가 `S2ProEngine` wrapper를 통해 Fish Speech source와 모델 파일을 확인하고, 로컬 endpoint가 아직 살아 있지 않으면 `scripts/serve_s2_pro.sh`를 자동으로 시작합니다.
+
+이 구조는 `MMAudio`, `Applio`, `ACE-Step`처럼 “백엔드가 외부 오디오 엔진을 감싸고 상태를 관리하는 방식”에 맞춘 것입니다. `serve_s2_pro.sh`는 여전히 존재하지만 일반 사용자가 먼저 실행해야 하는 필수 단계가 아니라, 백엔드가 호출하는 launcher이자 디버깅용 수동 실행 진입점입니다.
 
 `serve_s2_pro.sh`는 `.venv-fish-speech`를 별도로 만들어 Fish Speech를 설치합니다. Fish Speech 원본은 `torch==2.8.0`을 고정하지만, 이 프로젝트의 스크립트는 torch-family 패키지를 별도로 관리해서 기본값을 `torch 2.11.0 + cu130`으로 맞춥니다. 메인 `.venv`에 Fish Speech를 직접 설치하면 Torch와 flash-attn 조합이 바뀔 수 있으므로 분리합니다.
 
 S2-Pro 로컬 런타임의 torch/CUDA 기본값:
 
 ```env
+S2_PRO_RUNTIME=local
+S2_PRO_AUTO_START=1
 FISH_SPEECH_TORCH_VERSION=2.11.0
 FISH_SPEECH_TORCH_PROFILE=cu130
 ```
 
 다른 환경에서는 `FISH_SPEECH_TORCH_PROFILE=cu129`, `cu128`, `cpu`, `current` 중 하나로 바꿉니다. `current`는 torch 설치를 건드리지 않고 현재 venv에 들어 있는 torch를 그대로 씁니다.
 
-기본 서버 주소:
+기본 local endpoint:
 
 ```text
 http://127.0.0.1:8080/v1/tts
 ```
 
-웹 UI는 `/api/s2-pro/capabilities`에서 로컬 코드, 모델 파일, 서버 연결 상태를 확인하고 `/api/s2-pro/generate`로 생성 결과를 생성 갤러리에 저장합니다.
+웹 UI는 `/api/s2-pro/capabilities`에서 provider, 모델 파일, Local S2-Pro 엔진 상태를 확인하고 `/api/s2-pro/generate`로 생성 결과를 생성 갤러리에 저장합니다.
 
-Hosted Fish Audio API를 쓰고 싶으면 백엔드 `.env`에 아래 값을 넣고, S2-Pro 화면에서 `Runtime`을 `Fish Audio API`로 선택합니다. API 키는 프런트로 보내지 않고 백엔드에서만 사용합니다.
+Hosted Fish Audio API를 쓰고 싶으면 백엔드 `.env`에 아래 값을 넣고, S2-Pro 화면에서 `Provider`를 `Fish Audio API`로 선택합니다. API 키는 프런트로 보내지 않고 백엔드에서만 사용합니다.
 
 ```env
 S2_PRO_RUNTIME=api
@@ -240,7 +304,7 @@ FISH_AUDIO_API_URL=https://api.fish.audio
 FISH_AUDIO_MODEL=s2-pro
 ```
 
-로컬과 API를 화면에서 번갈아 쓰려면 `S2_PRO_RUNTIME`은 비워 두고, 각 생성 폼의 `Runtime`만 선택해도 됩니다.
+로컬과 API를 화면에서 번갈아 쓰려면 `S2_PRO_RUNTIME=local`로 두고, 각 생성 폼의 `Provider`만 선택해도 됩니다.
 
 ## 4-2. ACE-Step 작곡 런타임
 

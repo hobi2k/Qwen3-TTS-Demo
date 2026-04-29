@@ -120,7 +120,7 @@ function Inspector() {
         <Knob label="Pace"     value={104} unit=" %"  min={50} max={150}
               ticks={["0.5×","1×","1.5×"]} />
         <Knob label="Energy"   value={62}  unit=""    min={0}  max={100}
-              ticks={["whisper","spoken","shout"]} />
+              ticks={["soft","spoken","shout"]} />
         <Knob label="Pitch"    value={-2}  unit=" st" min={-12} max={12}
               ticks={["-12","0","+12"]} />
         <Knob label="Stability" value={78}  unit=" %" min={0}  max={100}

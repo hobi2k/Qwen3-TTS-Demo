@@ -86,7 +86,8 @@ data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
 
 즉 음성만으로는 학습이 끝나지 않습니다.
 
-텍스트가 비어 있으면, 프로젝트는 Whisper로 자동 전사를 시도합니다.
+텍스트가 비어 있으면, 프로젝트는 선택한 Qwen3-ASR 모델로 자동 전사를 시도합니다.
+기본값은 정확도 우선의 `Qwen3-ASR 1.7B`이고, 빠른 확인이 필요하면 UI 드롭다운에서 `Qwen3-ASR 0.6B`를 고를 수 있습니다.
 
 ### 4.2 권장 샘플 수
 

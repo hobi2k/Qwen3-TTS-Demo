@@ -16,6 +16,8 @@ class HealthResponse(BaseModel):
     attention_implementation: str
     recommended_instruction_language: str
     data_dir: str
+    asr_provider: str = "qwen3-asr"
+    default_asr_model: str = "Qwen/Qwen3-ASR-1.7B"
 
 
 class ModelInfo(BaseModel):
@@ -156,9 +158,10 @@ class VoiceBoxCloneRequest(GenerationRequestBase):
 
 
 class S2ProRuntimeResponse(BaseModel):
-    """Fish Speech local / Fish Audio API S2-Pro 런타임 상태 응답."""
+    """백엔드가 관리하는 S2-Pro 엔진/Provider 상태 응답."""
 
     available: bool
+    notes: str = ""
     server_running: bool
     source: str
     endpoint_url: str
@@ -175,6 +178,8 @@ class S2ProRuntimeResponse(BaseModel):
     runtime_mode: str = "local"
     api_key_configured: bool = False
     available_runtimes: List[str] = Field(default_factory=list)
+    managed_server: bool = False
+    auto_start: bool = True
     features: List[str] = Field(default_factory=list)
 
 
@@ -353,19 +358,21 @@ class DatasetSampleInput(BaseModel):
 
 
 class AudioTranscriptionRequest(BaseModel):
-    """저장된 음성 파일을 Whisper로 전사하는 요청 스키마다."""
+    """저장된 음성 파일을 Qwen3-ASR로 전사하는 요청 스키마."""
 
     audio_path: str
+    model_id: Optional[str] = None
 
 
 class AudioTranscriptionResponse(BaseModel):
-    """Whisper 전사 결과를 담는 응답 스키마다."""
+    """ASR 전사 결과를 담는 응답 스키마."""
 
     audio_path: str
     text: str
     language: Optional[str] = None
     simulation: bool = False
     model_id: Optional[str] = None
+    provider: str = "qwen3-asr"
 
 
 class SoundEffectRequest(BaseModel):
@@ -837,6 +844,7 @@ class BootstrapResponse(BaseModel):
     audio_tool_capabilities: List[AudioToolCapability] = Field(default_factory=list)
     audio_tool_jobs: List[AudioToolJob] = Field(default_factory=list)
     voice_changer_models: List[VoiceChangerModelInfo] = Field(default_factory=list)
+    asr_models: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class GenerationDeleteBatchRequest(BaseModel):

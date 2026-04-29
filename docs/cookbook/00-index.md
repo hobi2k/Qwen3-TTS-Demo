@@ -74,7 +74,7 @@
 - [20-private-hf-assets.md](./20-private-hf-assets.md)
   모델과 오디오 도구 자산을 개인 Hugging Face repo로 모으는 업로드/다운로드 기준
 - [21-s2-pro-workspace.md](./21-s2-pro-workspace.md)
-  Fish Speech S2-Pro 탭의 태그 기반 생성, 복제, 멀티 스피커, 다국어 입력 구조
+  Fish Speech S2-Pro 탭의 태그 기반 생성, 복제, 멀티 스피커, 다국어 입력 구조와 Local/API provider 운영 기준
 - [22-ace-step-music.md](./22-ace-step-music.md)
   ACE-Step 기반 음악 작곡 탭, 다운로드, 런타임 분리, 생성 갤러리 연결 구조
 
@@ -133,7 +133,8 @@
 - `목소리 복제`와 `목소리 설계`는 분리합니다.
 - `프리셋 기반 생성`은 저장된 스타일의 반복 생성용 화면입니다.
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
-- `S2-Pro`는 Qwen 모델 선택 화면에 끼워 넣지 않고 Fish Speech 전용 기능별 탭으로 분리합니다.
+- `S2-Pro`는 Qwen 모델 선택 화면에 끼워 넣지 않고 Fish Speech/Fish Audio 전용 기능별 탭으로 분리합니다.
+- `S2-Pro`의 기본 `Local S2-Pro` provider는 사용자가 별도 서버를 직접 켜는 방식이 아니라, MMAudio/Applio/ACE-Step처럼 백엔드가 관리하는 엔진 wrapper 방식입니다.
 - `MMAudio`는 Qwen 생성 흐름에 섞지 않고 사운드 효과 전용 섹션으로 분리합니다.
 - `Applio`는 하나의 전용 섹션 아래에서 RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 나눠 제공합니다.
 - `가이드`는 한 페이지 카드 묶음이 아니라 문서 목록과 본문으로 나뉜 document 화면입니다.

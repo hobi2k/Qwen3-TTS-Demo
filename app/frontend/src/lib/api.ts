@@ -305,11 +305,11 @@ export const api = {
     });
   },
 
-  transcribeAudio(audioPath: string): Promise<AudioTranscriptionResponse> {
+  transcribeAudio(audioPath: string, modelId?: string): Promise<AudioTranscriptionResponse> {
     return request<AudioTranscriptionResponse>("/api/transcriptions/reference-audio", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audio_path: audioPath }),
+      body: JSON.stringify({ audio_path: audioPath, model_id: modelId }),
     });
   },
 

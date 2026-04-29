@@ -89,7 +89,8 @@ profiles = {
         ('Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice', 'Qwen3-TTS-12Hz-0.6B-CustomVoice'),
         ('Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign', 'Qwen3-TTS-12Hz-1.7B-VoiceDesign'),
         ('Qwen/Qwen3-TTS-12Hz-0.6B-Base', 'Qwen3-TTS-12Hz-0.6B-Base'),
-        ('openai/whisper-large-v3', 'whisper-large-v3'),
+        ('Qwen/Qwen3-ASR-1.7B', 'Qwen3-ASR-1.7B'),
+        ('Qwen/Qwen3-ASR-0.6B', 'Qwen3-ASR-0.6B'),
     ],
     'all': [
         ('Qwen/Qwen3-TTS-Tokenizer-12Hz', 'Qwen3-TTS-Tokenizer-12Hz'),
@@ -98,7 +99,8 @@ profiles = {
         ('Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign', 'Qwen3-TTS-12Hz-1.7B-VoiceDesign'),
         ('Qwen/Qwen3-TTS-12Hz-0.6B-Base', 'Qwen3-TTS-12Hz-0.6B-Base'),
         ('Qwen/Qwen3-TTS-12Hz-1.7B-Base', 'Qwen3-TTS-12Hz-1.7B-Base'),
-        ('openai/whisper-large-v3', 'whisper-large-v3'),
+        ('Qwen/Qwen3-ASR-1.7B', 'Qwen3-ASR-1.7B'),
+        ('Qwen/Qwen3-ASR-0.6B', 'Qwen3-ASR-0.6B'),
     ],
 }
 

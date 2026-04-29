@@ -56,11 +56,11 @@ data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl
 QWEN_DEMO_OPTIMIZER=adafactor
 ```
 
-`Adafactor`는 품질 보장용이 아니라 16GB GPU에서 optimizer state 메모리 피크를 낮추기 위한 운영 옵션입니다. 품질은 생성 wav, Whisper 전사, speaker similarity, 실제 청취로 따로 확인합니다.
+`Adafactor`는 품질 보장용이 아니라 16GB GPU에서 optimizer state 메모리 피크를 낮추기 위한 운영 옵션입니다. 품질은 생성 wav, Qwen3-ASR 전사, speaker similarity, 실제 청취로 따로 확인합니다.
 
-## S2-Pro Runtime Scripts
+## S2-Pro Engine Scripts
 
-S2-Pro는 Qwen/VoiceBox 학습 경로가 아닙니다. 로컬 Fish Speech 자산을 별도 런타임으로 사용합니다.
+S2-Pro는 Qwen/VoiceBox 학습 경로가 아닙니다. 로컬 Fish Speech 자산을 별도 엔진으로 사용합니다.
 
 - source checkout: `vendor/fish-speech`
 - model directory: `data/models/fish-speech/s2-pro`
@@ -68,22 +68,37 @@ S2-Pro는 Qwen/VoiceBox 학습 경로가 아닙니다. 로컬 Fish Speech 자산
 
 Fish Speech는 메인 Qwen `.venv`에 설치하지 않습니다. Fish Speech upstream은 torch 버전 pin을 포함할 수 있으므로, Qwen/flash-attn 런타임과 섞이면 Torch/CUDA 구성이 흔들릴 수 있습니다. `scripts/serve_s2_pro.sh`는 독립 `.venv-fish-speech`를 만들고, 선택한 torch-family build를 먼저 설치한 뒤 Fish Speech를 설치합니다.
 
+일반 사용 흐름에서는 이 스크립트를 직접 먼저 실행하지 않습니다. FastAPI 백엔드가 `S2ProEngine` wrapper를 통해 로컬 provider 상태를 보고, S2-Pro 생성/목소리 저장 요청 시 endpoint가 없으면 이 스크립트를 lazy start합니다. 수동 실행은 디버깅, 포트 점검, 백엔드 시작 전 warm-up이 필요할 때만 사용합니다.
+
 ```bash
 ./scripts/download_models.sh s2pro
+```
+
+수동 디버깅:
+
+```bash
 ./scripts/serve_s2_pro.sh
 ```
 
 기본 로컬 S2-Pro torch 라인:
 
-```bash
+```env
+S2_PRO_RUNTIME=local
+S2_PRO_AUTO_START=1
 FISH_SPEECH_TORCH_VERSION=2.11.0
 FISH_SPEECH_TORCH_PROFILE=cu130
 ```
 
-런타임 설치 구현은 아래 파일입니다.
+엔진 설치 구현은 아래 파일입니다.
 
 ```text
 scripts/install_fish_speech_runtime.py
+```
+
+백엔드가 관리하는 로컬 엔진 로그는 아래 파일에 기록됩니다.
+
+```text
+data/runtime/fish-speech-s2-pro.log
 ```
 
 ## Remaining Scripts

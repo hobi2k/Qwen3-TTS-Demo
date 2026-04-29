@@ -61,6 +61,7 @@ import {
 import type {
   AceStepRuntimeResponse,
   AceStepUnderstandResponse,
+  AsrModelInfo,
   AudioAsset,
   AudioToolCapability,
   AudioToolResponse,
@@ -77,6 +78,11 @@ import type {
   UploadResponse,
   VoiceChangerModelInfo,
 } from "./lib/types";
+
+const DEFAULT_ASR_MODELS: AsrModelInfo[] = [
+  { id: "Qwen/Qwen3-ASR-1.7B", label: "Qwen3-ASR 1.7B", description: "정확도 우선" },
+  { id: "Qwen/Qwen3-ASR-0.6B", label: "Qwen3-ASR 0.6B", description: "가벼운 전사" },
+];
 
 type AceStepMode =
   | "text2music"
@@ -139,7 +145,7 @@ const ACE_STEP_STYLE_PRESETS = [
   },
   {
     label: "Dark trap",
-    prompt: "dark trap, distorted 808 bass, sparse piano, whispered female vocal hook, tense cinematic atmosphere",
+    prompt: "dark trap, distorted 808 bass, sparse piano, hushed female vocal hook, tense cinematic atmosphere",
   },
   {
     label: "Anime rock",
@@ -360,6 +366,8 @@ function StudioApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [speakers, setSpeakers] = useState<SpeakerInfo[]>([]);
+  const [asrModels, setAsrModels] = useState<AsrModelInfo[]>(DEFAULT_ASR_MODELS);
+  const [asrModelId, setAsrModelId] = useState("Qwen/Qwen3-ASR-1.7B");
   const [audioAssets, setAudioAssets] = useState<AudioAsset[]>([]);
   const [history, setHistory] = useState<GenerationRecord[]>([]);
   const [selectedGalleryIds, setSelectedGalleryIds] = useState<string[]>([]);
@@ -495,7 +503,7 @@ function StudioApp() {
   const [selectedS2VoiceId, setSelectedS2VoiceId] = useState("");
   const [s2TagSearch, setS2TagSearch] = useState("");
   const [s2ProForm, setS2ProForm] = useState({
-    runtime_source: "local" as "auto" | "local" | "api",
+    runtime_source: "local" as "local" | "api",
     output_name: "s2pro-voice-tts",
     text: "[breath] 오늘은 조금 천천히 말해볼게. [super happy] 그래도 결국 해냈어!",
     language: "Korean",
@@ -503,7 +511,6 @@ function StudioApp() {
     reference_text: "",
     speaker_script:
       "<|speaker:0|> [calm] 오늘 회의는 여기서 정리하겠습니다.\n<|speaker:1|> [excited] 좋아요, 다음 단계로 바로 넘어가죠.",
-    clone_text: "[whispers] 이 목소리로 아주 가까이서 말하는 느낌을 확인해볼게.",
     instruction: "",
     temperature: "0.7",
     top_p: "0.8",
@@ -511,7 +518,7 @@ function StudioApp() {
   });
   const [s2ProVoiceForm, setS2ProVoiceForm] = useState({
     name: "새-s2pro-목소리",
-    runtime_source: "local" as "auto" | "local" | "api",
+    runtime_source: "local" as "local" | "api",
     reference_audio_path: "",
     reference_text: "",
     language: "Korean",
@@ -690,6 +697,8 @@ function StudioApp() {
     setHealth(data.health);
     setModels(data.models);
     setSpeakers(data.speakers);
+    setAsrModels(data.asr_models?.length ? data.asr_models : DEFAULT_ASR_MODELS);
+    setAsrModelId((prev) => prev || data.health.default_asr_model || "Qwen/Qwen3-ASR-1.7B");
     setAudioAssets(data.audio_assets);
     setHistory(data.history);
     setClonePrompts(data.clone_prompts || []);
@@ -973,6 +982,32 @@ function StudioApp() {
     audio: history.filter((record) => ["audio", "effect"].includes(galleryAccentForMode(record.mode))).length,
   };
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
+  function selectS2ProVoice(voiceId: string) {
+    const voice = s2ProVoices.find((item) => item.id === voiceId || item.reference_id === voiceId);
+    setSelectedS2VoiceId(voiceId);
+    if (voice?.runtime_source) {
+      setS2ProForm((prev) => ({ ...prev, runtime_source: voice.runtime_source }));
+    }
+  }
+  function AsrModelSelect({ compact = false }: { compact?: boolean }) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs font-medium text-ink-muted">{t("asr.model.label", "음성 인식 모델")}</Label>
+        <Select value={asrModelId} onValueChange={setAsrModelId}>
+          <SelectTrigger className={compact ? "h-9" : undefined}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {asrModels.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                {model.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
   const activeStudioModel =
     selectedInferenceModel ??
     voiceDesignModels.find((model) => model.model_id === designForm.model_id) ??
@@ -1087,7 +1122,7 @@ function StudioApp() {
   }
 
   async function transcribeUploadedReference(audioPath: string) {
-    const result = await api.transcribeAudio(audioPath);
+    const result = await api.transcribeAudio(audioPath, asrModelId);
     setUploadRefText(result.text);
     setUploadTranscriptMeta(
       result.simulation
@@ -1125,18 +1160,28 @@ function StudioApp() {
   }
 
   function handleSelectS2ProReference(asset: AudioAsset) {
+    const metadataText = asset.transcript_text?.trim() || assetTextByPath.get(asset.path)?.trim() || "";
     setS2ProForm((prev) => ({
       ...prev,
       reference_audio_path: asset.path,
-      reference_text: asset.transcript_text?.trim() || prev.reference_text,
+      reference_text: metadataText || prev.reference_text,
     }));
     setS2ProVoiceForm((prev) => ({
       ...prev,
       reference_audio_path: asset.path,
-      reference_text: asset.transcript_text?.trim() || prev.reference_text,
+      reference_text: metadataText || prev.reference_text,
       name: prev.name === "새-s2pro-목소리" ? basenameFromPath(asset.path).replace(/\.[^.]+$/, "") : prev.name,
     }));
-    setMessage(`${asset.filename}을 S2-Pro 참조 음성으로 선택했습니다.`);
+    if (metadataText) {
+      setMessage(`${asset.filename}의 저장된 대사를 참조 텍스트로 불러왔습니다.`);
+      return;
+    }
+    void runAction(async () => {
+      const result = await api.transcribeAudio(asset.path, asrModelId);
+      setS2ProVoiceForm((prev) => ({ ...prev, reference_text: result.text }));
+      setS2ProForm((prev) => ({ ...prev, reference_text: result.text }));
+      setMessage(result.simulation ? "전사 placeholder가 채워졌습니다. 실제 문장으로 수정하세요." : `${asset.filename}을 전사해 참조 텍스트로 채웠습니다.`);
+    });
   }
 
   async function handleUploadS2ProReference(file: File) {
@@ -1149,26 +1194,10 @@ function StudioApp() {
         reference_audio_path: result.path,
         name: prev.name === "새-s2pro-목소리" ? basenameFromPath(result.path).replace(/\.[^.]+$/, "") : prev.name,
       }));
+      const transcription = await api.transcribeAudio(result.path, asrModelId);
+      setS2ProVoiceForm((prev) => ({ ...prev, reference_text: transcription.text }));
       await refreshAll();
-      setMessage(`${result.filename}을 S2-Pro 참조 음성으로 불러왔습니다.`);
-    });
-  }
-
-  async function handleTranscribeS2ProReference() {
-    if (!s2ProVoiceForm.reference_audio_path) {
-      setMessage("먼저 S2-Pro 참조 음성을 선택하거나 업로드하세요.");
-      return;
-    }
-    const savedTranscript = assetTextByPath.get(s2ProVoiceForm.reference_audio_path);
-    if (savedTranscript) {
-      setS2ProVoiceForm((prev) => ({ ...prev, reference_text: savedTranscript }));
-      setMessage("생성 갤러리에 저장된 대사를 참조 텍스트로 불러왔습니다.");
-      return;
-    }
-    await runAction(async () => {
-      const result = await api.transcribeAudio(s2ProVoiceForm.reference_audio_path);
-      setS2ProVoiceForm((prev) => ({ ...prev, reference_text: result.text }));
-      setMessage(result.simulation ? "전사 placeholder가 채워졌습니다. 실제 문장으로 수정하세요." : "S2-Pro 참조 음성을 전사했습니다.");
+      setMessage(transcription.simulation ? `${result.filename}을 불러오고 전사 placeholder를 채웠습니다.` : `${result.filename}을 불러오고 Qwen3-ASR 전사로 참조 텍스트를 채웠습니다.`);
     });
   }
 
@@ -1216,6 +1245,7 @@ function StudioApp() {
         create_qwen_prompt: false,
       });
       setSelectedS2VoiceId(voice.id);
+      setS2ProForm((prev) => ({ ...prev, runtime_source: voice.runtime_source }));
       await refreshAll();
       setMessage(`${voice.name}을 S2-Pro 목소리로 저장했습니다.`);
     });
@@ -1224,6 +1254,10 @@ function StudioApp() {
   function handleCreateS2ProVoice(event?: FormEvent) {
     event?.preventDefault();
     runAction(async () => {
+      if (!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim() || !s2ProVoiceForm.reference_text.trim()) {
+        setMessage("S2-Pro 목소리로 저장하려면 참조 음성, 목소리 이름, 참조 텍스트가 모두 필요합니다.");
+        return;
+      }
       const voice = await api.createS2ProVoice({
         name: s2ProVoiceForm.name,
         runtime_source: s2ProVoiceForm.runtime_source,
@@ -1235,6 +1269,7 @@ function StudioApp() {
         qwen_model_id: selectedBaseModelId,
       });
       setSelectedS2VoiceId(voice.id);
+      setS2ProForm((prev) => ({ ...prev, runtime_source: voice.runtime_source }));
       await refreshAll();
       setMessage(`${voice.name}을 S2-Pro 목소리로 저장했습니다.`);
     });
@@ -1243,9 +1278,7 @@ function StudioApp() {
   async function handleS2ProSubmit(event?: FormEvent) {
     event?.preventDefault();
     const textByMode =
-      currentS2ProMode === "clone"
-        ? s2ProForm.clone_text
-        : currentS2ProMode === "multi_speaker"
+      currentS2ProMode === "multi_speaker"
           ? s2ProForm.speaker_script
           : s2ProForm.text;
     await runAction(async () => {
@@ -1888,6 +1921,7 @@ function StudioApp() {
         create_qwen_prompt: false,
       });
       setSelectedS2VoiceId(s2Voice.id);
+      setS2ProForm((prev) => ({ ...prev, runtime_source: s2Voice.runtime_source }));
       await refreshAll();
       setMessage("S2-Pro 목소리 프리셋을 저장했습니다.");
     });
@@ -1990,6 +2024,7 @@ function StudioApp() {
           create_qwen_prompt: false,
         });
         setSelectedS2VoiceId(voice.id);
+        setS2ProForm((prev) => ({ ...prev, runtime_source: voice.runtime_source }));
       }
       await refreshAll();
       setMessage(createS2ProWithPreset ? "캐릭터 프리셋과 S2-Pro 목소리를 함께 저장했습니다." : "캐릭터 프리셋을 저장했습니다.");
@@ -2135,7 +2170,7 @@ function StudioApp() {
         .map((sample, index) => ({ sample, index }))
         .filter(({ sample }) => !sample.text);
 
-      const whisperTargets = blankTargets.filter(({ sample, index }) => {
+      const asrTargets = blankTargets.filter(({ sample, index }) => {
         const cachedText = assetTextByPath.get(sample.audio_path)?.trim();
         if (cachedText) {
           normalizedSamples[index].text = cachedText;
@@ -2145,12 +2180,12 @@ function StudioApp() {
         return true;
       });
 
-      if (whisperTargets.length > 0) {
+      if (asrTargets.length > 0) {
         const transcripts = await Promise.all(
-          whisperTargets.map(({ sample }) => api.transcribeAudio(sample.audio_path)),
+          asrTargets.map(({ sample }) => api.transcribeAudio(sample.audio_path, asrModelId)),
         );
         transcripts.forEach((result, resultIndex) => {
-          const targetIndex = whisperTargets[resultIndex].index;
+          const targetIndex = asrTargets[resultIndex].index;
           normalizedSamples[targetIndex].text = result.text;
           updateDatasetSample(targetIndex, { text: result.text });
         });
@@ -2181,7 +2216,7 @@ function StudioApp() {
     }
 
     await runAction(async () => {
-      const result = await api.transcribeAudio(sample.audio_path.trim());
+      const result = await api.transcribeAudio(sample.audio_path.trim(), asrModelId);
       updateDatasetSample(index, { text: result.text });
       setMessage(`샘플 ${index + 1}번 텍스트를 자동 전사했습니다.`);
     });
@@ -2198,7 +2233,7 @@ function StudioApp() {
     }
 
     await runAction(async () => {
-      const results = await Promise.all(targets.map(({ sample }) => api.transcribeAudio(sample.audio_path.trim())));
+      const results = await Promise.all(targets.map(({ sample }) => api.transcribeAudio(sample.audio_path.trim(), asrModelId)));
       results.forEach((result, resultIndex) => {
         updateDatasetSample(targets[resultIndex].index, { text: result.text });
       });
@@ -2815,12 +2850,12 @@ function StudioApp() {
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">S2-Pro 프리셋</Badge>
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{t("voices.s2pro.histCount", "생성 결과 {n}개").replace("{n}", String(relatedHistory.length))}</Badge>
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{t("voices.s2pro.qwenLinks", "Qwen 연결 {n}개").replace("{n}", String(relatedPresets.length + (voice.qwen_clone_prompt_path ? 1 : 0)))}</Badge>
-                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{voice.runtime_source === "api" ? "Fish Audio API" : "Local Fish Speech"}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{voice.runtime_source === "api" ? "Fish Audio API" : "Local S2-Pro"}</Badge>
                         </div>
                         <audio controls src={mediaUrl(voice.reference_audio_url)} className="mt-1 h-8 w-full" />
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => { setSelectedS2VoiceId(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
+                        <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
                           {t("voices.s2pro.useInS2Pro", "S2-Pro에서 사용")}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
@@ -3599,6 +3634,7 @@ function StudioApp() {
                   <p className="text-[11px] text-ink-subtle">{uploadTranscriptMeta}</p>
                 ) : null}
               </div>
+              <AsrModelSelect compact />
 
               <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
                 <Button variant="outline" size="sm" onClick={handleTranscribeUploadText} type="button">
@@ -3929,9 +3965,9 @@ function StudioApp() {
                       <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
                     </div>
                   </details>
-                  <Button disabled={loading || !selectedHybridPreset} type="submit">
-                    {t("projects.hybrid.submit", "말투 지시 적용 생성")}
-                  </Button>
+	                  <Button variant="outline" disabled={loading || !selectedHybridPreset} type="submit">
+	                    {t("projects.hybrid.submit", "말투 지시 적용 생성")}
+	                  </Button>
                 </form>
               </TabsContent>
 
@@ -4015,9 +4051,9 @@ function StudioApp() {
                       <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
                     </div>
                   </details>
-                  <Button disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
-                    {t("projects.voiceboxInstruct.submit", "VoiceBox 지시 생성")}
-                  </Button>
+	                  <Button variant="outline" disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
+	                    {t("projects.voiceboxInstruct.submit", "VoiceBox 지시 생성")}
+	                  </Button>
                 </form>
               </TabsContent>
             </Tabs>
@@ -4054,28 +4090,39 @@ function StudioApp() {
                 : t("s2pro.multilingual.subtitle", "같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.")
             }
             action={{
-              label: t("s2pro.action.generate", "S2-Pro 생성"),
+              label:
+                currentS2ProMode === "clone"
+                  ? t("s2pro.clone.save", "목소리 저장")
+                  : t("s2pro.action.generate", "S2-Pro 생성"),
               formId: "s2pro-form",
               loading,
             }}
             meta={
               s2ProRuntime ? (
-                <Badge variant="secondary" className={s2ProRuntime.server_running ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
+                <Badge variant="secondary" className={s2ProRuntime.available ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
                   {s2ProRuntime.runtime_mode === "api"
                     ? s2ProRuntime.api_key_configured
                       ? "Fish Audio API"
                       : "API key required"
-                    : s2ProRuntime.server_running
-                      ? "Local Fish Speech"
-                      : "Local offline"}{" · "}{s2ProRuntime.model}
+                    : "Local S2-Pro"}{" · "}{s2ProRuntime.model}
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="bg-canvas text-ink-muted border-0">{t("s2pro.runtime.checking", "Runtime 확인 중")}</Badge>
+                <Badge variant="secondary" className="bg-canvas text-ink-muted border-0">{t("s2pro.engine.checking", "엔진 확인 중")}</Badge>
               )
             }
           />
 
-          <form id="s2pro-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]" onSubmit={handleS2ProSubmit}>
+          <form
+            id="s2pro-form"
+            className={`grid grid-cols-1 gap-5 ${currentS2ProMode === "clone" ? "" : "lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]"}`}
+            onSubmit={(event) => {
+              if (currentS2ProMode === "clone") {
+                handleCreateS2ProVoice(event);
+                return;
+              }
+              void handleS2ProSubmit(event);
+            }}
+          >
             <div className="flex flex-col gap-5">
               {currentS2ProMode === "tagged" ? (
                 <>
@@ -4086,7 +4133,7 @@ function StudioApp() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Saved voice</Label>
-                      <Select value={selectedS2VoiceId || undefined} onValueChange={(value) => setSelectedS2VoiceId(value)}>
+                      <Select value={selectedS2VoiceId || undefined} onValueChange={selectS2ProVoice}>
                         <SelectTrigger>
                           <SelectValue placeholder={t("s2pro.tagged.defaultVoice", "저장 목소리 없이 기본 S2-Pro로 생성")} />
                         </SelectTrigger>
@@ -4129,7 +4176,7 @@ function StudioApp() {
                       <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
                         <p className="text-xs text-ink-muted">{t("s2pro.tagged.tagsHint", "대사 사이에 넣을 표현 태그를 고릅니다. 선택한 태그는 Text에 바로 삽입됩니다.")}</p>
                         <Input
-                          placeholder={t("s2pro.tagged.tagSearch", "Search tags, e.g. whisper, angry, pause")}
+                          placeholder={t("s2pro.tagged.tagSearch", "Search tags, e.g. low voice, angry, pause")}
                           value={s2TagSearch}
                           onChange={(event) => setS2TagSearch(event.target.value)}
                         />
@@ -4207,52 +4254,40 @@ function StudioApp() {
                         <Input value={s2ProVoiceForm.name} onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, name: event.target.value })} />
                       </div>
                       <div className="flex flex-col gap-1.5">
-                        <Label className="text-xs font-medium text-ink-muted">Runtime</Label>
-                        <Select
-                          value={s2ProVoiceForm.runtime_source || undefined}
-                          onValueChange={(value) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: value as "auto" | "local" | "api" })}
-                        >
+                          <Label className="text-xs font-medium text-ink-muted">Provider</Label>
+                          <Select
+                            value={s2ProVoiceForm.runtime_source || undefined}
+                            onValueChange={(value) => setS2ProVoiceForm({ ...s2ProVoiceForm, runtime_source: value as "local" | "api" })}
+                          >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="local">Local Fish Speech</SelectItem>
+                            <SelectItem value="local">Local S2-Pro</SelectItem>
                             <SelectItem value="api">Fish Audio API</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+                      <AsrModelSelect compact />
                       <div className="flex flex-col gap-1.5">
                         <Label className="text-xs font-medium text-ink-muted">Reference transcript</Label>
                         <Textarea
-                          placeholder={t("s2pro.clone.refPlaceholder", "비워두지 말고 실제 참조 음성의 대사를 넣으세요.")}
+                          placeholder={t("s2pro.clone.refPlaceholder", "선택/업로드하면 메타데이터나 Qwen3-ASR 전사로 자동 입력됩니다. 필요하면 수정하세요.")}
                           value={s2ProVoiceForm.reference_text}
                           onChange={(event) => setS2ProVoiceForm({ ...s2ProVoiceForm, reference_text: event.target.value })}
                           className="min-h-[80px] resize-y border-line bg-canvas"
                         />
                       </div>
-                      <Button disabled={!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim()} onClick={() => handleCreateS2ProVoice()} type="button">
+                      <Button
+                        disabled={!s2ProVoiceForm.reference_audio_path || !s2ProVoiceForm.name.trim() || !s2ProVoiceForm.reference_text.trim()}
+                        type="submit"
+                      >
                         {t("s2pro.clone.save", "목소리 저장")}
                       </Button>
-                      <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
-                        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
-                          {t("tts.advanced.controls", "Advanced controls")}
-                          <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
-                        </summary>
-                        <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" size="sm" disabled={!s2ProVoiceForm.reference_audio_path} onClick={handleTranscribeS2ProReference} type="button">
-                              {t("s2pro.clone.transcribe", "참조 텍스트 불러오기 / Whisper 전사")}
-                            </Button>
-                            <label className="flex items-center gap-2 text-xs text-ink-muted">
-                              <Switch checked={s2ProVoiceForm.create_qwen_prompt} onCheckedChange={(checked) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: checked })} />
-                              {t("s2pro.clone.qwenPrompt", "Qwen clone prompt도 함께 생성")}
-                            </label>
-                          </div>
-                          <p className="text-xs text-ink-muted">
-                            {t("s2pro.clone.transcribeHint", "생성 갤러리 음성은 저장된 생성 기록의 대사를 먼저 사용하고, 업로드 파일처럼 대사가 없는 경우에만 Whisper를 실행합니다.")}
-                          </p>
-                        </div>
-                      </details>
+                      <label className="flex items-center gap-2 rounded-md border border-line bg-canvas/60 px-3 py-2 text-xs text-ink-muted">
+                        <Switch checked={s2ProVoiceForm.create_qwen_prompt} onCheckedChange={(checked) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: checked })} />
+                        {t("s2pro.clone.qwenPrompt", "Qwen clone prompt도 함께 생성")}
+                      </label>
                     </div>
                   </WorkspaceCard>
                   <WorkspaceCard className="flex flex-col gap-4">
@@ -4260,22 +4295,31 @@ function StudioApp() {
                       <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">2</span>
                       <h3 className="text-sm font-medium text-ink">{t("s2pro.clone.step2", "저장된 목소리")}</h3>
                     </div>
-                    <p className="text-xs text-ink-muted">{t("s2pro.clone.step2Hint", "저장된 목소리를 선택해 테스트하거나 다른 생성 흐름으로 보냅니다.")}</p>
+                    <p className="text-xs text-ink-muted">{t("s2pro.clone.step2Hint", "저장된 목소리를 선택해 생성 탭이나 Qwen 작업으로 보냅니다.")}</p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {s2ProVoices.map((voice) => (
                         <article key={voice.id} className={`rounded-md border p-3 flex flex-col gap-2 transition ${selectedS2VoiceId === voice.id ? "border-accent-edge bg-accent-soft/30" : "border-line bg-canvas/50 hover:border-line-strong"}`}>
-                          <button onClick={() => setSelectedS2VoiceId(voice.id)} type="button" className="text-left flex flex-col gap-0.5">
+                          <button onClick={() => selectS2ProVoice(voice.id)} type="button" className="text-left flex flex-col gap-0.5">
                             <strong className="text-sm font-medium text-ink">{voice.name}</strong>
                             <span className="text-xs text-ink-muted">
                               {voice.runtime_source === "api"
                                 ? "Fish Audio API voice"
                                 : voice.fish_reference_present
-                                  ? "Local Fish Speech ready"
-                                  : "Fish server 재등록 필요"}
+                                  ? "Local S2-Pro voice"
+                                  : "다음 사용 시 자동 재등록 필요"}
                             </span>
                           </button>
                           <audio controls src={mediaUrl(voice.reference_audio_url)} className="w-full h-8" />
                           <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
+                              {t("s2pro.clone.toTagged", "S2-Pro TTS로 보내기")}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_multi_speaker"); }} type="button">
+                              {t("s2pro.clone.toDialogue", "대화 생성으로 보내기")}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_multilingual"); }} type="button">
+                              {t("s2pro.clone.toMultilingual", "다국어 TTS로 보내기")}
+                            </Button>
                             <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
                               {t("s2pro.clone.toQwenClone", "Qwen 복제로 보내기")}
                             </Button>
@@ -4285,14 +4329,6 @@ function StudioApp() {
                           </div>
                         </article>
                       ))}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">{t("s2pro.clone.testText", "저장 목소리 테스트 대사")}</Label>
-                      <Textarea
-                        value={s2ProForm.clone_text}
-                        onChange={(event) => setS2ProForm({ ...s2ProForm, clone_text: event.target.value })}
-                        className="min-h-[80px] resize-y border-line bg-canvas"
-                      />
                     </div>
                   </WorkspaceCard>
                 </>
@@ -4307,7 +4343,7 @@ function StudioApp() {
                   <p className="text-xs text-ink-muted">{t("s2pro.multi.hint", "대사 안에 speaker tag를 넣어 장면을 나눕니다. 목소리 자산이 없으면 먼저 목소리를 저장하세요.")}</p>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Saved voice</Label>
-                    <Select value={selectedS2VoiceId || undefined} onValueChange={(value) => setSelectedS2VoiceId(value)}>
+                    <Select value={selectedS2VoiceId || undefined} onValueChange={selectS2ProVoice}>
                       <SelectTrigger>
                         <SelectValue placeholder={t("s2pro.multi.placeholder", "저장 목소리 선택")} />
                       </SelectTrigger>
@@ -4338,7 +4374,7 @@ function StudioApp() {
                   <p className="text-xs text-ink-muted">{t("s2pro.multilingual.hint", "같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.")}</p>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Saved voice</Label>
-                    <Select value={selectedS2VoiceId || undefined} onValueChange={(value) => setSelectedS2VoiceId(value)}>
+                    <Select value={selectedS2VoiceId || undefined} onValueChange={selectS2ProVoice}>
                       <SelectTrigger>
                         <SelectValue placeholder={t("s2pro.multilingual.placeholder", "저장 목소리 없이 생성")} />
                       </SelectTrigger>
@@ -4360,20 +4396,23 @@ function StudioApp() {
                 </WorkspaceCard>
               ) : null}
 
-              {lastS2ProRecord ? (
-                <WorkspaceCard>
-                  <WorkspaceResultHeader title={t("s2pro.result.title", "S2-Pro 생성 결과")} badge={t("tts.result.latest")} />
-                  <AudioCard title={t("s2pro.result.title", "S2-Pro 생성 결과")} subtitle={lastS2ProRecord.mode} record={lastS2ProRecord} />
-                </WorkspaceCard>
-              ) : (
-                <WorkspaceEmptyState
-                  icon={AudioWaveform}
-                  title={t("s2pro.empty.title", "아직 생성된 S2-Pro 결과가 없습니다.")}
-                  body={t("s2pro.empty.body", "오른쪽 설정 후 [S2-Pro 생성]을 누르면 결과가 여기에 표시됩니다.")}
-                />
-              )}
+              {currentS2ProMode !== "clone" ? (
+                lastS2ProRecord ? (
+                  <WorkspaceCard>
+                    <WorkspaceResultHeader title={t("s2pro.result.title", "S2-Pro 생성 결과")} badge={t("tts.result.latest")} />
+                    <AudioCard title={t("s2pro.result.title", "S2-Pro 생성 결과")} subtitle={lastS2ProRecord.mode} record={lastS2ProRecord} />
+                  </WorkspaceCard>
+                ) : (
+                  <WorkspaceEmptyState
+                    icon={AudioWaveform}
+                    title={t("s2pro.empty.title", "아직 생성된 S2-Pro 결과가 없습니다.")}
+                    body={t("s2pro.empty.body", "오른쪽 설정 후 [S2-Pro 생성]을 누르면 결과가 여기에 표시됩니다.")}
+                  />
+                )
+              ) : null}
             </div>
 
+            {currentS2ProMode !== "clone" ? (
             <aside className="self-start">
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1">
@@ -4381,18 +4420,17 @@ function StudioApp() {
                   <span className="text-xs text-ink-muted">{selectedS2Voice ? selectedS2Voice.name : t("s2pro.defaultVoice", "기본 S2-Pro voice")}</span>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Runtime</Label>
+                  <Label className="text-xs font-medium text-ink-muted">Provider</Label>
                   <Select
                     value={s2ProForm.runtime_source || undefined}
-                    onValueChange={(value) => setS2ProForm({ ...s2ProForm, runtime_source: value as "auto" | "local" | "api" })}
+                    onValueChange={(value) => setS2ProForm({ ...s2ProForm, runtime_source: value as "local" | "api" })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="local">Local Fish Speech</SelectItem>
+                      <SelectItem value="local">Local S2-Pro</SelectItem>
                       <SelectItem value="api">Fish Audio API</SelectItem>
-                      <SelectItem value="auto">Auto from selected voice</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -4443,6 +4481,7 @@ function StudioApp() {
                 ) : null}
               </WorkspaceCard>
             </aside>
+            ) : null}
           </form>
         </WorkspaceShell>
       ) : null}
@@ -6241,6 +6280,7 @@ function StudioApp() {
                 <Label className="text-xs font-medium text-ink-muted">{t("dataset.field.speaker", "화자 이름")}</Label>
                 <Input value={datasetForm.speaker_name} onChange={(event) => setDatasetForm({ ...datasetForm, speaker_name: event.target.value })} />
               </div>
+              <AsrModelSelect compact />
             </div>
 
             <Tabs value={datasetInputMode} onValueChange={(value) => setDatasetInputMode(value as typeof datasetInputMode)}>

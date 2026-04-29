@@ -46,7 +46,7 @@
 `data/`는 사용자 자산과 실행 결과를 기능별로 나누어 저장합니다.
 
 - `data/models`
-  Qwen / Whisper 모델
+  Qwen / Qwen3-ASR 모델
 - `data/rvc-models`
   RVC `.pth + .index` 자산
 - `data/uploads`
@@ -92,7 +92,7 @@
 - `Base` clone prompt 생성
 - `Base` voice clone 생성
 - `preset + instruct` hybrid 생성
-- Whisper 전사
+- Qwen3-ASR 전사
 
 핵심 동작:
 
@@ -295,21 +295,25 @@ data/datasets/<dataset_id>/
 
 ### `/api/s2-pro/*`
 
-S2-Pro는 Qwen 런타임이 아니라 Fish Speech 계열 런타임을 사용합니다. 기본은 로컬 Fish Speech HTTP 서버이고, 선택적으로 hosted Fish Audio API도 사용할 수 있습니다.
+S2-Pro는 Qwen 런타임이 아니라 Fish Speech / Fish Audio 계열 provider를 사용합니다. 기본은 `Local S2-Pro`이고, 선택적으로 hosted Fish Audio API도 사용할 수 있습니다.
+
+로컬 provider는 내부적으로 Fish Speech 호환 HTTP 프로세스를 사용하지만, 사용자가 별도 서버를 직접 관리하는 구조가 아닙니다. 백엔드의 `S2ProEngine` wrapper가 `MMAudio`, `Applio`, `ACE-Step` wrapper처럼 capability와 준비 상태를 노출하고, 생성/저장 요청 시 local endpoint가 없으면 `scripts/serve_s2_pro.sh`를 자동 시작합니다.
 
 - `GET /api/s2-pro/capabilities`
-  Fish Speech 소스, S2-Pro 모델 파일, 로컬 서버/API 설정 상태를 반환합니다.
+  S2-Pro provider capability를 반환합니다. 로컬 provider에서는 Fish Speech source, S2-Pro 모델 파일, 백엔드 시작 프로세스 설정, health 상태를 반환하고, API provider에서는 API key 구성 여부와 endpoint 설정을 반환합니다.
 - `GET /api/s2-pro/voices`
   앱에 저장된 Fish Speech reference voice 목록을 반환합니다.
 - `POST /api/s2-pro/voices`
-  참조 음성을 로컬 Fish Speech `/v1/references/add` 또는 Fish Audio `/model`에 등록하고 `data/s2-pro-voices/`에 앱 레코드를 저장합니다.
+  참조 음성을 선택 provider에 등록하고 `data/s2-pro-voices/`에 앱 레코드를 저장합니다. 로컬 provider는 Local S2-Pro 엔진을 확인/자동 시작한 뒤 `/v1/references/add`로 등록하고, API provider는 Fish Audio `/model`을 사용합니다.
 - `POST /api/s2-pro/generate`
-  tagged TTS, voice clone, multi speaker, multilingual 요청을 로컬/API `/v1/tts`에 전달하고 결과를 생성 갤러리에 저장합니다.
+  tagged TTS, voice clone, multi speaker, multilingual 요청을 선택 provider의 `/v1/tts`에 전달하고 결과를 생성 갤러리에 저장합니다.
 
 중요한 점:
 
 - Hosted API는 선택 사항이며 `FISH_AUDIO_API_KEY`가 있을 때만 동작합니다.
-- 선택한 런타임이 준비되지 않았으면 가짜 결과를 만들지 않고 503을 반환합니다.
+- 선택한 provider가 준비되지 않았으면 가짜 결과를 만들지 않고 503을 반환합니다.
+- `S2_PRO_AUTO_START=1`이면 로컬 provider 준비는 요청 안에서 자동으로 시도합니다.
+- `S2_PRO_AUTO_START=0`이면 백엔드는 로컬 endpoint를 직접 시작하지 않습니다. 이 설정은 디버깅 또는 외부에서 이미 Fish Speech compatible endpoint를 관리할 때만 씁니다.
 - 저장 목소리는 S2-Pro reference id와 Qwen에서 재사용할 참조 음성 경로를 함께 갖습니다.
 
 ## 학습 래퍼 원칙

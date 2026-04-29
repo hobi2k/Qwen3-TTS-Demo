@@ -10,6 +10,7 @@ Markdown report for manual listening.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import shutil
@@ -25,13 +26,12 @@ import librosa
 import numpy as np
 import requests
 import torch
-from transformers import pipeline
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_API_BASE = "http://127.0.0.1:8000"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "data" / "generated" / "quality-validation"
-DEFAULT_WHISPER_MODEL = REPO_ROOT / "data" / "models" / "whisper-large-v3"
+DEFAULT_ASR_MODEL = REPO_ROOT / "data" / "models" / "Qwen3-ASR-1.7B"
 DEFAULT_REFERENCE_AUDIO = REPO_ROOT / "data" / "datasets" / "mai_ko_full" / "audio" / "00000.wav"
 DEFAULT_PROBE_TEXT = "오늘은 정말 힘들었어. 언제쯤 끝날까?"
 DEFAULT_LANGUAGE = "Korean"
@@ -100,9 +100,9 @@ def parse_args() -> argparse.Namespace:
         help="Directory that will hold timestamped validation runs.",
     )
     parser.add_argument(
-        "--whisper-model",
-        default=str(DEFAULT_WHISPER_MODEL),
-        help="Local Whisper model used to transcribe generated samples.",
+        "--asr-model",
+        default=str(DEFAULT_ASR_MODEL),
+        help="Qwen3-ASR model id or local model path used to transcribe generated samples.",
     )
     parser.add_argument(
         "--suite",
@@ -332,22 +332,37 @@ def resolve_reference_text(
     return str(response["text"]).strip()
 
 
-def build_transcriber(model_path: Path):
-    """Create a local Whisper transcription pipeline for generated samples."""
+def attention_backend() -> str:
+    """Choose the attention backend used by local Qwen3-ASR checks."""
 
-    device = 0 if torch.cuda.is_available() else -1
-    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    asr = pipeline(
-        task="automatic-speech-recognition",
-        model=str(model_path),
-        device=device,
-        torch_dtype=torch_dtype,
+    if torch.cuda.is_available() and importlib.util.find_spec("flash_attn") is not None:
+        return "flash_attention_2"
+    return "sdpa"
+
+
+def runtime_device() -> str:
+    """Choose the device map used by local Qwen3-ASR checks."""
+
+    if torch.cuda.is_available():
+        return "cuda:0"
+    if sys.platform == "darwin" and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def build_transcriber(model_path: Path):
+    """Create a local Qwen3-ASR transcriber for generated samples."""
+
+    from qwen_asr import Qwen3ASRModel
+
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    return Qwen3ASRModel.from_pretrained(
+        str(model_path),
+        dtype=dtype,
+        device_map=runtime_device(),
+        attn_implementation=attention_backend(),
+        max_new_tokens=512,
     )
-    if hasattr(asr, "model") and hasattr(asr.model, "generation_config"):
-        generation_config = asr.model.generation_config
-        if hasattr(generation_config, "forced_decoder_ids"):
-            generation_config.forced_decoder_ids = None
-    return asr
 
 
 def summarize_audio(audio_path: Path) -> Dict[str, float]:
@@ -365,10 +380,13 @@ def summarize_audio(audio_path: Path) -> Dict[str, float]:
 
 
 def transcribe_generated_audio(asr, audio_path: Path) -> str:
-    """Transcribe a generated sample using the local Whisper pipeline."""
+    """Transcribe a generated sample using the local Qwen3-ASR model."""
 
-    result = asr(str(audio_path), generate_kwargs={"task": "transcribe"})
-    return str(result["text"]).strip()
+    results = asr.transcribe(audio=str(audio_path), language=None)
+    result = results[0] if isinstance(results, list) and results else results
+    if isinstance(result, dict):
+        return str(result.get("text", "")).strip()
+    return str(getattr(result, "text", "")).strip()
 
 
 def copy_artifacts(run_dir: Path, suite: str, variant: str, record: Dict[str, Any], metadata: Dict[str, Any]) -> Path:
@@ -793,13 +811,13 @@ def run_hybrid_suite(
 
 
 _TRANSCRIBER_CACHE: Dict[str, Any] = {}
-TRANSCRIBER_MODEL_PATH = DEFAULT_WHISPER_MODEL
+TRANSCRIBER_MODEL_PATH = DEFAULT_ASR_MODEL
 
 
 def load_transcriber_cached():
-    """Load the Whisper transcription pipeline once per script invocation."""
+    """Load the Qwen3-ASR transcription model once per script invocation."""
 
-    cache_key = "default"
+    cache_key = str(TRANSCRIBER_MODEL_PATH)
     if cache_key in _TRANSCRIBER_CACHE:
         return _TRANSCRIBER_CACHE[cache_key]
 
@@ -899,7 +917,7 @@ def main() -> None:
 
     args = parse_args()
     global TRANSCRIBER_MODEL_PATH
-    TRANSCRIBER_MODEL_PATH = Path(args.whisper_model)
+    TRANSCRIBER_MODEL_PATH = Path(args.asr_model)
 
     run_root = Path(args.output_root)
     run_dir = run_root / utc_stamp()
@@ -920,9 +938,9 @@ def main() -> None:
     reference_audio = resolve_reference_audio(args, bootstrap)
     reference_text = resolve_reference_text(session, args.api_base, reference_audio, args.reference_text)
 
-    if not Path(args.whisper_model).exists():
+    if not Path(args.asr_model).exists():
         print(
-            f"[validate] Whisper model path does not exist yet: {args.whisper_model}. The ASR pipeline may download it on demand if available.",
+            f"[validate] Qwen3-ASR model path does not exist yet: {args.asr_model}. The ASR loader may download it on demand if available.",
             file=sys.stderr,
         )
 

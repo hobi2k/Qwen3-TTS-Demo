@@ -26,7 +26,8 @@ MODEL_DIRS = [
     "Qwen3-TTS-12Hz-0.6B-CustomVoice",
     "Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
-    "whisper-large-v3",
+    "Qwen3-ASR-1.7B",
+    "Qwen3-ASR-0.6B",
 ]
 
 AUXILIARY_PATHS = [
@@ -163,7 +164,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare or upload private Hugging Face asset files.")
     parser.add_argument("--repo-id", default=os.environ.get("PRIVATE_ASSET_REPO_ID"), help="Target Hugging Face repo id.")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="Manifest JSON path.")
-    parser.add_argument("--include-public-models", action="store_true", help="Also include Qwen/Whisper model mirrors under data/models.")
+    parser.add_argument("--include-public-models", action="store_true", help="Also include Qwen/Qwen3-ASR model mirrors under data/models.")
     parser.add_argument("--upload", action="store_true", help="Upload files after writing the manifest.")
     parser.add_argument("--private", action="store_true", help="Create the target Hugging Face repo as private when uploading.")
     parser.add_argument("--message", default="Upload Qwen3-TTS-Demo private assets", help="Hub commit message.")
