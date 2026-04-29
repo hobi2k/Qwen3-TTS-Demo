@@ -1056,6 +1056,17 @@ function StudioApp() {
   const selectedCloneModelId = cloneEngine === "voicebox" ? voiceBoxCloneForm.model_id : selectedBaseModelId;
   const selectedVoiceChangerModel = voiceChangerModels.find((item) => item.id === voiceChangerForm.selected_model_id) ?? null;
   const selectedVoiceChangerAsset = voiceChangerForm.audio_path ? audioAssetByPath.get(voiceChangerForm.audio_path) ?? null : null;
+  const selectedAudioSeparationAsset = audioSeparationForm.audio_path ? audioAssetByPath.get(audioSeparationForm.audio_path) ?? null : null;
+  const selectedAudioSeparationName =
+    selectedAudioSeparationAsset?.filename ||
+    (audioToolUpload?.path === audioSeparationForm.audio_path ? audioToolUpload.filename : "") ||
+    basenameFromPath(audioSeparationForm.audio_path);
+  const separationModelHelp =
+    audioSeparationForm.model_profile === "vocal_rvc"
+      ? t("separation.modelHelp.vocalRvc", "Applio/RVC 변환 전에 보컬만 뽑기 위한 프리셋입니다. 일반 보컬/반주 분리와 목적은 겹치지만, RVC 전처리용 설정을 묶어 둔 선택지입니다.")
+      : audioSeparationForm.model_profile === "demucs_4stem"
+        ? t("separation.modelHelp.demucs", "보컬, 드럼, 베이스, 기타/기타 stem을 나누는 다중 stem 분리입니다. RVC 보컬 추출용 기본 선택은 아닙니다.")
+        : t("separation.modelHelp.roformer", "일반 보컬/반주 분리 기본값입니다. 단일 Roformer 모델로 보컬과 나머지 소리를 나눕니다.");
   const selectedApplioBatchAssets = applioBatchPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
   const selectedApplioBatchExternalPaths = applioBatchPaths.filter((path) => !audioAssetByPath.has(path));
   const selectedBlendModelA = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_a) ?? null;
@@ -4089,14 +4100,15 @@ function StudioApp() {
                 : currentS2ProMode === "multi_speaker" ? t("s2pro.multi.subtitle", "대사 안에 speaker tag를 넣어 장면을 나눕니다.")
                 : t("s2pro.multilingual.subtitle", "같은 voice asset을 기준으로 한국어, 영어, 일본어 등 여러 언어 문장을 이어서 확인합니다.")
             }
-            action={{
-              label:
-                currentS2ProMode === "clone"
-                  ? t("s2pro.clone.save", "목소리 저장")
-                  : t("s2pro.action.generate", "S2-Pro 생성"),
-              formId: "s2pro-form",
-              loading,
-            }}
+            action={
+              currentS2ProMode === "clone"
+                ? undefined
+                : {
+                    label: t("s2pro.action.generate", "S2-Pro 생성"),
+                    formId: "s2pro-form",
+                    loading,
+                  }
+            }
             meta={
               s2ProRuntime ? (
                 <Badge variant="secondary" className={s2ProRuntime.available ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
@@ -4288,47 +4300,6 @@ function StudioApp() {
                         <Switch checked={s2ProVoiceForm.create_qwen_prompt} onCheckedChange={(checked) => setS2ProVoiceForm({ ...s2ProVoiceForm, create_qwen_prompt: checked })} />
                         {t("s2pro.clone.qwenPrompt", "Qwen clone prompt도 함께 생성")}
                       </label>
-                    </div>
-                  </WorkspaceCard>
-                  <WorkspaceCard className="flex flex-col gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">2</span>
-                      <h3 className="text-sm font-medium text-ink">{t("s2pro.clone.step2", "저장된 목소리")}</h3>
-                    </div>
-                    <p className="text-xs text-ink-muted">{t("s2pro.clone.step2Hint", "저장된 목소리를 선택해 생성 탭이나 Qwen 작업으로 보냅니다.")}</p>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {s2ProVoices.map((voice) => (
-                        <article key={voice.id} className={`rounded-md border p-3 flex flex-col gap-2 transition ${selectedS2VoiceId === voice.id ? "border-accent-edge bg-accent-soft/30" : "border-line bg-canvas/50 hover:border-line-strong"}`}>
-                          <button onClick={() => selectS2ProVoice(voice.id)} type="button" className="text-left flex flex-col gap-0.5">
-                            <strong className="text-sm font-medium text-ink">{voice.name}</strong>
-                            <span className="text-xs text-ink-muted">
-                              {voice.runtime_source === "api"
-                                ? "Fish Audio API voice"
-                                : voice.fish_reference_present
-                                  ? "Local S2-Pro voice"
-                                  : "다음 사용 시 자동 재등록 필요"}
-                            </span>
-                          </button>
-                          <audio controls src={mediaUrl(voice.reference_audio_url)} className="w-full h-8" />
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
-                              {t("s2pro.clone.toTagged", "S2-Pro TTS로 보내기")}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_multi_speaker"); }} type="button">
-                              {t("s2pro.clone.toDialogue", "대화 생성으로 보내기")}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_multilingual"); }} type="button">
-                              {t("s2pro.clone.toMultilingual", "다국어 TTS로 보내기")}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "clone")} type="button">
-                              {t("s2pro.clone.toQwenClone", "Qwen 복제로 보내기")}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => useS2VoiceInQwen(voice, "tts")} type="button">
-                              {t("s2pro.clone.toQwenTts", "Qwen TTS로 보내기")}
-                            </Button>
-                          </div>
-                        </article>
-                      ))}
                     </div>
                   </WorkspaceCard>
                 </>
@@ -6170,24 +6141,37 @@ function StudioApp() {
             <WorkspaceCard className="flex flex-col gap-3">
               <h3 className="text-sm font-medium text-ink">{t("separation.source.title", "분리할 오디오 선택")}</h3>
               <p className="text-xs text-ink-muted">{t("separation.source.hint", "파일을 업로드하거나 서버에 저장된 오디오를 골라 분리합니다.")}</p>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">{t("separation.source.upload", "새 파일 업로드")}</Label>
+              <div className="flex flex-col gap-2 rounded-md border border-line bg-canvas/60 p-3">
+                <Label className="text-xs font-medium text-ink-muted" htmlFor="audio-separation-upload">{t("separation.source.upload", "새 파일 업로드")}</Label>
                 <Input
+                  id="audio-separation-upload"
                   type="file"
                   accept="audio/*"
-                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
+                  className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) {
                       void handleAudioToolUpload(file);
                     }
+                    event.currentTarget.value = "";
                   }}
                 />
+                <div className="flex flex-wrap items-center gap-3">
+                  <label
+                    htmlFor="audio-separation-upload"
+                    className="inline-flex h-9 cursor-pointer items-center rounded-md border border-line bg-surface px-3 text-xs font-medium text-ink transition hover:border-line-strong hover:bg-canvas"
+                  >
+                    {t("separation.source.choose", "파일 업로드")}
+                  </label>
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
+                    {selectedAudioSeparationName || t("separation.source.none", "선택된 파일 없음")}
+                  </span>
+                </div>
               </div>
-              {audioToolUpload ? (
+              {audioSeparationForm.audio_path ? (
                 <div className="rounded-md border border-line bg-canvas/60 p-3">
-                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("separation.source.uploaded", "업로드한 파일")}</span>
-                  <strong className="mt-1 block text-sm font-medium text-ink">{audioToolUpload.filename}</strong>
+                  <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("separation.source.selected", "선택한 오디오")}</span>
+                  <strong className="mt-1 block truncate text-sm font-medium text-ink">{selectedAudioSeparationName}</strong>
                 </div>
               ) : null}
               <ServerAudioPicker assets={audioAssets} selectedPath={audioSeparationForm.audio_path} onSelect={handleSelectAudioToolAsset} />
@@ -6208,11 +6192,12 @@ function StudioApp() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="roformer_vocals">Roformer vocals - 최신 보컬 분리</SelectItem>
-                        <SelectItem value="vocal_rvc">RVC vocal preset - Applio 변환용 보컬 추출</SelectItem>
-                        <SelectItem value="demucs_4stem">Demucs 4-stem - 보컬/드럼/베이스/기타</SelectItem>
+                        <SelectItem value="roformer_vocals">{t("separation.model.roformer", "보컬/반주 분리 (Roformer 기본)")}</SelectItem>
+                        <SelectItem value="vocal_rvc">{t("separation.model.vocalRvc", "RVC용 보컬 추출 (Applio preset)")}</SelectItem>
+                        <SelectItem value="demucs_4stem">{t("separation.model.demucs", "4-stem 분리 (Demucs)")}</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] leading-relaxed text-ink-muted">{separationModelHelp}</p>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("separation.field.format", "출력 형식")}</Label>
@@ -6229,8 +6214,8 @@ function StudioApp() {
                   </div>
                 </div>
                 <article className="rounded-md border border-line bg-canvas/60 p-3">
-                  <strong className="text-sm font-medium text-ink">{t("separation.status.title", "현재 기본 모델")}</strong>
-                  <p className="mt-1 text-xs text-ink-muted">{t("separation.status.body", "audio-separator 0.44.1 모델 목록에서 보컬 분리 상위로 확인한 `vocals_mel_band_roformer.ckpt`를 기본으로 사용합니다. 모델 파일은 최초 실행 시 자동으로 내려받습니다.")}</p>
+                  <strong className="text-sm font-medium text-ink">{t("separation.status.title", "모델 선택 기준")}</strong>
+                  <p className="mt-1 text-xs text-ink-muted">{t("separation.status.body", "기본값은 보컬/반주 분리용 `vocals_mel_band_roformer.ckpt` 하나입니다. RVC용 보컬 추출은 Applio 전처리 프리셋이고, Demucs는 여러 stem을 나눌 때만 고릅니다.")}</p>
                 </article>
               </form>
             </WorkspaceCard>

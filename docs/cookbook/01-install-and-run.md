@@ -14,8 +14,8 @@
 - 권장 시스템 패키지: `ffmpeg`, `sox`
 - 실모델 다운로드가 가능한 네트워크
 
-오디오 분리는 `audio-separator`를 사용합니다. 모델 파일은 최초 분리 실행 시
-`data/stem-separator-models/` 아래로 자동 다운로드되며, 이 폴더는 git에 올리지 않습니다.
+오디오 분리는 `audio-separator`를 사용합니다. 이 모델은 `오디오 분리` 탭에서 보컬/반주를 분리할 때만 필요하며, Qwen TTS, S2-Pro 목소리 저장, ASR 전사에는 쓰이지 않습니다.
+기본 보컬 모델은 `vocals_mel_band_roformer.ckpt` 하나입니다. 모델 파일은 다운로드 스크립트 또는 최초 분리 실행 시 `data/stem-separator-models/` 아래로 내려받으며, 이 폴더는 git에 올리지 않습니다.
 
 ## 1. Clone
 
@@ -104,7 +104,7 @@ Windows PowerShell:
 - 기본 RVC `.pth + .index`
 - NSFW용 MMAudio 모델:
   `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
-- Stem Separator 모델:
+- Stem Separator 모델 (`오디오 분리` 탭용):
   `data/stem-separator-models/vocals_mel_band_roformer.ckpt`
 - ACE-Step 작곡 런타임:
   `vendor/ACE-Step`, `.venv-ace-step`, `data/models/ace-step`

@@ -142,7 +142,8 @@
 오디오 분리 기준:
 
 - 기존 HPSS가 아니라 model-backed Stem Separator를 사용합니다.
-- 기본 보컬 분리 모델은 `vocals_mel_band_roformer.ckpt`입니다.
+- 이 기능은 `오디오 분리` 탭 전용입니다. TTS, S2-Pro 목소리 저장, Qwen3-ASR 전사에는 필요하지 않습니다.
+- 기본 보컬 분리 모델은 `vocals_mel_band_roformer.ckpt` 하나입니다. 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델이며, 같은 계열 상위 후보들을 모두 기본 설치/노출하지는 않습니다.
 - Applio 변환용 보컬 추출은 `vocal_rvc` 프리셋을 선택합니다.
 
 ## 빠른 링크

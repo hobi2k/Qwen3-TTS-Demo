@@ -12,7 +12,7 @@
 - Qwen3-ASR 1.7B / 0.6B
 - Applio/RVC 기본 `.pth + .index`
 - MMAudio NSFW checkpoint
-- Stem Separator checkpoint와 YAML
+- Stem Separator checkpoint와 YAML (`오디오 분리` 탭 전용)
 - Fish Speech S2-Pro 모델 자산
 - ACE-Step checkpoint/cache 자산
 
@@ -131,6 +131,7 @@ export QWEN_USE_PRIVATE_ASSET_REPO=1
 ## 현재 구현 기준
 
 - `PRIVATE_ASSET_REPO_ID`가 있으면 RVC, MMAudio NSFW, Stem Separator, Fish Speech S2-Pro 자산을 개인 repo에서 먼저 찾습니다.
+- Stem Separator mirror는 오디오 분리 탭의 기본 보컬 모델 1개만 대상으로 합니다. 같은 Roformer 계열 상위 후보를 모두 mirror할 필요는 없습니다.
 - 개인 repo에 파일이 없으면 기존 public URL 또는 `audio-separator` 다운로드 경로로 되돌아갑니다.
 - `QWEN_USE_PRIVATE_ASSET_REPO=1`이면 Qwen/Qwen3-ASR 모델도 `models/<model-dir>/...` mirror에서 받습니다.
 - S2-Pro는 `fish-speech/s2-pro/...` mirror에서 받습니다.

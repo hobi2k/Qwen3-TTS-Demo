@@ -32,7 +32,7 @@
   Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다.
 - `Applio`
   `오디오 분리`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
-  오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리하며, 기본 보컬 모델은 `vocals_mel_band_roformer.ckpt`입니다.
+  오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 이 기능은 TTS나 목소리 저장에는 필요 없고, RVC용 보컬 추출/반주 제거가 필요할 때만 씁니다. 기본 보컬 모델은 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델인 `vocals_mel_band_roformer.ckpt` 하나만 사용합니다.
 - `ACE-Step 작곡`
   ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 모두 한 화면에서 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다.
 - `가이드`
@@ -365,7 +365,7 @@ ACE-Step subprocess의 Hugging Face / Transformers / matplotlib 캐시는 `data/
 저장되어 홈 디렉터리 캐시 권한 문제를 피합니다.
 - 기본 RVC `.pth + .index` 자산
 - `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
-- Stem Separator `vocals_mel_band_roformer.ckpt`
+- Stem Separator `vocals_mel_band_roformer.ckpt` (`오디오 분리` 탭용 기본 보컬 모델)
 
 NSFW용 MMAudio는 일반 `MMAudio` 모델과 별개로 다룹니다.
 다운로드 스크립트가 기본으로 받으며, 실제 추론에 연결하려면 `MMAUDIO_NSFW_COMMAND_TEMPLATE`가 필요합니다.

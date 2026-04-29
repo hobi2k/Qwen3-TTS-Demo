@@ -195,7 +195,8 @@
 ### 오디오 분리
 
 - 업로드 음성을 보컬/반주 또는 다중 stem으로 분리하는 독립 작업 화면
-- 기본 모델은 `audio-separator`의 Roformer vocal model입니다.
+- 기본 모델은 `audio-separator`의 `vocals_mel_band_roformer.ckpt`입니다.
+- 이 모델은 오디오 분리 탭에서만 필요합니다. TTS 생성, 목소리 저장, ASR 전사 흐름에는 노출하지 않습니다.
 - `RVC vocal preset`은 Applio 변환용 보컬 추출을 빠르게 이어가기 위한 선택지입니다.
 - 사용자는 모델 프로필과 출력 형식을 고르고, 결과 stem을 바로 재생/다운로드할 수 있어야 합니다.
 

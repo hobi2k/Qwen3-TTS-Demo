@@ -144,11 +144,13 @@
 오디오 분리 API는 별도 작업 라우트로 유지합니다.
 
 현재 구현은 librosa HPSS가 아니라 `audio-separator` 기반 Stem Separator입니다.
+이 엔진은 `오디오 분리` API에서만 사용합니다. Qwen/S2-Pro 음성 생성, 목소리 저장, Qwen3-ASR 전사와는 독립입니다.
 
 기본값:
 
 - 패키지: `audio-separator>=0.44.1,<0.45.0`
 - 기본 보컬 분리 모델: `vocals_mel_band_roformer.ckpt`
+  설치된 `audio-separator 0.44.1`에서 vocals 필터 상위권에 있는 Roformer 모델입니다. 상위 후보 여러 개를 모두 설치하거나 ensemble하지 않고, 기본 워크플로우에서는 이 모델 하나만 씁니다.
 - RVC용 보컬 추출 프리셋: `vocal_rvc`
 - 다중 stem 옵션: `htdemucs_ft.yaml`
 - 모델 캐시: `data/stem-separator-models/`
