@@ -670,7 +670,8 @@ class RvcTrainingRequest(BaseModel):
     """Applio/RVC 목소리 모델 학습 요청 스키마다."""
 
     model_name: str = Field(..., min_length=1, max_length=80)
-    dataset_path: str = Field(..., min_length=1)
+    dataset_path: str = ""
+    audio_paths: List[str] = Field(default_factory=list)
     sample_rate: int = Field(40000)
     total_epoch: int = Field(100, ge=1, le=10000)
     batch_size: int = Field(4, ge=1, le=50)

@@ -666,6 +666,7 @@ export interface VoiceModelBlendRequest {
 export interface RvcTrainingRequest {
   model_name: string;
   dataset_path: string;
+  audio_paths: string[];
   sample_rate: number;
   total_epoch: number;
   batch_size: number;

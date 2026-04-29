@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Play, AudioWaveform, Sparkles, Clock, Wand2, Mic, Layers, Music2, Music, Drum, AudioLines, Scissors, FileAudio, Volume2, GitMerge, Database, Cog, BookOpen, Home as HomeIcon, Library, FolderOpen, Headphones, Save, Upload } from "lucide-react";
+import { Loader2, Play, AudioWaveform, Sparkles, Clock, Wand2, Mic, Layers, Music2, Music, Drum, AudioLines, Scissors, FileAudio, Volume2, GitMerge, Database, Cog, BookOpen, Home as HomeIcon, Library, FolderOpen, Headphones, Save } from "lucide-react";
 import {
   WorkspaceShell,
   WorkspaceHeader,
@@ -263,6 +263,51 @@ function displayModelName(model: ModelInfo): string {
     .replace(/^(보이스박스|학습된)\s+/g, "")
     .replace(/^(VoiceBox|Fine-tuned)\s+/gi, "")
     .trim();
+}
+
+function storageFriendlyName(value: string): string {
+  const stem = basenameFromPath(value).replace(/\.[^.]+$/, "");
+  return stem.replace(/[^\p{L}\p{N}_.-]+/gu, "-").replace(/^-+|-+$/g, "") || "rvc-voice";
+}
+
+function AudioUploadField({
+  id,
+  buttonLabel,
+  statusLabel,
+  accept = "audio/*",
+  onFile,
+}: {
+  id: string;
+  buttonLabel: string;
+  statusLabel: string;
+  accept?: string;
+  onFile: (file: File) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex h-11 w-full items-center gap-3 rounded-md border border-line bg-canvas/60 px-2">
+      <input
+        id={id}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) {
+            void onFile(file);
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="inline-flex h-8 min-w-[104px] shrink-0 cursor-pointer items-center justify-center rounded-md border border-line bg-surface px-3 text-xs font-medium text-ink transition hover:border-line-strong hover:bg-canvas"
+        onClick={() => document.getElementById(id)?.click()}
+      >
+        {buttonLabel}
+      </button>
+      <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{statusLabel}</span>
+    </div>
+  );
 }
 
 function s2ProTabToMode(tab: TabKey): S2ProMode {
@@ -648,6 +693,7 @@ function StudioApp() {
     index_algorithm: "Auto",
     checkpointing: true,
   });
+  const [rvcTrainAudioPaths, setRvcTrainAudioPaths] = useState<string[]>([]);
   const [lastRvcTrainingResult, setLastRvcTrainingResult] = useState<string>("");
   const [audioConvertForm, setAudioConvertForm] = useState({
     audio_path: "",
@@ -1069,6 +1115,7 @@ function StudioApp() {
         : t("separation.modelHelp.roformer", "일반 보컬/반주 분리 기본값입니다. 단일 Roformer 모델로 보컬과 나머지 소리를 나눕니다.");
   const selectedApplioBatchAssets = applioBatchPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
   const selectedApplioBatchExternalPaths = applioBatchPaths.filter((path) => !audioAssetByPath.has(path));
+  const selectedRvcTrainAssets = rvcTrainAudioPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
   const selectedBlendModelA = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_a) ?? null;
   const selectedBlendModelB = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_b) ?? null;
   const selectedDatasetReferenceAsset = datasetForm.ref_audio_path ? audioAssetByPath.get(datasetForm.ref_audio_path) ?? null : null;
@@ -1696,6 +1743,7 @@ function StudioApp() {
       const result = await api.trainRvcModel({
         model_name: rvcTrainForm.model_name,
         dataset_path: rvcTrainForm.dataset_path,
+        audio_paths: rvcTrainAudioPaths,
         sample_rate: Number(rvcTrainForm.sample_rate || "40000"),
         total_epoch: Number(rvcTrainForm.total_epoch || "100"),
         batch_size: Number(rvcTrainForm.batch_size || "4"),
@@ -1758,6 +1806,16 @@ function StudioApp() {
 
   function addApplioBatchAsset(asset: AudioAsset) {
     setApplioBatchPaths((prev) => (prev.includes(asset.path) ? prev : [...prev, asset.path]));
+  }
+
+  function addRvcTrainAsset(asset: AudioAsset) {
+    setRvcTrainAudioPaths((prev) => (prev.includes(asset.path) ? prev : [...prev, asset.path]));
+    if (!rvcTrainForm.model_name || rvcTrainForm.model_name === "my-rvc-voice") {
+      setRvcTrainForm((prev) => ({
+        ...prev,
+        model_name: storageFriendlyName(asset.filename || "rvc-voice"),
+      }));
+    }
   }
 
   function addApplioBatchManualPath() {
@@ -3608,29 +3666,12 @@ function StudioApp() {
 
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">{t("clone.step1.upload", "음성 파일 불러오기")}</Label>
-                <label className="group flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-line bg-canvas/60 px-3 py-2.5 transition hover:border-accent-edge hover:bg-canvas">
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent-ink">
-                    <Upload className="size-3.5" />
-                    {t("clone.step1.choose", "파일 선택")}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
-                    {uploadedRef
-                      ? uploadedRef.filename
-                      : t("clone.step1.noFile", "선택된 파일 없음")}
-                  </span>
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = "";
-                      if (file) {
-                        void handleUploadReference(file);
-                      }
-                    }}
-                  />
-                </label>
+                <AudioUploadField
+                  id="qwen-clone-reference-upload"
+                  buttonLabel={t("clone.step1.choose", "파일 선택")}
+                  statusLabel={uploadedRef ? uploadedRef.filename : t("clone.step1.noFile", "선택된 파일 없음")}
+                  onFile={handleUploadReference}
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -4193,12 +4234,12 @@ function StudioApp() {
                           onChange={(event) => setS2TagSearch(event.target.value)}
                         />
                         <div className="flex flex-col gap-3" aria-label="S2-Pro expression tag library">
-                          {filteredS2TagCategories.map((category) => (
-                            <section key={category.label} className="flex flex-col gap-1.5">
+                          {filteredS2TagCategories.map((category, categoryIndex) => (
+                            <section key={`${category.label}-${categoryIndex}`} className="flex flex-col gap-1.5">
                               <strong className="text-xs font-medium text-ink-muted">{category.label}</strong>
                               <div className="flex flex-wrap gap-1.5">
-                                {category.tags.map((tag) => (
-                                  <Button variant="outline" size="sm" className="h-7 text-xs" key={tag} onClick={() => applyS2ProTag(tag)} type="button">
+                                {category.tags.map((tag, tagIndex) => (
+                                  <Button variant="outline" size="sm" className="h-7 text-xs" key={`${categoryIndex}-${tag}-${tagIndex}`} onClick={() => applyS2ProTag(tag)} type="button">
                                     {tag}
                                   </Button>
                                 ))}
@@ -4236,16 +4277,11 @@ function StudioApp() {
                       <TabsContent value="upload" className="m-0 mt-3 flex flex-col gap-2">
                         <Label className="text-xs font-medium text-ink-muted">{t("s2pro.clone.uploadTitle", "참조 음성 업로드")}</Label>
                         <p className="text-xs text-ink-muted">{t("s2pro.clone.uploadHint", "WAV, MP3, FLAC 파일을 선택하세요")}</p>
-                        <Input
-                          type="file"
-                          accept="audio/*"
-                          className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              void handleUploadS2ProReference(file);
-                            }
-                          }}
+                        <AudioUploadField
+                          id="s2pro-voice-reference-upload"
+                          buttonLabel={t("file_upload.choose", "파일 선택")}
+                          statusLabel={s2ProUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음")}
+                          onFile={handleUploadS2ProReference}
                         />
                         {s2ProUploadedRef ? (
                           <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
@@ -4662,13 +4698,11 @@ function StudioApp() {
                   onChange={(event) => setAceStepAudioForm({ ...aceStepAudioForm, src_audio: event.target.value })}
                 />
               </div>
-              <Input
-                type="file"
-                accept="audio/*"
-                className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
+              <AudioUploadField
+                id="ace-step-source-upload"
+                buttonLabel={t("file_upload.choose", "파일 선택")}
+                statusLabel={aceStepAudioForm.src_audio ? basenameFromPath(aceStepAudioForm.src_audio) : t("file_upload.none", "선택된 파일 없음")}
+                onFile={async (file) => {
                   await runAction(async () => {
                     const result = await api.uploadAudio(file);
                     setAceStepAudioForm((prev) => ({ ...prev, src_audio: result.path }));
@@ -5206,7 +5240,7 @@ function StudioApp() {
             action={{
               label: t("applio_train.action.create", "RVC 모델 만들기"),
               formId: "applio-train-form",
-              disabled: loading || !rvcTrainForm.model_name || !rvcTrainForm.dataset_path,
+              disabled: loading || !rvcTrainForm.model_name || (!rvcTrainForm.dataset_path && !rvcTrainAudioPaths.length),
               loading,
             }}
           />
@@ -5223,6 +5257,47 @@ function StudioApp() {
                   <p className="mt-1 text-xs text-ink-muted">{t("applio_train.outputsBody", "학습이 끝나면 `.pth` 모델과 `.index`가 생기고, 변환 탭의 목소리 목록에 나타납니다.")}</p>
                 </div>
               </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.title", "생성 갤러리에서 목표 음성 선택")}</strong>
+                    <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.body", "같은 화자의 깨끗한 WAV 결과를 여러 개 고르면 백엔드가 RVC 학습용 폴더를 자동으로 만듭니다.")}</p>
+                  </div>
+                  <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addRvcTrainAsset} />
+                </div>
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.selected", "선택한 학습 음성")}</strong>
+                    <Button variant="outline" size="sm" onClick={() => setRvcTrainAudioPaths([])} type="button">
+                      {t("applio_train.gallery.clear", "비우기")}
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.count", "{n}개 선택됨").replace("{n}", String(rvcTrainAudioPaths.length))}</p>
+                  <div className="mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+                    {selectedRvcTrainAssets.length ? selectedRvcTrainAssets.map((asset) => (
+                      <article key={asset.path} className="rounded-md border border-line bg-surface p-2">
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <strong className="block truncate text-xs font-medium text-ink">{asset.filename}</strong>
+                            <span className="text-[10px] text-ink-subtle">{asset.source === "generated" ? t("applio_batch.gallery", "생성 갤러리") : t("applio_batch.upload", "업로드")}</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-danger hover:bg-danger/10"
+                            onClick={() => setRvcTrainAudioPaths((prev) => prev.filter((path) => path !== asset.path))}
+                            type="button"
+                          >
+                            {t("applio_batch.remove", "제거")}
+                          </Button>
+                        </div>
+                      </article>
+                    )) : (
+                      <p className="text-xs text-ink-muted">{t("applio_train.gallery.empty", "아직 선택한 학습 음성이 없습니다.")}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">{t("applio_train.modelName", "모델 이름")}</Label>
@@ -5232,7 +5307,7 @@ function StudioApp() {
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">{t("applio_train.datasetPath", "목표 목소리 폴더")}</Label>
                   <Input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
-                  <span className="text-[11px] text-ink-subtle">{t("applio_train.datasetHint", "이 폴더 안의 WAV 파일들이 RVC 모델의 목표 음색이 됩니다.")}</span>
+                  <span className="text-[11px] text-ink-subtle">{t("applio_train.datasetHint", "이미 정리된 WAV 폴더가 있으면 직접 입력하세요. 위에서 갤러리 음성을 선택했다면 비워둬도 됩니다.")}</span>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -5261,86 +5336,97 @@ function StudioApp() {
                   {t("tts.advanced.controls", "Advanced controls")}
                   <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                 </summary>
-                <div className="border-t border-line px-3 py-3 flex flex-col gap-3">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">F0 method</Label>
-                      <Select value={rvcTrainForm.f0_method || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, f0_method: value })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="rmvpe">rmvpe</SelectItem>
-                          <SelectItem value="fcpe">fcpe</SelectItem>
-                          <SelectItem value="crepe">crepe</SelectItem>
-                        </SelectContent>
-                      </Select>
+                <div className="flex flex-col gap-5 border-t border-line px-3 py-3">
+                  <section className="flex flex-col gap-3">
+                    <h4 className="text-[11px] font-semibold uppercase text-ink-subtle">{t("applio_train.advanced.voice", "Voice analysis")}</h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.f0", "F0 method")}</Label>
+                        <Select value={rvcTrainForm.f0_method || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, f0_method: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rmvpe">rmvpe</SelectItem>
+                            <SelectItem value="fcpe">fcpe</SelectItem>
+                            <SelectItem value="crepe">crepe</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.embedder", "Content embedder")}</Label>
+                        <Select value={rvcTrainForm.embedder_model || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, embedder_model: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contentvec">contentvec</SelectItem>
+                            <SelectItem value="korean-hubert-base">korean-hubert-base</SelectItem>
+                            <SelectItem value="spin">spin</SelectItem>
+                            <SelectItem value="spin-v2">spin-v2</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.index", "Index")}</Label>
+                        <Select value={rvcTrainForm.index_algorithm || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, index_algorithm: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Auto">Auto</SelectItem>
+                            <SelectItem value="Faiss">Faiss</SelectItem>
+                            <SelectItem value="KMeans">KMeans</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Content embedder</Label>
-                      <Select value={rvcTrainForm.embedder_model || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, embedder_model: value })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="contentvec">contentvec</SelectItem>
-                          <SelectItem value="korean-hubert-base">korean-hubert-base</SelectItem>
-                          <SelectItem value="spin">spin</SelectItem>
-                          <SelectItem value="spin-v2">spin-v2</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  </section>
+                  <section className="flex flex-col gap-3 border-t border-line/70 pt-4">
+                    <h4 className="text-[11px] font-semibold uppercase text-ink-subtle">{t("applio_train.advanced.preprocessing", "Preprocessing")}</h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.cut", "Cut mode")}</Label>
+                        <Select value={rvcTrainForm.cut_preprocess || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, cut_preprocess: value })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Automatic">Automatic</SelectItem>
+                            <SelectItem value="Simple">Simple</SelectItem>
+                            <SelectItem value="Skip">Skip</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.chunk", "Chunk length")}</Label>
+                        <Input value={rvcTrainForm.chunk_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, chunk_len: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.overlap", "Overlap")}</Label>
+                        <Input value={rvcTrainForm.overlap_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, overlap_len: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.cleanStrength", "Clean strength")}</Label>
+                        <Input value={rvcTrainForm.clean_strength} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, clean_strength: event.target.value })} />
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">CPU cores</Label>
-                      <Input value={rvcTrainForm.cpu_cores} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cpu_cores: event.target.value })} />
+                    <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                      <label className="flex min-h-10 items-center justify-between gap-3 border-t border-line/70 py-2 text-xs text-ink-muted sm:border-t-0">
+                        <span>{t("applio_train.advanced.noiseReduction", "Noise reduction")}</span>
+                        <Switch checked={rvcTrainForm.noise_reduction} onCheckedChange={(checked) => setRvcTrainForm({ ...rvcTrainForm, noise_reduction: checked })} />
+                      </label>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">GPU</Label>
-                      <Input value={rvcTrainForm.gpu} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, gpu: event.target.value })} />
+                  </section>
+                  <section className="flex flex-col gap-3 border-t border-line/70 pt-4">
+                    <h4 className="text-[11px] font-semibold uppercase text-ink-subtle">{t("applio_train.advanced.compute", "Compute")}</h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.cpu", "CPU cores")}</Label>
+                        <Input value={rvcTrainForm.cpu_cores} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, cpu_cores: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">{t("applio_train.advanced.gpu", "GPU")}</Label>
+                        <Input value={rvcTrainForm.gpu} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, gpu: event.target.value })} />
+                      </div>
+                      <label className="flex min-h-10 items-center justify-between gap-3 self-end border-t border-line/70 py-2 text-xs text-ink-muted sm:border-t-0">
+                        <span>{t("applio_train.advanced.memoryEfficient", "Memory-efficient training")}</span>
+                        <Switch checked={rvcTrainForm.checkpointing} onCheckedChange={(checked) => setRvcTrainForm({ ...rvcTrainForm, checkpointing: checked })} />
+                      </label>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Cut mode</Label>
-                      <Select value={rvcTrainForm.cut_preprocess || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, cut_preprocess: value })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Automatic">Automatic</SelectItem>
-                          <SelectItem value="Simple">Simple</SelectItem>
-                          <SelectItem value="Skip">Skip</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Chunk length</Label>
-                      <Input value={rvcTrainForm.chunk_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, chunk_len: event.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Overlap</Label>
-                      <Input value={rvcTrainForm.overlap_len} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, overlap_len: event.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Index</Label>
-                      <Select value={rvcTrainForm.index_algorithm || undefined} onValueChange={(value) => setRvcTrainForm({ ...rvcTrainForm, index_algorithm: value })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Auto">Auto</SelectItem>
-                          <SelectItem value="Faiss">Faiss</SelectItem>
-                          <SelectItem value="KMeans">KMeans</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <label className="flex items-center gap-2 text-xs text-ink-muted">
-                      <Switch checked={rvcTrainForm.noise_reduction} onCheckedChange={(checked) => setRvcTrainForm({ ...rvcTrainForm, noise_reduction: checked })} />
-                      Noise reduction
-                    </label>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Clean strength</Label>
-                      <Input value={rvcTrainForm.clean_strength} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, clean_strength: event.target.value })} />
-                    </div>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted">
-                      <Switch checked={rvcTrainForm.checkpointing} onCheckedChange={(checked) => setRvcTrainForm({ ...rvcTrainForm, checkpointing: checked })} />
-                      Memory-efficient training
-                    </label>
-                  </div>
+                  </section>
                 </div>
               </details>
               {lastRvcTrainingResult ? <p className="text-xs text-ink-muted">{lastRvcTrainingResult}</p> : null}
@@ -5379,16 +5465,11 @@ function StudioApp() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">{t("applio_convert.source.upload", "새 음성 업로드")}</Label>
-                <Input
-                  type="file"
-                  accept="audio/*"
-                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleAudioToolUpload(file);
-                    }
-                  }}
+                <AudioUploadField
+                  id="applio-convert-upload"
+                  buttonLabel={t("file_upload.choose", "파일 선택")}
+                  statusLabel={audioToolUpload?.filename || t("file_upload.none", "선택된 파일 없음")}
+                  onFile={handleAudioToolUpload}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -5547,16 +5628,11 @@ function StudioApp() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">{t("applio_batch.source.upload", "배치에 파일 추가")}</Label>
-                <Input
-                  type="file"
-                  accept="audio/*"
-                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleApplioBatchUpload(file);
-                    }
-                  }}
+                <AudioUploadField
+                  id="applio-batch-upload"
+                  buttonLabel={t("file_upload.choose", "파일 선택")}
+                  statusLabel={t("applio_batch.source.uploadHint", "파일을 선택하면 아래 목록에 추가됩니다.")}
+                  onFile={handleApplioBatchUpload}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -5811,17 +5887,14 @@ function StudioApp() {
               <TabsContent value="upload" className="m-0 flex flex-col gap-2">
                 <Label className="text-xs font-medium text-ink-muted">{t("audio_editor.source.upload.title", "새 오디오 파일 불러오기")}</Label>
                 <p className="text-xs text-ink-muted">{t("audio_editor.source.upload.hint", "WAV, FLAC, MP3 등 브라우저가 선택할 수 있는 오디오를 업로드합니다.")}</p>
-                <Input
-                  type="file"
-                  accept="audio/*"
-                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleAudioToolUpload(file);
-                      setAudioEditorSource("upload");
-                      setAudioEditorDuration(0);
-                    }
+                <AudioUploadField
+                  id="audio-editor-upload"
+                  buttonLabel={t("file_upload.choose", "파일 선택")}
+                  statusLabel={audioEditorSource === "upload" && audioToolUpload?.filename ? audioToolUpload.filename : t("file_upload.none", "선택된 파일 없음")}
+                  onFile={(file) => {
+                    void handleAudioToolUpload(file);
+                    setAudioEditorSource("upload");
+                    setAudioEditorDuration(0);
                   }}
                 />
               </TabsContent>
@@ -5999,16 +6072,13 @@ function StudioApp() {
               <TabsContent value="upload" className="m-0 flex flex-col gap-2">
                 <Label className="text-xs font-medium text-ink-muted">{t("audio_denoise.source.upload.title", "새 오디오 파일 불러오기")}</Label>
                 <p className="text-xs text-ink-muted">{t("audio_denoise.source.upload.hint", "노이즈를 줄일 원본 음성을 업로드합니다. 결과는 생성 갤러리에 저장됩니다.")}</p>
-                <Input
-                  type="file"
-                  accept="audio/*"
-                  className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-xs file:font-medium file:text-accent-ink hover:file:bg-accent/30"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleAudioToolUpload(file);
-                      setAudioDenoiseSource("upload");
-                    }
+                <AudioUploadField
+                  id="audio-denoise-upload"
+                  buttonLabel={t("file_upload.choose", "파일 선택")}
+                  statusLabel={audioDenoiseSource === "upload" && audioToolUpload?.filename ? audioToolUpload.filename : t("file_upload.none", "선택된 파일 없음")}
+                  onFile={(file) => {
+                    void handleAudioToolUpload(file);
+                    setAudioDenoiseSource("upload");
                   }}
                 />
               </TabsContent>
@@ -6141,32 +6211,14 @@ function StudioApp() {
             <WorkspaceCard className="flex flex-col gap-3">
               <h3 className="text-sm font-medium text-ink">{t("separation.source.title", "분리할 오디오 선택")}</h3>
               <p className="text-xs text-ink-muted">{t("separation.source.hint", "파일을 업로드하거나 서버에 저장된 오디오를 골라 분리합니다.")}</p>
-              <div className="flex flex-col gap-2 rounded-md border border-line bg-canvas/60 p-3">
-                <Label className="text-xs font-medium text-ink-muted" htmlFor="audio-separation-upload">{t("separation.source.upload", "새 파일 업로드")}</Label>
-                <Input
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("separation.source.upload", "새 파일 업로드")}</Label>
+                <AudioUploadField
                   id="audio-separation-upload"
-                  type="file"
-                  accept="audio/*"
-                  className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void handleAudioToolUpload(file);
-                    }
-                    event.currentTarget.value = "";
-                  }}
+                  buttonLabel={t("separation.source.choose", "파일 업로드")}
+                  statusLabel={selectedAudioSeparationName || t("file_upload.none", "선택된 파일 없음")}
+                  onFile={handleAudioToolUpload}
                 />
-                <div className="flex flex-wrap items-center gap-3">
-                  <label
-                    htmlFor="audio-separation-upload"
-                    className="inline-flex h-9 cursor-pointer items-center rounded-md border border-line bg-surface px-3 text-xs font-medium text-ink transition hover:border-line-strong hover:bg-canvas"
-                  >
-                    {t("separation.source.choose", "파일 업로드")}
-                  </label>
-                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
-                    {selectedAudioSeparationName || t("separation.source.none", "선택된 파일 없음")}
-                  </span>
-                </div>
               </div>
               {audioSeparationForm.audio_path ? (
                 <div className="rounded-md border border-line bg-canvas/60 p-3">

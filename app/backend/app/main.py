@@ -928,6 +928,41 @@ def resolve_repo_audio_path(audio_path: str) -> str:
     return str((REPO_ROOT / candidate).resolve())
 
 
+def prepare_rvc_training_dataset_from_audio_paths(model_name: str, audio_paths: List[str]) -> Path:
+    """선택한 생성/업로드 음성을 Applio가 읽을 학습 폴더로 복사한다."""
+
+    seen: set[str] = set()
+    deduped_paths: List[str] = []
+    for raw_path in audio_paths:
+        path = raw_path.strip()
+        if path and path not in seen:
+            deduped_paths.append(path)
+            seen.add(path)
+    if not deduped_paths:
+        raise HTTPException(status_code=400, detail="RVC training needs a target voice folder or selected gallery audio.")
+
+    created_at = datetime.now(timezone.utc)
+    run_dir = storage.dated_child_dir(storage.data_dir, "rvc-datasets", created_at=created_at) / (
+        f"{created_at.strftime('%H%M%S')}_{storage.slugify(model_name, default='rvc-dataset')}"
+    )
+    wav_dir = run_dir / "wavs"
+    wav_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest: List[Dict[str, str]] = []
+    for index, audio_path in enumerate(deduped_paths, start=1):
+        source = Path(resolve_repo_audio_path(audio_path))
+        if not source.exists() or not source.is_file():
+            raise HTTPException(status_code=400, detail=f"Selected RVC training audio not found: {audio_path}")
+        if source.suffix.lower() != ".wav":
+            raise HTTPException(status_code=400, detail=f"RVC training currently expects WAV files. Convert first: {audio_path}")
+        target = wav_dir / f"{index:04d}_{storage.slugify(source.stem, default='sample')}.wav"
+        shutil.copy2(source, target)
+        manifest.append({"source": audio_path, "copied_to": storage.relpath(target)})
+
+    (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return wav_dir
+
+
 def samples_from_audio_folder(folder_path: str) -> List[Dict[str, str]]:
     """오디오 폴더를 스캔해 데이터셋 샘플 목록으로 변환한다."""
 
@@ -2192,10 +2227,18 @@ def train_rvc_voice_model(payload: RvcTrainingRequest) -> RvcTrainingResponse:
     if payload.sample_rate not in {32000, 40000, 48000}:
         raise HTTPException(status_code=400, detail="RVC sample rate must be 32000, 40000, or 48000.")
 
+    if not payload.audio_paths and not payload.dataset_path.strip():
+        raise HTTPException(status_code=400, detail="RVC training needs a target voice folder or selected gallery audio.")
+    dataset_path = (
+        prepare_rvc_training_dataset_from_audio_paths(payload.model_name, payload.audio_paths)
+        if payload.audio_paths
+        else Path(resolve_repo_audio_path(payload.dataset_path))
+    )
+
     try:
         meta = voice_changer.train_rvc_model(
             model_name=payload.model_name,
-            dataset_path=resolve_repo_audio_path(payload.dataset_path),
+            dataset_path=str(dataset_path),
             sample_rate=payload.sample_rate,
             total_epoch=payload.total_epoch,
             batch_size=payload.batch_size,

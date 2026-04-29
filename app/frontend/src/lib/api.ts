@@ -63,13 +63,14 @@ import type {
 
 function apiCandidates(path: string): string[] {
   const configuredBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
-  const candidates = [path];
+  const defaultBase = "http://127.0.0.1:8190";
 
   if (configuredBase) {
-    candidates.push(`${configuredBase}${path}`);
+    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`]));
   }
 
-  candidates.push(`http://127.0.0.1:8190${path}`);
+  const candidates = [`${defaultBase}${path}`];
+  candidates.push(path);
 
   return Array.from(new Set(candidates));
 }

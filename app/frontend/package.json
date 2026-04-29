@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8190}} next dev -p 5173",
+    "dev": "NEXT_DIST_DIR=.next-dev NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8190}} next dev -p 5173",
     "build": "next build",
     "preview": "python3 -m http.server 4173 -d out"
   },
