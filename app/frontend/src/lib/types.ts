@@ -388,6 +388,47 @@ export interface S2ProVoiceCreateRequest {
   qwen_model_id?: string;
 }
 
+export interface S2ProTrainingRequest {
+  output_name: string;
+  training_type: "lora" | "full";
+  source_type: "protos" | "lab_audio_dir";
+  proto_dir?: string;
+  lab_audio_dir?: string;
+  pretrained_ckpt_path?: string | null;
+  lora_config: string;
+  merge_lora: boolean;
+  max_steps: number;
+  val_check_interval: number;
+  batch_size: number;
+  accumulate_grad_batches: number;
+  learning_rate: number;
+  num_workers: number;
+  precision: string;
+  accelerator: string;
+  devices: string;
+  strategy_backend: string;
+  codec_checkpoint_path?: string | null;
+  vq_batch_size: number;
+  vq_num_workers: number;
+}
+
+export interface S2ProTrainingResponse {
+  status: string;
+  message: string;
+  run_id: string;
+  output_name: string;
+  training_type: string;
+  run_dir: string;
+  result_dir: string;
+  log_path: string;
+  final_checkpoint_path?: string | null;
+  merged_model_path?: string | null;
+  command: string[];
+  preprocess_commands: string[][];
+  merge_command: string[];
+  meta: Record<string, unknown>;
+}
+
 export interface CustomVoiceRequest extends GenerationRequestExtras {
   text: string;
   language: string;
@@ -605,6 +646,85 @@ export interface AceStepFormatSampleRequest {
   lm_temperature?: number;
   lm_top_k?: number;
   lm_top_p?: number;
+}
+
+export interface AceStepTrainingRequest {
+  output_name: string;
+  adapter_type: "lora" | "lokr";
+  trainer_mode: "fixed" | "vanilla";
+  source_type: "tensors" | "audio_dir" | "dataset_json";
+  tensor_dir?: string;
+  audio_dir?: string;
+  dataset_json?: string;
+  checkpoint_dir?: string | null;
+  model_variant: string;
+  base_model?: string | null;
+  device: string;
+  precision: "auto" | "bf16" | "fp16" | "fp32";
+  max_duration: number;
+  learning_rate: number;
+  batch_size: number;
+  gradient_accumulation: number;
+  epochs: number;
+  save_every: number;
+  seed: number;
+  num_workers: number;
+  gradient_checkpointing: boolean;
+  rank: number;
+  alpha: number;
+  dropout: number;
+  lokr_linear_dim: number;
+  lokr_linear_alpha: number;
+  lokr_factor: number;
+  lokr_decompose_both: boolean;
+  lokr_use_tucker: boolean;
+  lokr_use_scalar: boolean;
+  lokr_weight_decompose: boolean;
+}
+
+export interface AceStepTrainingResponse {
+  status: string;
+  message: string;
+  run_id: string;
+  adapter_type: string;
+  trainer_mode: string;
+  tensor_dir: string;
+  output_dir: string;
+  final_adapter_path?: string | null;
+  log_path: string;
+  command: string[];
+  preprocess_command: string[];
+  meta: Record<string, unknown>;
+}
+
+export interface MMAudioTrainingRequest {
+  output_name: string;
+  model: string;
+  weights_path?: string;
+  checkpoint_path?: string;
+  data_mode: "configured" | "example";
+  nproc_per_node: number;
+  num_iterations: number;
+  batch_size: number;
+  learning_rate: number;
+  compile: boolean;
+  debug: boolean;
+  save_weights_interval: number;
+  save_checkpoint_interval: number;
+  val_interval: number;
+  eval_interval: number;
+}
+
+export interface MMAudioTrainingResponse {
+  status: string;
+  message: string;
+  run_id: string;
+  output_name: string;
+  run_dir: string;
+  log_path: string;
+  final_weights_path?: string | null;
+  command: string[];
+  meta: Record<string, unknown>;
 }
 
 export interface AceStepRuntimeResponse {

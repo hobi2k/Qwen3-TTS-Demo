@@ -38,6 +38,7 @@ export type TabKey =
   | "ace_understand"
   | "ace_create_sample"
   | "ace_format_sample"
+  | "ace_lora_train"
   | "separation"
   | "dataset"
   | "training"
@@ -46,6 +47,8 @@ export type TabKey =
   | "s2pro_clone"
   | "s2pro_multi_speaker"
   | "s2pro_multilingual"
+  | "s2pro_train"
+  | "mmaudio_train"
   | "guide";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
@@ -185,6 +188,11 @@ export const PRODUCT_PAGES = {
     title: "ACE-Step 프롬프트 정리",
     description: "작성한 스타일 설명과 가사를 모델이 읽기 좋은 작곡 입력으로 다듬습니다.",
   },
+  ace_lora_train: {
+    label: "LoRA / LoKr 학습",
+    title: "ACE-Step LoRA / LoKr 학습",
+    description: "ACE-Step upstream 학습기로 스타일 adapter를 만들고 생성 LoRA 목록에 바로 연결합니다.",
+  },
   separation: {
     label: "오디오 분리",
     title: "오디오 분리",
@@ -229,6 +237,16 @@ export const PRODUCT_PAGES = {
     label: "다국어 TTS",
     title: "S2-Pro 다국어 TTS",
     description: "저장한 목소리의 톤을 유지하면서 여러 언어의 문장을 생성합니다.",
+  },
+  s2pro_train: {
+    label: "LoRA / Full 학습",
+    title: "S2-Pro LoRA / Full 학습",
+    description: "Fish Speech text2semantic fine-tuning으로 S2-Pro LoRA 또는 full checkpoint를 만듭니다.",
+  },
+  mmaudio_train: {
+    label: "MMAudio 학습",
+    title: "MMAudio 학습",
+    description: "MMAudio upstream train.py로 full/continued training을 실행합니다.",
   },
   guide: {
     label: "가이드",

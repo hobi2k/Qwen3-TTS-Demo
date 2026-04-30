@@ -85,6 +85,7 @@ UI 상단 모드 탭에 1:1 매핑되며, 백엔드는 별도 엔드포인트를
 | Understand | `POST /api/music/ace-step/understand` | 5Hz LM이 BPM/캡션/가사/키 추정 |
 | Inspiration | `POST /api/music/ace-step/create-sample` | 한 줄 NL → caption/lyrics/메타 |
 | Format | `POST /api/music/ace-step/format-sample` | 사용자가 적은 caption/lyrics 정리 |
+| LoRA / LoKr 학습 | `POST /api/music/ace-step/train-adapter` | upstream `train.py fixed/vanilla`로 adapter 학습 |
 
 런타임 정보는 `GET /api/music/ace-step/runtime`에서 조회합니다. 응답에는
 `model_variants`, `lm_models`, `lora_adapters`, `track_names`, `supported_tasks`가 포함되어
@@ -125,6 +126,16 @@ Korean city pop, warm analog synths, clean female vocal, night drive
 ### Understand / Inspiration / Format
 
 오디오 또는 자연어 한 줄에서 BPM, 키, 가사, 캡션을 LM이 추정하거나 사용자가 적은 caption/lyrics를 ACE-Step 정형 포맷으로 정리합니다. 결과는 화면 하단 메타 패널에 보이고, Inspiration / Format 결과는 자동으로 Text → Music 폼에 채워 넣어 바로 합성으로 이어가게 합니다.
+
+### LoRA / LoKr 학습
+
+ACE-Step upstream의 Side-Step 학습 CLI(`vendor/ACE-Step/train.py`)를 백엔드가 별도 프로세스로 실행합니다. UI에서는 입력 방식을 탭으로 나눕니다.
+
+* `Tensors`: 이미 preprocess가 끝난 `.pt` tensor 폴더를 바로 `--dataset-dir`로 학습합니다.
+* `Audio folder`: WAV/MP3/FLAC 폴더를 먼저 `--preprocess --audio-dir`로 tensor화한 뒤 같은 실행에서 학습합니다.
+* `Dataset JSON`: ACE-Step dataset JSON을 `--preprocess --dataset-json`로 tensor화한 뒤 학습합니다.
+
+결과는 기본적으로 `data/models/ace-step/loras/<adapter-name>__<run-id>/final`에 저장됩니다. 실행 로그는 `data/audio-tools/ace_step_training/<run-id>/train.log`에 남고, 학습이 성공하면 프런트는 런타임 정보를 다시 읽어 `Model & LoRA` 선택 목록에 새 adapter가 나타나게 합니다.
 
 ## 5. 생성 갤러리 연결
 

@@ -148,6 +148,17 @@ UI의 `Provider` 선택 값은 각 생성 요청과 voice clone 요청에 함께
 - `data/models/fish-speech/s2-pro/model-00002-of-00002.safetensors`
 - `data/models/fish-speech/s2-pro/model.safetensors.index.json`
 - `data/models/fish-speech/s2-pro/tokenizer.json`
+
+## S2-Pro 학습
+
+`S2-Pro LoRA / Full 학습` 탭은 Fish Speech upstream의 `fish_speech/train.py --config-name text2semantic_finetune`을 실행합니다.
+
+- `LoRA`: `+lora@model.model.lora_config=r_8_alpha_16` 또는 `r_32_alpha_16_fast`를 붙여 text2semantic LoRA를 학습합니다. 옵션을 켜면 학습 후 `tools/llama/merge_lora.py`로 일반 checkpoint로 변환합니다.
+- `Full`: LoRA config를 주입하지 않고 `text2semantic_finetune.yaml`의 LLAMA/text2semantic 모델을 full fine-tuning합니다.
+- `Protobuf dataset`: 이미 `tools/llama/build_dataset.py`로 만든 `data/protos` 같은 폴더를 바로 씁니다.
+- `Audio + .lab folder`: `.wav/.mp3/.flac`와 같은 이름의 `.lab` 파일이 있는 폴더를 받아 `tools/vqgan/extract_vq.py`와 `tools/llama/build_dataset.py`를 먼저 실행합니다.
+
+실행 로그는 `data/audio-tools/s2_pro_training/<run-id>/train.log`에 저장됩니다. LoRA merge 결과는 기본적으로 `data/models/fish-speech/<run-name>__<run-id>` 아래에 만들어집니다.
 - `data/models/fish-speech/s2-pro/tokenizer_config.json`
 - `data/models/fish-speech/s2-pro/special_tokens_map.json`
 

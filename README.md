@@ -26,15 +26,15 @@
   VoiceBox 하나만 사용해 참조 음성의 음색을 복제합니다.
 - `Clone + Instruct`
   VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용합니다.
-- `사운드 효과`
-  `MMAudio` 기반 효과음 생성 화면입니다.
-- `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS`
-  Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다.
+- `사운드 효과 / MMAudio 학습`
+  `MMAudio` 기반 효과음 생성 화면과 upstream `train.py` 기반 full/continued training 화면입니다. MMAudio upstream에는 LoRA/adapter 학습 경로가 없어 학습 탭은 기존 weight 이어학습 또는 전체 학습만 다룹니다.
+- `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS / LoRA-Full 학습`
+  Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다. 학습 탭은 Fish Speech `text2semantic_finetune`을 호출해 LoRA 또는 full fine-tuning을 실행하고, LoRA는 필요하면 merged checkpoint로 변환합니다.
 - `Applio`
   `오디오 분리`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 이 기능은 TTS나 목소리 저장에는 필요 없고, RVC용 보컬 추출/반주 제거가 필요할 때만 씁니다. 기본 보컬 모델은 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델인 `vocals_mel_band_roformer.ckpt` 하나만 사용합니다.
 - `ACE-Step 작곡`
-  ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 모두 한 화면에서 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다.
+  ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 `LoRA / LoKr 학습` 탭에서는 upstream `train.py`를 호출해 텐서 폴더, 오디오 폴더, dataset JSON에서 ACE-Step 어댑터를 만들고 생성 LoRA 목록에 연결합니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 

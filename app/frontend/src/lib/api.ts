@@ -8,6 +8,8 @@ import type {
   AceStepLegoRequest,
   AceStepRepaintRequest,
   AceStepRuntimeResponse,
+  AceStepTrainingRequest,
+  AceStepTrainingResponse,
   AceStepUnderstandRequest,
   AceStepUnderstandResponse,
   AudioTranscriptionResponse,
@@ -37,12 +39,16 @@ import type {
   HealthResponse,
   HybridCloneInstructRequest,
   ModelInfo,
+  MMAudioTrainingRequest,
+  MMAudioTrainingResponse,
   MusicCompositionRequest,
   PrepareDatasetRequest,
   RvcTrainingRequest,
   RvcTrainingResponse,
   S2ProGenerateRequest,
   S2ProRuntimeResponse,
+  S2ProTrainingRequest,
+  S2ProTrainingResponse,
   S2ProVoiceCreateRequest,
   S2ProVoiceRecord,
   SoundEffectRequest,
@@ -394,6 +400,14 @@ export const api = {
     });
   },
 
+  trainS2Pro(payload: S2ProTrainingRequest): Promise<S2ProTrainingResponse> {
+    return request<S2ProTrainingResponse>("/api/s2-pro/train", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
   generateS2Pro(payload: S2ProGenerateRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/s2-pro/generate", {
       method: "POST",
@@ -404,6 +418,14 @@ export const api = {
 
   generateSoundEffect(payload: SoundEffectRequest): Promise<AudioToolResponse> {
     return request<AudioToolResponse>("/api/audio-tools/sound-effects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  trainMMAudio(payload: MMAudioTrainingRequest): Promise<MMAudioTrainingResponse> {
+    return request<MMAudioTrainingResponse>("/api/audio-tools/mmaudio-train", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -488,6 +510,14 @@ export const api = {
 
   aceStepFormatSample(payload: AceStepFormatSampleRequest): Promise<AceStepUnderstandResponse> {
     return request<AceStepUnderstandResponse>("/api/music/ace-step/format-sample", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  trainAceStepAdapter(payload: AceStepTrainingRequest): Promise<AceStepTrainingResponse> {
+    return request<AceStepTrainingResponse>("/api/music/ace-step/train-adapter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

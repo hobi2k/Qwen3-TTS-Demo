@@ -7,6 +7,7 @@ import pickle
 import re
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -25,6 +26,8 @@ from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
 from .fish_speech import (
     FishSpeechError,
     S2ProEngine,
+    fish_speech_model_dir,
+    fish_speech_repo_root,
     fish_speech_status,
     generate_s2_pro_audio,
     list_s2_pro_references,
@@ -41,6 +44,8 @@ from .schemas import (
     AceStepLegoRequest,
     AceStepRepaintRequest,
     AceStepRuntimeResponse,
+    AceStepTrainingRequest,
+    AceStepTrainingResponse,
     AceStepUnderstandRequest,
     AceStepUnderstandResponse,
     AudioAsset,
@@ -76,8 +81,12 @@ from .schemas import (
     MusicCompositionRequest,
     RvcTrainingRequest,
     RvcTrainingResponse,
+    MMAudioTrainingRequest,
+    MMAudioTrainingResponse,
     S2ProGenerateRequest,
     S2ProRuntimeResponse,
+    S2ProTrainingRequest,
+    S2ProTrainingResponse,
     S2ProVoiceCreateRequest,
     S2ProVoiceRecord,
     VoiceBoxCloneRequest,
@@ -2410,6 +2419,106 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
     )
 
 
+@app.post("/api/audio-tools/mmaudio-train", response_model=MMAudioTrainingResponse)
+def train_mmaudio(payload: MMAudioTrainingRequest) -> MMAudioTrainingResponse:
+    """MMAudio full/continued training을 실행한다. LoRA/adapter 학습은 upstream에 없다."""
+
+    mmaudio_root = mmaudio_engine.mmaudio_root
+    if mmaudio_root is None or not mmaudio_root.exists():
+        raise HTTPException(status_code=400, detail="MMAudio repository is not available.")
+    train_py = mmaudio_root / "train.py"
+    if not train_py.exists():
+        raise HTTPException(status_code=400, detail=f"MMAudio train.py not found: {train_py}")
+
+    weights_path = ""
+    if payload.weights_path.strip():
+        weights_path = str(_resolve_training_path(payload.weights_path, "weights_path"))
+    checkpoint_path = ""
+    if payload.checkpoint_path.strip():
+        checkpoint_path = str(_resolve_training_path(payload.checkpoint_path, "checkpoint_path"))
+
+    run_id = storage.new_id("mmtrain")
+    created_at = utc_now()
+    label = readable_label(payload.output_name, "mmaudio-training")
+    run_dir = storage.audio_tools_dir / "mmaudio_training" / run_id
+    output_dir = run_dir / "output"
+    log_path = run_dir / "train.log"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        "torchrun",
+        "--standalone",
+        f"--nproc_per_node={payload.nproc_per_node}",
+        str(train_py),
+        f"exp_id={label}__{run_id}",
+        f"model={payload.model}",
+        f"hydra.run.dir={output_dir}",
+        f"num_iterations={payload.num_iterations}",
+        f"batch_size={payload.batch_size}",
+        f"learning_rate={payload.learning_rate}",
+        f"compile={str(payload.compile)}",
+        f"debug={str(payload.debug)}",
+        f"example_train={str(payload.data_mode == 'example')}",
+        f"save_weights_interval={payload.save_weights_interval}",
+        f"save_checkpoint_interval={payload.save_checkpoint_interval}",
+        f"val_interval={payload.val_interval}",
+        f"eval_interval={payload.eval_interval}",
+    ]
+    if weights_path:
+        command.append(f"weights={weights_path}")
+    if checkpoint_path:
+        command.append(f"checkpoint={checkpoint_path}")
+
+    env = os.environ.copy()
+    env.setdefault("OMP_NUM_THREADS", "4")
+    result = _run_training_command(command, cwd=mmaudio_root, log_path=log_path, section="train", env=env)
+    status = "completed" if result.returncode == 0 else "failed"
+    weights = sorted(output_dir.glob("*.pth")) if output_dir.exists() else []
+    latest_weights = weights[-1] if weights else None
+    message = "MMAudio training completed." if status == "completed" else f"MMAudio training failed. See {storage.relpath(log_path)}"
+    meta = {
+        "training_kind": "full_or_continued",
+        "lora_supported": False,
+        "model": payload.model,
+        "data_mode": payload.data_mode,
+        "output_dir": str(output_dir),
+        "weights_path": weights_path,
+        "checkpoint_path": checkpoint_path,
+        "command": command,
+        "returncode": result.returncode,
+    }
+    record = {
+        "id": run_id,
+        "kind": "mmaudio_training",
+        "status": status,
+        "input_summary": payload.output_name,
+        "created_at": created_at,
+        "message": message,
+        "meta": meta,
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.audio_tools_dir,
+            category="mmaudio_training",
+            label=label,
+            record_id=run_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
+    return MMAudioTrainingResponse(
+        status=status,
+        message=message,
+        run_id=run_id,
+        output_name=payload.output_name,
+        run_dir=storage.relpath(run_dir),
+        log_path=storage.relpath(log_path),
+        final_weights_path=storage.relpath(latest_weights) if latest_weights else None,
+        command=command,
+        meta=meta,
+    )
+
+
 def _ace_step_base_payload(payload: Any) -> Dict[str, Any]:
     """공통 ACE-Step 입력을 subprocess가 이해하는 dict로 직렬화한다."""
 
@@ -2786,6 +2895,346 @@ def _run_lm_only_task(task: str, payload: Any, request_payload: Dict[str, Any]) 
         status_message=result.get("status_message", "") or "",
         error=result.get("error"),
         raw_meta=meta or {},
+    )
+
+
+def _resolve_ace_training_path(value: str, field_name: str) -> Path:
+    """ACE-Step training 입력 경로를 절대 경로로 해석하고 존재 여부를 확인한다."""
+
+    raw = (value or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail=f"{field_name} is required.")
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    candidate = candidate.resolve()
+    if not candidate.exists():
+        raise HTTPException(status_code=404, detail=f"{field_name} not found: {raw}")
+    return candidate
+
+
+def _ace_step_subprocess_env() -> Dict[str, str]:
+    """ACE-Step subprocess가 프로젝트 캐시와 모델 경로를 공유하도록 환경을 만든다."""
+
+    env = os.environ.copy()
+    env.setdefault("ACESTEP_CHECKPOINTS_DIR", str(ace_step_composer.checkpoint_path))
+    env.setdefault("ACESTEP_PROJECT_ROOT", str(ace_step_composer.ace_step_root))
+    cache_root = REPO_ROOT / "data" / "cache" / "ace-step"
+    env.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    env.setdefault("TRANSFORMERS_CACHE", str(cache_root / "huggingface" / "transformers"))
+    env.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
+    Path(env["HF_HOME"]).mkdir(parents=True, exist_ok=True)
+    Path(env["TRANSFORMERS_CACHE"]).mkdir(parents=True, exist_ok=True)
+    Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
+    return env
+
+
+def _append_bool_arg(command: List[str], enabled: bool, name: str) -> None:
+    command.append(f"--{name}" if enabled else f"--no-{name}")
+
+
+def _run_ace_step_training_command(command: List[str], log_path: Path, section: str) -> subprocess.CompletedProcess[str]:
+    """ACE-Step training CLI를 실행하고 stdout/stderr를 로그에 누적한다."""
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n\n===== {section} =====\n")
+        handle.write(" ".join(command) + "\n\n")
+    completed = subprocess.run(
+        command,
+        cwd=str(ace_step_composer.ace_step_root),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_ace_step_subprocess_env(),
+    )
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(completed.stdout or "")
+        if completed.stderr:
+            handle.write("\n[stderr]\n")
+            handle.write(completed.stderr)
+    return completed
+
+
+def _resolve_training_path(value: str, field_name: str) -> Path:
+    """학습 입력 경로를 프로젝트 상대/절대 경로 모두에서 해석한다."""
+
+    raw = (value or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail=f"{field_name} is required.")
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    candidate = candidate.resolve()
+    if not candidate.exists():
+        raise HTTPException(status_code=404, detail=f"{field_name} not found: {raw}")
+    return candidate
+
+
+def _python_from_repo(repo_root: Path) -> str:
+    """vendored repo의 venv python을 우선 사용하고 없으면 현재 인터프리터를 쓴다."""
+
+    for candidate in [
+        repo_root / ".venv" / "bin" / "python",
+        repo_root / "venv" / "bin" / "python",
+    ]:
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
+
+
+def _run_training_command(
+    command: List[str],
+    *,
+    cwd: Path,
+    log_path: Path,
+    section: str,
+    env: Optional[Dict[str, str]] = None,
+) -> subprocess.CompletedProcess[str]:
+    """긴 학습 명령을 실행하고 재현 가능한 로그를 남긴다."""
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n\n===== {section} =====\n")
+        handle.write(" ".join(command) + "\n\n")
+    completed = subprocess.run(
+        command,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env or os.environ.copy(),
+    )
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(completed.stdout or "")
+        if completed.stderr:
+            handle.write("\n[stderr]\n")
+            handle.write(completed.stderr)
+    return completed
+
+
+def _ace_step_train_command(
+    payload: AceStepTrainingRequest,
+    *,
+    train_py: Path,
+    checkpoint_dir: Path,
+    tensor_dir: Path,
+    output_dir: Path,
+) -> List[str]:
+    command = [
+        ace_step_composer.python_executable,
+        str(train_py),
+        payload.trainer_mode,
+        "--plain",
+        "--yes",
+        "--checkpoint-dir",
+        str(checkpoint_dir),
+        "--model-variant",
+        payload.model_variant,
+        "--dataset-dir",
+        str(tensor_dir),
+        "--output-dir",
+        str(output_dir),
+        "--adapter-type",
+        payload.adapter_type,
+        "--device",
+        payload.device,
+        "--precision",
+        payload.precision,
+        "--lr",
+        str(payload.learning_rate),
+        "--batch-size",
+        str(payload.batch_size),
+        "--gradient-accumulation",
+        str(payload.gradient_accumulation),
+        "--epochs",
+        str(payload.epochs),
+        "--save-every",
+        str(payload.save_every),
+        "--seed",
+        str(payload.seed),
+        "--num-workers",
+        str(payload.num_workers),
+    ]
+    if payload.base_model:
+        command.extend(["--base-model", payload.base_model])
+    _append_bool_arg(command, payload.gradient_checkpointing, "gradient-checkpointing")
+
+    if payload.adapter_type == "lokr":
+        command.extend(
+            [
+                "--lokr-linear-dim",
+                str(payload.lokr_linear_dim),
+                "--lokr-linear-alpha",
+                str(payload.lokr_linear_alpha),
+                "--lokr-factor",
+                str(payload.lokr_factor),
+            ]
+        )
+        if payload.lokr_decompose_both:
+            command.append("--lokr-decompose-both")
+        if payload.lokr_use_tucker:
+            command.append("--lokr-use-tucker")
+        if payload.lokr_use_scalar:
+            command.append("--lokr-use-scalar")
+        if payload.lokr_weight_decompose:
+            command.append("--lokr-weight-decompose")
+    else:
+        command.extend(
+            [
+                "--rank",
+                str(payload.rank),
+                "--alpha",
+                str(payload.alpha),
+                "--dropout",
+                str(payload.dropout),
+            ]
+        )
+    return command
+
+
+@app.post("/api/music/ace-step/train-adapter", response_model=AceStepTrainingResponse)
+def ace_step_train_adapter(payload: AceStepTrainingRequest) -> AceStepTrainingResponse:
+    """ACE-Step upstream CLI로 LoRA/LoKr adapter를 학습한다."""
+
+    if not ace_step_composer.ace_step_root.exists():
+        raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
+
+    train_py = ace_step_composer.ace_step_root / "train.py"
+    if not train_py.exists():
+        raise HTTPException(status_code=400, detail=f"ACE-Step training CLI not found: {train_py}")
+
+    checkpoint_dir = Path(payload.checkpoint_dir).expanduser().resolve() if payload.checkpoint_dir else ace_step_composer.checkpoint_path
+    if not checkpoint_dir.exists():
+        raise HTTPException(status_code=404, detail=f"ACE-Step checkpoint dir not found: {checkpoint_dir}")
+
+    run_id = storage.new_id("ace_train")
+    created_at = utc_now()
+    run_label = readable_label(payload.output_name, f"{payload.adapter_type}-adapter")
+    run_dir = storage.audio_tools_dir / "ace_step_training" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "train.log"
+    output_dir = ace_step_composer.lora_dir / f"{run_label}__{run_id}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    preprocess_command: List[str] = []
+    if payload.source_type == "tensors":
+        tensor_dir = _resolve_ace_training_path(payload.tensor_dir, "tensor_dir")
+    else:
+        tensor_dir = run_dir / "tensors"
+        preprocess_command = [
+            ace_step_composer.python_executable,
+            str(train_py),
+            payload.trainer_mode,
+            "--plain",
+            "--yes",
+            "--preprocess",
+            "--checkpoint-dir",
+            str(checkpoint_dir),
+            "--model-variant",
+            payload.model_variant,
+            "--dataset-dir",
+            str(tensor_dir),
+            "--output-dir",
+            str(output_dir),
+            "--tensor-output",
+            str(tensor_dir),
+            "--max-duration",
+            str(payload.max_duration),
+            "--device",
+            payload.device,
+            "--precision",
+            payload.precision,
+        ]
+        if payload.source_type == "audio_dir":
+            preprocess_command.extend(["--audio-dir", str(_resolve_ace_training_path(payload.audio_dir, "audio_dir"))])
+        else:
+            preprocess_command.extend(["--dataset-json", str(_resolve_ace_training_path(payload.dataset_json, "dataset_json"))])
+
+        preprocess_result = _run_ace_step_training_command(preprocess_command, log_path, "preprocess")
+        if preprocess_result.returncode != 0:
+            record = {
+                "id": run_id,
+                "kind": "ace_step_adapter_training",
+                "status": "failed",
+                "input_summary": payload.output_name,
+                "created_at": created_at,
+                "artifacts": [],
+                "message": "ACE-Step preprocessing failed.",
+                "meta": {"log_path": storage.relpath(log_path), "preprocess_command": preprocess_command},
+            }
+            storage.write_json(
+                storage.named_record_path(
+                    root=storage.audio_tools_dir,
+                    category="ace_step_adapter_training",
+                    label=run_label,
+                    record_id=run_id,
+                    created_at=parse_created_at(created_at),
+                ),
+                record,
+            )
+            raise HTTPException(status_code=400, detail=f"ACE-Step preprocessing failed. See {storage.relpath(log_path)}")
+
+    train_command = _ace_step_train_command(
+        payload,
+        train_py=train_py,
+        checkpoint_dir=checkpoint_dir,
+        tensor_dir=tensor_dir,
+        output_dir=output_dir,
+    )
+    train_result = _run_ace_step_training_command(train_command, log_path, "train")
+    status = "completed" if train_result.returncode == 0 else "failed"
+    final_dir = output_dir / "final"
+    final_adapter = final_dir if final_dir.exists() else output_dir
+    final_adapter_path = storage.relpath(final_adapter) if status == "completed" and final_adapter.exists() else None
+    message = (
+        f"ACE-Step {payload.adapter_type.upper()} adapter training completed."
+        if status == "completed"
+        else f"ACE-Step {payload.adapter_type.upper()} adapter training failed. See {storage.relpath(log_path)}"
+    )
+    record = {
+        "id": run_id,
+        "kind": "ace_step_adapter_training",
+        "status": status,
+        "input_summary": payload.output_name,
+        "created_at": created_at,
+        "artifacts": [],
+        "message": message,
+        "meta": {
+            "adapter_type": payload.adapter_type,
+            "trainer_mode": payload.trainer_mode,
+            "tensor_dir": str(tensor_dir),
+            "output_dir": str(output_dir),
+            "final_adapter_path": final_adapter_path,
+            "log_path": storage.relpath(log_path),
+            "preprocess_command": preprocess_command,
+            "command": train_command,
+            "returncode": train_result.returncode,
+        },
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.audio_tools_dir,
+            category="ace_step_adapter_training",
+            label=run_label,
+            record_id=run_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
+    return AceStepTrainingResponse(
+        status=status,
+        message=message,
+        run_id=run_id,
+        adapter_type=payload.adapter_type,
+        trainer_mode=payload.trainer_mode,
+        tensor_dir=str(tensor_dir),
+        output_dir=str(output_dir),
+        final_adapter_path=final_adapter_path,
+        log_path=storage.relpath(log_path),
+        command=train_command,
+        preprocess_command=preprocess_command,
+        meta=record["meta"],
     )
 
 
@@ -3440,6 +3889,190 @@ def s2_pro_capabilities() -> S2ProRuntimeResponse:
             "managed_local_engine",
             "hosted_fish_audio_api",
         ],
+    )
+
+
+@app.post("/api/s2-pro/train", response_model=S2ProTrainingResponse)
+def train_s2_pro(payload: S2ProTrainingRequest) -> S2ProTrainingResponse:
+    """Fish Speech S2-Pro text2semantic LoRA/full fine-tuning을 실행한다."""
+
+    repo_root = fish_speech_repo_root().resolve()
+    if not repo_root.exists():
+        raise HTTPException(status_code=400, detail=f"Fish Speech source is missing: {repo_root}")
+    train_py = repo_root / "fish_speech" / "train.py"
+    extract_vq_py = repo_root / "tools" / "vqgan" / "extract_vq.py"
+    build_dataset_py = repo_root / "tools" / "llama" / "build_dataset.py"
+    merge_lora_py = repo_root / "tools" / "llama" / "merge_lora.py"
+    if not train_py.exists():
+        raise HTTPException(status_code=400, detail=f"Fish Speech train.py not found: {train_py}")
+
+    pretrained_ckpt = _resolve_training_path(payload.pretrained_ckpt_path, "pretrained_ckpt_path") if payload.pretrained_ckpt_path else fish_speech_model_dir().resolve()
+    if not pretrained_ckpt.exists():
+        raise HTTPException(status_code=404, detail=f"S2-Pro checkpoint dir not found: {pretrained_ckpt}")
+
+    run_id = storage.new_id("s2train")
+    created_at = utc_now()
+    label = readable_label(payload.output_name, "s2pro-training")
+    project_name = f"{label}__{run_id}"
+    run_dir = storage.audio_tools_dir / "s2_pro_training" / run_id
+    result_dir = run_dir / "results"
+    proto_dir = run_dir / "protos"
+    log_path = run_dir / "train.log"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    preprocess_commands: List[List[str]] = []
+
+    python_exe = _python_from_repo(repo_root)
+    env = os.environ.copy()
+    env.setdefault("HF_HOME", str(REPO_ROOT / "data" / "cache" / "fish-speech" / "huggingface"))
+    env.setdefault("TRANSFORMERS_CACHE", str(REPO_ROOT / "data" / "cache" / "fish-speech" / "huggingface" / "transformers"))
+    Path(env["HF_HOME"]).mkdir(parents=True, exist_ok=True)
+    Path(env["TRANSFORMERS_CACHE"]).mkdir(parents=True, exist_ok=True)
+
+    if payload.source_type == "lab_audio_dir":
+        source_dir = _resolve_training_path(payload.lab_audio_dir, "lab_audio_dir")
+        codec_checkpoint = _resolve_training_path(payload.codec_checkpoint_path, "codec_checkpoint_path") if payload.codec_checkpoint_path else pretrained_ckpt / "codec.pth"
+        if not codec_checkpoint.exists():
+            raise HTTPException(status_code=404, detail=f"codec checkpoint not found: {codec_checkpoint}")
+        if not extract_vq_py.exists() or not build_dataset_py.exists():
+            raise HTTPException(status_code=400, detail="Fish Speech preprocessing tools are missing.")
+        extract_command = [
+            python_exe,
+            str(extract_vq_py),
+            str(source_dir),
+            "--num-workers",
+            str(payload.vq_num_workers),
+            "--batch-size",
+            str(payload.vq_batch_size),
+            "--config-name",
+            "modded_dac_vq",
+            "--checkpoint-path",
+            str(codec_checkpoint),
+        ]
+        preprocess_commands.append(extract_command)
+        extract_result = _run_training_command(extract_command, cwd=repo_root, log_path=log_path, section="extract_vq", env=env)
+        if extract_result.returncode != 0:
+            raise HTTPException(status_code=400, detail=f"S2-Pro semantic token extraction failed. See {storage.relpath(log_path)}")
+        build_command = [
+            python_exe,
+            str(build_dataset_py),
+            "--input",
+            str(source_dir),
+            "--output",
+            str(proto_dir),
+            "--text-extension",
+            ".lab",
+            "--num-workers",
+            str(payload.num_workers),
+        ]
+        preprocess_commands.append(build_command)
+        build_result = _run_training_command(build_command, cwd=repo_root, log_path=log_path, section="build_dataset", env=env)
+        if build_result.returncode != 0:
+            raise HTTPException(status_code=400, detail=f"S2-Pro protobuf dataset build failed. See {storage.relpath(log_path)}")
+    else:
+        proto_dir = _resolve_training_path(payload.proto_dir, "proto_dir")
+
+    train_command = [
+        python_exe,
+        str(train_py),
+        "--config-name",
+        "text2semantic_finetune",
+        f"project={project_name}",
+        f"paths.run_dir={result_dir}",
+        f"pretrained_ckpt_path={pretrained_ckpt}",
+        f"train_dataset.proto_files=[{proto_dir}]",
+        f"val_dataset.proto_files=[{proto_dir}]",
+        f"data.batch_size={payload.batch_size}",
+        f"data.num_workers={payload.num_workers}",
+        f"trainer.max_steps={payload.max_steps}",
+        f"trainer.val_check_interval={payload.val_check_interval}",
+        f"trainer.accumulate_grad_batches={payload.accumulate_grad_batches}",
+        f"trainer.precision={payload.precision}",
+        f"trainer.accelerator={payload.accelerator}",
+        f"trainer.devices={payload.devices}",
+        f"trainer.strategy.process_group_backend={payload.strategy_backend}",
+        f"model.optimizer.lr={payload.learning_rate}",
+    ]
+    if payload.training_type == "lora":
+        train_command.append(f"+lora@model.model.lora_config={payload.lora_config}")
+
+    train_result = _run_training_command(train_command, cwd=repo_root, log_path=log_path, section="train", env=env)
+    status = "completed" if train_result.returncode == 0 else "failed"
+    checkpoints_dir = result_dir / "checkpoints"
+    checkpoint_candidates = sorted(checkpoints_dir.glob("*.ckpt")) if checkpoints_dir.exists() else []
+    final_checkpoint = checkpoint_candidates[-1] if checkpoint_candidates else None
+    merged_model_path: Optional[str] = None
+    merge_command: List[str] = []
+
+    if status == "completed" and payload.training_type == "lora" and payload.merge_lora and final_checkpoint:
+        if not merge_lora_py.exists():
+            raise HTTPException(status_code=400, detail=f"Fish Speech merge_lora.py not found: {merge_lora_py}")
+        merge_output = REPO_ROOT / "data" / "models" / "fish-speech" / f"{label}__{run_id}"
+        merge_command = [
+            python_exe,
+            str(merge_lora_py),
+            "--lora-config",
+            payload.lora_config,
+            "--base-weight",
+            str(pretrained_ckpt),
+            "--lora-weight",
+            str(final_checkpoint),
+            "--output",
+            str(merge_output),
+        ]
+        merge_result = _run_training_command(merge_command, cwd=repo_root, log_path=log_path, section="merge_lora", env=env)
+        if merge_result.returncode == 0 and merge_output.exists():
+            merged_model_path = storage.relpath(merge_output)
+        else:
+            status = "failed"
+
+    message = "S2-Pro training completed." if status == "completed" else f"S2-Pro training failed. See {storage.relpath(log_path)}"
+    meta = {
+        "training_type": payload.training_type,
+        "source_type": payload.source_type,
+        "proto_dir": str(proto_dir),
+        "run_dir": str(run_dir),
+        "result_dir": str(result_dir),
+        "final_checkpoint_path": storage.relpath(final_checkpoint) if final_checkpoint else None,
+        "merged_model_path": merged_model_path,
+        "command": train_command,
+        "preprocess_commands": preprocess_commands,
+        "merge_command": merge_command,
+        "returncode": train_result.returncode,
+    }
+    record = {
+        "id": run_id,
+        "kind": "s2_pro_training",
+        "status": status,
+        "input_summary": payload.output_name,
+        "created_at": created_at,
+        "message": message,
+        "meta": meta,
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.audio_tools_dir,
+            category="s2_pro_training",
+            label=label,
+            record_id=run_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
+    return S2ProTrainingResponse(
+        status=status,
+        message=message,
+        run_id=run_id,
+        output_name=payload.output_name,
+        training_type=payload.training_type,
+        run_dir=storage.relpath(run_dir),
+        result_dir=storage.relpath(result_dir),
+        log_path=storage.relpath(log_path),
+        final_checkpoint_path=storage.relpath(final_checkpoint) if final_checkpoint else None,
+        merged_model_path=merged_model_path,
+        command=train_command,
+        preprocess_commands=preprocess_commands,
+        merge_command=merge_command,
+        meta=meta,
     )
 
 

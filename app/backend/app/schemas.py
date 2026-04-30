@@ -244,6 +244,51 @@ class S2ProVoiceRecord(BaseModel):
     image_url: Optional[str] = None
 
 
+class S2ProTrainingRequest(BaseModel):
+    """Fish Speech S2-Pro LoRA/full fine-tuning 요청."""
+
+    output_name: str = Field("my-s2pro-voice", min_length=1, max_length=120)
+    training_type: str = Field("lora", pattern="^(lora|full)$")
+    source_type: str = Field("protos", pattern="^(protos|lab_audio_dir)$")
+    proto_dir: str = ""
+    lab_audio_dir: str = ""
+    pretrained_ckpt_path: Optional[str] = None
+    lora_config: str = "r_8_alpha_16"
+    merge_lora: bool = True
+    max_steps: int = Field(10000, ge=1, le=1000000)
+    val_check_interval: int = Field(100, ge=1, le=1000000)
+    batch_size: int = Field(4, ge=1, le=128)
+    accumulate_grad_batches: int = Field(1, ge=1, le=128)
+    learning_rate: float = Field(1e-4, gt=0.0, le=1.0)
+    num_workers: int = Field(4, ge=0, le=64)
+    precision: str = "bf16-true"
+    accelerator: str = "gpu"
+    devices: str = "auto"
+    strategy_backend: str = "nccl"
+    codec_checkpoint_path: Optional[str] = None
+    vq_batch_size: int = Field(16, ge=1, le=256)
+    vq_num_workers: int = Field(1, ge=0, le=64)
+
+
+class S2ProTrainingResponse(BaseModel):
+    """Fish Speech S2-Pro fine-tuning 실행 결과."""
+
+    status: str
+    message: str
+    run_id: str
+    output_name: str
+    training_type: str
+    run_dir: str
+    result_dir: str
+    log_path: str
+    final_checkpoint_path: Optional[str] = None
+    merged_model_path: Optional[str] = None
+    command: List[str] = Field(default_factory=list)
+    preprocess_commands: List[List[str]] = Field(default_factory=list)
+    merge_command: List[str] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class GenerationRecord(BaseModel):
     """생성 이력 저장 및 응답에 사용하는 레코드 스키마다."""
 
@@ -589,6 +634,59 @@ class AceStepFormatSampleRequest(BaseModel):
     lm_top_p: float = Field(0.9, ge=0.0, le=1.0)
 
 
+class AceStepTrainingRequest(BaseModel):
+    """ACE-Step LoRA/LoKr adapter 학습 요청."""
+
+    output_name: str = Field("my-ace-step-adapter", min_length=1, max_length=120)
+    adapter_type: str = Field("lora", pattern="^(lora|lokr)$")
+    trainer_mode: str = Field("fixed", pattern="^(fixed|vanilla)$")
+    source_type: str = Field("tensors", pattern="^(tensors|audio_dir|dataset_json)$")
+    tensor_dir: str = ""
+    audio_dir: str = ""
+    dataset_json: str = ""
+    checkpoint_dir: Optional[str] = None
+    model_variant: str = "turbo"
+    base_model: Optional[str] = None
+    device: str = "auto"
+    precision: str = "auto"
+    max_duration: float = Field(240.0, ge=1.0, le=1200.0)
+    learning_rate: float = Field(1e-4, gt=0.0, le=1.0)
+    batch_size: int = Field(1, ge=1, le=16)
+    gradient_accumulation: int = Field(4, ge=1, le=128)
+    epochs: int = Field(100, ge=1, le=10000)
+    save_every: int = Field(10, ge=1, le=10000)
+    seed: int = Field(42, ge=0)
+    num_workers: int = Field(4, ge=0, le=64)
+    gradient_checkpointing: bool = True
+    rank: int = Field(64, ge=1, le=512)
+    alpha: int = Field(128, ge=1, le=1024)
+    dropout: float = Field(0.1, ge=0.0, le=1.0)
+    lokr_linear_dim: int = Field(64, ge=1, le=512)
+    lokr_linear_alpha: int = Field(128, ge=1, le=1024)
+    lokr_factor: int = Field(-1, ge=-1, le=64)
+    lokr_decompose_both: bool = False
+    lokr_use_tucker: bool = False
+    lokr_use_scalar: bool = False
+    lokr_weight_decompose: bool = True
+
+
+class AceStepTrainingResponse(BaseModel):
+    """ACE-Step LoRA/LoKr adapter 학습 결과."""
+
+    status: str
+    message: str
+    run_id: str
+    adapter_type: str
+    trainer_mode: str
+    tensor_dir: str
+    output_dir: str
+    final_adapter_path: Optional[str] = None
+    log_path: str
+    command: List[str] = Field(default_factory=list)
+    preprocess_command: List[str] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AceStepRuntimeResponse(BaseModel):
     """ACE-Step 런타임/모델/LoRA 상태 응답."""
 
@@ -696,6 +794,40 @@ class RvcTrainingResponse(BaseModel):
     model_name: str
     model_path: Optional[str] = None
     index_path: Optional[str] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class MMAudioTrainingRequest(BaseModel):
+    """MMAudio full/continued training 요청."""
+
+    output_name: str = Field("my-mmaudio-run", min_length=1, max_length=120)
+    model: str = "small_16k"
+    weights_path: str = ""
+    checkpoint_path: str = ""
+    data_mode: str = Field("configured", pattern="^(configured|example)$")
+    nproc_per_node: int = Field(1, ge=1, le=16)
+    num_iterations: int = Field(10000, ge=1, le=1000000)
+    batch_size: int = Field(1, ge=1, le=2048)
+    learning_rate: float = Field(1e-4, gt=0.0, le=1.0)
+    compile: bool = False
+    debug: bool = False
+    save_weights_interval: int = Field(1000, ge=1, le=1000000)
+    save_checkpoint_interval: int = Field(1000, ge=1, le=1000000)
+    val_interval: int = Field(5000, ge=1, le=1000000)
+    eval_interval: int = Field(20000, ge=1, le=1000000)
+
+
+class MMAudioTrainingResponse(BaseModel):
+    """MMAudio training 실행 결과."""
+
+    status: str
+    message: str
+    run_id: str
+    output_name: str
+    run_dir: str
+    log_path: str
+    final_weights_path: Optional[str] = None
+    command: List[str] = Field(default_factory=list)
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 

@@ -5630,6 +5630,9 @@ http://scripts.sil.org/OFL
   .h-2\.5 {
     height: calc(var(--spacing) * 2.5);
   }
+  .h-5 {
+    height: calc(var(--spacing) * 5);
+  }
   .h-6 {
     height: calc(var(--spacing) * 6);
   }
@@ -5737,6 +5740,9 @@ http://scripts.sil.org/OFL
   }
   .w-3\/4 {
     width: calc(3 / 4 * 100%);
+  }
+  .w-8 {
+    width: calc(var(--spacing) * 8);
   }
   .w-44 {
     width: calc(var(--spacing) * 44);
@@ -6492,6 +6498,9 @@ http://scripts.sil.org/OFL
   .pr-8 {
     padding-right: calc(var(--spacing) * 8);
   }
+  .pb-2 {
+    padding-bottom: calc(var(--spacing) * 2);
+  }
   .pb-3 {
     padding-bottom: calc(var(--spacing) * 3);
   }
@@ -6595,6 +6604,9 @@ http://scripts.sil.org/OFL
   }
   .break-words {
     overflow-wrap: break-word;
+  }
+  .break-all {
+    word-break: break-all;
   }
   .text-clip {
     text-overflow: clip;
@@ -7975,6 +7987,11 @@ http://scripts.sil.org/OFL
       grid-template-columns: repeat(5, minmax(0, 1fr));
     }
   }
+  .sm\:grid-cols-\[minmax\(0\,1fr\)_220px\] {
+    @media (width >= 40rem) {
+      grid-template-columns: minmax(0,1fr) 220px;
+    }
+  }
   .sm\:flex-row {
     @media (width >= 40rem) {
       flex-direction: row;
@@ -8069,6 +8086,21 @@ http://scripts.sil.org/OFL
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
+  .lg\:grid-cols-\[minmax\(0\,1\.1fr\)_minmax\(0\,0\.9fr\)\] {
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(0,1.1fr) minmax(0,0.9fr);
+    }
+  }
+  .lg\:grid-cols-\[minmax\(0\,1fr\)_180px\] {
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(0,1fr) 180px;
+    }
+  }
+  .lg\:grid-cols-\[minmax\(0\,1fr\)_220px\] {
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(0,1fr) 220px;
+    }
+  }
   .lg\:grid-cols-\[minmax\(0\,1fr\)_minmax\(260px\,320px\)\] {
     @media (width >= 64rem) {
       grid-template-columns: minmax(0,1fr) minmax(260px,320px);
@@ -8079,9 +8111,19 @@ http://scripts.sil.org/OFL
       grid-template-columns: minmax(0,1fr) minmax(320px,360px);
     }
   }
+  .lg\:grid-cols-\[minmax\(0\,1fr\)_minmax\(320px\,380px\)\] {
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(0,1fr) minmax(320px,380px);
+    }
+  }
   .lg\:grid-cols-\[minmax\(220px\,260px\)_minmax\(0\,1fr\)\] {
     @media (width >= 64rem) {
       grid-template-columns: minmax(220px,260px) minmax(0,1fr);
+    }
+  }
+  .lg\:grid-cols-\[repeat\(3\,minmax\(0\,1fr\)\)\] {
+    @media (width >= 64rem) {
+      grid-template-columns: repeat(3,minmax(0,1fr));
     }
   }
   .xl\:grid-cols-4 {

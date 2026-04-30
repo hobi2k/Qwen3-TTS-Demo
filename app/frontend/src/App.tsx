@@ -60,6 +60,7 @@ import {
 } from "./lib/app-ui";
 import type {
   AceStepRuntimeResponse,
+  AceStepTrainingResponse,
   AceStepUnderstandResponse,
   AsrModelInfo,
   AudioAsset,
@@ -71,8 +72,10 @@ import type {
   FineTuneRun,
   GenerationRecord,
   HealthResponse,
+  MMAudioTrainingResponse,
   ModelInfo,
   S2ProRuntimeResponse,
+  S2ProTrainingResponse,
   S2ProVoiceRecord,
   SpeakerInfo,
   UploadResponse,
@@ -94,7 +97,8 @@ type AceStepMode =
   | "complete"
   | "understand"
   | "create_sample"
-  | "format_sample";
+  | "format_sample"
+  | "lora_train";
 
 type AceStepTabKey = Extract<
   TabKey,
@@ -108,6 +112,7 @@ type AceStepTabKey = Extract<
   | "ace_understand"
   | "ace_create_sample"
   | "ace_format_sample"
+  | "ace_lora_train"
 >;
 
 const ACE_STEP_TAB_TO_MODE: Record<AceStepTabKey, AceStepMode> = {
@@ -121,6 +126,7 @@ const ACE_STEP_TAB_TO_MODE: Record<AceStepTabKey, AceStepMode> = {
   ace_understand: "understand",
   ace_create_sample: "create_sample",
   ace_format_sample: "format_sample",
+  ace_lora_train: "lora_train",
 };
 
 const ACE_STEP_TRACK_OPTIONS = [
@@ -727,6 +733,30 @@ function StudioApp() {
   const [s2ProCloneSource, setS2ProCloneSource] = useState<"gallery" | "upload">("gallery");
   const [s2ProUploadedRef, setS2ProUploadedRef] = useState<UploadResponse | null>(null);
   const [lastS2ProRecord, setLastS2ProRecord] = useState<GenerationRecord | null>(null);
+  const [s2ProTrainSource, setS2ProTrainSource] = useState<"protos" | "lab_audio_dir">("protos");
+  const [s2ProTrainResult, setS2ProTrainResult] = useState<S2ProTrainingResponse | null>(null);
+  const [s2ProTrainForm, setS2ProTrainForm] = useState({
+    output_name: "my-s2pro-voice",
+    training_type: "lora" as "lora" | "full",
+    proto_dir: "data/protos",
+    lab_audio_dir: "",
+    pretrained_ckpt_path: "",
+    lora_config: "r_8_alpha_16",
+    merge_lora: true,
+    max_steps: "10000",
+    val_check_interval: "100",
+    batch_size: "4",
+    accumulate_grad_batches: "1",
+    learning_rate: "0.0001",
+    num_workers: "4",
+    precision: "bf16-true",
+    accelerator: "gpu",
+    devices: "auto",
+    strategy_backend: "nccl",
+    codec_checkpoint_path: "",
+    vq_batch_size: "16",
+    vq_num_workers: "1",
+  });
   const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
   const [soundEffectForm, setSoundEffectForm] = useState({
     model_profile: "mmaudio",
@@ -737,6 +767,24 @@ function StudioApp() {
     steps: "25",
     cfg_scale: "5.0",
     negative_prompt: "",
+  });
+  const [mmaudioTrainResult, setMMAudioTrainResult] = useState<MMAudioTrainingResponse | null>(null);
+  const [mmaudioTrainForm, setMMAudioTrainForm] = useState({
+    output_name: "my-mmaudio-run",
+    model: "small_16k",
+    weights_path: "",
+    checkpoint_path: "",
+    data_mode: "example" as "configured" | "example",
+    nproc_per_node: "1",
+    num_iterations: "10000",
+    batch_size: "1",
+    learning_rate: "0.0001",
+    compile: false,
+    debug: false,
+    save_weights_interval: "1000",
+    save_checkpoint_interval: "1000",
+    val_interval: "5000",
+    eval_interval: "20000",
   });
   const [aceStepForm, setAceStepForm] = useState({
     output_name: "midnight-city-demo",
@@ -816,6 +864,38 @@ function StudioApp() {
     vocal_language: "unknown",
   });
   const [aceStepUnderstandResult, setAceStepUnderstandResult] = useState<AceStepUnderstandResponse | null>(null);
+  const [aceStepTrainSource, setAceStepTrainSource] = useState<"tensors" | "audio_dir" | "dataset_json">("tensors");
+  const [aceStepTrainResult, setAceStepTrainResult] = useState<AceStepTrainingResponse | null>(null);
+  const [aceStepTrainForm, setAceStepTrainForm] = useState({
+    output_name: "my-ace-style",
+    adapter_type: "lokr" as "lora" | "lokr",
+    trainer_mode: "fixed" as "fixed" | "vanilla",
+    tensor_dir: "",
+    audio_dir: "",
+    dataset_json: "",
+    model_variant: "turbo",
+    device: "auto",
+    precision: "auto" as "auto" | "bf16" | "fp16" | "fp32",
+    max_duration: "240",
+    learning_rate: "0.03",
+    batch_size: "1",
+    gradient_accumulation: "4",
+    epochs: "500",
+    save_every: "10",
+    seed: "42",
+    num_workers: "4",
+    gradient_checkpointing: true,
+    rank: "64",
+    alpha: "128",
+    dropout: "0.1",
+    lokr_linear_dim: "64",
+    lokr_linear_alpha: "128",
+    lokr_factor: "-1",
+    lokr_decompose_both: false,
+    lokr_use_tucker: false,
+    lokr_use_scalar: false,
+    lokr_weight_decompose: true,
+  });
   const [voiceChangerForm, setVoiceChangerForm] = useState({
     audio_path: "",
     selected_model_id: "",
@@ -1529,6 +1609,43 @@ function StudioApp() {
     });
   }
 
+  async function handleS2ProTrainSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    const sourceValue = s2ProTrainSource === "protos" ? s2ProTrainForm.proto_dir : s2ProTrainForm.lab_audio_dir;
+    if (!sourceValue.trim()) {
+      setMessage("S2-Pro 학습 입력 경로를 먼저 넣어주세요.");
+      return;
+    }
+    await runAction(async () => {
+      const result = await api.trainS2Pro({
+        output_name: s2ProTrainForm.output_name,
+        training_type: s2ProTrainForm.training_type,
+        source_type: s2ProTrainSource,
+        proto_dir: s2ProTrainForm.proto_dir,
+        lab_audio_dir: s2ProTrainForm.lab_audio_dir,
+        pretrained_ckpt_path: s2ProTrainForm.pretrained_ckpt_path || null,
+        lora_config: s2ProTrainForm.lora_config,
+        merge_lora: s2ProTrainForm.merge_lora,
+        max_steps: Number(s2ProTrainForm.max_steps || "10000"),
+        val_check_interval: Number(s2ProTrainForm.val_check_interval || "100"),
+        batch_size: Number(s2ProTrainForm.batch_size || "4"),
+        accumulate_grad_batches: Number(s2ProTrainForm.accumulate_grad_batches || "1"),
+        learning_rate: Number(s2ProTrainForm.learning_rate || "0.0001"),
+        num_workers: Number(s2ProTrainForm.num_workers || "4"),
+        precision: s2ProTrainForm.precision,
+        accelerator: s2ProTrainForm.accelerator,
+        devices: s2ProTrainForm.devices,
+        strategy_backend: s2ProTrainForm.strategy_backend,
+        codec_checkpoint_path: s2ProTrainForm.codec_checkpoint_path || null,
+        vq_batch_size: Number(s2ProTrainForm.vq_batch_size || "16"),
+        vq_num_workers: Number(s2ProTrainForm.vq_num_workers || "1"),
+      });
+      setS2ProTrainResult(result);
+      await refreshAll();
+      setMessage(result.message);
+    });
+  }
+
   function applySoundEffectRecipe(item: { prompt: string; prompts?: Partial<Record<SoundEffectPromptLanguage, string>>; profile?: string; duration?: string }, promptLanguage: SoundEffectPromptLanguage) {
     const seconds = item.duration?.includes(":")
       ? Number(item.duration.split(":").pop() || "4")
@@ -1588,6 +1705,32 @@ function StudioApp() {
       setLastAudioToolResult(result);
       await refreshAll();
       setMessage("사운드 이펙트를 생성했습니다.");
+    });
+  }
+
+  async function handleMMAudioTrainSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      const result = await api.trainMMAudio({
+        output_name: mmaudioTrainForm.output_name,
+        model: mmaudioTrainForm.model,
+        weights_path: mmaudioTrainForm.weights_path,
+        checkpoint_path: mmaudioTrainForm.checkpoint_path,
+        data_mode: mmaudioTrainForm.data_mode,
+        nproc_per_node: Number(mmaudioTrainForm.nproc_per_node || "1"),
+        num_iterations: Number(mmaudioTrainForm.num_iterations || "10000"),
+        batch_size: Number(mmaudioTrainForm.batch_size || "1"),
+        learning_rate: Number(mmaudioTrainForm.learning_rate || "0.0001"),
+        compile: mmaudioTrainForm.compile,
+        debug: mmaudioTrainForm.debug,
+        save_weights_interval: Number(mmaudioTrainForm.save_weights_interval || "1000"),
+        save_checkpoint_interval: Number(mmaudioTrainForm.save_checkpoint_interval || "1000"),
+        val_interval: Number(mmaudioTrainForm.val_interval || "5000"),
+        eval_interval: Number(mmaudioTrainForm.eval_interval || "20000"),
+      });
+      setMMAudioTrainResult(result);
+      await refreshAll();
+      setMessage(result.message);
     });
   }
 
@@ -1830,6 +1973,57 @@ function StudioApp() {
         }));
       }
       setMessage(result.success ? "Format 결과를 폼에 반영했습니다." : `Format 실패: ${result.error || ""}`);
+    });
+  }
+
+  async function handleAceStepTrainAdapterSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    const sourceValue =
+      aceStepTrainSource === "tensors"
+        ? aceStepTrainForm.tensor_dir
+        : aceStepTrainSource === "audio_dir"
+          ? aceStepTrainForm.audio_dir
+          : aceStepTrainForm.dataset_json;
+    if (!sourceValue.trim()) {
+      setMessage("ACE-Step 학습 입력 경로를 먼저 넣어주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await api.trainAceStepAdapter({
+        output_name: aceStepTrainForm.output_name,
+        adapter_type: aceStepTrainForm.adapter_type,
+        trainer_mode: aceStepTrainForm.trainer_mode,
+        source_type: aceStepTrainSource,
+        tensor_dir: aceStepTrainForm.tensor_dir,
+        audio_dir: aceStepTrainForm.audio_dir,
+        dataset_json: aceStepTrainForm.dataset_json,
+        model_variant: aceStepTrainForm.model_variant,
+        device: aceStepTrainForm.device,
+        precision: aceStepTrainForm.precision,
+        max_duration: Number(aceStepTrainForm.max_duration || "240"),
+        learning_rate: Number(aceStepTrainForm.learning_rate || (aceStepTrainForm.adapter_type === "lokr" ? "0.03" : "0.0001")),
+        batch_size: Number(aceStepTrainForm.batch_size || "1"),
+        gradient_accumulation: Number(aceStepTrainForm.gradient_accumulation || "4"),
+        epochs: Number(aceStepTrainForm.epochs || "100"),
+        save_every: Number(aceStepTrainForm.save_every || "10"),
+        seed: Number(aceStepTrainForm.seed || "42"),
+        num_workers: Number(aceStepTrainForm.num_workers || "4"),
+        gradient_checkpointing: aceStepTrainForm.gradient_checkpointing,
+        rank: Number(aceStepTrainForm.rank || "64"),
+        alpha: Number(aceStepTrainForm.alpha || "128"),
+        dropout: Number(aceStepTrainForm.dropout || "0.1"),
+        lokr_linear_dim: Number(aceStepTrainForm.lokr_linear_dim || "64"),
+        lokr_linear_alpha: Number(aceStepTrainForm.lokr_linear_alpha || "128"),
+        lokr_factor: Number(aceStepTrainForm.lokr_factor || "-1"),
+        lokr_decompose_both: aceStepTrainForm.lokr_decompose_both,
+        lokr_use_tucker: aceStepTrainForm.lokr_use_tucker,
+        lokr_use_scalar: aceStepTrainForm.lokr_use_scalar,
+        lokr_weight_decompose: aceStepTrainForm.lokr_weight_decompose,
+      });
+      setAceStepTrainResult(result);
+      await loadAceStepRuntime();
+      setMessage(result.message);
     });
   }
 
@@ -2639,7 +2833,9 @@ function StudioApp() {
     "s2pro_clone",
     "s2pro_multi_speaker",
     "s2pro_multilingual",
+    "s2pro_train",
     "effects",
+    "mmaudio_train",
     "audio_editor",
     "audio_denoise",
     "separation",
@@ -2657,6 +2853,7 @@ function StudioApp() {
     "ace_understand",
     "ace_create_sample",
     "ace_format_sample",
+    "ace_lora_train",
     "dataset",
     "training",
     "voicebox_fusion",
@@ -2679,7 +2876,9 @@ function StudioApp() {
       return handleGenerateFromPreset();
     }
     if (isS2ProTab(activeTab)) return handleS2ProSubmit();
+    if (activeTab === "s2pro_train") return handleS2ProTrainSubmit();
     if (activeTab === "effects") return handleSoundEffectSubmit();
+    if (activeTab === "mmaudio_train") return handleMMAudioTrainSubmit();
     if (activeTab === "audio_editor") return handleAudioEditSubmit();
     if (activeTab === "audio_denoise") return handleAudioDenoiseSubmit();
     if (activeTab === "separation") return handleAudioSeparation();
@@ -2697,6 +2896,7 @@ function StudioApp() {
     if (activeTab === "ace_understand") return handleAceStepUnderstandSubmit();
     if (activeTab === "ace_create_sample") return handleAceStepCreateSampleSubmit();
     if (activeTab === "ace_format_sample") return handleAceStepFormatSampleSubmit();
+    if (activeTab === "ace_lora_train") return handleAceStepTrainAdapterSubmit();
     if (activeTab === "dataset") return handleCreateDataset();
     if (activeTab === "training") return handleCreateRun();
     if (activeTab === "voicebox_fusion") return handleCreateVoiceBoxFusion();
@@ -2735,6 +2935,15 @@ function StudioApp() {
             <button className={activeTab === "projects" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("projects")} type="button">
               <span>{t("tab.projects")}</span>
             </button>
+            <button className={activeTab === "dataset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("dataset")} type="button">
+              <span>{t("tab.dataset")}</span>
+            </button>
+            <button className={activeTab === "training" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("training")} type="button">
+              <span>{t("tab.train")}</span>
+            </button>
+            <button className={activeTab === "voicebox_fusion" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voicebox_fusion")} type="button">
+              <span>{t("tab.fuse")}</span>
+            </button>
           </div>
 
           <div className="studio-nav__group">
@@ -2751,12 +2960,18 @@ function StudioApp() {
             <button className={activeTab === "s2pro_multilingual" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openS2ProTab("s2pro_multilingual")} type="button">
               <span>{t("tab.s2pro_multilingual")}</span>
             </button>
+            <button className={activeTab === "s2pro_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("s2pro_train")} type="button">
+              <span>{t("tab.s2pro_train")}</span>
+            </button>
           </div>
 
           <div className="studio-nav__group">
             <div className="studio-nav__label"><span>{t("section.audiolab")}</span></div>
             <button className={activeTab === "effects" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("effects")} type="button">
               <span>{t("tab.effects")}</span>
+            </button>
+            <button className={activeTab === "mmaudio_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("mmaudio_train")} type="button">
+              <span>{t("tab.mmaudio_train")}</span>
             </button>
             <button className={activeTab === "audio_editor" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("audio_editor")} type="button">
               <span>{t("tab.audio_editor")}</span>
@@ -2814,18 +3029,8 @@ function StudioApp() {
             <button className={activeTab === "ace_format_sample" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_format_sample")} type="button">
               <span>{t("tab.ace_format_sample")}</span>
             </button>
-          </div>
-
-          <div className="studio-nav__group">
-            <div className="studio-nav__label"><span>{t("section.training")}</span></div>
-            <button className={activeTab === "dataset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("dataset")} type="button">
-              <span>{t("tab.dataset")}</span>
-            </button>
-            <button className={activeTab === "training" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("training")} type="button">
-              <span>{t("tab.train")}</span>
-            </button>
-            <button className={activeTab === "voicebox_fusion" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voicebox_fusion")} type="button">
-              <span>{t("tab.fuse")}</span>
+            <button className={activeTab === "ace_lora_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openAceStepTab("ace_lora_train")} type="button">
+              <span>{t("tab.ace_lora_train")}</span>
             </button>
           </div>
 
@@ -4689,6 +4894,174 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
+      {activeTab === "s2pro_train" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("s2pro.eyebrow", "S2-PRO")}
+            eyebrowIcon={Mic}
+            title={t("s2pro.train.title", "S2-Pro LoRA / Full 학습")}
+            subtitle={t("s2pro.train.subtitle", "Fish Speech text2semantic fine-tuning을 로컬에서 실행합니다. LoRA는 학습 후 merged checkpoint로 변환할 수 있습니다.")}
+            action={{
+              label: t("s2pro.train.submit", "S2-Pro 학습 시작"),
+              formId: "s2pro-train-form",
+              disabled:
+                loading ||
+                !s2ProTrainForm.output_name.trim() ||
+                (s2ProTrainSource === "protos" && !s2ProTrainForm.proto_dir.trim()) ||
+                (s2ProTrainSource === "lab_audio_dir" && !s2ProTrainForm.lab_audio_dir.trim()),
+              loading,
+            }}
+            meta={
+              s2ProRuntime ? (
+                <Badge variant="secondary" className={s2ProRuntime.repo_ready ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
+                  {s2ProRuntime.repo_ready ? "Fish Speech ready" : "Fish Speech missing"}
+                </Badge>
+              ) : null
+            }
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+            <WorkspaceCard>
+              <form id="s2pro-train-form" className="flex flex-col gap-5" onSubmit={handleS2ProTrainSubmit}>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Run name</Label>
+                    <Input value={s2ProTrainForm.output_name} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Training type</Label>
+                    <Select value={s2ProTrainForm.training_type} onValueChange={(training_type) => setS2ProTrainForm((prev) => ({ ...prev, training_type: training_type as "lora" | "full" }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lora">LoRA</SelectItem>
+                        <SelectItem value="full">Full</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Tabs value={s2ProTrainSource} onValueChange={(value) => setS2ProTrainSource(value as "protos" | "lab_audio_dir")} className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Training data source</Label>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="protos">Protobuf dataset</TabsTrigger>
+                      <TabsTrigger value="lab_audio_dir">Audio + .lab folder</TabsTrigger>
+                    </TabsList>
+                  </div>
+                  <TabsContent value="protos" className="mt-0">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Proto directory</Label>
+                      <Input placeholder="data/protos 또는 절대경로" value={s2ProTrainForm.proto_dir} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, proto_dir: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">Fish Speech `tools/llama/build_dataset.py`가 만든 protobuf 폴더를 바로 사용합니다.</span>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="lab_audio_dir" className="mt-0">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Audio + .lab folder</Label>
+                        <Input placeholder="data/s2pro-datasets/my-speaker 또는 절대경로" value={s2ProTrainForm.lab_audio_dir} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, lab_audio_dir: event.target.value }))} />
+                        <span className="text-[11px] text-ink-subtle">같은 이름의 `.wav/.mp3/.flac`와 `.lab` 텍스트를 VQ 추출 후 protobuf로 묶습니다.</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">VQ batch</Label>
+                        <Input value={s2ProTrainForm.vq_batch_size} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, vq_batch_size: event.target.value }))} />
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Max steps</Label>
+                    <Input value={s2ProTrainForm.max_steps} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, max_steps: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Batch size</Label>
+                    <Input value={s2ProTrainForm.batch_size} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, batch_size: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Learning rate</Label>
+                    <Input value={s2ProTrainForm.learning_rate} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, learning_rate: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Val interval</Label>
+                    <Input value={s2ProTrainForm.val_check_interval} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, val_check_interval: event.target.value }))} />
+                  </div>
+                </div>
+
+                {s2ProTrainForm.training_type === "lora" ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LoRA config</Label>
+                      <Select value={s2ProTrainForm.lora_config} onValueChange={(lora_config) => setS2ProTrainForm((prev) => ({ ...prev, lora_config }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="r_8_alpha_16">r_8_alpha_16</SelectItem>
+                          <SelectItem value="r_32_alpha_16_fast">r_32_alpha_16_fast</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <label className="flex items-end gap-2 pb-2 text-xs text-ink-muted">
+                      <Switch checked={s2ProTrainForm.merge_lora} onCheckedChange={(checked) => setS2ProTrainForm((prev) => ({ ...prev, merge_lora: checked }))} />
+                      Merge LoRA after training
+                    </label>
+                  </div>
+                ) : null}
+
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    Advanced training settings
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="grid grid-cols-1 gap-3 border-t border-line px-3 py-3 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Pretrained checkpoint</Label>
+                      <Input placeholder="비우면 data/models/fish-speech/s2-pro" value={s2ProTrainForm.pretrained_ckpt_path} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, pretrained_ckpt_path: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Precision</Label>
+                      <Input value={s2ProTrainForm.precision} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, precision: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Devices</Label>
+                      <Input value={s2ProTrainForm.devices} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, devices: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Accumulate grad</Label>
+                      <Input value={s2ProTrainForm.accumulate_grad_batches} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, accumulate_grad_batches: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Workers</Label>
+                      <Input value={s2ProTrainForm.num_workers} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, num_workers: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Strategy backend</Label>
+                      <Input value={s2ProTrainForm.strategy_backend} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, strategy_backend: event.target.value }))} />
+                    </div>
+                  </div>
+                </details>
+              </form>
+            </WorkspaceCard>
+
+            <aside className="self-start">
+              <WorkspaceCard className="flex flex-col gap-3">
+                <strong className="text-sm font-medium text-ink">Training result</strong>
+                {s2ProTrainResult ? (
+                  <div className="flex flex-col gap-2 text-xs text-ink-muted">
+                    <span>Status: <strong className="text-ink">{s2ProTrainResult.status}</strong></span>
+                    <span className="break-all">Log: {s2ProTrainResult.log_path}</span>
+                    <span className="break-all">Checkpoint: {s2ProTrainResult.final_checkpoint_path || "-"}</span>
+                    <span className="break-all">Merged: {s2ProTrainResult.merged_model_path || "-"}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-ink-muted">S2-Pro 학습 결과가 여기에 표시됩니다.</p>
+                )}
+              </WorkspaceCard>
+            </aside>
+          </div>
+        </WorkspaceShell>
+      ) : null}
+
       {activeTab === "effects" ? (
         <WorkspaceShell>
           <WorkspaceHeader
@@ -4856,6 +5229,130 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
+      {activeTab === "mmaudio_train" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("effects.eyebrow", "SOUND EFFECTS")}
+            eyebrowIcon={Volume2}
+            title={t("mmaudio.train.title", "MMAudio 학습")}
+            subtitle={t("mmaudio.train.subtitle", "MMAudio upstream train.py를 실행합니다. 현재 upstream은 LoRA/adapter가 아니라 full/continued training 구조입니다.")}
+            action={{
+              label: t("mmaudio.train.submit", "MMAudio 학습 시작"),
+              formId: "mmaudio-train-form",
+              disabled: loading || !mmaudioTrainForm.output_name.trim(),
+              loading,
+            }}
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+            <WorkspaceCard>
+              <form id="mmaudio-train-form" className="flex flex-col gap-5" onSubmit={handleMMAudioTrainSubmit}>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Run name</Label>
+                    <Input value={mmaudioTrainForm.output_name} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                    <Select value={mmaudioTrainForm.model} onValueChange={(model) => setMMAudioTrainForm((prev) => ({ ...prev, model }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="small_16k">small_16k</SelectItem>
+                        <SelectItem value="small_44k">small_44k</SelectItem>
+                        <SelectItem value="medium_44k">medium_44k</SelectItem>
+                        <SelectItem value="large_44k">large_44k</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Data mode</Label>
+                    <Select value={mmaudioTrainForm.data_mode} onValueChange={(data_mode) => setMMAudioTrainForm((prev) => ({ ...prev, data_mode: data_mode as "configured" | "example" }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="example">Example data</SelectItem>
+                        <SelectItem value="configured">Configured dataset</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-[11px] text-ink-subtle">Configured는 `vendor/MMAudio/config/data/base.yaml` 설정을 그대로 사용합니다.</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Pretrained weights</Label>
+                    <Input placeholder="weights/mmaudio_small_16k.pth 또는 절대경로" value={mmaudioTrainForm.weights_path} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, weights_path: event.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Processes</Label>
+                    <Input value={mmaudioTrainForm.nproc_per_node} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, nproc_per_node: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Iterations</Label>
+                    <Input value={mmaudioTrainForm.num_iterations} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, num_iterations: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Batch size</Label>
+                    <Input value={mmaudioTrainForm.batch_size} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, batch_size: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Learning rate</Label>
+                    <Input value={mmaudioTrainForm.learning_rate} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, learning_rate: event.target.value }))} />
+                  </div>
+                </div>
+
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                    Advanced training settings
+                    <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="grid grid-cols-1 gap-3 border-t border-line px-3 py-3 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Resume checkpoint</Label>
+                      <Input value={mmaudioTrainForm.checkpoint_path} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Save weights every</Label>
+                      <Input value={mmaudioTrainForm.save_weights_interval} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, save_weights_interval: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Save checkpoint every</Label>
+                      <Input value={mmaudioTrainForm.save_checkpoint_interval} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, save_checkpoint_interval: event.target.value }))} />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted">
+                      <Switch checked={mmaudioTrainForm.compile} onCheckedChange={(checked) => setMMAudioTrainForm((prev) => ({ ...prev, compile: checked }))} />
+                      Compile
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted">
+                      <Switch checked={mmaudioTrainForm.debug} onCheckedChange={(checked) => setMMAudioTrainForm((prev) => ({ ...prev, debug: checked }))} />
+                      Debug
+                    </label>
+                  </div>
+                </details>
+              </form>
+            </WorkspaceCard>
+
+            <aside className="self-start">
+              <WorkspaceCard className="flex flex-col gap-3">
+                <strong className="text-sm font-medium text-ink">Training result</strong>
+                {mmaudioTrainResult ? (
+                  <div className="flex flex-col gap-2 text-xs text-ink-muted">
+                    <span>Status: <strong className="text-ink">{mmaudioTrainResult.status}</strong></span>
+                    <span className="break-all">Log: {mmaudioTrainResult.log_path}</span>
+                    <span className="break-all">Weights: {mmaudioTrainResult.final_weights_path || "-"}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-ink-muted">MMAudio 학습 결과가 여기에 표시됩니다.</p>
+                )}
+                <p className="text-[11px] text-ink-subtle">MMAudio upstream에는 LoRA/adapter 경로가 없어 전체 모델 학습/이어학습만 실행합니다.</p>
+              </WorkspaceCard>
+            </aside>
+          </div>
+        </WorkspaceShell>
+      ) : null}
+
       {isAceStepTab(activeTab) ? (
         <WorkspaceShell>
           <WorkspaceHeader
@@ -4876,6 +5373,7 @@ function StudioApp() {
                 : currentAceStepMode === "complete" ? t("ace.complete.title", "ACE-Step 부족한 트랙 채우기")
                 : currentAceStepMode === "understand" ? t("ace.understand.title", "ACE-Step 오디오 분석")
                 : currentAceStepMode === "create_sample" ? t("ace.create_sample.title", "ACE-Step 작곡 초안 생성")
+                : currentAceStepMode === "lora_train" ? t("ace.train.title", "ACE-Step LoRA / LoKr 학습")
                 : t("ace.format_sample.title", "ACE-Step 입력 정리")
             }
             subtitle={
@@ -4888,11 +5386,12 @@ function StudioApp() {
                 : currentAceStepMode === "complete" ? t("ace.complete.subtitle", "드럼, 베이스, 보컬처럼 비어 있거나 약한 여러 트랙을 한 번에 보강합니다.")
                 : currentAceStepMode === "understand" ? t("ace.understand.subtitle", "오디오를 듣고 BPM, 키, 언어, 가사, 스타일 캡션을 추정해 다음 작곡 입력으로 재사용합니다.")
                 : currentAceStepMode === "create_sample" ? t("ace.create_sample.subtitle", "한 줄 아이디어를 스타일 설명과 가사 초안으로 펼칩니다.")
+                : currentAceStepMode === "lora_train" ? t("ace.train.subtitle", "ACE-Step upstream 학습기로 LoRA 또는 LoKr adapter를 만들고 생성 LoRA 목록에 바로 연결합니다.")
                 : t("ace.format_sample.subtitle", "Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬습니다.")
             }
           />
 
-          {currentAceStepMode !== "text2music" && currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" ? (
+          {currentAceStepMode !== "text2music" && currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" && currentAceStepMode !== "lora_train" ? (
             <WorkspaceCard className="flex flex-col gap-3">
               <h3 className="text-sm font-medium text-ink">{t("ace.source.title", "Source audio")}</h3>
               <p className="text-xs text-ink-muted">{t("ace.source.subtitle", "업로드, 직접 경로, 생성 갤러리 중 하나로 작업할 원본을 고릅니다.")}</p>
@@ -4920,7 +5419,7 @@ function StudioApp() {
             </WorkspaceCard>
           ) : null}
 
-          {currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" ? (
+          {currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" && currentAceStepMode !== "lora_train" ? (
             <WorkspaceCard className="flex flex-col gap-3">
               <h3 className="text-sm font-medium text-ink">{t("ace.model.title", "Model & LoRA")}</h3>
               <p className="text-xs text-ink-muted">{t("ace.model.subtitle", "모델을 비워두면 다운로드된 turbo 계열을 우선 사용합니다. LoRA는 특정 스타일을 더 강하게 입힐 때만 선택하세요.")}</p>
@@ -5458,6 +5957,312 @@ function StudioApp() {
                   </Button>
                   {loading ? <p className="text-xs text-ink-muted">{t("ace.format.running", "ACE-Step LM이 입력을 정리하는 중입니다. 모델 로딩이 필요하면 잠시 걸릴 수 있습니다.")}</p> : null}
                 </form>
+              </WorkspaceCard>
+            ) : null}
+
+            {currentAceStepMode === "lora_train" ? (
+              <WorkspaceCard>
+                <form className="flex flex-col gap-5" onSubmit={handleAceStepTrainAdapterSubmit}>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("ace.train.adapterName", "Adapter name")}</Label>
+                      <Input
+                        placeholder="my-ace-style"
+                        value={aceStepTrainForm.output_name}
+                        onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, output_name: event.target.value }))}
+                      />
+                      <span className="text-[11px] text-ink-subtle">
+                        {t("ace.train.adapterNameHint", "학습이 끝나면 이 이름으로 생성 LoRA 목록에 표시됩니다.")}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Adapter type</Label>
+                        <Select
+                          value={aceStepTrainForm.adapter_type}
+                          onValueChange={(adapter_type) => setAceStepTrainForm((prev) => ({
+                            ...prev,
+                            adapter_type: adapter_type as "lora" | "lokr",
+                            learning_rate:
+                              adapter_type === prev.adapter_type
+                                ? prev.learning_rate
+                                : adapter_type === "lokr"
+                                  ? "0.03"
+                                  : "0.0001",
+                          }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="lokr">LoKr</SelectItem>
+                            <SelectItem value="lora">LoRA</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Trainer</Label>
+                        <Select
+                          value={aceStepTrainForm.trainer_mode}
+                          onValueChange={(trainer_mode) => setAceStepTrainForm((prev) => ({ ...prev, trainer_mode: trainer_mode as "fixed" | "vanilla" }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="fixed">fixed</SelectItem>
+                            <SelectItem value="vanilla">vanilla</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Tabs value={aceStepTrainSource} onValueChange={(value) => setAceStepTrainSource(value as "tensors" | "audio_dir" | "dataset_json")} className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("ace.train.source.title", "Training data source")}</Label>
+                      <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="tensors">Tensors</TabsTrigger>
+                        <TabsTrigger value="audio_dir">Audio folder</TabsTrigger>
+                        <TabsTrigger value="dataset_json">Dataset JSON</TabsTrigger>
+                      </TabsList>
+                    </div>
+
+                    <TabsContent value="tensors" className="mt-0">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Tensor directory</Label>
+                        <Input
+                          placeholder="data/ace-step/tensors/my-dataset 또는 절대경로"
+                          value={aceStepTrainForm.tensor_dir}
+                          onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, tensor_dir: event.target.value }))}
+                        />
+                        <span className="text-[11px] text-ink-subtle">
+                          {t("ace.train.tensorHint", "이미 ACE-Step preprocess가 끝난 tensor 폴더를 바로 학습합니다.")}
+                        </span>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="audio_dir" className="mt-0">
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Audio folder</Label>
+                          <Input
+                            placeholder="data/generated/voice-clean 또는 절대경로"
+                            value={aceStepTrainForm.audio_dir}
+                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, audio_dir: event.target.value }))}
+                          />
+                          <span className="text-[11px] text-ink-subtle">
+                            {t("ace.train.audioHint", "WAV/MP3/FLAC 폴더를 먼저 tensor로 변환한 뒤 같은 실행에서 학습합니다.")}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Max duration</Label>
+                          <Input
+                            value={aceStepTrainForm.max_duration}
+                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, max_duration: event.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="dataset_json" className="mt-0">
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Dataset JSON</Label>
+                          <Input
+                            placeholder="data/ace-step/datasets/my-dataset.json 또는 절대경로"
+                            value={aceStepTrainForm.dataset_json}
+                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, dataset_json: event.target.value }))}
+                          />
+                          <span className="text-[11px] text-ink-subtle">
+                            {t("ace.train.jsonHint", "ACE-Step 형식의 dataset JSON을 tensor로 변환한 뒤 학습합니다.")}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Max duration</Label>
+                          <Input
+                            value={aceStepTrainForm.max_duration}
+                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, max_duration: event.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Model variant</Label>
+                      <Select value={aceStepTrainForm.model_variant} onValueChange={(model_variant) => setAceStepTrainForm((prev) => ({ ...prev, model_variant }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="turbo">turbo</SelectItem>
+                          <SelectItem value="base">base</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Epochs</Label>
+                      <Input value={aceStepTrainForm.epochs} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, epochs: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Batch size</Label>
+                      <Input value={aceStepTrainForm.batch_size} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, batch_size: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Learning rate</Label>
+                      <Input value={aceStepTrainForm.learning_rate} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, learning_rate: event.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Gradient accumulation</Label>
+                      <Input value={aceStepTrainForm.gradient_accumulation} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, gradient_accumulation: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Save every</Label>
+                      <Input value={aceStepTrainForm.save_every} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, save_every: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Seed</Label>
+                      <Input value={aceStepTrainForm.seed} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, seed: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Workers</Label>
+                      <Input value={aceStepTrainForm.num_workers} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, num_workers: event.target.value }))} />
+                    </div>
+                  </div>
+
+                  {aceStepTrainForm.adapter_type === "lora" ? (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Rank</Label>
+                        <Input value={aceStepTrainForm.rank} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, rank: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Alpha</Label>
+                        <Input value={aceStepTrainForm.alpha} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, alpha: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Dropout</Label>
+                        <Input value={aceStepTrainForm.dropout} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, dropout: event.target.value }))} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Linear dim</Label>
+                        <Input value={aceStepTrainForm.lokr_linear_dim} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, lokr_linear_dim: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Linear alpha</Label>
+                        <Input value={aceStepTrainForm.lokr_linear_alpha} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, lokr_linear_alpha: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Factor</Label>
+                        <Input value={aceStepTrainForm.lokr_factor} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, lokr_factor: event.target.value }))} />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={aceStepTrainForm.lokr_weight_decompose} onCheckedChange={(checked) => setAceStepTrainForm((prev) => ({ ...prev, lokr_weight_decompose: checked }))} />
+                        Weight decompose
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={aceStepTrainForm.lokr_decompose_both} onCheckedChange={(checked) => setAceStepTrainForm((prev) => ({ ...prev, lokr_decompose_both: checked }))} />
+                        Decompose both
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={aceStepTrainForm.lokr_use_tucker} onCheckedChange={(checked) => setAceStepTrainForm((prev) => ({ ...prev, lokr_use_tucker: checked }))} />
+                        Tucker
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <Switch checked={aceStepTrainForm.lokr_use_scalar} onCheckedChange={(checked) => setAceStepTrainForm((prev) => ({ ...prev, lokr_use_scalar: checked }))} />
+                        Scalar
+                      </label>
+                    </div>
+                  )}
+
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      Advanced training settings
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="grid grid-cols-1 gap-3 border-t border-line px-3 py-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Device</Label>
+                        <Input value={aceStepTrainForm.device} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, device: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Precision</Label>
+                        <Select value={aceStepTrainForm.precision} onValueChange={(precision) => setAceStepTrainForm((prev) => ({ ...prev, precision: precision as "auto" | "bf16" | "fp16" | "fp32" }))}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">auto</SelectItem>
+                            <SelectItem value="bf16">bf16</SelectItem>
+                            <SelectItem value="fp16">fp16</SelectItem>
+                            <SelectItem value="fp32">fp32</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <label className="flex items-end gap-2 pb-2 text-xs text-ink-muted">
+                        <Switch checked={aceStepTrainForm.gradient_checkpointing} onCheckedChange={(checked) => setAceStepTrainForm((prev) => ({ ...prev, gradient_checkpointing: checked }))} />
+                        Gradient checkpointing
+                      </label>
+                    </div>
+                  </details>
+
+                  <Button
+                    disabled={
+                      loading ||
+                      !aceStepAvailable ||
+                      !aceStepTrainForm.output_name.trim() ||
+                      (aceStepTrainSource === "tensors" && !aceStepTrainForm.tensor_dir.trim()) ||
+                      (aceStepTrainSource === "audio_dir" && !aceStepTrainForm.audio_dir.trim()) ||
+                      (aceStepTrainSource === "dataset_json" && !aceStepTrainForm.dataset_json.trim())
+                    }
+                    type="submit"
+                    className="self-start"
+                  >
+                    {loading ? t("common.loading", "처리 중…") : t("ace.train.submit", "LoRA / LoKr 학습 시작")}
+                  </Button>
+                </form>
+              </WorkspaceCard>
+            ) : null}
+
+            {currentAceStepMode === "lora_train" && aceStepTrainResult ? (
+              <WorkspaceCard>
+                <WorkspaceResultHeader title={t("ace.train.result", "학습 결과")} badge={aceStepTrainResult.status} />
+                <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-2">
+                  <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
+                    <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Output</span>
+                    <span className="break-all text-ink">{aceStepTrainResult.output_dir || "-"}</span>
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
+                    <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Adapter</span>
+                    <span className="break-all text-ink">{aceStepTrainResult.final_adapter_path || "-"}</span>
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
+                    <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Tensor directory</span>
+                    <span className="break-all text-ink">{aceStepTrainResult.tensor_dir || "-"}</span>
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
+                    <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Log</span>
+                    <span className="break-all text-ink">{aceStepTrainResult.log_path || "-"}</span>
+                  </div>
+                </div>
+                {aceStepTrainResult.final_adapter_path ? (
+                  <Button
+                    variant="outline"
+                    className="mt-3 self-start"
+                    type="button"
+                    onClick={() => setAceStepCommonForm((prev) => ({ ...prev, lora_path: aceStepTrainResult.final_adapter_path || prev.lora_path }))}
+                  >
+                    {t("ace.train.useAdapter", "생성 LoRA로 선택")}
+                  </Button>
+                ) : null}
               </WorkspaceCard>
             ) : null}
 
