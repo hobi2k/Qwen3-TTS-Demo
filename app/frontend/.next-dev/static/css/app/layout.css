@@ -5454,6 +5454,9 @@ http://scripts.sil.org/OFL
   .my-1 {
     margin-block: calc(var(--spacing) * 1);
   }
+  .mt-0 {
+    margin-top: calc(var(--spacing) * 0);
+  }
   .mt-1 {
     margin-top: calc(var(--spacing) * 1);
   }
@@ -5651,6 +5654,9 @@ http://scripts.sil.org/OFL
   .h-16 {
     height: calc(var(--spacing) * 16);
   }
+  .h-40 {
+    height: calc(var(--spacing) * 40);
+  }
   .h-\[360px\] {
     height: 360px;
   }
@@ -5690,6 +5696,9 @@ http://scripts.sil.org/OFL
   .max-h-\[300px\] {
     max-height: 300px;
   }
+  .min-h-9 {
+    min-height: calc(var(--spacing) * 9);
+  }
   .min-h-10 {
     min-height: calc(var(--spacing) * 10);
   }
@@ -5698,6 +5707,9 @@ http://scripts.sil.org/OFL
   }
   .min-h-16 {
     min-height: calc(var(--spacing) * 16);
+  }
+  .min-h-40 {
+    min-height: calc(var(--spacing) * 40);
   }
   .min-h-\[64px\] {
     min-height: 64px;
@@ -5717,6 +5729,9 @@ http://scripts.sil.org/OFL
   .min-h-\[200px\] {
     min-height: 200px;
   }
+  .min-h-\[228px\] {
+    min-height: 228px;
+  }
   .w-1 {
     width: calc(var(--spacing) * 1);
   }
@@ -5734,6 +5749,9 @@ http://scripts.sil.org/OFL
   }
   .w-72 {
     width: calc(var(--spacing) * 72);
+  }
+  .w-\[168px\] {
+    width: 168px;
   }
   .w-fit {
     width: fit-content;
@@ -5856,6 +5874,9 @@ http://scripts.sil.org/OFL
   .resize {
     resize: both;
   }
+  .resize-none {
+    resize: none;
+  }
   .resize-y {
     resize: vertical;
   }
@@ -5906,6 +5927,9 @@ http://scripts.sil.org/OFL
   }
   .items-start {
     align-items: flex-start;
+  }
+  .items-stretch {
+    align-items: stretch;
   }
   .justify-between {
     justify-content: space-between;
@@ -7955,6 +7979,11 @@ http://scripts.sil.org/OFL
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
+  .sm\:grid-cols-5 {
+    @media (width >= 40rem) {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
   .sm\:flex-row {
     @media (width >= 40rem) {
       flex-direction: row;
@@ -7969,6 +7998,11 @@ http://scripts.sil.org/OFL
     @media (width >= 40rem) {
       border-top-style: var(--tw-border-style);
       border-top-width: 0px;
+    }
+  }
+  .sm\:pt-\[22px\] {
+    @media (width >= 40rem) {
+      padding-top: 22px;
     }
   }
   .sm\:text-left {

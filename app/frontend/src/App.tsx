@@ -157,6 +157,14 @@ const ACE_STEP_STYLE_PRESETS = [
   },
 ] as const;
 
+type SoundEffectPromptLanguage = "ko" | "ja" | "en";
+
+const SOUND_EFFECT_PROMPT_LANGUAGES: Array<{ value: SoundEffectPromptLanguage; label: string }> = [
+  { value: "ko", label: "한국어" },
+  { value: "ja", label: "日本語" },
+  { value: "en", label: "English" },
+];
+
 function PromptSummaryCard({
   title,
   prompt,
@@ -306,6 +314,152 @@ function AudioUploadField({
         {buttonLabel}
       </button>
       <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{statusLabel}</span>
+    </div>
+  );
+}
+
+const ACE_VOCAL_LANGUAGE_OPTIONS = [
+  { value: "unknown", label: "Auto / unknown" },
+  { value: "English", label: "English" },
+  { value: "Korean", label: "Korean" },
+  { value: "Japanese", label: "Japanese" },
+  { value: "Chinese", label: "Chinese" },
+  { value: "Cantonese", label: "Cantonese" },
+  { value: "Spanish", label: "Spanish" },
+  { value: "French", label: "French" },
+  { value: "German", label: "German" },
+  { value: "Italian", label: "Italian" },
+  { value: "Portuguese", label: "Portuguese" },
+  { value: "Russian", label: "Russian" },
+];
+
+type AceCommonGenerationForm = {
+  audio_duration: string;
+  infer_step: string;
+  guidance_scale: string;
+  manual_seeds: string;
+  bpm: string;
+  keyscale: string;
+  timesignature: string;
+  batch_size: string;
+  audio_format: string;
+  instrumental: boolean;
+};
+
+function AcePromptLaneGrid({
+  prompt,
+  lyrics,
+  vocalLanguage,
+  lyricsOptional = false,
+  onPromptChange,
+  onLyricsChange,
+  onVocalLanguageChange,
+}: {
+  prompt: string;
+  lyrics: string;
+  vocalLanguage: string;
+  lyricsOptional?: boolean;
+  onPromptChange: (value: string) => void;
+  onLyricsChange: (value: string) => void;
+  onVocalLanguageChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+      <section className="flex min-h-[228px] flex-col gap-2 rounded-md border border-line bg-canvas/60 p-3">
+        <div className="flex min-h-9 items-center gap-2">
+          <b className="font-mono text-xs uppercase tracking-allcaps text-accent-ink">STYLE</b>
+          <span className="text-[10px] text-ink-subtle">prompt lane</span>
+        </div>
+        <Textarea
+          className="h-40 min-h-40 flex-1 resize-none border-line bg-canvas"
+          value={prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+        />
+      </section>
+      <section className="flex min-h-[228px] flex-col gap-2 rounded-md border border-line bg-canvas/60 p-3">
+        <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <b className="font-mono text-xs uppercase tracking-allcaps text-accent-ink">LYRICS</b>
+            <span className="text-[10px] text-ink-subtle">vocal lane{lyricsOptional ? " · optional" : ""}</span>
+          </div>
+          <Select value={vocalLanguage || "unknown"} onValueChange={onVocalLanguageChange}>
+            <SelectTrigger className="h-8 w-[168px]">
+              <SelectValue placeholder="Vocal language" />
+            </SelectTrigger>
+            <SelectContent>
+              {ACE_VOCAL_LANGUAGE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Textarea
+          className="h-40 min-h-40 flex-1 resize-none border-line bg-canvas"
+          value={lyrics}
+          onChange={(event) => onLyricsChange(event.target.value)}
+        />
+      </section>
+    </div>
+  );
+}
+
+function AceCommonGenerationControls({
+  form,
+  onChange,
+}: {
+  form: AceCommonGenerationForm;
+  onChange: (patch: Partial<AceCommonGenerationForm>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-line bg-canvas/60 p-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Duration</Label>
+          <Input value={form.audio_duration} onChange={(event) => onChange({ audio_duration: event.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Steps</Label>
+          <Input value={form.infer_step} onChange={(event) => onChange({ infer_step: event.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Guidance</Label>
+          <Input value={form.guidance_scale} onChange={(event) => onChange({ guidance_scale: event.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Seed</Label>
+          <Input value={form.manual_seeds} onChange={(event) => onChange({ manual_seeds: event.target.value })} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">BPM</Label>
+          <Input placeholder="auto" value={form.bpm} onChange={(event) => onChange({ bpm: event.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Key</Label>
+          <Input placeholder="auto" value={form.keyscale} onChange={(event) => onChange({ keyscale: event.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Time signature</Label>
+          <Input placeholder="auto" value={form.timesignature} onChange={(event) => onChange({ timesignature: event.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">Format</Label>
+          <Select value={form.audio_format || undefined} onValueChange={(audio_format) => onChange({ audio_format })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="wav">wav</SelectItem>
+              <SelectItem value="flac">flac</SelectItem>
+              <SelectItem value="mp3">mp3</SelectItem>
+              <SelectItem value="ogg">ogg</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="m-0 flex min-h-9 items-center gap-2 self-end text-xs text-ink-muted">
+          <Switch checked={form.instrumental} onCheckedChange={(instrumental) => onChange({ instrumental })} />
+          Instrumental
+        </label>
+      </div>
     </div>
   );
 }
@@ -589,6 +743,13 @@ function StudioApp() {
     prompt: "Korean city pop, warm analog synths, clean female vocal, night drive, glossy drums, melodic bass",
     lyrics:
       "[verse]\n오늘 밤도 불빛은 천천히 흐르고\n창밖의 도시는 말없이 반짝여\n\n[chorus]\n우린 멀리 가도 같은 노래를 기억해\n끝나지 않을 밤처럼 다시 시작해",
+    vocal_language: "Korean",
+    instrumental: false,
+    bpm: "",
+    keyscale: "",
+    timesignature: "",
+    batch_size: "1",
+    audio_format: "wav",
     audio_duration: "60",
     infer_step: "27",
     guidance_scale: "15",
@@ -633,6 +794,9 @@ function StudioApp() {
     repainting_end: "-1",
     repaint_mode: "balanced",
     repaint_strength: "0.5",
+    chunk_mask_mode: "auto",
+    repaint_latent_crossfade_frames: "10",
+    repaint_wav_crossfade_sec: "0.0",
   });
   const [aceStepExtendForm, setAceStepExtendForm] = useState({
     complete_tracks: "vocals,drums,bass,guitar",
@@ -649,7 +813,7 @@ function StudioApp() {
   const [aceStepCreateSampleForm, setAceStepCreateSampleForm] = useState({
     query: "a soft Bengali love song for a quiet evening",
     instrumental: false,
-    vocal_language: "",
+    vocal_language: "unknown",
   });
   const [aceStepUnderstandResult, setAceStepUnderstandResult] = useState<AceStepUnderstandResponse | null>(null);
   const [voiceChangerForm, setVoiceChangerForm] = useState({
@@ -693,6 +857,7 @@ function StudioApp() {
     index_algorithm: "Auto",
     checkpointing: true,
   });
+  const [rvcTrainSource, setRvcTrainSource] = useState<"gallery" | "folder">("gallery");
   const [rvcTrainAudioPaths, setRvcTrainAudioPaths] = useState<string[]>([]);
   const [lastRvcTrainingResult, setLastRvcTrainingResult] = useState<string>("");
   const [audioConvertForm, setAudioConvertForm] = useState({
@@ -1122,10 +1287,11 @@ function StudioApp() {
   const selectedDatasetSampleAssets = datasetSamples
     .filter((sample) => sample.audio_path.trim())
     .map((sample, index) => ({ sample, index, asset: audioAssetByPath.get(sample.audio_path) ?? null }));
+  const rvcTrainSourceReady = rvcTrainSource === "gallery" ? rvcTrainAudioPaths.length > 0 : Boolean(rvcTrainForm.dataset_path.trim());
   const filteredSoundEffectLibrary = SOUND_EFFECT_LIBRARY.filter((item) => {
     const query = audioEffectsSearch.trim().toLowerCase();
     if (!query) return true;
-    return `${item.title} ${item.subtitle} ${item.prompt}`.toLowerCase().includes(query);
+    return `${item.title} ${item.subtitle} ${item.prompt} ${Object.values(item.prompts || {}).join(" ")}`.toLowerCase().includes(query);
   });
   function updateDatasetSample(
     index: number,
@@ -1363,13 +1529,13 @@ function StudioApp() {
     });
   }
 
-  function applySoundEffectRecipe(item: { prompt: string; profile?: string; duration?: string }) {
+  function applySoundEffectRecipe(item: { prompt: string; prompts?: Partial<Record<SoundEffectPromptLanguage, string>>; profile?: string; duration?: string }, promptLanguage: SoundEffectPromptLanguage) {
     const seconds = item.duration?.includes(":")
       ? Number(item.duration.split(":").pop() || "4")
       : Number(item.duration || soundEffectForm.duration_sec);
     setSoundEffectForm((prev) => ({
       ...prev,
-      prompt: item.prompt,
+      prompt: item.prompts?.[promptLanguage] || item.prompt,
       model_profile: item.profile || prev.model_profile,
       duration_sec: Number.isFinite(seconds) && seconds > 0 ? String(seconds) : prev.duration_sec,
     }));
@@ -1432,6 +1598,14 @@ function StudioApp() {
         output_name: aceStepForm.output_name,
         prompt: aceStepForm.prompt,
         lyrics: aceStepForm.lyrics,
+        vocal_language: aceStepForm.vocal_language || "unknown",
+        use_cot_language: (aceStepForm.vocal_language || "unknown") === "unknown",
+        instrumental: aceStepForm.instrumental,
+        bpm: aceStepForm.bpm ? Number(aceStepForm.bpm) : null,
+        keyscale: aceStepForm.keyscale,
+        timesignature: aceStepForm.timesignature,
+        batch_size: Number(aceStepForm.batch_size || "1"),
+        audio_format: aceStepForm.audio_format,
         audio_duration: Number(aceStepForm.audio_duration || "60"),
         infer_step: Number(aceStepForm.infer_step || "27"),
         guidance_scale: Number(aceStepForm.guidance_scale || "15"),
@@ -1476,11 +1650,19 @@ function StudioApp() {
       caption: aceStepForm.prompt,
       prompt: aceStepForm.prompt,
       lyrics: aceStepForm.lyrics,
+      vocal_language: aceStepForm.vocal_language || "unknown",
+      use_cot_language: (aceStepForm.vocal_language || "unknown") === "unknown",
+      instrumental: aceStepForm.instrumental,
+      bpm: aceStepForm.bpm ? Number(aceStepForm.bpm) : null,
+      keyscale: aceStepForm.keyscale,
+      timesignature: aceStepForm.timesignature,
       duration: Number(aceStepForm.audio_duration || "60"),
       inference_steps: Number(aceStepForm.infer_step || "27"),
       guidance_scale: Number(aceStepForm.guidance_scale || "15"),
       seeds: seedsRaw,
       use_random_seed: !seedsRaw,
+      batch_size: Number(aceStepForm.batch_size || "1"),
+      audio_format: aceStepForm.audio_format,
       cpu_offload: aceStepForm.cpu_offload,
       compile_model: aceStepForm.torch_compile,
       config_path: aceStepCommonForm.config_path || undefined,
@@ -1523,6 +1705,9 @@ function StudioApp() {
         repainting_end: Number(aceStepRepaintForm.repainting_end || "-1"),
         repaint_mode: aceStepRepaintForm.repaint_mode as "balanced" | "conservative" | "aggressive",
         repaint_strength: Number(aceStepRepaintForm.repaint_strength || "0.5"),
+        chunk_mask_mode: aceStepRepaintForm.chunk_mask_mode as "auto" | "explicit",
+        repaint_latent_crossfade_frames: Number(aceStepRepaintForm.repaint_latent_crossfade_frames || "10"),
+        repaint_wav_crossfade_sec: Number(aceStepRepaintForm.repaint_wav_crossfade_sec || "0"),
       });
       setLastAceStepRecord(response.record);
       await refreshAll();
@@ -1606,7 +1791,7 @@ function StudioApp() {
       const result = await api.aceStepCreateSample({
         query: aceStepCreateSampleForm.query,
         instrumental: aceStepCreateSampleForm.instrumental,
-        vocal_language: aceStepCreateSampleForm.vocal_language || undefined,
+        vocal_language: aceStepCreateSampleForm.vocal_language === "unknown" ? undefined : aceStepCreateSampleForm.vocal_language,
         config_path: aceStepCommonForm.config_path || undefined,
         lm_model_path: aceStepCommonForm.lm_model_path || undefined,
       });
@@ -1628,6 +1813,11 @@ function StudioApp() {
       const result = await api.aceStepFormatSample({
         caption: aceStepForm.prompt,
         lyrics: aceStepForm.lyrics,
+        bpm: aceStepForm.bpm.trim() ? Number(aceStepForm.bpm) : undefined,
+        duration: aceStepForm.audio_duration.trim() ? Number(aceStepForm.audio_duration) : undefined,
+        keyscale: aceStepForm.keyscale,
+        timesignature: aceStepForm.timesignature,
+        vocal_language: aceStepForm.vocal_language === "unknown" ? undefined : aceStepForm.vocal_language,
         config_path: aceStepCommonForm.config_path || undefined,
         lm_model_path: aceStepCommonForm.lm_model_path || undefined,
       });
@@ -1739,11 +1929,17 @@ function StudioApp() {
 
   async function handleRvcTrainSubmit(event?: FormEvent) {
     event?.preventDefault();
+    const datasetPath = rvcTrainSource === "folder" ? rvcTrainForm.dataset_path.trim() : "";
+    const audioPaths = rvcTrainSource === "gallery" ? rvcTrainAudioPaths : [];
+    if (!datasetPath && audioPaths.length === 0) {
+      setMessage(rvcTrainSource === "gallery" ? t("applio_train.gallery.empty", "아직 선택한 학습 음성이 없습니다.") : t("applio_train.datasetRequired", "학습할 WAV 폴더 경로를 입력하세요."));
+      return;
+    }
     await runAction(async () => {
       const result = await api.trainRvcModel({
         model_name: rvcTrainForm.model_name,
-        dataset_path: rvcTrainForm.dataset_path,
-        audio_paths: rvcTrainAudioPaths,
+        dataset_path: datasetPath,
+        audio_paths: audioPaths,
         sample_rate: Number(rvcTrainForm.sample_rate || "40000"),
         total_epoch: Number(rvcTrainForm.total_epoch || "100"),
         batch_size: Number(rvcTrainForm.batch_size || "4"),
@@ -4499,7 +4695,7 @@ function StudioApp() {
             eyebrow={t("effects.eyebrow", "SOUND EFFECTS")}
             eyebrowIcon={Volume2}
             title={t("effects.title", "사운드 효과")}
-            subtitle={t("effects.subtitle", "영어 프롬프트와 길이, 강도를 직접 조절해 효과음을 생성합니다.")}
+            subtitle={t("effects.subtitle", "한국어, 일본어, 영어 프롬프트와 길이, 강도를 직접 조절해 효과음을 생성합니다.")}
             action={{
               label: t("effects.action.generate", "생성"),
               formId: "sound-effects-form",
@@ -4531,12 +4727,22 @@ function StudioApp() {
                           </strong>
                           <p className="text-xs text-ink-muted line-clamp-1">{item.subtitle}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                           <span className="font-mono text-[10px] text-ink-subtle">{item.duration}</span>
                           <MiniWaveform />
-                          <Button variant="outline" size="sm" onClick={() => applySoundEffectRecipe(item)} type="button">
-                            {t("effects.usePrompt", "Use prompt")}
-                          </Button>
+                          <span className="ml-1 font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("effects.usePrompt", "Use prompt")}</span>
+                          {SOUND_EFFECT_PROMPT_LANGUAGES.map((promptLanguage) => (
+                            <Button
+                              key={`${item.id}-${promptLanguage.value}`}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-[11px]"
+                              onClick={() => applySoundEffectRecipe(item, promptLanguage.value)}
+                              type="button"
+                            >
+                              {promptLanguage.label}
+                            </Button>
+                          ))}
                         </div>
                       </article>
                     ))}
@@ -4564,7 +4770,7 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Prompt</Label>
                     <Textarea
-                      placeholder={t("effects.prompt.placeholder", "Write the sound prompt in English.")}
+                      placeholder={t("effects.prompt.placeholder", "한국어, 일본어, 영어 중 원하는 언어로 효과음 프롬프트를 입력하세요.")}
                       value={soundEffectForm.prompt}
                       onChange={(event) => setSoundEffectForm({ ...soundEffectForm, prompt: event.target.value })}
                       className="min-h-[80px] resize-y border-line bg-canvas"
@@ -4714,7 +4920,7 @@ function StudioApp() {
             </WorkspaceCard>
           ) : null}
 
-          {currentAceStepMode !== "text2music" ? (
+          {currentAceStepMode !== "create_sample" && currentAceStepMode !== "format_sample" ? (
             <WorkspaceCard className="flex flex-col gap-3">
               <h3 className="text-sm font-medium text-ink">{t("ace.model.title", "Model & LoRA")}</h3>
               <p className="text-xs text-ink-muted">{t("ace.model.subtitle", "모델을 비워두면 다운로드된 turbo 계열을 우선 사용합니다. LoRA는 특정 스타일을 더 강하게 입힐 때만 선택하세요.")}</p>
@@ -4824,30 +5030,14 @@ function StudioApp() {
                   ))}
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                  <section className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
-                    <div className="flex items-baseline gap-2">
-                      <b className="text-xs font-mono uppercase tracking-allcaps text-accent-ink">STYLE</b>
-                      <span className="text-[10px] text-ink-subtle">prompt lane</span>
-                    </div>
-                    <Textarea
-                      className="min-h-[120px] resize-y border-line bg-canvas"
-                      value={aceStepForm.prompt}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })}
-                    />
-                  </section>
-                  <section className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
-                    <div className="flex items-baseline gap-2">
-                      <b className="text-xs font-mono uppercase tracking-allcaps text-accent-ink">LYRICS</b>
-                      <span className="text-[10px] text-ink-subtle">vocal lane</span>
-                    </div>
-                    <Textarea
-                      className="min-h-[120px] resize-y border-line bg-canvas"
-                      value={aceStepForm.lyrics}
-                      onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })}
-                    />
-                  </section>
-                </div>
+                <AcePromptLaneGrid
+                  prompt={aceStepForm.prompt}
+                  lyrics={aceStepForm.lyrics}
+                  vocalLanguage={aceStepForm.vocal_language}
+                  onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                  onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                  onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                />
 
                 <div className="relative h-12 overflow-hidden rounded-md border border-line bg-canvas/60" aria-hidden="true">
                   <div className="flex h-full items-end justify-between gap-px px-1 py-1">
@@ -4857,24 +5047,10 @@ function StudioApp() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Duration</Label>
-                    <Input value={aceStepForm.audio_duration} onChange={(event) => setAceStepForm({ ...aceStepForm, audio_duration: event.target.value })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Steps</Label>
-                    <Input value={aceStepForm.infer_step} onChange={(event) => setAceStepForm({ ...aceStepForm, infer_step: event.target.value })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Guidance</Label>
-                    <Input value={aceStepForm.guidance_scale} onChange={(event) => setAceStepForm({ ...aceStepForm, guidance_scale: event.target.value })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Seed</Label>
-                    <Input value={aceStepForm.manual_seeds} onChange={(event) => setAceStepForm({ ...aceStepForm, manual_seeds: event.target.value })} />
-                  </div>
-                </div>
+                <AceCommonGenerationControls
+                  form={aceStepForm}
+                  onChange={(patch) => setAceStepForm((prev) => ({ ...prev, ...patch }))}
+                />
 
                 <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
                   <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
@@ -4990,16 +5166,19 @@ function StudioApp() {
             {currentAceStepMode === "cover" ? (
               <WorkspaceCard>
                 <form className="flex flex-col gap-4" onSubmit={handleAceStepCoverSubmit}>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
-                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Lyrics ({t("ace.optional", "선택")})</Label>
-                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.lyrics} onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })} />
-                    </div>
-                  </div>
+                  <AcePromptLaneGrid
+                    prompt={aceStepForm.prompt}
+                    lyrics={aceStepForm.lyrics}
+                    vocalLanguage={aceStepForm.vocal_language}
+                    lyricsOptional
+                    onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                    onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                    onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                  />
+                  <AceCommonGenerationControls
+                    form={aceStepForm}
+                    onChange={(patch) => setAceStepForm((prev) => ({ ...prev, ...patch }))}
+                  />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">{t("ace.cover.strength", "Cover strength (0=완전 새로, 1=원곡 가깝게)")}</Label>
@@ -5020,16 +5199,18 @@ function StudioApp() {
             {currentAceStepMode === "repaint" ? (
               <WorkspaceCard>
                 <form className="flex flex-col gap-4" onSubmit={handleAceStepRepaintSubmit}>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
-                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Lyrics</Label>
-                      <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.lyrics} onChange={(event) => setAceStepForm({ ...aceStepForm, lyrics: event.target.value })} />
-                    </div>
-                  </div>
+                  <AcePromptLaneGrid
+                    prompt={aceStepForm.prompt}
+                    lyrics={aceStepForm.lyrics}
+                    vocalLanguage={aceStepForm.vocal_language}
+                    onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                    onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                    onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                  />
+                  <AceCommonGenerationControls
+                    form={aceStepForm}
+                    onChange={(patch) => setAceStepForm((prev) => ({ ...prev, ...patch }))}
+                  />
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">{t("ace.repaint.start", "Repaint start (초)")}</Label>
@@ -5055,6 +5236,26 @@ function StudioApp() {
                       <Input value={aceStepRepaintForm.repaint_strength} onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_strength: event.target.value })} />
                     </div>
                   </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Chunk mask mode</Label>
+                      <Select value={aceStepRepaintForm.chunk_mask_mode || undefined} onValueChange={(value) => setAceStepRepaintForm({ ...aceStepRepaintForm, chunk_mask_mode: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">auto</SelectItem>
+                          <SelectItem value="explicit">explicit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Latent crossfade frames</Label>
+                      <Input value={aceStepRepaintForm.repaint_latent_crossfade_frames} onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_latent_crossfade_frames: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">WAV crossfade sec</Label>
+                      <Input value={aceStepRepaintForm.repaint_wav_crossfade_sec} onChange={(event) => setAceStepRepaintForm({ ...aceStepRepaintForm, repaint_wav_crossfade_sec: event.target.value })} />
+                    </div>
+                  </div>
                   <Button disabled={loading || !aceStepAvailable || !aceStepAudioForm.src_audio} type="submit" className="self-start">
                     {t("ace.repaint.submit", "Repaint 생성")}
                   </Button>
@@ -5065,10 +5266,19 @@ function StudioApp() {
             {currentAceStepMode === "extend" ? (
               <WorkspaceCard>
                 <form className="flex flex-col gap-4" onSubmit={handleAceStepExtendSubmit}>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
-                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
-                  </div>
+                  <AcePromptLaneGrid
+                    prompt={aceStepForm.prompt}
+                    lyrics={aceStepForm.lyrics}
+                    vocalLanguage={aceStepForm.vocal_language}
+                    lyricsOptional
+                    onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                    onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                    onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                  />
+                  <AceCommonGenerationControls
+                    form={aceStepForm}
+                    onChange={(patch) => setAceStepForm((prev) => ({ ...prev, ...patch }))}
+                  />
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("ace.extend.tracks", "Tracks (콤마로 구분)")}</Label>
                     <Input value={aceStepExtendForm.complete_tracks} onChange={(event) => setAceStepExtendForm({ ...aceStepExtendForm, complete_tracks: event.target.value })} />
@@ -5104,10 +5314,19 @@ function StudioApp() {
             {currentAceStepMode === "lego" ? (
               <WorkspaceCard>
                 <form className="flex flex-col gap-4" onSubmit={handleAceStepLegoSubmit}>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
-                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
-                  </div>
+                  <AcePromptLaneGrid
+                    prompt={aceStepForm.prompt}
+                    lyrics={aceStepForm.lyrics}
+                    vocalLanguage={aceStepForm.vocal_language}
+                    lyricsOptional
+                    onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                    onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                    onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                  />
+                  <AceCommonGenerationControls
+                    form={aceStepForm}
+                    onChange={(patch) => setAceStepForm((prev) => ({ ...prev, ...patch }))}
+                  />
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Track</Label>
                     <Select value={aceStepLegoForm.lego_track || undefined} onValueChange={(value) => setAceStepLegoForm({ ...aceStepLegoForm, lego_track: value })}>
@@ -5129,10 +5348,19 @@ function StudioApp() {
             {currentAceStepMode === "complete" ? (
               <WorkspaceCard>
                 <form className="flex flex-col gap-4" onSubmit={handleAceStepCompleteSubmit}>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Style prompt</Label>
-                    <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepForm.prompt} onChange={(event) => setAceStepForm({ ...aceStepForm, prompt: event.target.value })} />
-                  </div>
+                  <AcePromptLaneGrid
+                    prompt={aceStepForm.prompt}
+                    lyrics={aceStepForm.lyrics}
+                    vocalLanguage={aceStepForm.vocal_language}
+                    lyricsOptional
+                    onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                    onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                    onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                  />
+                  <AceCommonGenerationControls
+                    form={aceStepForm}
+                    onChange={(patch) => setAceStepForm((prev) => ({ ...prev, ...patch }))}
+                  />
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("ace.complete.tracks", "Tracks (콤마로 구분)")}</Label>
                     <Input value={aceStepCompleteForm.complete_tracks} onChange={(event) => setAceStepCompleteForm({ ...aceStepCompleteForm, complete_tracks: event.target.value })} />
@@ -5161,21 +5389,29 @@ function StudioApp() {
                     <Label className="text-xs font-medium text-ink-muted">Query</Label>
                     <Textarea className="min-h-[100px] resize-y border-line bg-canvas" value={aceStepCreateSampleForm.query} onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, query: event.target.value })} />
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-wrap items-end gap-3">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Vocal language ({t("ace.optional", "선택")})</Label>
-                      <Input
-                        placeholder={t("ace.create.vocalPlaceholder", "예: ko, en, ja")}
-                        value={aceStepCreateSampleForm.vocal_language}
-                        onChange={(event) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, vocal_language: event.target.value })}
-                      />
+                      <Select
+                        value={aceStepCreateSampleForm.vocal_language || "unknown"}
+                        onValueChange={(vocal_language) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, vocal_language })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Vocal language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ACE_VOCAL_LANGUAGE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <label className="flex items-center gap-2 self-end text-xs text-ink-muted">
+                    <label className="m-0 flex h-10 items-center gap-2 text-xs text-ink-muted">
                       <Switch
                         checked={aceStepCreateSampleForm.instrumental}
                         onCheckedChange={(checked) => setAceStepCreateSampleForm({ ...aceStepCreateSampleForm, instrumental: checked })}
                       />
-                      Instrumental
+                      <span>Instrumental</span>
                     </label>
                   </div>
                   <Button disabled={loading || !aceStepAvailable} type="submit" className="self-start">
@@ -5191,9 +5427,36 @@ function StudioApp() {
                   <p className="text-xs text-ink-muted">
                     {t("ace.format.body", "이 기능은 오디오를 바꾸는 기능이 아닙니다. 현재 작곡 폼의 Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬고, 정리된 결과를 다시 작곡 폼에 반영합니다.")}
                   </p>
-                  <Button disabled={loading || !aceStepAvailable} type="submit" className="self-start">
-                    {t("ace.format.submit", "작곡 입력 정리")}
+                  <AcePromptLaneGrid
+                    prompt={aceStepForm.prompt}
+                    lyrics={aceStepForm.lyrics}
+                    vocalLanguage={aceStepForm.vocal_language}
+                    onPromptChange={(prompt) => setAceStepForm((prev) => ({ ...prev, prompt }))}
+                    onLyricsChange={(lyrics) => setAceStepForm((prev) => ({ ...prev, lyrics }))}
+                    onVocalLanguageChange={(vocal_language) => setAceStepForm((prev) => ({ ...prev, vocal_language }))}
+                  />
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Duration</Label>
+                      <Input value={aceStepForm.audio_duration} onChange={(event) => setAceStepForm({ ...aceStepForm, audio_duration: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">BPM</Label>
+                      <Input placeholder="auto" value={aceStepForm.bpm} onChange={(event) => setAceStepForm({ ...aceStepForm, bpm: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Key</Label>
+                      <Input placeholder="auto" value={aceStepForm.keyscale} onChange={(event) => setAceStepForm({ ...aceStepForm, keyscale: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Time signature</Label>
+                      <Input placeholder="auto" value={aceStepForm.timesignature} onChange={(event) => setAceStepForm({ ...aceStepForm, timesignature: event.target.value })} />
+                    </div>
+                  </div>
+                  <Button disabled={loading || !aceStepAvailable || (!aceStepForm.prompt.trim() && !aceStepForm.lyrics.trim())} type="submit" className="self-start">
+                    {loading ? t("common.loading", "처리 중…") : t("ace.format.submit", "작곡 입력 정리")}
                   </Button>
+                  {loading ? <p className="text-xs text-ink-muted">{t("ace.format.running", "ACE-Step LM이 입력을 정리하는 중입니다. 모델 로딩이 필요하면 잠시 걸릴 수 있습니다.")}</p> : null}
                 </form>
               </WorkspaceCard>
             ) : null}
@@ -5240,7 +5503,7 @@ function StudioApp() {
             action={{
               label: t("applio_train.action.create", "RVC 모델 만들기"),
               formId: "applio-train-form",
-              disabled: loading || !rvcTrainForm.model_name || (!rvcTrainForm.dataset_path && !rvcTrainAudioPaths.length),
+              disabled: loading || !rvcTrainForm.model_name || !rvcTrainSourceReady,
               loading,
             }}
           />
@@ -5250,66 +5513,87 @@ function StudioApp() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-2">
                 <div className="rounded-md border border-line bg-canvas/60 p-3">
                   <strong className="text-sm font-medium text-ink">{t("applio_train.requirements", "준비물")}</strong>
-                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.requirementsBody", "목표 목소리만 깨끗하게 들어 있는 WAV 폴더를 넣으세요. 같은 화자 음성 10분 이상을 권장합니다.")}</p>
+                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.requirementsBody", "목표 목소리만 깨끗하게 들어 있는 WAV를 생성 갤러리에서 고르거나, 준비된 WAV 폴더를 입력하세요. 같은 화자 음성 10분 이상을 권장합니다.")}</p>
                 </div>
                 <div className="rounded-md border border-line bg-canvas/60 p-3">
                   <strong className="text-sm font-medium text-ink">{t("applio_train.outputs", "결과물")}</strong>
                   <p className="mt-1 text-xs text-ink-muted">{t("applio_train.outputsBody", "학습이 끝나면 `.pth` 모델과 `.index`가 생기고, 변환 탭의 목소리 목록에 나타납니다.")}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
-                <div className="flex flex-col gap-2">
-                  <div>
-                    <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.title", "생성 갤러리에서 목표 음성 선택")}</strong>
-                    <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.body", "같은 화자의 깨끗한 WAV 결과를 여러 개 고르면 백엔드가 RVC 학습용 폴더를 자동으로 만듭니다.")}</p>
-                  </div>
-                  <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addRvcTrainAsset} />
-                </div>
-                <div className="rounded-md border border-line bg-canvas/60 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.selected", "선택한 학습 음성")}</strong>
-                    <Button variant="outline" size="sm" onClick={() => setRvcTrainAudioPaths([])} type="button">
-                      {t("applio_train.gallery.clear", "비우기")}
-                    </Button>
-                  </div>
-                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.count", "{n}개 선택됨").replace("{n}", String(rvcTrainAudioPaths.length))}</p>
-                  <div className="mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
-                    {selectedRvcTrainAssets.length ? selectedRvcTrainAssets.map((asset) => (
-                      <article key={asset.path} className="rounded-md border border-line bg-surface p-2">
-                        <div className="flex items-center gap-2">
-                          <div className="min-w-0 flex-1">
-                            <strong className="block truncate text-xs font-medium text-ink">{asset.filename}</strong>
-                            <span className="text-[10px] text-ink-subtle">{asset.source === "generated" ? t("applio_batch.gallery", "생성 갤러리") : t("applio_batch.upload", "업로드")}</span>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-danger hover:bg-danger/10"
-                            onClick={() => setRvcTrainAudioPaths((prev) => prev.filter((path) => path !== asset.path))}
-                            type="button"
-                          >
-                            {t("applio_batch.remove", "제거")}
-                          </Button>
-                        </div>
-                      </article>
-                    )) : (
-                      <p className="text-xs text-ink-muted">{t("applio_train.gallery.empty", "아직 선택한 학습 음성이 없습니다.")}</p>
-                    )}
-                  </div>
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">{t("applio_train.modelName", "모델 이름")}</Label>
+                <Input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, model_name: event.target.value })} />
+                <span className="text-[11px] text-ink-subtle">{t("applio_train.modelNameHint", "예: mai-rvc, narrator-clean. 화면에는 이 이름으로 표시됩니다.")}</span>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+              <Tabs value={rvcTrainSource} onValueChange={(value) => setRvcTrainSource(value as "gallery" | "folder")} className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.modelName", "모델 이름")}</Label>
-                  <Input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, model_name: event.target.value })} />
-                  <span className="text-[11px] text-ink-subtle">{t("applio_train.modelNameHint", "예: mai-rvc, narrator-clean. 화면에는 이 이름으로 표시됩니다.")}</span>
+                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.source.title", "학습 데이터 입력 방식")}</Label>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="gallery">{t("applio_train.source.gallery", "생성 갤러리")}</TabsTrigger>
+                    <TabsTrigger value="folder">{t("applio_train.source.folder", "폴더 경로")}</TabsTrigger>
+                  </TabsList>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.datasetPath", "목표 목소리 폴더")}</Label>
-                  <Input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
-                  <span className="text-[11px] text-ink-subtle">{t("applio_train.datasetHint", "이미 정리된 WAV 폴더가 있으면 직접 입력하세요. 위에서 갤러리 음성을 선택했다면 비워둬도 됩니다.")}</span>
-                </div>
-              </div>
+
+                <TabsContent value="gallery" className="mt-0">
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
+                    <div className="flex flex-col gap-2">
+                      <div>
+                        <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.title", "생성 갤러리에서 목표 음성 선택")}</strong>
+                        <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.body", "같은 화자의 깨끗한 WAV 결과를 여러 개 고르면 백엔드가 RVC 학습용 폴더를 자동으로 만듭니다.")}</p>
+                      </div>
+                      <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addRvcTrainAsset} />
+                    </div>
+                    <div className="rounded-md border border-line bg-canvas/60 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.selected", "선택한 학습 음성")}</strong>
+                        <Button variant="outline" size="sm" onClick={() => setRvcTrainAudioPaths([])} type="button">
+                          {t("applio_train.gallery.clear", "비우기")}
+                        </Button>
+                      </div>
+                      <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.count", "{n}개 선택됨").replace("{n}", String(rvcTrainAudioPaths.length))}</p>
+                      <div className="mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+                        {selectedRvcTrainAssets.length ? selectedRvcTrainAssets.map((asset) => (
+                          <article key={asset.path} className="rounded-md border border-line bg-surface p-2">
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <strong className="block truncate text-xs font-medium text-ink">{asset.filename}</strong>
+                                <span className="text-[10px] text-ink-subtle">{asset.source === "generated" ? t("applio_batch.gallery", "생성 갤러리") : t("applio_batch.upload", "업로드")}</span>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-danger hover:bg-danger/10"
+                                onClick={() => setRvcTrainAudioPaths((prev) => prev.filter((path) => path !== asset.path))}
+                                type="button"
+                              >
+                                {t("applio_batch.remove", "제거")}
+                              </Button>
+                            </div>
+                          </article>
+                        )) : (
+                          <p className="text-xs text-ink-muted">{t("applio_train.gallery.empty", "아직 선택한 학습 음성이 없습니다.")}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="folder" className="mt-0">
+                  <div className="rounded-md border border-line bg-canvas/60 p-3">
+                    <div className="flex flex-col gap-1.5">
+                      <strong className="text-sm font-medium text-ink">{t("applio_train.folder.title", "준비된 WAV 폴더 사용")}</strong>
+                      <p className="text-xs text-ink-muted">{t("applio_train.folder.body", "이미 같은 화자의 WAV 파일을 한 폴더에 정리해 둔 경우 이 경로만 사용합니다. 생성 갤러리 선택은 이 모드에서 요청에 포함되지 않습니다.")}</p>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">{t("applio_train.datasetPath", "목표 목소리 폴더")}</Label>
+                      <Input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
+                      <span className="text-[11px] text-ink-subtle">{t("applio_train.datasetHint", "이미 정리된 WAV 폴더가 있으면 직접 입력하세요.")}</span>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">{t("applio_train.sampleRate", "샘플레이트")}</Label>
