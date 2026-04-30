@@ -31,6 +31,7 @@
 16. [개인 Hugging Face 자산 mirror](./20-private-hf-assets.md)
 17. [S2-Pro 작업실](./21-s2-pro-workspace.md)
 18. [ACE-Step 작곡](./22-ace-step-music.md)
+19. [VibeVoice 작업실](./23-vibevoice-workspace.md)
 
 ## 현재 문서 맵
 
@@ -77,6 +78,8 @@
   Fish Speech S2-Pro 탭의 태그 기반 생성, 복제, 멀티 스피커, 다국어 입력 구조와 Local/API provider 운영 기준
 - [22-ace-step-music.md](./22-ace-step-music.md)
   ACE-Step 기반 음악 작곡 탭, 다운로드, 런타임 분리, 생성 갤러리 연결 구조
+- [23-vibevoice-workspace.md](./23-vibevoice-workspace.md)
+  VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS, ASR LoRA fine-tuning, vendor/model 관리 기준
 
 ### 현재 기능에서 중요한 두 문서
 
@@ -120,6 +123,12 @@
 - `Applio 모델 블렌딩`
 - `ACE-Step 작곡`
   장르/분위기/악기 태그와 가사 구조를 입력해 완성형 음악을 생성합니다.
+- `VibeVoice TTS`
+  Microsoft VibeVoice Realtime 0.5B와 1.5B long-form TTS를 별도 vendor wrapper로 실행합니다.
+- `VibeVoice ASR`
+  VibeVoice-ASR로 업로드/생성 갤러리/직접 경로 음성을 전사합니다.
+- `VibeVoice LoRA Train`
+  공식 ASR LoRA fine-tuning을 실행하고, TTS LoRA는 command template 기반 실험 경로로만 제공합니다.
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
@@ -135,6 +144,7 @@
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 - `S2-Pro`는 Qwen 모델 선택 화면에 끼워 넣지 않고 Fish Speech/Fish Audio 전용 기능별 탭으로 분리합니다.
 - `S2-Pro`의 기본 `Local S2-Pro` provider는 사용자가 별도 서버를 직접 켜는 방식이 아니라, MMAudio/Applio/ACE-Step처럼 백엔드가 관리하는 엔진 wrapper 방식입니다.
+- `VibeVoice`도 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice`를 쓰는 vendor wrapper 방식이며, 이 로컬 산출물은 git에 올리지 않습니다.
 - `MMAudio`는 Qwen 생성 흐름에 섞지 않고 사운드 효과 전용 섹션으로 분리합니다.
 - `Applio`는 하나의 전용 섹션 아래에서 RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 나눠 제공합니다.
 - `가이드`는 한 페이지 카드 묶음이 아니라 문서 목록과 본문으로 나뉜 document 화면입니다.

@@ -10,6 +10,8 @@
   "layout": {
     "models": "models/<model-dir>/...",
     "fish_speech_s2_pro": "fish-speech/s2-pro/...",
+    "vibevoice": "vibevoice/VibeVoice-ASR/..., vibevoice/VibeVoice-Realtime-0.5B/..., vibevoice/VibeVoice-1.5B/..., optional vibevoice/VibeVoice-7B/...",
+    "vibevoice_note": "VibeVoice vendor checkout and .venv-vibevoice are local runtime artifacts; only model snapshots belong in the private HF mirror.",
     "ace_step": "ace-step/...",
     "rvc": "rvc-models/<model>.pth and <model>.index",
     "mmaudio": "mmaudio/nsfw/<checkpoint>.safetensors",

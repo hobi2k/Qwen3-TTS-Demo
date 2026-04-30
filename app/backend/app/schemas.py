@@ -831,6 +831,128 @@ class MMAudioTrainingResponse(BaseModel):
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
+class VibeVoiceRuntimeResponse(BaseModel):
+    """VibeVoice vendor runtime 상태."""
+
+    available: bool = False
+    repo_root: str
+    model_root: str
+    python_executable: str
+    repo_ready: bool = False
+    asr_ready: bool = False
+    realtime_tts_ready: bool = False
+    longform_tts_ready: bool = False
+    large_tts_ready: bool = False
+    asr_model: str
+    realtime_tts_model: str
+    longform_tts_model: str
+    large_tts_model: str
+    tts_entrypoints: List[str] = Field(default_factory=list)
+    features: List[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class VibeVoiceTTSRequest(BaseModel):
+    """VibeVoice TTS 생성 요청."""
+
+    text: str = Field(..., min_length=1)
+    output_name: Optional[str] = None
+    model_profile: str = Field("realtime", pattern="^(realtime|tts_15b|1\\.5b|longform|tts_7b|7b|large)$")
+    language: str = "auto"
+    speaker_name: str = "Speaker 1"
+    speaker_audio_path: Optional[str] = None
+    speaker_names: List[str] = Field(default_factory=list)
+    speaker_audio_paths: List[str] = Field(default_factory=list)
+    speaker_prompt_text: str = ""
+    cfg_scale: float = Field(1.3, ge=0.0, le=20.0)
+    temperature: float = Field(0.95, ge=0.0, le=2.0)
+    top_p: float = Field(0.95, ge=0.0, le=1.0)
+    seed: Optional[int] = None
+    device: str = "auto"
+    precision: str = "auto"
+    attn_implementation: str = "auto"
+    inference_steps: int = Field(10, ge=1, le=200)
+    max_length_times: float = Field(2.0, ge=0.1, le=20.0)
+    disable_prefill: bool = False
+    show_progress: bool = False
+    max_new_tokens: int = Field(2048, ge=1, le=32768)
+    output_format: str = "wav"
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class VibeVoiceASRRequest(BaseModel):
+    """VibeVoice-ASR 전사 요청."""
+
+    audio_path: str = Field(..., min_length=1)
+    language: str = "auto"
+    task: str = "transcribe"
+    context_info: str = ""
+    device: str = "auto"
+    precision: str = "auto"
+    attn_implementation: str = "auto"
+    batch_size: int = Field(2, ge=1, le=64)
+    max_new_tokens: int = Field(256, ge=1, le=4096)
+    temperature: float = Field(0.0, ge=0.0, le=2.0)
+    top_p: float = Field(1.0, ge=0.0, le=1.0)
+    num_beams: int = Field(1, ge=1, le=16)
+    return_timestamps: bool = False
+
+
+class VibeVoiceASRResponse(BaseModel):
+    """VibeVoice-ASR 전사 결과."""
+
+    audio_path: str
+    text: str
+    language: Optional[str] = None
+    model_id: str = "vibevoice/asr"
+    provider: str = "vibevoice"
+    segments: List[Dict[str, Any]] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class VibeVoiceTrainingRequest(BaseModel):
+    """VibeVoice fine-tuning 실행 요청."""
+
+    training_mode: str = Field("tts_lora", pattern="^(asr_lora|tts_lora)$")
+    output_name: str = Field("vibevoice-lora", min_length=1, max_length=120)
+    model_path: str = ""
+    data_dir: str = Field(..., min_length=1)
+    output_dir: str = ""
+    nproc_per_node: int = Field(1, ge=1, le=16)
+    num_train_epochs: float = Field(3.0, gt=0.0, le=1000.0)
+    per_device_train_batch_size: int = Field(1, ge=1, le=128)
+    gradient_accumulation_steps: int = Field(4, ge=1, le=1024)
+    learning_rate: float = Field(1e-4, gt=0.0, le=1.0)
+    warmup_ratio: float = Field(0.1, ge=0.0, le=1.0)
+    weight_decay: float = Field(0.01, ge=0.0, le=1.0)
+    max_grad_norm: float = Field(1.0, ge=0.0, le=1000.0)
+    logging_steps: int = Field(10, ge=1, le=1000000)
+    save_steps: int = Field(100, ge=1, le=1000000)
+    lora_r: int = Field(16, ge=1, le=1024)
+    lora_alpha: int = Field(32, ge=1, le=4096)
+    lora_dropout: float = Field(0.05, ge=0.0, le=1.0)
+    bf16: bool = True
+    gradient_checkpointing: bool = True
+    use_customized_context: bool = True
+    max_audio_length: Optional[float] = Field(default=None, gt=0.0)
+    report_to: str = "none"
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class VibeVoiceTrainingResponse(BaseModel):
+    """VibeVoice fine-tuning 실행 결과."""
+
+    status: str
+    message: str
+    run_id: str
+    output_name: str
+    run_dir: str
+    log_path: str
+    adapter_path: Optional[str] = None
+    command: List[str] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AudioConvertRequest(BaseModel):
     """오디오 포맷/샘플레이트 변환 요청 스키마다."""
 

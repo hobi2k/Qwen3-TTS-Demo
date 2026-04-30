@@ -15,6 +15,8 @@ STEM_SEPARATOR_MODELS_DIR="${ROOT_DIR}/data/stem-separator-models"
 ACE_STEP_MODEL_DIR="${ACE_STEP_CHECKPOINT_PATH:-${ROOT_DIR}/data/models/ace-step}"
 FISH_SPEECH_DIR="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
 FISH_SPEECH_MODEL_DIR="${FISH_SPEECH_MODEL_DIR:-${ROOT_DIR}/data/models/fish-speech/s2-pro}"
+VIBEVOICE_DIR="${VIBEVOICE_REPO_ROOT:-${VENDOR_DIR}/VibeVoice}"
+VIBEVOICE_MODEL_DIR="${VIBEVOICE_MODEL_DIR:-${ROOT_DIR}/data/models/vibevoice}"
 PROFILE="${1:-all}"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
@@ -29,6 +31,7 @@ mkdir -p "${MMAUDIO_MODELS_DIR}"
 mkdir -p "${STEM_SEPARATOR_MODELS_DIR}"
 mkdir -p "${ACE_STEP_MODEL_DIR}"
 mkdir -p "${FISH_SPEECH_MODEL_DIR}"
+mkdir -p "${VIBEVOICE_MODEL_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 if [[ -f "${BACKEND_DIR}/.env" ]]; then
@@ -86,6 +89,8 @@ use_private_assets = sys.argv[5] == "1"
 profiles = {
     "ace-step": [],
     "s2pro": [],
+    "vibevoice": [],
+    "vibevoice-7b": [],
     "core": [
         ("Qwen/Qwen3-TTS-Tokenizer-12Hz", "Qwen3-TTS-Tokenizer-12Hz"),
         ("Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", "Qwen3-TTS-12Hz-0.6B-CustomVoice"),
@@ -107,7 +112,7 @@ profiles = {
 }
 
 if profile not in profiles:
-    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', 's2pro', or 'ace-step'.")
+    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', 's2pro', 'ace-step', 'vibevoice', or 'vibevoice-7b'.")
 
 for repo_id, dirname in profiles[profile]:
     local_dir = models_dir / dirname
@@ -139,6 +144,81 @@ PY
 echo
 echo "Downloaded model profile: ${PROFILE}"
 echo "Models stored in: ${MODELS_DIR}"
+
+VIBEVOICE_VENV="${VIBEVOICE_VENV:-${ROOT_DIR}/.venv-vibevoice}"
+VIBEVOICE_REPO_URL="${VIBEVOICE_REPO_URL:-https://github.com/vibevoice-community/VibeVoice.git}"
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "vibevoice-7b" ]]; then
+  if [[ ! -d "${VIBEVOICE_DIR}/.git" && ! -d "${VIBEVOICE_DIR}" ]]; then
+    echo "Cloning VibeVoice vendor repo -> ${VIBEVOICE_DIR}"
+    git clone "${VIBEVOICE_REPO_URL}" "${VIBEVOICE_DIR}"
+  else
+    echo "VibeVoice vendor repo already present: ${VIBEVOICE_DIR}"
+  fi
+
+  if [[ ! -d "${VIBEVOICE_VENV}" ]]; then
+    echo "Creating VibeVoice venv -> ${VIBEVOICE_VENV}"
+    python -m venv "${VIBEVOICE_VENV}"
+  fi
+  "${VIBEVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+  if [[ -f "${VIBEVOICE_DIR}/requirements.txt" ]]; then
+    "${VIBEVOICE_VENV}/bin/python" -m pip install -r "${VIBEVOICE_DIR}/requirements.txt"
+  fi
+  if [[ -f "${VIBEVOICE_DIR}/pyproject.toml" || -f "${VIBEVOICE_DIR}/setup.py" ]]; then
+    "${VIBEVOICE_VENV}/bin/python" -m pip install -e "${VIBEVOICE_DIR}"
+  fi
+  "${VIBEVOICE_VENV}/bin/python" -m pip install librosa soundfile huggingface_hub transformers accelerate peft
+
+  VIBEVOICE_INCLUDE_7B="${VIBEVOICE_INCLUDE_7B:-0}"
+  if [[ "${PROFILE}" == "vibevoice-7b" ]]; then
+    VIBEVOICE_INCLUDE_7B=1
+  fi
+  python - "${VIBEVOICE_MODEL_DIR}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" "${VIBEVOICE_INCLUDE_7B}" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+
+target_root = Path(sys.argv[1])
+private_repo_id = sys.argv[2]
+private_revision = sys.argv[3]
+use_private_assets = sys.argv[4] == "1"
+include_7b = sys.argv[5] == "1"
+
+models = [
+    ("microsoft/VibeVoice-ASR", "VibeVoice-ASR"),
+    ("microsoft/VibeVoice-Realtime-0.5B", "VibeVoice-Realtime-0.5B"),
+    ("vibevoice/VibeVoice-1.5B", "VibeVoice-1.5B"),
+]
+if include_7b:
+    models.append(("vibevoice/VibeVoice-7B", "VibeVoice-7B"))
+
+for repo_id, dirname in models:
+    local_dir = target_root / dirname
+    if private_repo_id and use_private_assets:
+        prefix = f"vibevoice/{dirname}/"
+        print(f"Downloading private VibeVoice mirror {private_repo_id}/{prefix} -> {local_dir}")
+        files = [item for item in list_repo_files(private_repo_id, repo_type="model", revision=private_revision) if item.startswith(prefix)]
+        if not files:
+            raise SystemExit(f"Private VibeVoice mirror missing path: {prefix}")
+        for filename in files:
+            rel = filename.removeprefix(prefix)
+            target = local_dir / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            cached = hf_hub_download(repo_id=private_repo_id, filename=filename, revision=private_revision, repo_type="model")
+            shutil.copy2(cached, target)
+    else:
+        print(f"Downloading {repo_id} -> {local_dir}")
+        snapshot_download(
+            repo_id=repo_id,
+            local_dir=str(local_dir),
+            local_dir_use_symlinks=False,
+            resume_download=True,
+        )
+suffix = ", and community 7B TTS" if include_7b else ""
+print(f"VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS{suffix} model downloads completed.")
+PY
+fi
 
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "s2pro" ]]; then
   python - "${FISH_SPEECH_MODEL_DIR}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'

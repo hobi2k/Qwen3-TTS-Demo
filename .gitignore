@@ -192,6 +192,7 @@ cython_debug/
 node_modules/
 app/frontend/dist/
 app/frontend/.next/
+app/frontend/.next-dev/
 app/frontend/out/
 app/frontend/tsconfig.tsbuildinfo
 
@@ -201,12 +202,16 @@ app/frontend/tsconfig.tsbuildinfo
 .venv/
 .venv-fish-speech/
 .venv-ace-step/
+.venv-vibevoice/
 app/backend/.venv*/
 .cache/
 models/
 models/**
 !vendor/fish-speech/fish_speech/models/
 !vendor/fish-speech/fish_speech/models/**
+# Microsoft VibeVoice is cloned by scripts/download_models.sh and is not a
+# source subtree maintained by this repo.
+vendor/VibeVoice/
 data/models/
 data/models/**
 data/cache/**

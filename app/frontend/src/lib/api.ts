@@ -55,6 +55,12 @@ import type {
   SpeakerInfo,
   UploadResponse,
   UniversalInferenceRequest,
+  VibeVoiceASRRequest,
+  VibeVoiceASRResponse,
+  VibeVoiceRuntimeResponse,
+  VibeVoiceTTSRequest,
+  VibeVoiceTrainingRequest,
+  VibeVoiceTrainingResponse,
   VoiceBoxCloneRequest,
   VoiceBoxFusionRequest,
   VoiceChangerBatchRequest,
@@ -410,6 +416,34 @@ export const api = {
 
   generateS2Pro(payload: S2ProGenerateRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/s2-pro/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  vibeVoiceRuntime(): Promise<VibeVoiceRuntimeResponse> {
+    return request<VibeVoiceRuntimeResponse>("/api/vibevoice/runtime");
+  },
+
+  generateVibeVoiceTTS(payload: VibeVoiceTTSRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/vibevoice/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  transcribeVibeVoice(payload: VibeVoiceASRRequest): Promise<VibeVoiceASRResponse> {
+    return request<VibeVoiceASRResponse>("/api/vibevoice/asr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  trainVibeVoice(payload: VibeVoiceTrainingRequest): Promise<VibeVoiceTrainingResponse> {
+    return request<VibeVoiceTrainingResponse>("/api/vibevoice/train", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

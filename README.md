@@ -1,6 +1,6 @@
 # Qwen3-TTS-Demo
 
-`Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`, `ACE-Step`을 하나의 로컬 작업실로 묶은 음성/음악 데모 애플리케이션입니다.
+`Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`, `ACE-Step`, `VibeVoice`를 하나의 로컬 작업실로 묶은 음성/음악 데모 애플리케이션입니다.
 
 현재 구조는 “기능을 나열하는 데모”가 아니라, 사용자가 실제로 아래 작업을 구분해서 쓸 수 있는 제품형 흐름을 기준으로 정리되어 있습니다.
 
@@ -35,6 +35,8 @@
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 이 기능은 TTS나 목소리 저장에는 필요 없고, RVC용 보컬 추출/반주 제거가 필요할 때만 씁니다. 기본 보컬 모델은 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델인 `vocals_mel_band_roformer.ckpt` 하나만 사용합니다.
 - `ACE-Step 작곡`
   ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 `LoRA / LoKr 학습` 탭에서는 upstream `train.py`를 호출해 텐서 폴더, 오디오 폴더, dataset JSON에서 ACE-Step 어댑터를 만들고 생성 LoRA 목록에 연결합니다.
+- `VibeVoice`
+  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B와 Long-form 1.5B를 선택해 생성하고, `VibeVoice ASR`은 context/hotwords/timestamps 옵션을 포함한 전사를 제공합니다. `VibeVoice LoRA Train`은 공식 ASR LoRA fine-tuning을 실행하며, TTS LoRA는 공식 trainer가 없으므로 command template 기반 실험 경로로만 표시합니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -58,6 +60,7 @@
 - 개인 Hugging Face 자산 mirror: [docs/cookbook/20-private-hf-assets.md](docs/cookbook/20-private-hf-assets.md)
 - S2-Pro 작업실: [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)
 - ACE-Step 작곡: [docs/cookbook/22-ace-step-music.md](docs/cookbook/22-ace-step-music.md)
+- VibeVoice 작업실: [docs/cookbook/23-vibevoice-workspace.md](docs/cookbook/23-vibevoice-workspace.md)
 
 ## Clone 후 전체 준비
 
@@ -116,17 +119,19 @@ Qwen3-TTS-Demo/
     MMAudio/                 # vendored (tracked in this repo)
     fish-speech/             # vendored (tracked in this repo)
     ACE-Step/                # vendored (tracked in this repo)
+    VibeVoice/               # downloaded vendor checkout, gitignored
   app/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript
   data/
-    models/                  # downloaded Qwen/Qwen3-ASR models
+    models/                  # downloaded Qwen/Qwen3-ASR/S2-Pro/VibeVoice/ACE-Step models, gitignored
     rvc-models/              # local RVC model assets, gitignored
     uploads/                 # uploaded source audio
     generated/               # generated audio + metadata
     audio-tools/             # sound effect / changer / separation metadata
     s2-pro-voices/           # saved Fish Speech reference voice records
     models/ace-step/         # ACE-Step checkpoint/cache, gitignored
+    models/vibevoice/        # VibeVoice ASR/0.5B/1.5B weights, gitignored
     clone-prompts/           # saved clone prompt assets
     presets/                 # saved presets
     datasets/                # canonical dataset folders
@@ -187,6 +192,7 @@ data/datasets/mai_ko_full/
 - `MMAudio`: 사운드 효과 생성
 - `Applio`: RVC 변환, Stem Separator 분리
 - `Music`: ACE-Step 작곡
+- `VibeVoice`: Microsoft VibeVoice TTS, ASR, ASR LoRA 학습
 - `Qwen 학습`: 데이터셋 만들기, 학습 실행, VoiceBox 융합
 - `도움말`: 가이드
 
@@ -285,6 +291,35 @@ FISH_AUDIO_API_KEY=
 ```
 
 상세 provider/환경변수/문제 해결은 [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)와 [app/backend/.env.example](app/backend/.env.example)에 정리했습니다.
+
+## VibeVoice 작업실
+
+`VIBEVOICE` 탭은 community-maintained VibeVoice code vendor를 Qwen/S2-Pro와 같은 wrapper 방식으로 붙인 화면입니다. 코드 checkout은 `vibevoice-community/VibeVoice` 하나만 사용하고, ASR/realtime처럼 공식 Hugging Face weight가 필요한 경우에만 `microsoft/*` 모델 repo를 받습니다.
+
+지원 모델:
+
+- `microsoft/VibeVoice-ASR`: VibeVoice ASR 탭과 공통 ASR 모델 선택에서 사용
+- `microsoft/VibeVoice-Realtime-0.5B`: VibeVoice TTS의 realtime 모델
+- `vibevoice/VibeVoice-1.5B`: 장문 TTS 모델 weight. 다운로드와 UI 선택을 지원하며, 앱에 포함된 `scripts/run_vibevoice_tts_15b.py`와 community checkout의 inference code로 기본 실행 경로를 제공합니다.
+- `vibevoice/VibeVoice-7B`: community 쪽 7B 장문 TTS 모델입니다. Microsoft official model zoo에는 enabled download로 남아 있지 않아 별도 opt-in 모델로 취급합니다.
+
+설치/다운로드:
+
+```bash
+./scripts/download_models.sh vibevoice
+```
+
+`all` 프로필에도 위 세 모델이 모두 포함됩니다. 기본 경로는 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice/*`입니다. 이 세 경로는 로컬 산출물이라 `.gitignore`에 들어가며, 저장소에는 앱 integration code와 문서만 남깁니다.
+
+7B 모델은 용량과 출처가 다르므로 기본 `all`에는 넣지 않고 아래처럼 따로 받습니다.
+
+```bash
+./scripts/download_models.sh vibevoice-7b
+```
+
+community repo에는 TTS fine-tuning 경로가 포함되어 있어 앱의 기본 학습 모드는 `TTS LoRA (community)`입니다. ASR LoRA는 선택한 checkout이 `finetuning-asr/lora_finetune.py`를 제공할 때만 실행합니다.
+
+상세 환경 변수, 1.5B helper 옵션, ASR/학습 탭 기준은 [docs/cookbook/23-vibevoice-workspace.md](docs/cookbook/23-vibevoice-workspace.md)에 있습니다.
 
 ## 빠른 시작
 

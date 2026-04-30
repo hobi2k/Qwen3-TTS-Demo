@@ -15,6 +15,7 @@
 - Stem Separator checkpoint와 YAML (`오디오 분리` 탭 전용)
 - Fish Speech S2-Pro 모델 자산
 - ACE-Step checkpoint/cache 자산
+- VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS 모델 자산
 
 이 자산들은 git에 직접 올리면 안 됩니다. 크기가 크고, GitHub 제한에 걸리며, 저장소 clone도 느려집니다.
 
@@ -58,6 +59,23 @@ fish-speech/
     tokenizer.json
     tokenizer_config.json
     special_tokens_map.json
+vibevoice/
+  VibeVoice-ASR/
+    model-00001-of-00008.safetensors
+    ...
+    model-00008-of-00008.safetensors
+    model.safetensors.index.json
+  VibeVoice-Realtime-0.5B/
+    model.safetensors
+  VibeVoice-1.5B/
+    model-00001-of-00003.safetensors
+    model-00002-of-00003.safetensors
+    model-00003-of-00003.safetensors
+    model.safetensors.index.json
+  VibeVoice-7B/
+    model-00001-of-0000N.safetensors
+    ...
+    model.safetensors.index.json
 ace-step/
   checkpoints-or-cache-files...
 ```
@@ -135,8 +153,9 @@ export QWEN_USE_PRIVATE_ASSET_REPO=1
 - 개인 repo에 파일이 없으면 기존 public URL 또는 `audio-separator` 다운로드 경로로 되돌아갑니다.
 - `QWEN_USE_PRIVATE_ASSET_REPO=1`이면 Qwen/Qwen3-ASR 모델도 `models/<model-dir>/...` mirror에서 받습니다.
 - S2-Pro는 `fish-speech/s2-pro/...` mirror에서 받습니다.
+- VibeVoice는 `vibevoice/VibeVoice-ASR/...`, `vibevoice/VibeVoice-Realtime-0.5B/...`, `vibevoice/VibeVoice-1.5B/...`, optional `vibevoice/VibeVoice-7B/...` mirror에서 받습니다.
 - ACE-Step은 `ace-step/...` mirror에서 받아 `data/models/ace-step`에 복구합니다.
-- 모델과 생성물 폴더는 gitignore 대상입니다.
+- 모델과 생성물 폴더는 gitignore 대상입니다. VibeVoice의 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice`도 로컬 산출물이라 git에 올리지 않습니다.
 
 ## 남은 운영 과제
 

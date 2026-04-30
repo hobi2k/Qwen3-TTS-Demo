@@ -1,0 +1,1 @@
+"""VibeVoice compatibility patch modules."""

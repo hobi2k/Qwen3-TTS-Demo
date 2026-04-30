@@ -38,6 +38,7 @@ WSL/Linux에서는 아래 명령 하나로 백엔드 설정, 모델 다운로드
 ./scripts/bootstrap_all.sh core      # Qwen 핵심 모델만
 ./scripts/bootstrap_all.sh s2pro     # Fish Speech S2-Pro만
 ./scripts/bootstrap_all.sh ace-step  # ACE-Step만
+./scripts/bootstrap_all.sh vibevoice # VibeVoice ASR/TTS만
 ```
 
 이 스크립트는 `uv`, `npm`이 이미 설치되어 있다고 가정합니다. `ffmpeg`, `sox`는 시스템 패키지라 자동 설치하지 않고 `setup_backend.sh`에서 경고만 표시합니다.
@@ -108,6 +109,8 @@ Windows PowerShell:
   `data/stem-separator-models/vocals_mel_band_roformer.ckpt`
 - ACE-Step 작곡 런타임:
   `vendor/ACE-Step`, `.venv-ace-step`, `data/models/ace-step`
+- VibeVoice ASR/TTS 런타임:
+  `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice`
 
 개인 Hugging Face mirror를 먼저 사용하려면:
 
@@ -142,6 +145,18 @@ ACE-Step 작곡만 준비하려면:
 
 ```bash
 ./scripts/download_models.sh ace-step
+```
+
+VibeVoice만 준비하려면:
+
+```bash
+./scripts/download_models.sh vibevoice
+```
+
+VibeVoice community 7B까지 준비하려면:
+
+```bash
+./scripts/download_models.sh vibevoice-7b
 ```
 
 ACE-Step-1.5는 내부 `nano-vllm`을 로컬 소스로 들고 있어서 일반 `pip install -e`가
@@ -192,6 +207,7 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 - `MMAUDIO_REPO_ROOT`
 - `FISH_SPEECH_REPO_ROOT`
 - `ACE_STEP_REPO_ROOT`
+- `VIBEVOICE_REPO_ROOT`
   비워 두면 `vendor/*` 아래 체크아웃을 씁니다.
 - `APPLIO_PYTHON_EXECUTABLE`
 - `MMAUDIO_PYTHON_EXECUTABLE`
@@ -237,6 +253,59 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 - `FISH_AUDIO_API_URL`
 - `FISH_AUDIO_MODEL`
   Fish Audio API provider를 쓸 때만 API key가 필요합니다.
+
+### VibeVoice
+
+- `VIBEVOICE_REPO_ROOT`
+- `VIBEVOICE_MODEL_DIR`
+- `VIBEVOICE_PYTHON`
+- `VIBEVOICE_ASR_MODEL_PATH`
+- `VIBEVOICE_REALTIME_MODEL_PATH`
+- `VIBEVOICE_TTS_15B_MODEL_PATH`
+- `VIBEVOICE_TTS_7B_MODEL_PATH`
+  비워 두면 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice/*`를 씁니다.
+- `VIBEVOICE_ASR_COMMAND_TEMPLATE`
+- `VIBEVOICE_TTS_COMMAND_TEMPLATE`
+- `VIBEVOICE_TTS_15B_COMMAND_TEMPLATE`
+  공식 checkout의 엔트리포인트가 환경과 맞지 않거나 1.5B TTS 호환 엔트리포인트를 직접 지정해야 할 때만 씁니다.
+- `VIBEVOICE_TTS_15B_INFERENCE_STEPS`
+  앱에 포함된 1.5B TTS helper의 diffusion inference step 수입니다. 기본값은 `10`입니다.
+- `VIBEVOICE_TTS_7B_INFERENCE_STEPS`
+  7B community 모델의 diffusion inference step 수입니다. 기본값은 `12`입니다.
+- `VIBEVOICE_TTS_FINETUNE_COMMAND_TEMPLATE`
+  Microsoft VibeVoice repo가 공식 TTS LoRA trainer를 제공하지 않기 때문에, 별도 실험 trainer를 직접 연결할 때만 씁니다.
+
+다운로드:
+
+```bash
+./scripts/download_models.sh vibevoice
+```
+
+VibeVoice code vendor는 `vibevoice-community/VibeVoice` 하나만 사용합니다. `all` 프로필은 `microsoft/VibeVoice-ASR`, `microsoft/VibeVoice-Realtime-0.5B`, `vibevoice/VibeVoice-1.5B`를 모두 받습니다.
+7B community 모델은 크기와 출처가 달라 기본 `all`에 포함하지 않고 `./scripts/download_models.sh vibevoice-7b` 또는 `VIBEVOICE_INCLUDE_7B=1 ./scripts/download_models.sh vibevoice`로 받습니다.
+1.5B/7B TTS는 `scripts/run_vibevoice_tts_15b.py`와 `app/backend/app/vendor_patches/vibevoice/modeling_vibevoice_inference.py`를 통해 기본 실행됩니다.
+
+VibeVoice 로컬 산출물은 git에 넣지 않습니다.
+
+```text
+.venv-vibevoice/
+vendor/VibeVoice/
+data/models/vibevoice/
+```
+
+모델 준비 확인:
+
+```bash
+test -d vendor/VibeVoice
+test -d .venv-vibevoice
+test -d data/models/vibevoice/VibeVoice-ASR
+test -d data/models/vibevoice/VibeVoice-Realtime-0.5B
+test -d data/models/vibevoice/VibeVoice-1.5B
+test -d data/models/vibevoice/VibeVoice-7B
+find data/models/vibevoice -maxdepth 2 -name '*.safetensors'
+```
+
+VibeVoice 기능별 설명은 [23-vibevoice-workspace.md](./23-vibevoice-workspace.md)에 따로 정리했습니다.
 
 ### ACE-Step
 

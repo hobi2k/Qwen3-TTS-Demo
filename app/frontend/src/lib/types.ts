@@ -207,6 +207,116 @@ export interface AudioToolJob {
   message: string;
 }
 
+export interface VibeVoiceRuntimeResponse {
+  available: boolean;
+  repo_root: string;
+  model_root: string;
+  python_executable: string;
+  repo_ready: boolean;
+  asr_ready: boolean;
+  realtime_tts_ready: boolean;
+  longform_tts_ready: boolean;
+  large_tts_ready: boolean;
+  asr_model: string;
+  realtime_tts_model: string;
+  longform_tts_model: string;
+  large_tts_model: string;
+  tts_entrypoints: string[];
+  features: string[];
+  notes: string;
+}
+
+export interface VibeVoiceTTSRequest {
+  text: string;
+  output_name?: string;
+  model_profile: "realtime" | "tts_15b" | "1.5b" | "longform" | "tts_7b" | "7b" | "large";
+  language: string;
+  speaker_name: string;
+  speaker_audio_path?: string;
+  speaker_names: string[];
+  speaker_audio_paths: string[];
+  speaker_prompt_text: string;
+  cfg_scale: number;
+  temperature: number;
+  top_p: number;
+  seed?: number;
+  device: string;
+  precision: string;
+  attn_implementation: string;
+  inference_steps: number;
+  max_length_times: number;
+  disable_prefill: boolean;
+  show_progress: boolean;
+  max_new_tokens: number;
+  output_format: string;
+  extra_args: string[];
+}
+
+export interface VibeVoiceASRRequest {
+  audio_path: string;
+  language: string;
+  task: string;
+  context_info: string;
+  device: string;
+  precision: string;
+  attn_implementation: string;
+  batch_size: number;
+  max_new_tokens: number;
+  temperature: number;
+  top_p: number;
+  num_beams: number;
+  return_timestamps: boolean;
+}
+
+export interface VibeVoiceASRResponse {
+  audio_path: string;
+  text: string;
+  language?: string | null;
+  model_id: string;
+  provider: string;
+  segments: Record<string, unknown>[];
+  meta: Record<string, unknown>;
+}
+
+export interface VibeVoiceTrainingRequest {
+  training_mode: "asr_lora" | "tts_lora";
+  output_name: string;
+  model_path: string;
+  data_dir: string;
+  output_dir: string;
+  nproc_per_node: number;
+  num_train_epochs: number;
+  per_device_train_batch_size: number;
+  gradient_accumulation_steps: number;
+  learning_rate: number;
+  warmup_ratio: number;
+  weight_decay: number;
+  max_grad_norm: number;
+  logging_steps: number;
+  save_steps: number;
+  lora_r: number;
+  lora_alpha: number;
+  lora_dropout: number;
+  bf16: boolean;
+  gradient_checkpointing: boolean;
+  use_customized_context: boolean;
+  max_audio_length?: number;
+  report_to: string;
+  extra_args: string[];
+}
+
+export interface VibeVoiceTrainingResponse {
+  status: string;
+  message: string;
+  run_id: string;
+  output_name: string;
+  run_dir: string;
+  log_path: string;
+  adapter_path?: string | null;
+  command: string[];
+  meta: Record<string, unknown>;
+}
+
 export interface BootstrapResponse {
   health: HealthResponse;
   models: ModelInfo[];

@@ -48,6 +48,9 @@ export type TabKey =
   | "s2pro_multi_speaker"
   | "s2pro_multilingual"
   | "s2pro_train"
+  | "vibevoice_tts"
+  | "vibevoice_asr"
+  | "vibevoice_train"
   | "mmaudio_train"
   | "guide";
 export type AudioEffectsView = "explore" | "history";
@@ -242,6 +245,21 @@ export const PRODUCT_PAGES = {
     label: "LoRA / Full 학습",
     title: "S2-Pro LoRA / Full 학습",
     description: "Fish Speech text2semantic fine-tuning으로 S2-Pro LoRA 또는 full checkpoint를 만듭니다.",
+  },
+  vibevoice_tts: {
+    label: "TTS",
+    title: "VibeVoice TTS",
+    description: "Microsoft VibeVoice Realtime 0.5B와 1.5B TTS 모델을 vendor checkout으로 실행합니다.",
+  },
+  vibevoice_asr: {
+    label: "ASR",
+    title: "VibeVoice ASR",
+    description: "Microsoft VibeVoice-ASR 모델로 업로드/생성 음성을 전사합니다.",
+  },
+  vibevoice_train: {
+    label: "LoRA Train",
+    title: "VibeVoice LoRA Train",
+    description: "공식 ASR LoRA fine-tuning과 실험적 TTS LoRA command path를 관리합니다.",
   },
   mmaudio_train: {
     label: "MMAudio 학습",

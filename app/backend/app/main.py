@@ -99,6 +99,12 @@ from .schemas import (
     PresetGenerateRequest,
     AudioTranslateRequest,
     UniversalInferenceRequest,
+    VibeVoiceASRRequest,
+    VibeVoiceASRResponse,
+    VibeVoiceRuntimeResponse,
+    VibeVoiceTTSRequest,
+    VibeVoiceTrainingRequest,
+    VibeVoiceTrainingResponse,
     VoiceChangerBatchRequest,
     VoiceChangerRequest,
     VoiceModelBlendRequest,
@@ -113,6 +119,7 @@ from .voice_changer import (
     applio_voice_changer_available,
     list_available_voice_models,
 )
+from .vibevoice import VibeVoiceEngine, VibeVoiceError
 
 JsonDict = Dict[str, Any]
 
@@ -133,6 +140,7 @@ voice_changer = ApplioVoiceChanger(REPO_ROOT)
 mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
 stem_separator_engine = StemSeparatorEngine(REPO_ROOT)
 ace_step_composer = AceStepComposer(REPO_ROOT)
+vibevoice_engine = VibeVoiceEngine(REPO_ROOT)
 
 
 def default_model_id(category: str) -> str:
@@ -1179,6 +1187,26 @@ def transcribe_audio_or_raise(audio_path: str, model_id: Optional[str] = None) -
         ASR 전사 결과 응답 모델.
     """
 
+    if (model_id or "").startswith("vibevoice"):
+        try:
+            absolute_path = resolve_audio_absolute_path(audio_path)
+            result = vibevoice_engine.transcribe(audio_path=absolute_path)
+        except HTTPException:
+            raise
+        except VibeVoiceError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"VibeVoice-ASR failed: {error}") from error
+
+        return AudioTranscriptionResponse(
+            audio_path=audio_path,
+            text=str(result.get("text") or ""),
+            language=result.get("language"),
+            simulation=False,
+            model_id="vibevoice/asr",
+            provider="vibevoice",
+        )
+
     try:
         result = engine.transcribe_reference_audio(audio_path, model_id=model_id)
     except FileNotFoundError as error:
@@ -1915,7 +1943,22 @@ def audio_tool_capabilities() -> List[AudioToolCapability]:
             available=s2_pro_engine.is_available(),
             notes=s2_pro_engine.availability_notes(),
         ),
+        AudioToolCapability(
+            key="vibevoice",
+            label="VibeVoice",
+            description="Microsoft VibeVoice vendor로 ASR, Realtime TTS 0.5B, 1.5B TTS weights를 관리합니다.",
+            available=vibevoice_engine.status()["available"],
+            notes=vibevoice_engine.status()["notes"],
+        ),
     ]
+
+
+def available_asr_models() -> List[Dict[str, str]]:
+    """ASR dropdown models across Qwen and VibeVoice providers."""
+
+    models = list(engine.supported_asr_models())
+    models.extend(vibevoice_engine.asr_models())
+    return models
 
 
 def resolve_audio_absolute_path(audio_path: str) -> Path:
@@ -2127,7 +2170,7 @@ def bootstrap() -> BootstrapResponse:
         audio_tool_capabilities=audio_tool_capabilities(),
         audio_tool_jobs=list_audio_tool_jobs(),
         voice_changer_models=list_voice_changer_models(),
-        asr_models=engine.supported_asr_models(),
+        asr_models=available_asr_models(),
     )
 
 
@@ -2172,7 +2215,7 @@ def list_speakers() -> List[Dict[str, str]]:
 def list_asr_models() -> List[Dict[str, str]]:
     """전사 UI에서 선택할 수 있는 Qwen3-ASR 모델 목록을 반환한다."""
 
-    return engine.supported_asr_models()
+    return available_asr_models()
 
 
 @app.post("/api/transcriptions/reference-audio", response_model=AudioTranscriptionResponse)
@@ -2187,6 +2230,341 @@ def transcribe_reference_audio(payload: AudioTranscriptionRequest) -> AudioTrans
     """
 
     return transcribe_audio_or_raise(payload.audio_path, model_id=payload.model_id)
+
+
+@app.get("/api/vibevoice/runtime", response_model=VibeVoiceRuntimeResponse)
+def vibevoice_runtime() -> VibeVoiceRuntimeResponse:
+    """VibeVoice vendor checkout/model availability."""
+
+    return VibeVoiceRuntimeResponse(**vibevoice_engine.status())
+
+
+@app.post("/api/vibevoice/asr", response_model=VibeVoiceASRResponse)
+def transcribe_vibevoice_audio(payload: VibeVoiceASRRequest) -> VibeVoiceASRResponse:
+    """Run Microsoft VibeVoice-ASR on a stored audio file."""
+
+    try:
+        absolute_path = resolve_audio_absolute_path(payload.audio_path)
+        result = vibevoice_engine.transcribe(
+            audio_path=absolute_path,
+            language=payload.language,
+            task=payload.task,
+            context_info=payload.context_info,
+            device=payload.device,
+            precision=payload.precision,
+            attn_implementation=payload.attn_implementation,
+            batch_size=payload.batch_size,
+            max_new_tokens=payload.max_new_tokens,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            num_beams=payload.num_beams,
+            return_timestamps=payload.return_timestamps,
+        )
+    except HTTPException:
+        raise
+    except VibeVoiceError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"VibeVoice-ASR failed: {error}") from error
+
+    return VibeVoiceASRResponse(
+        audio_path=payload.audio_path,
+        text=str(result.get("text") or ""),
+        language=result.get("language"),
+        segments=list(result.get("segments") or []),
+        meta=dict(result.get("meta") or {}),
+    )
+
+
+@app.post("/api/vibevoice/tts", response_model=GenerationResponse)
+def generate_vibevoice_tts(payload: VibeVoiceTTSRequest) -> GenerationResponse:
+    """Generate speech through VibeVoice Realtime 0.5B or 1.5B vendor path."""
+
+    extension = audio_tool_format_or_422(payload.output_format)
+    output_path = generated_audio_path("vibevoice-tts", payload.output_name or payload.text, extension)
+    speaker_audio_path: Optional[Path] = None
+    if payload.speaker_audio_path:
+        speaker_audio_path = resolve_audio_absolute_path(payload.speaker_audio_path)
+    speaker_audio_paths = [resolve_audio_absolute_path(path) for path in payload.speaker_audio_paths if path.strip()]
+    if speaker_audio_path and not speaker_audio_paths:
+        speaker_audio_paths = [speaker_audio_path]
+
+    try:
+        meta = vibevoice_engine.generate_tts(
+            text=payload.text,
+            output_path=output_path,
+            model_profile=payload.model_profile,
+            language=payload.language,
+            speaker_name=payload.speaker_name,
+            speaker_audio_path=speaker_audio_path,
+            speaker_names=payload.speaker_names,
+            speaker_audio_paths=speaker_audio_paths,
+            speaker_prompt_text=payload.speaker_prompt_text,
+            cfg_scale=payload.cfg_scale,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            seed=payload.seed,
+            device=payload.device,
+            precision=payload.precision,
+            attn_implementation=payload.attn_implementation,
+            inference_steps=payload.inference_steps,
+            max_length_times=payload.max_length_times,
+            disable_prefill=payload.disable_prefill,
+            show_progress=payload.show_progress,
+            max_new_tokens=payload.max_new_tokens,
+            extra_args=payload.extra_args,
+        )
+    except HTTPException:
+        raise
+    except VibeVoiceError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"VibeVoice TTS failed: {error}") from error
+
+    record = write_audio_tool_generation_record(
+        mode="vibevoice_tts",
+        text=payload.text,
+        language=payload.language,
+        audio_path=output_path,
+        instruction=payload.speaker_prompt_text,
+        meta={
+            "tool_kind": "vibevoice_tts",
+            "model_profile": payload.model_profile,
+            "speaker_name": payload.speaker_name,
+            "speaker_audio_path": payload.speaker_audio_path,
+            "speaker_names": payload.speaker_names,
+            "speaker_audio_paths": payload.speaker_audio_paths,
+            "cfg_scale": payload.cfg_scale,
+            "temperature": payload.temperature,
+            "top_p": payload.top_p,
+            "seed": payload.seed,
+            "device": payload.device,
+            "precision": payload.precision,
+            "attn_implementation": payload.attn_implementation,
+            "inference_steps": payload.inference_steps,
+            "max_length_times": payload.max_length_times,
+            "disable_prefill": payload.disable_prefill,
+            "max_new_tokens": payload.max_new_tokens,
+            **meta,
+        },
+    )
+    save_audio_tool_job(
+        kind="vibevoice_tts",
+        input_summary=readable_label(payload.output_name or payload.text, "vibevoice"),
+        message="VibeVoice TTS completed.",
+        assets=[create_audio_tool_asset(output_path, "vibevoice speech")],
+    )
+    return GenerationResponse(record=record)
+
+
+@app.post("/api/vibevoice/train", response_model=VibeVoiceTrainingResponse)
+def train_vibevoice(payload: VibeVoiceTrainingRequest) -> VibeVoiceTrainingResponse:
+    """Run VibeVoice fine-tuning paths.
+
+    The default vendor is the community fork, which exposes TTS fine-tuning.
+    ASR LoRA remains available only when the selected checkout includes the
+    Microsoft `finetuning-asr/lora_finetune.py` script.
+    """
+
+    status_info = vibevoice_engine.status()
+    if not Path(status_info["repo_root"]).exists():
+        raise HTTPException(status_code=400, detail=f"VibeVoice vendor repo not found: {status_info['repo_root']}")
+
+    data_input = payload.data_dir.strip()
+    data_dir = Path(data_input).expanduser()
+    if not data_dir.is_absolute():
+        data_dir = REPO_ROOT / data_dir
+    data_ref = str(data_dir) if data_dir.exists() else data_input
+    if payload.training_mode == "asr_lora" and not data_dir.exists():
+        raise HTTPException(status_code=404, detail=f"VibeVoice ASR training data directory not found: {payload.data_dir}")
+
+    run_id = storage.new_id("vibevoice_train")
+    created_at = utc_now()
+    run_label = readable_label(payload.output_name, "vibevoice-train")
+    run_dir = storage.dated_child_dir(storage.audio_tools_dir, "vibevoice_training", created_at=parse_created_at(created_at)) / f"{run_id}_{storage.slugify(run_label, default='vibevoice-train')}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(payload.output_dir.strip()).expanduser() if payload.output_dir.strip() else run_dir / "adapter"
+    if not output_dir.is_absolute():
+        output_dir = REPO_ROOT / output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "train.log"
+
+    python_bin = vibevoice_engine.python_executable
+    torchrun_bin = os.getenv("VIBEVOICE_TORCHRUN", "").strip()
+    if not torchrun_bin:
+        python_path = Path(python_bin)
+        torchrun_candidate = python_path.parent / "torchrun"
+        torchrun_bin = str(torchrun_candidate if torchrun_candidate.exists() else "torchrun")
+    if payload.training_mode == "asr_lora":
+        model_path = payload.model_path.strip() or vibevoice_engine.model_id("asr")
+        script_path = Path(status_info["repo_root"]) / "finetuning-asr" / "lora_finetune.py"
+        if not script_path.exists():
+            raise HTTPException(status_code=400, detail=f"VibeVoice ASR LoRA script not found: {script_path}")
+        command = [
+            torchrun_bin,
+            f"--nproc_per_node={payload.nproc_per_node}",
+            str(script_path),
+            "--model_path",
+            model_path,
+            "--data_dir",
+            str(data_dir),
+            "--output_dir",
+            str(output_dir),
+            "--num_train_epochs",
+            str(payload.num_train_epochs),
+            "--per_device_train_batch_size",
+            str(payload.per_device_train_batch_size),
+            "--gradient_accumulation_steps",
+            str(payload.gradient_accumulation_steps),
+            "--learning_rate",
+            str(payload.learning_rate),
+            "--warmup_ratio",
+            str(payload.warmup_ratio),
+            "--weight_decay",
+            str(payload.weight_decay),
+            "--max_grad_norm",
+            str(payload.max_grad_norm),
+            "--logging_steps",
+            str(payload.logging_steps),
+            "--save_steps",
+            str(payload.save_steps),
+            "--lora_r",
+            str(payload.lora_r),
+            "--lora_alpha",
+            str(payload.lora_alpha),
+            "--lora_dropout",
+            str(payload.lora_dropout),
+            "--report_to",
+            payload.report_to,
+        ]
+        if payload.bf16:
+            command.append("--bf16")
+        if payload.gradient_checkpointing:
+            command.append("--gradient_checkpointing")
+        if not payload.use_customized_context:
+            command.extend(["--use_customized_context", "False"])
+        if payload.max_audio_length is not None:
+            command.extend(["--max_audio_length", str(payload.max_audio_length)])
+        command.extend(payload.extra_args)
+    else:
+        template = os.getenv("VIBEVOICE_TTS_FINETUNE_COMMAND_TEMPLATE", "").strip()
+        model_path = payload.model_path.strip() or vibevoice_engine.model_id("tts_15b")
+        if template:
+            values = {
+                "python": python_bin,
+                "repo": status_info["repo_root"],
+                "model": model_path,
+                "data_dir": data_ref,
+                "output_dir": output_dir,
+                "epochs": payload.num_train_epochs,
+                "batch_size": payload.per_device_train_batch_size,
+                "grad_accum": payload.gradient_accumulation_steps,
+                "learning_rate": payload.learning_rate,
+                "lora_r": payload.lora_r,
+                "lora_alpha": payload.lora_alpha,
+                "lora_dropout": payload.lora_dropout,
+            }
+            command = vibevoice_engine._format_template(template, values)
+        else:
+            train_module = Path(status_info["repo_root"]) / "vibevoice" / "finetune" / "train_vibevoice.py"
+            if not train_module.exists():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Community VibeVoice TTS fine-tuning module not found: {train_module}",
+                )
+            command = [
+                python_bin,
+                "-m",
+                "vibevoice.finetune.train_vibevoice",
+                "--model_name_or_path",
+                model_path,
+                "--dataset_name",
+                data_ref,
+                "--text_column_name",
+                "text",
+                "--audio_column_name",
+                "audio",
+                "--voice_prompts_column_name",
+                "audio",
+                "--output_dir",
+                str(output_dir),
+                "--per_device_train_batch_size",
+                str(payload.per_device_train_batch_size),
+                "--gradient_accumulation_steps",
+                str(payload.gradient_accumulation_steps),
+                "--learning_rate",
+                str(payload.learning_rate),
+                "--num_train_epochs",
+                str(payload.num_train_epochs),
+                "--logging_steps",
+                str(payload.logging_steps),
+                "--save_steps",
+                str(payload.save_steps),
+                "--report_to",
+                payload.report_to,
+                "--remove_unused_columns",
+                "False",
+                "--warmup_ratio",
+                str(payload.warmup_ratio),
+                "--max_grad_norm",
+                str(payload.max_grad_norm),
+                "--lora_target_modules",
+                "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
+                "--lr_scheduler_type",
+                "cosine",
+                "--voice_prompt_drop_rate",
+                "0.2",
+                "--ddpm_batch_mul",
+                "4",
+                "--diffusion_loss_weight",
+                "1.4",
+                "--ce_loss_weight",
+                "0.04",
+                "--train_diffusion_head",
+                "True",
+                "--do_train",
+                "--gradient_clipping",
+            ]
+            if payload.bf16:
+                command.extend(["--bf16", "True"])
+            if payload.gradient_checkpointing:
+                command.append("--gradient_checkpointing")
+            if payload.weight_decay:
+                command.extend(["--weight_decay", str(payload.weight_decay)])
+            if payload.max_audio_length is not None:
+                command.extend(["--max_audio_length", str(payload.max_audio_length)])
+            command.extend(payload.extra_args)
+
+    with log_path.open("w", encoding="utf-8") as log:
+        log.write(f"$ {' '.join(command)}\n\n")
+        process = subprocess.run(
+            command,
+            cwd=str(REPO_ROOT),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+    status = "completed" if process.returncode == 0 else "failed"
+    message = "VibeVoice training completed." if status == "completed" else f"VibeVoice training failed. See {storage.relpath(log_path)}"
+    adapter_path = storage.relpath(output_dir) if output_dir.exists() else None
+    save_audio_tool_job(kind="vibevoice_training", input_summary=payload.output_name, message=message, assets=[])
+    return VibeVoiceTrainingResponse(
+        status=status,
+        message=message,
+        run_id=run_id,
+        output_name=payload.output_name,
+        run_dir=storage.relpath(run_dir),
+        log_path=storage.relpath(log_path),
+        adapter_path=adapter_path,
+        command=command,
+        meta={
+            "training_mode": payload.training_mode,
+            "data_dir": str(data_dir),
+            "output_dir": str(output_dir),
+            "returncode": process.returncode,
+        },
+    )
 
 
 @app.get("/api/history", response_model=List[GenerationRecord])
