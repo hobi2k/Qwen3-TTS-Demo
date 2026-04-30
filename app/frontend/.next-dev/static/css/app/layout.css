@@ -5702,9 +5702,6 @@ http://scripts.sil.org/OFL
   .min-h-10 {
     min-height: calc(var(--spacing) * 10);
   }
-  .min-h-11 {
-    min-height: calc(var(--spacing) * 11);
-  }
   .min-h-16 {
     min-height: calc(var(--spacing) * 16);
   }
@@ -5898,9 +5895,6 @@ http://scripts.sil.org/OFL
   .grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .grid-cols-\[auto_minmax\(0\,1fr\)\] {
-    grid-template-columns: auto minmax(0,1fr);
-  }
   .grid-rows-\[auto_1fr\] {
     grid-template-rows: auto 1fr;
   }
@@ -5939,9 +5933,6 @@ http://scripts.sil.org/OFL
   }
   .justify-end {
     justify-content: flex-end;
-  }
-  .justify-start {
-    justify-content: flex-start;
   }
   .gap-0\.5 {
     gap: calc(var(--spacing) * 0.5);
@@ -7998,11 +7989,6 @@ http://scripts.sil.org/OFL
     @media (width >= 40rem) {
       border-top-style: var(--tw-border-style);
       border-top-width: 0px;
-    }
-  }
-  .sm\:pt-\[22px\] {
-    @media (width >= 40rem) {
-      padding-top: 22px;
     }
   }
   .sm\:text-left {

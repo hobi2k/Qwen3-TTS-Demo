@@ -1564,6 +1564,76 @@ def maybe_move_file(source: Path, destination: Path) -> Path:
     return destination
 
 
+def stored_path_exists(value: Any) -> bool:
+    """저장 레코드 안의 상대/절대 경로가 실제 파일로 존재하는지 확인한다."""
+
+    if not value:
+        return False
+    candidate = Path(str(value))
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    return candidate.exists()
+
+
+def clone_prompt_id_from_path(value: Any) -> Optional[str]:
+    """`clone_xxxxx` 형태의 ID를 경로 문자열에서 추출한다."""
+
+    if not value:
+        return None
+    match = re.search(r"(clone_[0-9a-fA-F]+)", str(value))
+    return match.group(1) if match else None
+
+
+def generation_reference_by_id(record_id: Optional[str]) -> Optional[str]:
+    """생성 record ID로 현재 오디오 경로를 찾는다."""
+
+    if not record_id:
+        return None
+    for record in list_generation_records():
+        if record.id == record_id and stored_path_exists(record.output_audio_path):
+            return record.output_audio_path
+    return None
+
+
+def generation_reference_by_text(reference_text: Optional[str]) -> Optional[str]:
+    """참조 문장과 같은 생성 결과의 현재 오디오 경로를 찾는다."""
+
+    normalized = (reference_text or "").strip()
+    if not normalized:
+        return None
+    for record in list_generation_records():
+        if (record.input_text or "").strip() == normalized and stored_path_exists(record.output_audio_path):
+            return record.output_audio_path
+    return None
+
+
+def clone_prompt_record_by_id(prompt_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """clone prompt ID로 현재 레코드를 찾는다."""
+
+    if not prompt_id:
+        return None
+    for record in storage.list_json_records(storage.clone_prompts_dir):
+        if record.get("id") == prompt_id:
+            return record
+    return None
+
+
+def repair_generated_reference(record: Dict[str, Any]) -> bool:
+    """프리셋/clone prompt가 가리키는 예전 생성 오디오 경로를 현재 경로로 복구한다."""
+
+    current = record.get("reference_audio_path")
+    if stored_path_exists(current):
+        return False
+
+    replacement = generation_reference_by_id((record.get("meta") or {}).get("generation_id"))
+    if not replacement:
+        replacement = generation_reference_by_text(record.get("reference_text"))
+    if replacement and replacement != current:
+        record["reference_audio_path"] = replacement
+        return True
+    return False
+
+
 def migrate_generation_records() -> None:
     """기존 flat/random 생성 이력을 읽기 쉬운 구조로 정리한다.
 
@@ -1655,6 +1725,7 @@ def migrate_clone_prompt_records() -> None:
             record_id=str(record["id"]),
             created_at=created_at,
         )
+        repair_generated_reference(record)
         final_record_path = maybe_move_file(record_path, target_record)
         storage.write_json(final_record_path, record)
 
@@ -1678,6 +1749,16 @@ def migrate_preset_records() -> None:
 
         created_at = parse_created_at(record.get("created_at"))
         label = readable_record_label(record, "preset")
+        changed = repair_generated_reference(record)
+        prompt_id = clone_prompt_id_from_path(record.get("clone_prompt_path"))
+        clone_record = clone_prompt_record_by_id(prompt_id)
+        if clone_record:
+            if clone_record.get("prompt_path") and clone_record.get("prompt_path") != record.get("clone_prompt_path"):
+                record["clone_prompt_path"] = clone_record["prompt_path"]
+                changed = True
+            if not stored_path_exists(record.get("reference_audio_path")) and clone_record.get("reference_audio_path"):
+                record["reference_audio_path"] = clone_record["reference_audio_path"]
+                changed = True
         target_record = storage.named_record_path(
             root=storage.presets_dir,
             category=str(record.get("source_type") or "preset"),
@@ -1686,7 +1767,8 @@ def migrate_preset_records() -> None:
             created_at=created_at,
         )
         final_record_path = maybe_move_file(record_path, target_record)
-        storage.write_json(final_record_path, record)
+        if changed or final_record_path != record_path:
+            storage.write_json(final_record_path, record)
 
 
 def migrate_audio_tool_jobs() -> None:

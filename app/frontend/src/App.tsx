@@ -367,7 +367,7 @@ function AcePromptLaneGrid({
     <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
       <section className="flex min-h-[228px] flex-col gap-2 rounded-md border border-line bg-canvas/60 p-3">
         <div className="flex min-h-9 items-center gap-2">
-          <b className="font-mono text-xs uppercase tracking-allcaps text-accent-ink">STYLE</b>
+          <b className="font-mono text-xs uppercase tracking-allcaps text-ink-muted">STYLE</b>
           <span className="text-[10px] text-ink-subtle">prompt lane</span>
         </div>
         <Textarea
@@ -379,7 +379,7 @@ function AcePromptLaneGrid({
       <section className="flex min-h-[228px] flex-col gap-2 rounded-md border border-line bg-canvas/60 p-3">
         <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
           <div className="flex items-baseline gap-2">
-            <b className="font-mono text-xs uppercase tracking-allcaps text-accent-ink">LYRICS</b>
+            <b className="font-mono text-xs uppercase tracking-allcaps text-ink-muted">LYRICS</b>
             <span className="text-[10px] text-ink-subtle">vocal lane{lyricsOptional ? " · optional" : ""}</span>
           </div>
           <Select value={vocalLanguage || "unknown"} onValueChange={onVocalLanguageChange}>
