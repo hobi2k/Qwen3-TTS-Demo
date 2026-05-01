@@ -32,6 +32,7 @@ BACKEND_DIR = REPO_ROOT / "app" / "backend"
 PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
 SAMPLE_AUDIO = REPO_ROOT / "data" / "e2e" / "live_input.wav"
 SAMPLE_LONG_AUDIO = REPO_ROOT / "data" / "e2e" / "live_input_12s.wav"
+BACKEND_LOG = REPO_ROOT / "data" / "runtime" / "live-e2e-backend.log"
 
 
 @dataclass
@@ -174,6 +175,15 @@ def add_optional_live_check(results: list[CheckResult], base_url: str, name: str
     return None
 
 
+def tail_text(path: Path, max_lines: int = 40) -> str:
+    """Return recent log lines without blocking on a live subprocess pipe."""
+
+    if not path.exists():
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
 def start_backend(port: int) -> subprocess.Popen[str]:
     """Start uvicorn for live HTTP checks."""
 
@@ -189,11 +199,13 @@ def start_backend(port: int) -> subprocess.Popen[str]:
         "--port",
         str(port),
     ]
+    BACKEND_LOG.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = BACKEND_LOG.open("w", encoding="utf-8")
     return subprocess.Popen(
         command,
         cwd=BACKEND_DIR,
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=log_handle,
         stderr=subprocess.STDOUT,
         text=True,
         start_new_session=True,
@@ -204,21 +216,16 @@ def wait_for_backend(proc: subprocess.Popen[str], base_url: str, timeout: float 
     """Wait until /api/health responds or raise with recent server output."""
 
     started_at = time.time()
-    recent_output: list[str] = []
     while time.time() - started_at < timeout:
         if proc.poll() is not None:
-            if proc.stdout:
-                recent_output.extend(proc.stdout.readlines()[-30:])
-            raise RuntimeError("backend exited early\n" + "".join(recent_output[-30:]))
+            raise RuntimeError("backend exited early\n" + tail_text(BACKEND_LOG))
         try:
             status, _ = request_json(base_url, "GET", "/api/health", timeout=2.0)
             if status == 200:
                 return
         except Exception:
             time.sleep(0.5)
-    if proc.stdout:
-        recent_output.extend(proc.stdout.readlines()[-30:])
-    raise TimeoutError("backend did not become healthy\n" + "".join(recent_output[-30:]))
+    raise TimeoutError("backend did not become healthy\n" + tail_text(BACKEND_LOG))
 
 
 def run_checks(include_heavy: bool, port: int | None) -> int:

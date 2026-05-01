@@ -43,6 +43,7 @@ export type TabKey =
   | "dataset"
   | "training"
   | "voicebox_fusion"
+  | "s2pro_dataset"
   | "s2pro_tagged"
   | "s2pro_clone"
   | "s2pro_multi_speaker"
@@ -50,10 +51,14 @@ export type TabKey =
   | "s2pro_train"
   | "vibevoice_tts"
   | "vibevoice_asr"
+  | "vibevoice_dataset"
   | "vibevoice_tts_train"
   | "vibevoice_asr_train"
   | "vibevoice_model_tools"
+  | "applio_dataset"
+  | "ace_dataset"
   | "mmaudio_train"
+  | "mmaudio_dataset"
   | "guide";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
@@ -223,6 +228,11 @@ export const PRODUCT_PAGES = {
     title: "VoiceBox 융합",
     description: "CustomVoice 결과와 Base encoder를 합쳐 독립 모델로 만듭니다.",
   },
+  s2pro_dataset: {
+    label: "S2-Pro 데이터셋",
+    title: "S2-Pro 데이터셋",
+    description: "Fish Speech 학습에 필요한 lab 음성 폴더 또는 proto 폴더를 정리합니다.",
+  },
   s2pro_tagged: {
     label: "텍스트 음성 변환",
     title: "S2-Pro 텍스트 음성 변환",
@@ -258,6 +268,11 @@ export const PRODUCT_PAGES = {
     title: "VibeVoice ASR",
     description: "Microsoft VibeVoice-ASR 모델로 업로드/생성 음성을 전사합니다.",
   },
+  vibevoice_dataset: {
+    label: "VibeVoice 데이터셋",
+    title: "VibeVoice 데이터셋",
+    description: "VibeVoice TTS/ASR fine-tuning용 JSONL 또는 폴더 구조를 지정합니다.",
+  },
   vibevoice_tts_train: {
     label: "TTS Fine-tune",
     title: "VibeVoice TTS Fine-tune",
@@ -272,6 +287,21 @@ export const PRODUCT_PAGES = {
     label: "Model Tools",
     title: "VibeVoice Model Tools",
     description: "LoRA merge, merge 검증, NnScaler checkpoint 변환을 실행합니다.",
+  },
+  applio_dataset: {
+    label: "Applio 데이터셋",
+    title: "Applio RVC 데이터셋",
+    description: "RVC 모델 학습에 사용할 같은 화자의 WAV 묶음을 선택하거나 폴더로 지정합니다.",
+  },
+  ace_dataset: {
+    label: "ACE-Step 데이터셋",
+    title: "ACE-Step 데이터셋",
+    description: "ACE-Step LoRA/LoKr 학습에 사용할 tensor, 오디오 폴더, dataset JSON을 지정합니다.",
+  },
+  mmaudio_dataset: {
+    label: "MMAudio 데이터셋",
+    title: "MMAudio 데이터셋",
+    description: "MMAudio upstream 학습 모드에 맞춰 example/configured 데이터 입력을 정리합니다.",
   },
   mmaudio_train: {
     label: "MMAudio 학습",

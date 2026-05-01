@@ -314,10 +314,12 @@ def run_customvoice_training(
 
     runtime = resolve_runtime()
     gradient_accumulation_steps = int(os.getenv("QWEN_DEMO_GRAD_ACCUM_STEPS", "1"))
+    output_model_path.mkdir(parents=True, exist_ok=True)
     accelerator = Accelerator(
         gradient_accumulation_steps=gradient_accumulation_steps,
         mixed_precision=runtime["mixed_precision"],
         log_with="tensorboard",
+        project_dir=str(output_model_path / "accelerate"),
     )
 
     qwen3tts = Qwen3TTSModel.from_pretrained(

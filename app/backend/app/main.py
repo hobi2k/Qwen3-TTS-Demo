@@ -512,11 +512,13 @@ def resolve_finetune_entrypoint(training_mode: str) -> str:
     """파인튜닝 모드에 맞는 실행 스크립트 경로를 반환한다."""
 
     normalized = (training_mode or "base").strip().lower()
+    if normalized == "base":
+        return resolve_qwen_extension_script("finetuning/sft_base_12hz.py")
     if normalized == "custom_voice":
         return resolve_qwen_extension_script("finetuning/sft_custom_voice_12hz.py")
     if normalized == "voicebox":
         return resolve_qwen_extension_script("finetuning/sft_voicebox_12hz.py")
-    return "finetuning/sft_12hz.py"
+    return resolve_qwen_extension_script("finetuning/sft_base_12hz.py")
 
 
 def qwen_training_python() -> str:

@@ -363,6 +363,7 @@ data/generated/sound-effects/2026-05-01/113406_short-soft-rain-on-a-window-clean
 
 현재 실험에서 기준으로 삼는 구현은 `qwen_extensions` 안의 역할별 canonical script입니다.
 
+- `qwen_extensions/finetuning/sft_base_12hz.py`
 - `qwen_extensions/finetuning/sft_custom_voice_12hz.py`
 - `qwen_extensions/fusion/make_voicebox_checkpoint.py`
 - `qwen_extensions/finetuning/sft_voicebox_12hz.py`
@@ -373,3 +374,35 @@ data/generated/sound-effects/2026-05-01/113406_short-soft-rain-on-a-window-clean
 재현 명령은 위 canonical script를 직접 호출합니다.
 
 현재 유지되는 진입점 목록은 [19-script-entrypoints.md](./19-script-entrypoints.md)를 봅니다.
+
+## 11. 2026-05-01 Qwen 학습 스텝 검증
+
+풀 트레이닝을 반복하지 않고, 실제 학습 루프가 첫 스텝까지 정상 진입하는지 확인했습니다.
+
+명령:
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+.venv/bin/python scripts/live_training_step_smoke.py
+```
+
+결과:
+
+| 경로 | 결과 |
+| --- | --- |
+| Base 1.7B | `Epoch 0 | Step 0 | Loss: 14.1813` |
+| CustomVoice 1.7B | `Epoch 0 | Step 0 | Loss: 12.5594` |
+| VoiceBox 1.7B | `Epoch 0 | Step 0 | Loss: 7.1637` |
+
+검증 후 상태:
+
+- `data/training-smoke` 임시 산출물 삭제 확인
+- 학습 subprocess 잔류 없음
+- `nvidia-smi` 기준 GPU 학습 프로세스 없음
+- `accelerate`는 `1.12.0` 유지
+
+참고:
+
+- PyPI 최신 `accelerate 1.13.0`도 동일한 step smoke는 통과했습니다.
+- 하지만 `qwen-asr 0.0.6`과 `qwen-tts 0.1.1`이 `accelerate==1.12.0`을 요구하므로, dependency-clean 상태를 위해 `1.12.0`으로 되돌렸습니다.
+- `Accelerator(log_with="tensorboard")`는 `project_dir`를 명시하도록 고쳐 최신 계열 요구사항에도 대응했습니다.

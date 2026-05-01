@@ -70,6 +70,15 @@ Windows PowerShell:
 - `app/backend/.env` 생성
 - 시스템 의존성 점검
 
+메인 `.venv`의 Gradio 계열은 `gradio>=5.50,<6` 라인으로 고정합니다.
+이유는 VibeVoice가 `gradio==5.50.0`을 기준으로 하고, MMAudio도 `gradio<6`을 요구하기 때문입니다.
+`hf-gradio`는 `gradio-client>=2,<3`을 요구해 `gradio 5.50.0`의 `gradio-client 1.14.0`과 충돌하므로 메인 런타임에 설치하지 않습니다.
+설치 후 아래 명령이 깨끗해야 합니다.
+
+```bash
+.venv/bin/python -m pip check
+```
+
 가상환경 `pip`가 깨졌을 때 직접 복구하려면:
 
 ```bash

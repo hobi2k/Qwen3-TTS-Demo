@@ -147,7 +147,7 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 
 - 이 명령은 smoke test가 아니라 live E2E입니다. 여러 대형 모델을 순차 로드하므로 10분 이상 걸릴 수 있습니다.
 - Qwen / S2-Pro / Applio / MMAudio / ACE-Step / VibeVoice가 실제 local runtime으로 동작하는지 확인합니다. API mock, fallback audio, simulation mode를 성공으로 처리하지 않습니다.
-- 훈련 endpoint는 장시간/파괴적 작업이므로 이 E2E에서 자동 실행하지 않습니다. 훈련 검증은 별도 학습 로그와 산출 체크포인트 품질 평가로 수행합니다.
+- 훈련 endpoint는 장시간/파괴적 작업이므로 이 E2E에서 자동 실행하지 않습니다. 대신 Qwen 학습 경로는 `scripts/live_training_step_smoke.py`로 실제 `Step/Loss`가 내려오는지 확인하고, 품질 검증은 별도 학습 로그와 산출 체크포인트 평가로 수행합니다.
 - MMAudio는 모델 초기화와 생성이 특히 느릴 수 있어 E2E 스크립트에서 마지막에 실행합니다.
 - 각 단계는 `[live-e2e] START/PASS/FAIL` 로그를 즉시 출력하므로, 멈춘 경우 어느 기능에서 걸렸는지 확인할 수 있습니다.
 - 완료 후 스크립트가 임시 uvicorn 프로세스 그룹을 종료합니다. 종료 후 `nvidia-smi`에서 GPU 프로세스가 남아 있지 않아야 합니다.
@@ -159,7 +159,7 @@ Fine-tuning 기능은 생성 기능과 검증 방식이 다릅니다. 실제 학
 | 범위 | 확인 방법 | 현재 상태 |
 | --- | --- | --- |
 | Qwen dataset prepare | `qwen3_tts_prepare_data.py`와 `/api/datasets/{id}/prepare-for-training`가 같은 프로젝트 Python과 `qwen_extensions` 경로를 쓰는지 확인 | 정리됨 |
-| Qwen Base / CustomVoice / VoiceBox 학습 | `qwen_extensions/finetuning/*` canonical script, `QWEN_DEMO_OPTIMIZER`, `QWEN_DEMO_TRAIN_PRECISION`, `QWEN_DEMO_GRAD_ACCUM_STEPS`로 실행 | MAI full run 결과 문서화됨 |
+| Qwen Base / CustomVoice / VoiceBox 학습 | `qwen_extensions/finetuning/*` canonical script, `QWEN_DEMO_OPTIMIZER`, `QWEN_DEMO_TRAIN_PRECISION`, `QWEN_DEMO_GRAD_ACCUM_STEPS`로 실행 | MAI full run 결과 문서화됨. 2026-05-01 step smoke 통과 |
 | VoiceBox fusion | `qwen_extensions/fusion/make_voicebox_checkpoint.py`로 speaker encoder 내장 여부 확인 | MAI VoiceBox 결과 문서화됨 |
 | S2-Pro fine-tune | `/api/s2-pro/train`이 Fish Speech `text2semantic_finetune`와 LoRA merge를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
 | Applio/RVC training | `/api/audio-tools/rvc-train`이 Applio preprocess/extract/train/index 순서로 실행 | 엔드포인트/자산 정리됨, 자동 full-run 제외 |
@@ -168,6 +168,33 @@ Fine-tuning 기능은 생성 기능과 검증 방식이 다릅니다. 실제 학
 | VibeVoice training | `/api/vibevoice/train`이 ASR LoRA 또는 TTS trainer/template를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
 
 학습 기능을 실제로 끝까지 검증할 때는 한 번에 하나만 실행합니다. 동시에 여러 학습을 돌리면 VRAM 피크, CUDA allocator, subprocess cache가 겹쳐 WSL 안정성이 떨어질 수 있습니다.
+
+### Qwen 학습 스텝 스모크
+
+풀 트레이닝을 기다리기 전에 아래 명령으로 학습 루프가 실제로 첫 스텝까지 내려오는지 확인합니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+.venv/bin/python scripts/live_training_step_smoke.py
+```
+
+동작 방식:
+
+- `data/datasets/mai_ko_subsets/prepared_4.jsonl`을 사용합니다.
+- Base 1.7B, CustomVoice 1.7B, VoiceBox 1.7B를 순서대로 하나씩 실행합니다.
+- `Epoch 0 | Step 0 | Loss: ...`가 찍히면 해당 프로세스 그룹을 중단합니다.
+- 임시 출력은 `data/training-smoke`에만 생성하고 검증 후 삭제합니다.
+- WSL/GPU 안정성을 위해 동시에 여러 학습을 실행하지 않습니다.
+
+2026-05-01 확인 결과:
+
+| 경로 | 확인 로그 |
+| --- | --- |
+| Base 1.7B | `Epoch 0 | Step 0 | Loss: 14.1813` |
+| CustomVoice 1.7B | `Epoch 0 | Step 0 | Loss: 12.5594` |
+| VoiceBox 1.7B | `Epoch 0 | Step 0 | Loss: 7.1637` |
+
+`accelerate`는 PyPI 최신 `1.13.0`도 스텝 진입은 통과했지만, `qwen-asr`와 `qwen-tts` 패키지가 `accelerate==1.12.0`을 요구하므로 프로젝트 환경은 `1.12.0`을 유지합니다. `project_dir`를 명시해 최신 계열의 logging 요구사항에도 맞도록 코드가 정리되어 있습니다.
 
 ### plain CustomVoice vs VoiceBox 비교
 

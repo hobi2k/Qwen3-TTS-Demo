@@ -19,6 +19,7 @@
 
 | 책임 | 실행 파일 |
 | --- | --- |
+| Base speaker fine-tuning | `qwen_extensions/finetuning/sft_base_12hz.py` |
 | plain CustomVoice fine-tuning | `qwen_extensions/finetuning/sft_custom_voice_12hz.py` |
 | shared training implementation | `qwen_extensions/finetuning/voicebox_training_common.py` |
 | VoiceBox bootstrap training | `qwen_extensions/finetuning/sft_voicebox_bootstrap_12hz.py` |
@@ -58,7 +59,7 @@ vendor/Qwen3-TTS/finetuning
 qwen_extensions
 ```
 
-이렇게 해야 `Base` 학습은 업스트림 `sft_12hz.py`를 그대로 쓰고, `CustomVoice`/`VoiceBox` 학습은 데모 확장 코드를 안정적으로 import할 수 있습니다.
+이렇게 해야 `Base`, `CustomVoice`, `VoiceBox` 학습이 모두 `qwen_extensions/finetuning`의 현재 검증된 엔트리포인트를 안정적으로 import할 수 있습니다. 업스트림 `vendor/Qwen3-TTS/finetuning/sft_12hz.py`는 비교와 호환을 위해 남기지만, 백엔드 실행 기준은 `qwen_extensions/finetuning/sft_base_12hz.py`입니다.
 
 ## Current Training Code Path
 
@@ -148,10 +149,23 @@ data/runtime/fish-speech-s2-pro.log
 
 UI의 학습 탭은 아래 백엔드 엔드포인트를 호출합니다. 이 항목들은 모두 장시간 작업이므로 live E2E 자동 검증에서는 버튼을 누르지 않고, 단일 작업으로 따로 실행합니다.
 
+학습용 데이터셋 준비 UI도 Qwen 전용으로 두지 않습니다. 현재 프런트엔드는 아래처럼 모델군별 데이터셋 탭을 따로 둡니다.
+
+| 데이터셋 탭 | 목적 | 학습 탭으로 넘기는 값 |
+| --- | --- | --- |
+| Qwen 데이터셋 만들기 | Qwen Base/CustomVoice/VoiceBox용 `audio/`, `raw.jsonl`, `prepared.jsonl`, `manifest.json` 생성 | `dataset_id` |
+| S2-Pro 데이터셋 | Fish Speech `text2semantic_finetune`용 `wav + .lab` 폴더 또는 proto 폴더 선택 | `lab_audio_dir` 또는 `proto_dir` |
+| VibeVoice 데이터셋 | VibeVoice TTS/ASR용 local dataset path, HF dataset id, train/validation JSONL 지정 | `data_dir`, `train_jsonl`, `validation_jsonl` |
+| Applio RVC 데이터셋 | 같은 화자의 생성 갤러리 WAV 묶음 또는 정리된 WAV 폴더 선택 | `audio_paths` 또는 `dataset_path` |
+| ACE-Step 데이터셋 | LoRA/LoKr 학습용 tensor 폴더, 오디오 폴더, dataset JSON 지정 | `tensor_dir`, `audio_dir`, `dataset_json` |
+| MMAudio 데이터셋 | upstream `example_train` 검증 모드 또는 Hydra config 등록 데이터셋 모드 선택 | `data_mode` |
+
+중요한 구분은 “모든 모델이 Qwen처럼 JSONL 하나로 끝나지 않는다”는 점입니다. S2-Pro, VibeVoice, ACE-Step, MMAudio, Applio는 upstream trainer가 기대하는 입력 형식이 서로 다르므로, UI도 하나의 범용 데이터셋 폼으로 뭉치지 않고 모델별 준비 탭으로 나눕니다.
+
 | 기능 | API | 실행 기준 |
 | --- | --- | --- |
 | Qwen 데이터 준비 | `POST /api/datasets/{dataset_id}/prepare-for-training` | `scripts/qwen3_tts_prepare_data.py` |
-| Qwen Base/CustomVoice/VoiceBox fine-tune | `POST /api/finetune-runs` | `vendor/Qwen3-TTS/finetuning/sft_12hz.py` 또는 `qwen_extensions/finetuning/*` |
+| Qwen Base/CustomVoice/VoiceBox fine-tune | `POST /api/finetune-runs` | `qwen_extensions/finetuning/sft_base_12hz.py`, `sft_custom_voice_12hz.py`, `sft_voicebox_12hz.py` |
 | VoiceBox fusion | `POST /api/voicebox/fusion` | `qwen_extensions/fusion/make_voicebox_checkpoint.py` |
 | S2-Pro LoRA/full fine-tune | `POST /api/s2-pro/train` | `vendor/fish-speech/fish_speech/train.py --config-name text2semantic_finetune` |
 | Applio/RVC model train | `POST /api/audio-tools/rvc-train` | Applio CLI preprocess/extract/train/index |

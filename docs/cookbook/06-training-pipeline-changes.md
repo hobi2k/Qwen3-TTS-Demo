@@ -111,20 +111,30 @@
 
 이 차이를 문서와 UI 모두에서 분리해서 보여주는 것이 이 데모의 중요한 변경점입니다.
 
-## 3. `sft_12hz.py`가 단순 실행 스크립트에서 공통 학습 엔진으로 확장되었습니다
+## 3. Qwen 학습 엔진은 `qwen_extensions` 기준으로 분리되었습니다
 
-파일: [sft_12hz.py](../../vendor/Qwen3-TTS/finetuning/sft_12hz.py)
+파일:
 
-원래 이 파일은 `Base` 학습 진입점으로 쓰였습니다.  
-지금은 여전히 `Base Fine-Tune`의 기본 스크립트이지만, 동시에 **다른 학습 경로가 재사용하는 공통 코어** 역할도 합니다.
+- [sft_base_12hz.py](../../qwen_extensions/finetuning/sft_base_12hz.py)
+- [sft_custom_voice_12hz.py](../../qwen_extensions/finetuning/sft_custom_voice_12hz.py)
+- [sft_voicebox_12hz.py](../../qwen_extensions/finetuning/sft_voicebox_12hz.py)
+- [voicebox_training_common.py](../../qwen_extensions/finetuning/voicebox_training_common.py)
 
-이번에 추가되거나 강화된 핵심 요소:
+업스트림 [sft_12hz.py](../../vendor/Qwen3-TTS/finetuning/sft_12hz.py)는 원본 비교와 호환을 위해 남겨 둡니다. 하지만 현재 백엔드 실행 기준은 `qwen_extensions/finetuning`입니다. 이렇게 해야 업스트림 코드를 직접 덮어쓰지 않으면서도 `accelerate`, optimizer, VoiceBox speaker encoder 같은 데모 전용 요구사항을 한곳에서 관리할 수 있습니다.
 
-- `build_arg_parser(default_init_model_path)`
-- `train_with_args(args)`
+공통 학습 엔진에서 관리하는 핵심 요소:
+
+- `run_customvoice_training(...)`
+- `finalize_checkpoint_layout(...)`
+- `export_customvoice_checkpoint(...)`
 - `resolve_speaker_encoder_source(...)`
 - `load_speaker_encoder(...)`
 - `resolve_output_speaker_id(...)`
+- `Accelerator(..., project_dir=...)`
+- `QWEN_DEMO_OPTIMIZER`
+- `QWEN_DEMO_TRAIN_PRECISION`
+- `QWEN_DEMO_GRAD_ACCUM_STEPS`
+- `QWEN_DEMO_LOG_EVERY`
 
 ### 이 변경이 왜 필요했는가
 
@@ -132,12 +142,14 @@
 
 그래서 현재 구조는 이렇게 바뀌었습니다.
 
-- `sft_12hz.py`
-  - 기본 `Base` 학습 스크립트
-  - 동시에 공통 학습 로직을 제공하는 코어
+- `sft_base_12hz.py`
+  - `Base` speaker SFT 전용 진입점
 - `sft_custom_voice_12hz.py`
   - `CustomVoice` 전용 진입점
-  - 실제 학습 로직은 `sft_12hz.py`의 공통 함수 재사용
+- `sft_voicebox_12hz.py`
+  - speaker encoder가 내장된 `VoiceBox` 재학습 진입점
+- `voicebox_training_common.py`
+  - 세 진입점이 함께 쓰는 실제 학습 구현
 
 즉 같은 기능을 두 파일에 복붙한 구조가 아니라, **기본 경로와 확장 경로를 분리하면서도 유지보수 가능한 구조**로 바꾼 것입니다.
 
@@ -156,7 +168,7 @@
 
 이 요구를 반영해, 현재는 아래처럼 경로가 분리되어 있습니다.
 
-- `Base Fine-Tune`: `sft_12hz.py`
+- `Base Fine-Tune`: `sft_base_12hz.py`
 - `CustomVoice Fine-Tune`: `sft_custom_voice_12hz.py`
 
 ### 이 스크립트가 해결하려는 문제
@@ -210,13 +222,13 @@ plain `CustomVoice` 결과 체크포인트는 여전히 self-contained라고 보
 
 백엔드에서는 `training_mode`를 보고 어떤 스크립트를 실행할지 결정합니다.
 
-- `base`면 `sft_12hz.py`
+- `base`면 `sft_base_12hz.py`
 - `custom_voice`면 `sft_custom_voice_12hz.py`
 - `voicebox`면 `sft_voicebox_12hz.py`
 
 실행 interpreter는 기본적으로 백엔드와 같은 Python입니다. 예전처럼 bare `python3`를 호출하면 시스템 Python이 잡혀 `torch`, `qwen-tts`, `flash_attn`, editable package가 빠질 수 있으므로, 백엔드는 `QWEN_DEMO_PYTHON`이 명시된 경우만 그 값을 사용하고 보통은 `sys.executable`을 씁니다.
 
-즉 현재 `학습 실행`은 단순 입력 폼이 아니라, **업스트림의 서로 다른 학습 진입점을 선택하는 런처 역할**을 합니다.
+즉 현재 `학습 실행`은 단순 입력 폼이 아니라, **Qwen 확장 폴더의 서로 다른 학습 진입점을 선택하는 런처 역할**을 합니다.
 
 ## 6. 실행 기록에 "어떻게 학습했는지"가 남도록 바뀌었습니다
 
@@ -258,8 +270,9 @@ plain `CustomVoice` 결과 체크포인트는 여전히 self-contained라고 보
 
 또한 어떤 스크립트가 실제로 실행될지도 읽기 전용으로 드러납니다.
 
-- `sft_12hz.py`
+- `sft_base_12hz.py`
 - `sft_custom_voice_12hz.py`
+- `sft_voicebox_12hz.py`
 
 이 덕분에 초심자도 "지금 내가 어떤 파이프라인을 타고 있는지"를 화면에서 확인할 수 있습니다.
 
