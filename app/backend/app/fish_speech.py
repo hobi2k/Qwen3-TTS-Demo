@@ -96,7 +96,7 @@ def fish_speech_config(runtime_source: RuntimeSource = None) -> Optional[FishSpe
     runtime = _normalize_runtime_source(runtime_source)
     if runtime == "api":
         model = (os.getenv("FISH_AUDIO_MODEL") or os.getenv("FISH_SPEECH_MODEL") or "s2-pro").strip() or "s2-pro"
-        timeout_sec = float(os.getenv("FISH_AUDIO_TIMEOUT_SEC") or os.getenv("FISH_SPEECH_TIMEOUT_SEC") or "180")
+        timeout_sec = float(os.getenv("FISH_AUDIO_TIMEOUT_SEC") or os.getenv("FISH_SPEECH_TIMEOUT_SEC") or "600")
         server_url = (os.getenv("FISH_AUDIO_API_URL") or "https://api.fish.audio").strip()
         return FishSpeechConfig(
             endpoint_url=_join_tts_endpoint(server_url),
@@ -108,7 +108,7 @@ def fish_speech_config(runtime_source: RuntimeSource = None) -> Optional[FishSpe
         )
 
     model = (os.getenv("FISH_SPEECH_MODEL") or "s2-pro").strip() or "s2-pro"
-    timeout_sec = float(os.getenv("FISH_SPEECH_TIMEOUT_SEC") or "180")
+    timeout_sec = float(os.getenv("FISH_SPEECH_TIMEOUT_SEC") or "600")
     server_url = (os.getenv("FISH_SPEECH_SERVER_URL") or "http://127.0.0.1:8080").strip()
     return FishSpeechConfig(
         endpoint_url=_join_tts_endpoint(server_url),
@@ -343,7 +343,7 @@ def ensure_local_s2_pro_server(config: FishSpeechConfig) -> None:
             text=True,
         )
 
-    timeout_sec = float(os.getenv("S2_PRO_START_TIMEOUT_SEC") or "120")
+    timeout_sec = float(os.getenv("S2_PRO_START_TIMEOUT_SEC") or "600")
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
         if _local_server_running(config, timeout=2.0):

@@ -103,6 +103,8 @@ from .schemas import (
     VibeVoiceASRResponse,
     VibeVoiceRuntimeResponse,
     VibeVoiceTTSRequest,
+    VibeVoiceModelToolRequest,
+    VibeVoiceModelToolResponse,
     VibeVoiceTrainingRequest,
     VibeVoiceTrainingResponse,
     VoiceChangerBatchRequest,
@@ -129,7 +131,8 @@ REPO_ROOT = BACKEND_DIR.parent.parent
 FRONTEND_DIR = REPO_ROOT / "app" / "frontend"
 LEGACY_FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 NEXT_FRONTEND_OUT_DIR = FRONTEND_DIR / "out"
-UPSTREAM_QWEN_DIR = REPO_ROOT / "Qwen3-TTS"
+UPSTREAM_QWEN_DIR = REPO_ROOT / "vendor" / "Qwen3-TTS"
+DEFAULT_QWEN_EXTENSIONS_DIR = REPO_ROOT / "qwen_extensions"
 DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
 load_dotenv(BACKEND_DIR / ".env")
 
@@ -472,15 +475,83 @@ def model_catalog_by_id() -> Dict[str, ModelInfo]:
     return {item.model_id: item for item in build_model_catalog()}
 
 
+def qwen_extensions_dir() -> Path:
+    """Return the directory that owns demo-specific Qwen extension scripts.
+
+    The stock Qwen checkout remains under ``vendor/Qwen3-TTS``. Scripts that were
+    added by this demo are resolved from ``QWEN_EXTENSIONS`` first so backend
+    execution does not depend on mutating the upstream tree.
+    """
+
+    configured = (os.getenv("QWEN_EXTENSIONS") or "").strip()
+    if not configured:
+        return DEFAULT_QWEN_EXTENSIONS_DIR
+    candidate = Path(configured).expanduser()
+    return candidate if candidate.is_absolute() else (REPO_ROOT / candidate)
+
+
+def resolve_qwen_extension_script(relative_path: str) -> str:
+    """Resolve a demo-maintained Qwen script path for CLI execution.
+
+    Args:
+        relative_path: Path inside either ``qwen_extensions`` or legacy
+            ``vendor/Qwen3-TTS``.
+
+    Returns:
+        Absolute path to the extension script when present, otherwise the
+        matching legacy path under ``vendor/Qwen3-TTS`` for compatibility.
+    """
+
+    extension_path = qwen_extensions_dir() / relative_path
+    if extension_path.exists():
+        return str(extension_path)
+    return str(UPSTREAM_QWEN_DIR / relative_path)
+
+
 def resolve_finetune_entrypoint(training_mode: str) -> str:
-    """파인튜닝 모드에 맞는 업스트림 스크립트 파일명을 반환한다."""
+    """파인튜닝 모드에 맞는 실행 스크립트 경로를 반환한다."""
 
     normalized = (training_mode or "base").strip().lower()
     if normalized == "custom_voice":
-        return "finetuning/sft_custom_voice_12hz.py"
+        return resolve_qwen_extension_script("finetuning/sft_custom_voice_12hz.py")
     if normalized == "voicebox":
-        return "finetuning/sft_voicebox_12hz.py"
+        return resolve_qwen_extension_script("finetuning/sft_voicebox_12hz.py")
     return "finetuning/sft_12hz.py"
+
+
+def qwen_training_python() -> str:
+    """Return the Python executable used for Qwen prepare/fine-tuning jobs.
+
+    Fine-tuning must run in the same dependency environment as the backend by
+    default. A bare ``python3`` can point to the system interpreter and miss
+    torch, qwen-tts, flash-attn, or local editable packages, so the backend uses
+    ``QWEN_DEMO_PYTHON`` only when the user explicitly overrides it.
+    """
+
+    configured = (os.getenv("QWEN_DEMO_PYTHON") or "").strip()
+    return configured or sys.executable
+
+
+def qwen_subprocess_env() -> Dict[str, str]:
+    """Build a stable environment for Qwen prepare/fine-tuning subprocesses."""
+
+    env = os.environ.copy()
+    pythonpath_parts = [
+        str(UPSTREAM_QWEN_DIR),
+        str(UPSTREAM_QWEN_DIR / "finetuning"),
+        str(qwen_extensions_dir()),
+    ]
+    existing = env.get("PYTHONPATH", "")
+    if existing:
+        pythonpath_parts.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    env.setdefault("HF_HOME", str(REPO_ROOT / "data" / "cache" / "huggingface"))
+    env.setdefault("TRANSFORMERS_CACHE", str(REPO_ROOT / "data" / "cache" / "huggingface" / "transformers"))
+    env.setdefault("MPLCONFIGDIR", str(REPO_ROOT / "data" / "cache" / "matplotlib"))
+    Path(env["HF_HOME"]).mkdir(parents=True, exist_ok=True)
+    Path(env["TRANSFORMERS_CACHE"]).mkdir(parents=True, exist_ok=True)
+    Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
+    return env
 
 app = FastAPI(title="Qwen3-TTS Demo API")
 app.add_middleware(
@@ -1125,7 +1196,7 @@ def run_prepare_data(
 
     result = subprocess.run(
         [
-            "python3",
+            qwen_training_python(),
             str(prepare_script),
             "--device",
             device,
@@ -1141,6 +1212,7 @@ def run_prepare_data(
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
+        env=qwen_subprocess_env(),
     )
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=result.stderr or result.stdout or "prepare_data.py failed")
@@ -2115,6 +2187,7 @@ def run_upstream_command(command: List[str]) -> subprocess.CompletedProcess[str]
         cwd=str(UPSTREAM_QWEN_DIR),
         capture_output=True,
         text=True,
+        env=qwen_subprocess_env(),
     )
 
 
@@ -2244,9 +2317,18 @@ def transcribe_vibevoice_audio(payload: VibeVoiceASRRequest) -> VibeVoiceASRResp
     """Run Microsoft VibeVoice-ASR on a stored audio file."""
 
     try:
-        absolute_path = resolve_audio_absolute_path(payload.audio_path)
+        absolute_path = resolve_audio_absolute_path(payload.audio_path) if payload.audio_path.strip() else None
+        audio_dir: Optional[Path] = None
+        if payload.audio_dir.strip():
+            audio_dir = Path(payload.audio_dir).expanduser()
+            if not audio_dir.is_absolute():
+                audio_dir = REPO_ROOT / audio_dir
         result = vibevoice_engine.transcribe(
             audio_path=absolute_path,
+            audio_dir=audio_dir,
+            dataset=payload.dataset,
+            split=payload.split,
+            max_duration=payload.max_duration,
             language=payload.language,
             task=payload.task,
             context_info=payload.context_info,
@@ -2294,18 +2376,15 @@ def generate_vibevoice_tts(payload: VibeVoiceTTSRequest) -> GenerationResponse:
             text=payload.text,
             output_path=output_path,
             model_profile=payload.model_profile,
-            language=payload.language,
             speaker_name=payload.speaker_name,
             speaker_audio_path=speaker_audio_path,
             speaker_names=payload.speaker_names,
             speaker_audio_paths=speaker_audio_paths,
-            speaker_prompt_text=payload.speaker_prompt_text,
+            checkpoint_path=payload.checkpoint_path,
             cfg_scale=payload.cfg_scale,
-            temperature=payload.temperature,
-            top_p=payload.top_p,
+            ddpm_steps=payload.ddpm_steps,
             seed=payload.seed,
             device=payload.device,
-            precision=payload.precision,
             attn_implementation=payload.attn_implementation,
             inference_steps=payload.inference_steps,
             max_length_times=payload.max_length_times,
@@ -2324,9 +2403,9 @@ def generate_vibevoice_tts(payload: VibeVoiceTTSRequest) -> GenerationResponse:
     record = write_audio_tool_generation_record(
         mode="vibevoice_tts",
         text=payload.text,
-        language=payload.language,
+        language="auto",
         audio_path=output_path,
-        instruction=payload.speaker_prompt_text,
+        instruction=payload.checkpoint_path,
         meta={
             "tool_kind": "vibevoice_tts",
             "model_profile": payload.model_profile,
@@ -2334,12 +2413,11 @@ def generate_vibevoice_tts(payload: VibeVoiceTTSRequest) -> GenerationResponse:
             "speaker_audio_path": payload.speaker_audio_path,
             "speaker_names": payload.speaker_names,
             "speaker_audio_paths": payload.speaker_audio_paths,
+            "checkpoint_path": payload.checkpoint_path,
             "cfg_scale": payload.cfg_scale,
-            "temperature": payload.temperature,
-            "top_p": payload.top_p,
+            "ddpm_steps": payload.ddpm_steps,
             "seed": payload.seed,
             "device": payload.device,
-            "precision": payload.precision,
             "attn_implementation": payload.attn_implementation,
             "inference_steps": payload.inference_steps,
             "max_length_times": payload.max_length_times,
@@ -2480,12 +2558,14 @@ def train_vibevoice(payload: VibeVoiceTrainingRequest) -> VibeVoiceTrainingRespo
                 model_path,
                 "--dataset_name",
                 data_ref,
+                "--train_split_name",
+                payload.train_split_name,
                 "--text_column_name",
-                "text",
+                payload.text_column_name,
                 "--audio_column_name",
-                "audio",
+                payload.audio_column_name,
                 "--voice_prompts_column_name",
-                "audio",
+                payload.voice_prompts_column_name,
                 "--output_dir",
                 str(output_dir),
                 "--per_device_train_batch_size",
@@ -2509,22 +2589,45 @@ def train_vibevoice(payload: VibeVoiceTrainingRequest) -> VibeVoiceTrainingRespo
                 "--max_grad_norm",
                 str(payload.max_grad_norm),
                 "--lora_target_modules",
-                "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
+                payload.lora_target_modules,
                 "--lr_scheduler_type",
                 "cosine",
                 "--voice_prompt_drop_rate",
                 "0.2",
                 "--ddpm_batch_mul",
-                "4",
+                str(payload.ddpm_batch_mul),
                 "--diffusion_loss_weight",
-                "1.4",
+                str(payload.diffusion_loss_weight),
                 "--ce_loss_weight",
-                "0.04",
-                "--train_diffusion_head",
-                "True",
+                str(payload.ce_loss_weight),
                 "--do_train",
                 "--gradient_clipping",
             ]
+            if payload.dataset_config_name:
+                command.extend(["--dataset_config_name", payload.dataset_config_name])
+            if payload.eval_split_name:
+                command.extend(["--eval_split_name", payload.eval_split_name])
+            if payload.train_jsonl:
+                command.extend(["--train_jsonl", payload.train_jsonl])
+            if payload.validation_jsonl:
+                command.extend(["--validation_jsonl", payload.validation_jsonl])
+            if payload.eval_split_size:
+                command.extend(["--eval_split_size", str(payload.eval_split_size)])
+            if payload.ignore_verifications:
+                command.append("--ignore_verifications")
+            if payload.max_length is not None:
+                command.extend(["--max_length", str(payload.max_length)])
+            if payload.lora_wrap_diffusion_head:
+                command.extend(["--lora_wrap_diffusion_head", "True"])
+            command.extend(["--train_diffusion_head", "True" if payload.train_diffusion_head else "False"])
+            if payload.train_connectors:
+                command.extend(["--train_connectors", "True"])
+            if payload.layers_to_freeze:
+                command.extend(["--layers_to_freeze", payload.layers_to_freeze])
+            if payload.debug_save:
+                command.append("--debug_save")
+            if payload.debug_ce_details:
+                command.append("--debug_ce_details")
             if payload.bf16:
                 command.extend(["--bf16", "True"])
             if payload.gradient_checkpointing:
@@ -2564,6 +2667,79 @@ def train_vibevoice(payload: VibeVoiceTrainingRequest) -> VibeVoiceTrainingRespo
             "output_dir": str(output_dir),
             "returncode": process.returncode,
         },
+    )
+
+
+@app.post("/api/vibevoice/model-tools", response_model=VibeVoiceModelToolResponse)
+def run_vibevoice_model_tool(payload: VibeVoiceModelToolRequest) -> VibeVoiceModelToolResponse:
+    """Run VibeVoice model merge, verification, or NnScaler conversion utilities."""
+
+    status_info = vibevoice_engine.status()
+    repo_root = Path(status_info["repo_root"])
+    if not repo_root.exists():
+        raise HTTPException(status_code=400, detail=f"VibeVoice vendor source not found: {repo_root}")
+
+    run_id = storage.new_id("vibevoice_tool")
+    created_at = utc_now()
+    run_dir = storage.dated_child_dir(storage.audio_tools_dir, "vibevoice_tools", created_at=parse_created_at(created_at)) / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "tool.log"
+    output_path = Path(payload.output_path).expanduser()
+    if not output_path.is_absolute():
+        output_path = REPO_ROOT / output_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if payload.tool in {"merge", "verify_merge"}:
+        if not payload.base_model_path.strip():
+            raise HTTPException(status_code=400, detail="base_model_path is required for VibeVoice merge tools.")
+        script = repo_root / "vibevoice" / "scripts" / "merge_vibevoice_models.py"
+        command = [
+            vibevoice_engine.python_executable,
+            str(script),
+            "--base_model_path",
+            payload.base_model_path,
+            "--output_path",
+            str(output_path),
+            "--output_format",
+            payload.output_format,
+        ]
+        if payload.tool == "verify_merge":
+            command.append("--verify_only")
+        else:
+            if not payload.checkpoint_path.strip():
+                raise HTTPException(status_code=400, detail="checkpoint_path is required for VibeVoice merge.")
+            command.extend(["--checkpoint_path", payload.checkpoint_path])
+    else:
+        if not payload.nnscaler_checkpoint_path.strip():
+            raise HTTPException(status_code=400, detail="nnscaler_checkpoint_path is required for conversion.")
+        script = repo_root / "vibevoice" / "scripts" / "convert_nnscaler_checkpoint_to_transformers.py"
+        command = [
+            vibevoice_engine.python_executable,
+            str(script),
+            "--nnscaler_checkpoint_path",
+            payload.nnscaler_checkpoint_path,
+            "--pytorch_dump_folder_path",
+            str(output_path),
+        ]
+        if payload.config_path.strip():
+            command.extend(["--config_path", payload.config_path])
+
+    with log_path.open("w", encoding="utf-8") as log:
+        log.write(f"$ {' '.join(command)}\n\n")
+        process = subprocess.run(command, cwd=str(REPO_ROOT), stdout=log, stderr=subprocess.STDOUT, text=True)
+
+    status = "completed" if process.returncode == 0 else "failed"
+    message = "VibeVoice model utility completed." if status == "completed" else f"VibeVoice model utility failed. See {storage.relpath(log_path)}"
+    save_audio_tool_job(kind="vibevoice_model_tool", input_summary=payload.tool, message=message, assets=[])
+    return VibeVoiceModelToolResponse(
+        status=status,
+        message=message,
+        run_id=run_id,
+        run_dir=storage.relpath(run_dir),
+        log_path=storage.relpath(log_path),
+        output_path=storage.relpath(output_path),
+        command=command,
+        meta={"returncode": process.returncode, "tool": payload.tool},
     )
 
 
@@ -4556,11 +4732,17 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
 
     reference_id = payload.reference_id
     selected_voice_runtime_source: Optional[str] = None
+    selected_voice_audio_path: Optional[Path] = None
+    selected_voice_audio_rel = ""
+    selected_voice_ref_text = ""
     if reference_id:
         try:
             voice_record = get_s2pro_voice_record(reference_id)
             reference_id = voice_record.reference_id
             selected_voice_runtime_source = normalize_s2pro_runtime_source(voice_record.runtime_source)
+            selected_voice_audio_rel = voice_record.reference_audio_path
+            selected_voice_audio_path = resolve_audio_absolute_path(voice_record.reference_audio_path)
+            selected_voice_ref_text = voice_record.reference_text
         except HTTPException:
             # Fish Speech also accepts raw reference ids; keep that path for
             # users who already registered voices in the local Fish runtime.
@@ -4569,6 +4751,9 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
         runtime_source = selected_voice_runtime_source
 
     resolved_reference_ids: List[str] = []
+    fallback_voice_audio_path = selected_voice_audio_path
+    fallback_voice_audio_rel = selected_voice_audio_rel
+    fallback_voice_ref_text = selected_voice_ref_text
     for item in payload.reference_ids:
         if not item:
             continue
@@ -4577,6 +4762,10 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
             resolved_reference_ids.append(voice_record.reference_id)
             if runtime_source == "auto":
                 runtime_source = normalize_s2pro_runtime_source(voice_record.runtime_source)
+            if fallback_voice_audio_path is None:
+                fallback_voice_audio_rel = voice_record.reference_audio_path
+                fallback_voice_audio_path = resolve_audio_absolute_path(voice_record.reference_audio_path)
+                fallback_voice_ref_text = voice_record.reference_text
         except HTTPException:
             resolved_reference_ids.append(item)
 
@@ -4607,7 +4796,36 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
             runtime_source=runtime_source,
         )
     except FishSpeechError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if fallback_voice_audio_path is None or reference_audio_path is not None:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        try:
+            meta = generate_s2_pro_audio(
+                text=final_text,
+                output_path=output_path,
+                reference_audio_path=fallback_voice_audio_path,
+                reference_text=fallback_voice_ref_text,
+                reference_id=None,
+                reference_ids=[],
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+                max_new_tokens=payload.max_new_tokens,
+                chunk_length=payload.chunk_length,
+                output_format=output_format,
+                sample_rate=payload.sample_rate,
+                speed=payload.speed,
+                volume=payload.volume,
+                normalize=payload.normalize,
+                latency=payload.latency,
+                repetition_penalty=payload.repetition_penalty,
+                min_chunk_length=payload.min_chunk_length,
+                condition_on_previous_chunks=payload.condition_on_previous_chunks,
+                early_stop_threshold=payload.early_stop_threshold,
+                runtime_source=runtime_source,
+            )
+            meta["reference_id_fallback_error"] = str(exc)
+            reference_audio_rel = fallback_voice_audio_rel
+        except FishSpeechError as retry_exc:
+            raise HTTPException(status_code=503, detail=str(retry_exc)) from retry_exc
 
     record_id = storage.new_id("gen")
     record = build_generation_record(
@@ -4886,8 +5104,8 @@ def create_voicebox_fusion(payload: VoiceBoxFusionRequest) -> FineTuneRun:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     command = [
-        "python3",
-        "fusion/make_voicebox_checkpoint.py",
+        sys.executable,
+        resolve_qwen_extension_script("fusion/make_voicebox_checkpoint.py"),
         "--input-checkpoint",
         resolve_model_path_for_cli(payload.input_checkpoint_path),
         "--speaker-encoder-source",
@@ -4947,8 +5165,8 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
     record_id = storage.new_id("gen")
     output_dir = storage.generated_dir / "voicebox" / record_id
     command = [
-        "python3",
-        "inference/voicebox/clone_low_level.py",
+        sys.executable,
+        resolve_qwen_extension_script("inference/voicebox/clone_low_level.py"),
         "--model-path",
         resolve_model_path_for_cli(payload.model_id),
         "--ref-audio",
@@ -5552,7 +5770,7 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
         dataset = ensure_real_prepared_dataset(dataset, payload.device)
         prepared_jsonl_path = dataset["prepared_jsonl_path"]
         command = [
-            "python3",
+            qwen_training_python(),
             entrypoint,
             "--init_model_path",
             payload.init_model_path,

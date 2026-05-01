@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import shlex
 import subprocess
 import sys
@@ -38,13 +39,16 @@ def resolve_mmaudio_python(repo_root: Path) -> str:
     candidates: List[Path] = [Path(configured).expanduser()] if configured else []
     candidates.extend(
         [
-            repo_root / "vendor" / "MMAudio" / ".venv" / "bin" / "python",
+            repo_root / ".venv" / "bin" / "python",
             Path(sys.executable),
+            repo_root / "vendor" / "MMAudio" / ".venv" / "bin" / "python",
         ]
     )
     for candidate in candidates:
         if candidate.exists():
-            return str(candidate.resolve())
+            # Keep virtualenv symlinks intact; resolving them jumps to the base
+            # interpreter and loses the environment's site-packages.
+            return str(candidate)
     return sys.executable
 
 
@@ -158,10 +162,16 @@ class MMAudioSoundEffectEngine:
             "--duration",
             str(float(duration_sec)),
             "--output",
-            str(output_path),
+            str(output_path.parent),
         ]
         if seed is not None:
             command.extend(["--seed", str(int(seed))])
+        if steps is not None:
+            command.extend(["--num_steps", str(int(steps))])
+        if cfg_scale is not None:
+            command.extend(["--cfg_strength", str(float(cfg_scale))])
+        if negative_prompt:
+            command.extend(["--negative_prompt", negative_prompt])
         return command, profile_root
 
     def generate(
@@ -181,6 +191,11 @@ class MMAudioSoundEffectEngine:
             raise MMAudioError(self.availability_notes())
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_outputs = {
+            candidate.resolve()
+            for candidate in output_path.parent.glob("*")
+            if candidate.suffix.lower() in {".wav", ".flac", ".mp3", ".ogg"}
+        }
         command, cwd = self._build_command(
             prompt=prompt,
             duration_sec=duration_sec,
@@ -198,7 +213,26 @@ class MMAudioSoundEffectEngine:
                 f"{completed.returncode}.\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}"
             )
         if not output_path.exists():
-            raise MMAudioError(f"MMAudio did not create output file: {output_path}")
+            new_outputs = [
+                candidate
+                for candidate in output_path.parent.glob("*")
+                if candidate.suffix.lower() in {".wav", ".flac", ".mp3", ".ogg"}
+                and candidate.resolve() not in existing_outputs
+            ]
+            if not new_outputs:
+                raise MMAudioError(f"MMAudio did not create output file: {output_path}")
+            produced_path = max(new_outputs, key=lambda item: item.stat().st_mtime)
+            if produced_path.suffix.lower() == output_path.suffix.lower():
+                shutil.move(str(produced_path), output_path)
+            else:
+                try:
+                    import torchaudio
+
+                    audio, sample_rate = torchaudio.load(str(produced_path))
+                    torchaudio.save(str(output_path), audio, sample_rate)
+                    produced_path.unlink(missing_ok=True)
+                except Exception:
+                    shutil.copyfile(produced_path, output_path)
 
         return output_path, {
             "engine": "mmaudio",

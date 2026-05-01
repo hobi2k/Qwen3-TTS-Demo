@@ -123,12 +123,16 @@ class VibeVoiceEngine:
                 "ASR",
                 "ASR LoRA fine-tuning",
                 "ASR hotwords/context",
-                "ASR timestamps and speaker diarization",
+                "ASR batch files, folders, and HF datasets",
+                "ASR timestamps through helper path",
                 "Realtime TTS 0.5B",
                 "Long-form TTS 1.5B",
                 "Community long-form TTS 7B",
                 "1.5B multi-speaker voice prompts",
                 "7B multi-speaker voice prompts",
+                "TTS LoRA checkpoint loading",
+                "VibeVoice LoRA merge and verify",
+                "NnScaler checkpoint conversion",
                 "Command-template overrides",
             ],
             "notes": (
@@ -172,7 +176,11 @@ class VibeVoiceEngine:
     def transcribe(
         self,
         *,
-        audio_path: Path,
+        audio_path: Optional[Path] = None,
+        audio_dir: Optional[Path] = None,
+        dataset: str = "",
+        split: str = "test",
+        max_duration: float = 3600.0,
         language: str = "auto",
         task: str = "transcribe",
         context_info: str = "",
@@ -192,13 +200,19 @@ class VibeVoiceEngine:
         if not model_path.exists():
             raise VibeVoiceError(f"VibeVoice ASR model not found: {model_path}")
 
-        output_json = audio_path.with_suffix(audio_path.suffix + ".vibevoice-asr.json")
+        if audio_path is None and audio_dir is None and not dataset.strip():
+            raise VibeVoiceError("VibeVoice ASR requires audio_path, audio_dir, or dataset.")
+        output_json = (audio_path or self.repo_root / "data" / "vibevoice_asr_batch").with_suffix(".vibevoice-asr.json")
         template = os.getenv("VIBEVOICE_ASR_COMMAND_TEMPLATE", "").strip()
         values = {
             "python": self.python_executable,
             "repo": self.vendor_root,
             "model": model_path,
-            "audio": audio_path,
+            "audio": audio_path or "",
+            "audio_dir": audio_dir or "",
+            "dataset": dataset,
+            "split": split,
+            "max_duration": max_duration,
             "output": output_json,
             "language": language,
             "task": task,
@@ -217,14 +231,12 @@ class VibeVoiceEngine:
             command = self._format_template(template, values)
         else:
             official_script = self.vendor_root / "demo" / "vibevoice_asr_inference_from_file.py"
-            if official_script.exists() and not context_info.strip():
+            if official_script.exists() and not context_info.strip() and not return_timestamps:
                 command = [
                     self.python_executable,
                     str(official_script),
                     "--model_path",
                     str(model_path),
-                    "--audio_files",
-                    str(audio_path),
                     "--device",
                     device if device != "auto" else "auto",
                     "--max_new_tokens",
@@ -238,9 +250,17 @@ class VibeVoiceEngine:
                     "--batch_size",
                     str(batch_size),
                 ]
+                if audio_path:
+                    command.extend(["--audio_files", str(audio_path)])
+                elif audio_dir:
+                    command.extend(["--audio_dir", str(audio_dir)])
+                elif dataset.strip():
+                    command.extend(["--dataset", dataset, "--split", split, "--max_duration", str(max_duration)])
                 if attn_implementation != "auto":
                     command.extend(["--attn_implementation", attn_implementation])
             else:
+                if audio_path is None:
+                    raise VibeVoiceError("context/timestamp helper mode currently requires a single audio_path.")
                 command = [
                     self.python_executable,
                     str(self.repo_root / "scripts" / "run_vibevoice_asr.py"),
@@ -301,13 +321,11 @@ class VibeVoiceEngine:
         speaker_audio_path: Optional[Path] = None,
         speaker_names: Optional[List[str]] = None,
         speaker_audio_paths: Optional[List[Path]] = None,
-        speaker_prompt_text: str = "",
+        checkpoint_path: str = "",
         cfg_scale: float = 1.3,
-        temperature: float = 0.95,
-        top_p: float = 0.95,
+        ddpm_steps: int = 5,
         seed: Optional[int] = None,
         device: str = "auto",
-        precision: str = "auto",
         attn_implementation: str = "auto",
         inference_steps: int = 10,
         max_length_times: float = 2.0,
@@ -348,18 +366,15 @@ class VibeVoiceEngine:
             "text_file": prompt_file,
             "output": output_path,
             "output_dir": work_dir,
-            "language": language,
             "speaker": speaker_name,
             "speaker_audio": speaker_audio_path or "",
             "speaker_names": " ".join(speaker_names or []),
             "speaker_audio_paths": " ".join(str(path) for path in (speaker_audio_paths or [])),
-            "speaker_prompt_text": speaker_prompt_text,
+            "checkpoint_path": checkpoint_path,
             "cfg_scale": cfg_scale,
-            "temperature": temperature,
-            "top_p": top_p,
+            "ddpm_steps": ddpm_steps,
             "seed": "" if seed is None else seed,
             "device": device,
-            "precision": precision,
             "attn_implementation": attn_implementation,
             "inference_steps": inference_steps,
             "max_length_times": max_length_times,
@@ -380,7 +395,9 @@ class VibeVoiceEngine:
                 speaker_audio_path=speaker_audio_path,
                 speaker_names=speaker_names or [],
                 speaker_audio_paths=speaker_audio_paths or [],
+                checkpoint_path=checkpoint_path,
                 cfg_scale=cfg_scale,
+                ddpm_steps=ddpm_steps,
                 device=device,
                 seed=seed,
                 attn_implementation=attn_implementation,
@@ -407,6 +424,7 @@ class VibeVoiceEngine:
             "work_dir": str(work_dir),
             "speaker_names": speaker_names or [speaker_name],
             "speaker_audio_paths": [str(path) for path in (speaker_audio_paths or ([speaker_audio_path] if speaker_audio_path else []))],
+            "checkpoint_path": checkpoint_path,
         }
 
     def _default_tts_command(
@@ -421,7 +439,9 @@ class VibeVoiceEngine:
         speaker_audio_path: Optional[Path],
         speaker_names: List[str],
         speaker_audio_paths: List[Path],
+        checkpoint_path: str,
         cfg_scale: float,
+        ddpm_steps: int,
         device: str,
         seed: Optional[int],
         attn_implementation: str,
@@ -450,6 +470,8 @@ class VibeVoiceEngine:
                 *(speaker_names or [speaker_name]),
                 "--cfg-scale",
                 str(cfg_scale),
+                "--checkpoint-path",
+                checkpoint_path,
                 "--inference-steps",
                 str(inference_steps or int(os.getenv("VIBEVOICE_TTS_7B_INFERENCE_STEPS", default_steps))),
                 "--max-length-times",
@@ -474,7 +496,7 @@ class VibeVoiceEngine:
             command.extend(extra_args)
             return command
         else:
-            script = self.vendor_root / "demo" / "realtime_model_inference_from_file.py"
+            script = self.vendor_root / "demo" / "streaming_inference_from_file.py"
             if not script.exists():
                 raise VibeVoiceError(f"Realtime VibeVoice TTS entrypoint not found: {script}")
 
@@ -491,6 +513,8 @@ class VibeVoiceEngine:
             str(work_dir),
             "--cfg_scale",
             str(cfg_scale),
+            "--ddpm_steps",
+            str(ddpm_steps),
         ]
         if device and device != "auto":
             command.extend(["--device", device])

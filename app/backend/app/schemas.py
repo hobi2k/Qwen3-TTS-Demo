@@ -858,18 +858,15 @@ class VibeVoiceTTSRequest(BaseModel):
     text: str = Field(..., min_length=1)
     output_name: Optional[str] = None
     model_profile: str = Field("realtime", pattern="^(realtime|tts_15b|1\\.5b|longform|tts_7b|7b|large)$")
-    language: str = "auto"
     speaker_name: str = "Speaker 1"
     speaker_audio_path: Optional[str] = None
     speaker_names: List[str] = Field(default_factory=list)
     speaker_audio_paths: List[str] = Field(default_factory=list)
-    speaker_prompt_text: str = ""
+    checkpoint_path: str = ""
     cfg_scale: float = Field(1.3, ge=0.0, le=20.0)
-    temperature: float = Field(0.95, ge=0.0, le=2.0)
-    top_p: float = Field(0.95, ge=0.0, le=1.0)
+    ddpm_steps: int = Field(5, ge=1, le=200)
     seed: Optional[int] = None
     device: str = "auto"
-    precision: str = "auto"
     attn_implementation: str = "auto"
     inference_steps: int = Field(10, ge=1, le=200)
     max_length_times: float = Field(2.0, ge=0.1, le=20.0)
@@ -883,7 +880,11 @@ class VibeVoiceTTSRequest(BaseModel):
 class VibeVoiceASRRequest(BaseModel):
     """VibeVoice-ASR 전사 요청."""
 
-    audio_path: str = Field(..., min_length=1)
+    audio_path: str = ""
+    audio_dir: str = ""
+    dataset: str = ""
+    split: str = "test"
+    max_duration: float = Field(3600.0, gt=0.0)
     language: str = "auto"
     task: str = "transcribe"
     context_info: str = ""
@@ -918,6 +919,17 @@ class VibeVoiceTrainingRequest(BaseModel):
     model_path: str = ""
     data_dir: str = Field(..., min_length=1)
     output_dir: str = ""
+    dataset_config_name: str = ""
+    train_split_name: str = "train"
+    eval_split_name: str = "validation"
+    text_column_name: str = "text"
+    audio_column_name: str = "audio"
+    voice_prompts_column_name: str = "voice_prompts"
+    train_jsonl: str = ""
+    validation_jsonl: str = ""
+    eval_split_size: float = Field(0.0, ge=0.0, le=1.0)
+    ignore_verifications: bool = False
+    max_length: Optional[int] = Field(default=None, gt=0)
     nproc_per_node: int = Field(1, ge=1, le=16)
     num_train_epochs: float = Field(3.0, gt=0.0, le=1000.0)
     per_device_train_batch_size: int = Field(1, ge=1, le=128)
@@ -931,6 +943,16 @@ class VibeVoiceTrainingRequest(BaseModel):
     lora_r: int = Field(16, ge=1, le=1024)
     lora_alpha: int = Field(32, ge=1, le=4096)
     lora_dropout: float = Field(0.05, ge=0.0, le=1.0)
+    lora_target_modules: str = "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
+    lora_wrap_diffusion_head: bool = False
+    train_diffusion_head: bool = True
+    train_connectors: bool = False
+    layers_to_freeze: str = ""
+    ddpm_batch_mul: int = Field(4, ge=1, le=1024)
+    ce_loss_weight: float = Field(0.04, ge=0.0, le=1000.0)
+    diffusion_loss_weight: float = Field(1.4, ge=0.0, le=1000.0)
+    debug_save: bool = False
+    debug_ce_details: bool = False
     bf16: bool = True
     gradient_checkpointing: bool = True
     use_customized_context: bool = True
@@ -949,6 +971,31 @@ class VibeVoiceTrainingResponse(BaseModel):
     run_dir: str
     log_path: str
     adapter_path: Optional[str] = None
+    command: List[str] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class VibeVoiceModelToolRequest(BaseModel):
+    """VibeVoice 모델 병합/변환 유틸리티 요청."""
+
+    tool: str = Field("merge", pattern="^(merge|verify_merge|convert_nnscaler)$")
+    base_model_path: str = ""
+    checkpoint_path: str = ""
+    output_path: str = Field(..., min_length=1)
+    output_format: str = Field("safetensors", pattern="^(safetensors|bin)$")
+    nnscaler_checkpoint_path: str = ""
+    config_path: str = ""
+
+
+class VibeVoiceModelToolResponse(BaseModel):
+    """VibeVoice 모델 유틸리티 실행 결과."""
+
+    status: str
+    message: str
+    run_id: str
+    run_dir: str
+    log_path: str
+    output_path: str
     command: List[str] = Field(default_factory=list)
     meta: Dict[str, Any] = Field(default_factory=dict)
 

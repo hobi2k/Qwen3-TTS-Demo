@@ -54,14 +54,17 @@ def resolve_applio_python(repo_root: Path) -> str:
     candidates = [Path(configured).expanduser()] if configured else []
     candidates.extend(
         [
+            Path(sys.executable),
+            repo_root / ".venv" / "bin" / "python",
             repo_root / "vendor" / "Applio" / ".venv" / "bin" / "python",
             repo_root.parent / "s2-pro-demo" / ".venv" / "bin" / "python",
-            Path(sys.executable),
         ]
     )
     for candidate in candidates:
         if candidate.exists():
-            return str(candidate.resolve())
+            # Keep virtualenv symlinks intact. Resolving `.venv/bin/python`
+            # jumps to the base interpreter and loses installed packages.
+            return str(candidate)
     return sys.executable
 
 
@@ -101,6 +104,13 @@ class ApplioVoiceChanger:
         self.project_root = repo_root
         self.applio_root = resolve_applio_repo_root(repo_root)
         self.python_executable = resolve_applio_python(repo_root)
+
+    def subprocess_env(self) -> Dict[str, str]:
+        """Build a writable environment for Applio subprocesses."""
+
+        env = os.environ.copy()
+        env.setdefault("MPLCONFIGDIR", str(self.project_root / "data" / "cache" / "matplotlib"))
+        return env
 
     def is_available(self) -> bool:
         """Return whether an Applio checkout is available locally."""
@@ -242,6 +252,7 @@ class ApplioVoiceChanger:
                 command,
                 cwd=str(self.applio_root),
                 text=True,
+                env=self.subprocess_env(),
                 check=False,
             )
             completed_steps.append({"step": command[3], "returncode": completed.returncode})
@@ -352,6 +363,7 @@ class ApplioVoiceChanger:
             cwd=str(self.applio_root),
             capture_output=True,
             text=True,
+            env=self.subprocess_env(),
             check=False,
         )
         if completed.returncode != 0:
@@ -429,6 +441,7 @@ class ApplioVoiceChanger:
             cwd=str(self.applio_root),
             capture_output=True,
             text=True,
+            env=self.subprocess_env(),
             check=False,
         )
         if completed.returncode != 0:
