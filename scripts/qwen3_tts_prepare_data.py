@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Memory-safe tokenizer code preparation for Qwen3-TTS datasets.
 
-This script mirrors upstream ``Qwen3-TTS/finetuning/prepare_data.py`` but keeps
+This script mirrors upstream ``vendor/Qwen3-TTS/finetuning/prepare_data.py`` but keeps
 the logic on the demo side so we can adjust batch size and runtime settings
 without editing the upstream repository.
 """
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UPSTREAM_ROOT = REPO_ROOT / "Qwen3-TTS"
+UPSTREAM_ROOT = REPO_ROOT / "vendor" / "Qwen3-TTS"
 sys.path.insert(0, str(UPSTREAM_ROOT))
 
 from qwen_tts import Qwen3TTSTokenizer  # noqa: E402

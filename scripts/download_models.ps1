@@ -11,6 +11,9 @@ $VenvDir = Join-Path $RootDir ".venv"
 $ModelsDir = Join-Path $RootDir "data\models"
 $VendorDir = Join-Path $RootDir "vendor"
 $RvcDir = Join-Path $RootDir "data\rvc-models"
+$ApplioDir = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Join-Path $VendorDir "Applio" }
+$ApplioContentvecDir = Join-Path $ApplioDir "rvc\models\embedders\contentvec"
+$ApplioPredictorDir = Join-Path $ApplioDir "rvc\models\predictors"
 $MMAudioModelsDir = Join-Path $RootDir "data\mmaudio"
 $StemSeparatorModelsDir = Join-Path $RootDir "data\stem-separator-models"
 $FishSpeechDir = if ($env:FISH_SPEECH_REPO_ROOT) { $env:FISH_SPEECH_REPO_ROOT } else { Join-Path $VendorDir "fish-speech" }
@@ -23,6 +26,8 @@ if (-not (Test-Path $VenvDir)) {
 New-Item -ItemType Directory -Force -Path $ModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $VendorDir | Out-Null
 New-Item -ItemType Directory -Force -Path $RvcDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ApplioContentvecDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ApplioPredictorDir | Out-Null
 New-Item -ItemType Directory -Force -Path $MMAudioModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $StemSeparatorModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $FishSpeechModelDir | Out-Null
@@ -152,7 +157,6 @@ if ($Profile -eq "s2pro") {
     exit 0
 }
 
-$ApplioDir = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Join-Path $VendorDir "Applio" }
 $MMAudioDir = if ($env:MMAUDIO_REPO_ROOT) { $env:MMAUDIO_REPO_ROOT } else { Join-Path $VendorDir "MMAudio" }
 $ApplioRepoUrl = if ($env:APPLIO_REPO_URL) { $env:APPLIO_REPO_URL } else { "https://github.com/IAHispano/Applio.git" }
 $MMAudioRepoUrl = if ($env:MMAUDIO_REPO_URL) { $env:MMAUDIO_REPO_URL } else { "https://github.com/hkchengrex/MMAudio.git" }
@@ -161,6 +165,9 @@ $DefaultRvcIndexUrl = if ($env:APPLIO_DEFAULT_RVC_INDEX_URL) { $env:APPLIO_DEFAU
 $DefaultRvcModelFilename = if ($env:APPLIO_DEFAULT_RVC_MODEL_FILENAME) { $env:APPLIO_DEFAULT_RVC_MODEL_FILENAME } else { "yui-mix-pro-hq-40k.pth" }
 $DefaultRvcIndexFilename = if ($env:APPLIO_DEFAULT_RVC_INDEX_FILENAME) { $env:APPLIO_DEFAULT_RVC_INDEX_FILENAME } else { "added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index" }
 $SkipDefaultRvc = if ($env:APPLIO_SKIP_DEFAULT_RVC) { $env:APPLIO_SKIP_DEFAULT_RVC } else { "0" }
+$ApplioContentvecModelUrl = if ($env:APPLIO_CONTENTVEC_MODEL_URL) { $env:APPLIO_CONTENTVEC_MODEL_URL } else { "https://huggingface.co/IAHispano/Applio/resolve/main/Resources/embedders/contentvec/pytorch_model.bin" }
+$ApplioContentvecConfigUrl = if ($env:APPLIO_CONTENTVEC_CONFIG_URL) { $env:APPLIO_CONTENTVEC_CONFIG_URL } else { "https://huggingface.co/IAHispano/Applio/resolve/main/Resources/embedders/contentvec/config.json" }
+$ApplioRmvpeUrl = if ($env:APPLIO_RMVPE_URL) { $env:APPLIO_RMVPE_URL } else { "https://huggingface.co/IAHispano/Applio/resolve/main/Resources/predictors/rmvpe.pt" }
 
 if (-not (Test-Path (Join-Path $ApplioDir ".git"))) {
     Write-Host "Cloning Applio -> $ApplioDir"
@@ -168,6 +175,25 @@ if (-not (Test-Path (Join-Path $ApplioDir ".git"))) {
 }
 else {
     Write-Host "Applio already present at $ApplioDir"
+}
+
+$ApplioRuntimeAssets = @(
+    @{ PrivatePath = "applio/embedders/contentvec/pytorch_model.bin"; TargetPath = (Join-Path $ApplioContentvecDir "pytorch_model.bin"); Url = $ApplioContentvecModelUrl },
+    @{ PrivatePath = "applio/embedders/contentvec/config.json"; TargetPath = (Join-Path $ApplioContentvecDir "config.json"); Url = $ApplioContentvecConfigUrl },
+    @{ PrivatePath = "applio/predictors/rmvpe.pt"; TargetPath = (Join-Path $ApplioPredictorDir "rmvpe.pt"); Url = $ApplioRmvpeUrl }
+)
+
+foreach ($Asset in $ApplioRuntimeAssets) {
+    if (Test-Path $Asset.TargetPath) {
+        Write-Host "Applio runtime asset already present: $($Asset.TargetPath)"
+    }
+    elseif (Download-PrivateAsset -RepoPath $Asset.PrivatePath -TargetPath $Asset.TargetPath) {
+        Write-Host "Downloaded Applio runtime asset from private asset repo: $($Asset.PrivatePath)"
+    }
+    else {
+        Write-Host "Downloading Applio runtime asset -> $($Asset.TargetPath)"
+        Invoke-WebRequest -Uri $Asset.Url -OutFile $Asset.TargetPath
+    }
 }
 
 if (-not (Test-Path (Join-Path $MMAudioDir ".git"))) {

@@ -4,11 +4,14 @@
 
 예전에는 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 파일이 canonical script를 감싸는 호환 래퍼로 남아 있었습니다. 지금은 중복 경로가 오히려 유지보수를 흐리므로 제거했습니다.
 
+현재 기준에서는 `vendor/Qwen3-TTS` 안에 이미 들어간 커스텀 파일을 당장 삭제하지 않습니다. 대신 동일한 내용을 `qwen_extensions`에 복사해 두고, 실제 백엔드 실행은 `QWEN_EXTENSIONS`가 가리키는 확장 폴더를 우선 사용합니다. `vendor/Qwen3-TTS` 안 복사본은 호환과 비교를 위한 legacy mirror입니다.
+
 원칙은 단순합니다.
 
-- VoiceBox 학습 코드는 `Qwen3-TTS/finetuning`에 둡니다.
-- VoiceBox 체크포인트 변환과 업로드 코드는 `Qwen3-TTS/fusion`에 둡니다.
-- VoiceBox 추론 코드는 `Qwen3-TTS/inference/voicebox`에 둡니다.
+- VoiceBox 학습 코드는 `qwen_extensions/finetuning`에 둡니다.
+- VoiceBox 체크포인트 변환과 업로드 코드는 `qwen_extensions/fusion`에 둡니다.
+- VoiceBox 추론 코드는 `qwen_extensions/inference/voicebox`에 둡니다.
+- 기존 `vendor/Qwen3-TTS` 안 커스텀 파일은 이번 정리 단계에서는 삭제하지 않습니다.
 - 일반 유틸리티와 평가 스크립트만 `scripts/`에 둡니다.
 - 새 기능을 만들 때 `scripts/`나 최상위 폴더에 얇은 래퍼를 추가하지 않습니다.
 
@@ -16,18 +19,46 @@
 
 | 책임 | 실행 파일 |
 | --- | --- |
-| plain CustomVoice fine-tuning | `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py` |
-| shared training implementation | `Qwen3-TTS/finetuning/voicebox_training_common.py` |
-| VoiceBox bootstrap training | `Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py` |
-| VoiceBox -> VoiceBox retraining | `Qwen3-TTS/finetuning/sft_voicebox_12hz.py` |
-| CustomVoice -> VoiceBox conversion | `Qwen3-TTS/fusion/make_voicebox_checkpoint.py` |
-| Hugging Face upload | `Qwen3-TTS/fusion/upload_voicebox_to_hub.py` |
-| non-VoiceBox clone prompt + instruct | `Qwen3-TTS/inference/hybrid_clone_instruct.py` |
-| VoiceBox normal instruct inference | `Qwen3-TTS/inference/voicebox/infer_instruct.py` |
-| VoiceBox clone experiment | `Qwen3-TTS/inference/voicebox/clone.py` |
-| VoiceBox clone + instruct experiment | `Qwen3-TTS/inference/voicebox/clone_instruct.py` |
-| shared low-level VoiceBox clone logic | `Qwen3-TTS/inference/voicebox/clone_low_level.py` |
-| shared VoiceBox loader/runtime | `Qwen3-TTS/inference/voicebox/runtime.py` |
+| plain CustomVoice fine-tuning | `qwen_extensions/finetuning/sft_custom_voice_12hz.py` |
+| shared training implementation | `qwen_extensions/finetuning/voicebox_training_common.py` |
+| VoiceBox bootstrap training | `qwen_extensions/finetuning/sft_voicebox_bootstrap_12hz.py` |
+| VoiceBox -> VoiceBox retraining | `qwen_extensions/finetuning/sft_voicebox_12hz.py` |
+| CustomVoice -> VoiceBox conversion | `qwen_extensions/fusion/make_voicebox_checkpoint.py` |
+| Hugging Face upload | `qwen_extensions/fusion/upload_voicebox_to_hub.py` |
+| non-VoiceBox clone prompt + instruct | `qwen_extensions/inference/hybrid_clone_instruct.py` |
+| VoiceBox normal instruct inference | `qwen_extensions/inference/voicebox/infer_instruct.py` |
+| VoiceBox clone experiment | `qwen_extensions/inference/voicebox/clone.py` |
+| VoiceBox clone + instruct experiment | `qwen_extensions/inference/voicebox/clone_instruct.py` |
+| shared low-level VoiceBox clone logic | `qwen_extensions/inference/voicebox/clone_low_level.py` |
+| shared VoiceBox loader/runtime | `qwen_extensions/inference/voicebox/runtime.py` |
+
+## Backend Resolution
+
+FastAPI는 아래 순서로 Qwen 확장 스크립트를 찾습니다.
+
+1. `QWEN_EXTENSIONS`가 있으면 해당 디렉터리
+2. 없으면 저장소 루트의 `qwen_extensions`
+3. 해당 파일이 없을 때만 legacy fallback으로 `vendor/Qwen3-TTS`
+
+예시:
+
+```env
+QWEN_EXTENSIONS=qwen_extensions
+```
+
+상대 경로는 저장소 루트 기준입니다. 절대 경로를 넣으면 그 경로를 그대로 사용합니다.
+
+Qwen 데이터 준비와 fine-tuning subprocess는 기본적으로 백엔드와 같은 Python interpreter를 사용합니다.
+`QWEN_DEMO_PYTHON`을 지정하면 그 값을 우선하지만, 일반 운영에서는 비워 두는 편이 안전합니다.
+백엔드는 subprocess 환경에 아래 경로를 넣습니다.
+
+```text
+vendor/Qwen3-TTS
+vendor/Qwen3-TTS/finetuning
+qwen_extensions
+```
+
+이렇게 해야 `Base` 학습은 업스트림 `sft_12hz.py`를 그대로 쓰고, `CustomVoice`/`VoiceBox` 학습은 데모 확장 코드를 안정적으로 import할 수 있습니다.
 
 ## Current Training Code Path
 
@@ -35,13 +66,13 @@
 
 ```bash
 # 1. plain CustomVoice
-.venv/bin/python Qwen3-TTS/finetuning/sft_custom_voice_12hz.py ...
+.venv/bin/python qwen_extensions/finetuning/sft_custom_voice_12hz.py ...
 
 # 2. CustomVoice -> VoiceBox
-.venv/bin/python Qwen3-TTS/fusion/make_voicebox_checkpoint.py ...
+.venv/bin/python qwen_extensions/fusion/make_voicebox_checkpoint.py ...
 
 # 3. VoiceBox -> VoiceBox
-.venv/bin/python Qwen3-TTS/finetuning/sft_voicebox_12hz.py ...
+.venv/bin/python qwen_extensions/finetuning/sft_voicebox_12hz.py ...
 ```
 
 현재 full-run 데이터셋은 아래 파일입니다.
@@ -111,12 +142,28 @@ data/runtime/fish-speech-s2-pro.log
 - 외부 런타임 설치와 실행
 - 개인 Hugging Face asset manifest 준비
 
-현재 `scripts/`의 VoiceBox 관련 파일은 평가용 `evaluate_customvoice_voicebox_quality.py`만 남깁니다. 학습, 변환, 추론 자체는 `Qwen3-TTS` 내부 canonical script를 직접 사용합니다.
+현재 `scripts/`의 VoiceBox 관련 파일은 평가용 `evaluate_customvoice_voicebox_quality.py`만 남깁니다. 학습, 변환, 추론 자체는 `qwen_extensions` 내부 canonical script를 직접 사용합니다.
+
+## Training Endpoint Entrypoints
+
+UI의 학습 탭은 아래 백엔드 엔드포인트를 호출합니다. 이 항목들은 모두 장시간 작업이므로 live E2E 자동 검증에서는 버튼을 누르지 않고, 단일 작업으로 따로 실행합니다.
+
+| 기능 | API | 실행 기준 |
+| --- | --- | --- |
+| Qwen 데이터 준비 | `POST /api/datasets/{dataset_id}/prepare-for-training` | `scripts/qwen3_tts_prepare_data.py` |
+| Qwen Base/CustomVoice/VoiceBox fine-tune | `POST /api/finetune-runs` | `vendor/Qwen3-TTS/finetuning/sft_12hz.py` 또는 `qwen_extensions/finetuning/*` |
+| VoiceBox fusion | `POST /api/voicebox/fusion` | `qwen_extensions/fusion/make_voicebox_checkpoint.py` |
+| S2-Pro LoRA/full fine-tune | `POST /api/s2-pro/train` | `vendor/fish-speech/fish_speech/train.py --config-name text2semantic_finetune` |
+| Applio/RVC model train | `POST /api/audio-tools/rvc-train` | Applio CLI preprocess/extract/train/index |
+| MMAudio full/continued train | `POST /api/audio-tools/mmaudio-train` | `vendor/MMAudio/train.py` |
+| ACE-Step LoRA/LoKr adapter train | `POST /api/music/ace-step/train-adapter` | `vendor/ACE-Step/train.py fixed/vanilla` |
+| VibeVoice ASR/TTS train | `POST /api/vibevoice/train` | VibeVoice ASR LoRA script 또는 TTS trainer/template |
 
 ## What Not To Do
 
 - 최상위 `voicebox/` 폴더를 다시 만들지 않습니다.
 - `scripts/qwen3_tts_voicebox_*.py` 같은 호환 래퍼를 다시 추가하지 않습니다.
 - 학습 루프를 `scripts/`에 복제하지 않습니다.
+- 새 CustomVoice/VoiceBox 코드를 `vendor/Qwen3-TTS`에만 추가하지 않습니다. 먼저 `qwen_extensions`에 반영하고, legacy mirror가 필요할 때만 별도로 동기화합니다.
 - 새 VoiceBox 기능을 만들 때 canonical script가 아닌 별도 우회 경로부터 만들지 않습니다.
 - 문서에는 삭제된 래퍼 명령을 재현 경로로 남기지 않습니다.

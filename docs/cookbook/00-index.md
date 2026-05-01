@@ -32,6 +32,7 @@
 17. [S2-Pro 작업실](./21-s2-pro-workspace.md)
 18. [ACE-Step 작곡](./22-ace-step-music.md)
 19. [VibeVoice 작업실](./23-vibevoice-workspace.md)
+20. [Qwen Extensions 구조](./24-qwen-extensions.md)
 
 ## 현재 문서 맵
 
@@ -71,7 +72,7 @@
 - [18-current-experiment-results.md](./18-current-experiment-results.md)
   현재 MAI / CustomVoice / VoiceBox 실험 결과와 재현 명령
 - [19-script-entrypoints.md](./19-script-entrypoints.md)
-  `Qwen3-TTS` 역할별 canonical 스크립트 기준
+  `qwen_extensions` 역할별 canonical 스크립트 기준
 - [20-private-hf-assets.md](./20-private-hf-assets.md)
   모델과 오디오 도구 자산을 개인 Hugging Face repo로 모으는 업로드/다운로드 기준
 - [21-s2-pro-workspace.md](./21-s2-pro-workspace.md)
@@ -79,7 +80,9 @@
 - [22-ace-step-music.md](./22-ace-step-music.md)
   ACE-Step 기반 음악 작곡 탭, 다운로드, 런타임 분리, 생성 갤러리 연결 구조
 - [23-vibevoice-workspace.md](./23-vibevoice-workspace.md)
-  VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS, ASR LoRA fine-tuning, vendor/model 관리 기준
+  VibeVoice TTS, ASR, TTS/ASR fine-tuning, model tools, vendor/model 관리 기준
+- [24-qwen-extensions.md](./24-qwen-extensions.md)
+  `vendor/Qwen3-TTS`를 보존하면서 데모 전용 Qwen/VoiceBox 스크립트를 `qwen_extensions`로 실행하는 구조
 
 ### 현재 기능에서 중요한 두 문서
 
@@ -127,8 +130,12 @@
   Microsoft VibeVoice Realtime 0.5B와 1.5B long-form TTS를 별도 vendor wrapper로 실행합니다.
 - `VibeVoice ASR`
   VibeVoice-ASR로 업로드/생성 갤러리/직접 경로 음성을 전사합니다.
-- `VibeVoice LoRA Train`
-  공식 ASR LoRA fine-tuning을 실행하고, TTS LoRA는 command template 기반 실험 경로로만 제공합니다.
+- `VibeVoice TTS Fine-tune`
+  TTS LoRA trainer를 dataset/column/diffusion 옵션과 함께 실행합니다.
+- `VibeVoice ASR Fine-tune`
+  VibeVoice-ASR LoRA trainer를 별도 흐름으로 실행합니다.
+- `VibeVoice Model Tools`
+  LoRA merge, merge 검증, NnScaler checkpoint 변환을 실행합니다.
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
@@ -144,7 +151,7 @@
 - `데이터셋 만들기`와 `학습 실행`은 분리합니다.
 - `S2-Pro`는 Qwen 모델 선택 화면에 끼워 넣지 않고 Fish Speech/Fish Audio 전용 기능별 탭으로 분리합니다.
 - `S2-Pro`의 기본 `Local S2-Pro` provider는 사용자가 별도 서버를 직접 켜는 방식이 아니라, MMAudio/Applio/ACE-Step처럼 백엔드가 관리하는 엔진 wrapper 방식입니다.
-- `VibeVoice`도 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice`를 쓰는 vendor wrapper 방식이며, 이 로컬 산출물은 git에 올리지 않습니다.
+- `VibeVoice`도 vendor wrapper 방식입니다. `vendor/VibeVoice` source는 저장소에 포함하고, `.venv-vibevoice`, `data/models/vibevoice`만 로컬 산출물로 git에 올리지 않습니다.
 - `MMAudio`는 Qwen 생성 흐름에 섞지 않고 사운드 효과 전용 섹션으로 분리합니다.
 - `Applio`는 하나의 전용 섹션 아래에서 RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 나눠 제공합니다.
 - `가이드`는 한 페이지 카드 묶음이 아니라 문서 목록과 본문으로 나뉜 document 화면입니다.
@@ -163,7 +170,7 @@
 - 남은 구조 과제: [TODO.md](../../TODO.md)
 - 프런트 진입점: [App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
 - 백엔드 진입점: [main.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/main.py)
-- 업스트림 소개: [README.md](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/Qwen3-TTS/README.md)
+- 업스트림 소개: [README.md](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/vendor/Qwen3-TTS/README.md)
 
 ## 메모
 

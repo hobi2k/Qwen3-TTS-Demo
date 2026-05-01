@@ -54,7 +54,9 @@
 - `ACE-Step 작곡`
 - `VibeVoice TTS`
 - `VibeVoice ASR`
-- `VibeVoice LoRA Train`
+- `VibeVoice TTS Fine-tune`
+- `VibeVoice ASR Fine-tune`
+- `VibeVoice Model Tools`
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합`
@@ -240,10 +242,14 @@ Microsoft VibeVoice 계열 작업은 Qwen/S2-Pro 화면에 섞지 않고 `VIBEVO
   Realtime 0.5B, Long-form 1.5B, optional community 7B 모델을 선택합니다. 1.5B/7B는 speaker-labeled script, speaker reference audio, CFG scale, diffusion steps, max length, max new tokens 같은 설정을 제공합니다.
 - `VibeVoice ASR`
   생성 갤러리, 업로드, 직접 경로의 음성을 전사합니다. context/hotwords, timestamps, device, attention, beam, temperature/top-p 설정을 고급 영역에 둡니다.
-- `VibeVoice LoRA Train`
-  community TTS LoRA fine-tuning을 기본 실행합니다. ASR LoRA는 선택한 checkout에 해당 script가 있을 때만 실행합니다.
+- `VibeVoice TTS Fine-tune`
+  community TTS LoRA fine-tuning을 dataset/column/LoRA/diffusion 설정과 함께 실행합니다.
+- `VibeVoice ASR Fine-tune`
+  ASR LoRA는 선택한 checkout에 해당 script가 있을 때만 실행합니다.
+- `VibeVoice Model Tools`
+  LoRA merge, merge 검증, NnScaler checkpoint 변환처럼 학습 후 모델 정리 작업만 담당합니다.
 
-VibeVoice vendor checkout, 전용 venv, 모델 weight는 모두 로컬 산출물입니다. UI에는 준비 상태만 보여주고, 실제 파일은 `.gitignore` 대상인 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice`에 둡니다.
+VibeVoice source는 `vendor/VibeVoice`에 저장소 일부로 포함됩니다. UI에는 준비 상태만 보여주고, 실제 로컬 산출물은 `.gitignore` 대상인 `.venv-vibevoice`, `data/models/vibevoice`에 둡니다.
 
 ### 데이터셋 만들기
 

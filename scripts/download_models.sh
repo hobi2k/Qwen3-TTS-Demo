@@ -10,6 +10,8 @@ APPLIO_DIR="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
 MMAUDIO_DIR="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
 ACE_STEP_DIR="${ACE_STEP_REPO_ROOT:-${VENDOR_DIR}/ACE-Step}"
 RVC_DIR="${ROOT_DIR}/data/rvc-models"
+APPLIO_CONTENTVEC_DIR="${APPLIO_DIR}/rvc/models/embedders/contentvec"
+APPLIO_PREDICTOR_DIR="${APPLIO_DIR}/rvc/models/predictors"
 MMAUDIO_MODELS_DIR="${ROOT_DIR}/data/mmaudio"
 STEM_SEPARATOR_MODELS_DIR="${ROOT_DIR}/data/stem-separator-models"
 ACE_STEP_MODEL_DIR="${ACE_STEP_CHECKPOINT_PATH:-${ROOT_DIR}/data/models/ace-step}"
@@ -27,6 +29,8 @@ fi
 mkdir -p "${MODELS_DIR}"
 mkdir -p "${VENDOR_DIR}"
 mkdir -p "${RVC_DIR}"
+mkdir -p "${APPLIO_CONTENTVEC_DIR}"
+mkdir -p "${APPLIO_PREDICTOR_DIR}"
 mkdir -p "${MMAUDIO_MODELS_DIR}"
 mkdir -p "${STEM_SEPARATOR_MODELS_DIR}"
 mkdir -p "${ACE_STEP_MODEL_DIR}"
@@ -146,14 +150,13 @@ echo "Downloaded model profile: ${PROFILE}"
 echo "Models stored in: ${MODELS_DIR}"
 
 VIBEVOICE_VENV="${VIBEVOICE_VENV:-${ROOT_DIR}/.venv-vibevoice}"
-VIBEVOICE_REPO_URL="${VIBEVOICE_REPO_URL:-https://github.com/vibevoice-community/VibeVoice.git}"
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "vibevoice-7b" ]]; then
-  if [[ ! -d "${VIBEVOICE_DIR}/.git" && ! -d "${VIBEVOICE_DIR}" ]]; then
-    echo "Cloning VibeVoice vendor repo -> ${VIBEVOICE_DIR}"
-    git clone "${VIBEVOICE_REPO_URL}" "${VIBEVOICE_DIR}"
-  else
-    echo "VibeVoice vendor repo already present: ${VIBEVOICE_DIR}"
+  if [[ ! -f "${VIBEVOICE_DIR}/pyproject.toml" || ! -d "${VIBEVOICE_DIR}/vibevoice" ]]; then
+    echo "VibeVoice vendored source is missing or incomplete: ${VIBEVOICE_DIR}" >&2
+    echo "This project expects vendor/VibeVoice to be present in the repository, like the other vendor engines." >&2
+    exit 1
   fi
+  echo "Using vendored VibeVoice source: ${VIBEVOICE_DIR}"
 
   if [[ ! -d "${VIBEVOICE_VENV}" ]]; then
     echo "Creating VibeVoice venv -> ${VIBEVOICE_VENV}"
@@ -335,11 +338,30 @@ fi
 
 APPLIO_DEFAULT_RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth}"
 APPLIO_DEFAULT_RVC_INDEX_URL="${APPLIO_DEFAULT_RVC_INDEX_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/index/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index}"
+APPLIO_CONTENTVEC_MODEL_URL="${APPLIO_CONTENTVEC_MODEL_URL:-https://huggingface.co/IAHispano/Applio/resolve/main/Resources/embedders/contentvec/pytorch_model.bin}"
+APPLIO_CONTENTVEC_CONFIG_URL="${APPLIO_CONTENTVEC_CONFIG_URL:-https://huggingface.co/IAHispano/Applio/resolve/main/Resources/embedders/contentvec/config.json}"
+APPLIO_RMVPE_URL="${APPLIO_RMVPE_URL:-https://huggingface.co/IAHispano/Applio/resolve/main/Resources/predictors/rmvpe.pt}"
 APPLIO_DEFAULT_RVC_MODEL_FILENAME="${APPLIO_DEFAULT_RVC_MODEL_FILENAME:-yui-mix-pro-hq-40k.pth}"
 APPLIO_DEFAULT_RVC_INDEX_FILENAME="${APPLIO_DEFAULT_RVC_INDEX_FILENAME:-added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index}"
 APPLIO_SKIP_DEFAULT_RVC="${APPLIO_SKIP_DEFAULT_RVC:-0}"
 
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "core" ]]; then
+
+for asset in \
+  "applio/embedders/contentvec/pytorch_model.bin:${APPLIO_CONTENTVEC_DIR}/pytorch_model.bin:${APPLIO_CONTENTVEC_MODEL_URL}" \
+  "applio/embedders/contentvec/config.json:${APPLIO_CONTENTVEC_DIR}/config.json:${APPLIO_CONTENTVEC_CONFIG_URL}" \
+  "applio/predictors/rmvpe.pt:${APPLIO_PREDICTOR_DIR}/rmvpe.pt:${APPLIO_RMVPE_URL}"
+do
+  IFS=":" read -r private_path target_path fallback_url <<<"${asset}"
+  if [[ -f "${target_path}" ]]; then
+    echo "Applio runtime asset already present: ${target_path}"
+  elif [[ -n "${PRIVATE_ASSET_REPO_ID}" ]] && download_private_asset "${private_path}" "${target_path}"; then
+    echo "Downloaded Applio runtime asset from private asset repo: ${private_path}"
+  else
+    echo "Downloading Applio runtime asset -> ${target_path}"
+    curl -L "${fallback_url}" -o "${target_path}"
+  fi
+done
 
 RVC_MODEL_URL="${APPLIO_RVC_MODEL_URL:-}"
 RVC_INDEX_URL="${APPLIO_RVC_INDEX_URL:-}"

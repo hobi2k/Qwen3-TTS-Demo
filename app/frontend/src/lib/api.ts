@@ -59,6 +59,8 @@ import type {
   VibeVoiceASRResponse,
   VibeVoiceRuntimeResponse,
   VibeVoiceTTSRequest,
+  VibeVoiceModelToolRequest,
+  VibeVoiceModelToolResponse,
   VibeVoiceTrainingRequest,
   VibeVoiceTrainingResponse,
   VoiceBoxCloneRequest,
@@ -444,6 +446,14 @@ export const api = {
 
   trainVibeVoice(payload: VibeVoiceTrainingRequest): Promise<VibeVoiceTrainingResponse> {
     return request<VibeVoiceTrainingResponse>("/api/vibevoice/train", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  runVibeVoiceModelTool(payload: VibeVoiceModelToolRequest): Promise<VibeVoiceModelToolResponse> {
+    return request<VibeVoiceModelToolResponse>("/api/vibevoice/model-tools", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

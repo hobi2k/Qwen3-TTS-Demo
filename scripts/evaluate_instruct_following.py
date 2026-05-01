@@ -51,7 +51,7 @@ def load_qwen_model(model_path: str):
     """
 
     repo_root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(repo_root / "Qwen3-TTS"))
+    sys.path.insert(0, str(repo_root / "vendor" / "Qwen3-TTS"))
     from qwen_tts import Qwen3TTSModel
 
     attn_implementation = "flash_attention_2" if torch.cuda.is_available() and importlib.util.find_spec("flash_attn") else "sdpa"

@@ -59,7 +59,7 @@ data/finetune-runs/mai_ko_customvoice17b_full/final
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python Qwen3-TTS/fusion/make_voicebox_checkpoint.py \
+.venv/bin/python qwen_extensions/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final
@@ -97,7 +97,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
 QWEN_DEMO_GRAD_ACCUM_STEPS=1 \
-.venv/bin/python -u Qwen3-TTS/finetuning/sft_voicebox_12hz.py \
+.venv/bin/python -u qwen_extensions/finetuning/sft_voicebox_12hz.py \
   --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
   --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \
@@ -266,15 +266,108 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 - 추가 학습된 VoiceBox 하나만으로 low-level clone과 clone+instruct 생성이 가능합니다.
 - 현재 안정 후보는 `embedded_encoder_only`입니다.
 
-## 9. 관련 스크립트 정리
+Fine-tuning류 기능의 현재 검증 해석:
 
-현재 실험에서 기준으로 삼는 구현은 `Qwen3-TTS` 안의 역할별 canonical script입니다.
+- Qwen CustomVoice/VoiceBox 계열은 실제 MAI full run 산출물과 품질 평가 스크립트 기준으로 검증했습니다.
+- S2-Pro, Applio/RVC, MMAudio, ACE-Step, VibeVoice의 training endpoint는 실행 명령, 입력 검증, 로그/산출 경로가 구현되어 있습니다.
+- 다만 2026-05-01 live E2E 자동 검증은 장시간/파괴적 학습을 시작하지 않았습니다. live E2E는 생성/변환/분리/저장/재사용 runtime을 검증하고, fine-tuning은 별도 단일 실행으로 검증하는 정책입니다.
+- Qwen prepare/fine-tune subprocess는 더 이상 bare `python3`에 의존하지 않고, 기본적으로 백엔드와 같은 Python interpreter를 사용합니다.
 
-- `Qwen3-TTS/finetuning/sft_custom_voice_12hz.py`
-- `Qwen3-TTS/fusion/make_voicebox_checkpoint.py`
-- `Qwen3-TTS/finetuning/sft_voicebox_12hz.py`
-- `Qwen3-TTS/inference/voicebox/clone.py`
-- `Qwen3-TTS/inference/voicebox/clone_instruct.py`
+## 9. 2026-05-01 live E2E 결과
+
+검증 명령:
+
+```bash
+./.venv/bin/python scripts/live_e2e_verify.py --include-heavy
+```
+
+실행 환경:
+
+- backend: 임시 uvicorn 서버
+- runtime: `real`
+- device: `cuda:0`
+- attention: `flash_attention_2`
+- ASR: `data/models/Qwen3-ASR-1.7B`
+
+최종 재검증 결과:
+
+- 실행 시각: 2026-05-01
+- 결과: 전체 PASS
+- backend: 임시 uvicorn 서버 `http://127.0.0.1:51991`
+- catalog 상태: models 9, gallery 220, audio assets 220, clone prompts 6, presets 5, datasets 1, fine-tune runs 3, RVC models 1
+- 완료 후 `nvidia-smi` 기준 GPU 프로세스 없음
+
+통과한 항목:
+
+| check | result |
+| --- | --- |
+| frontend static shell | PASS |
+| backend health/bootstrap/model catalog/gallery/audio assets | PASS |
+| Applio/RVC model catalog | PASS |
+| S2-Pro capabilities/voices | PASS |
+| ACE-Step runtime | PASS |
+| VibeVoice runtime | PASS |
+| audio converter / denoise / edit | PASS |
+| Qwen CustomVoice generation | PASS |
+| Qwen model-select generation | PASS |
+| Qwen VoiceDesign generation | PASS |
+| Qwen VoiceClone generation | PASS |
+| Qwen clone prompt from upload | PASS |
+| Qwen preset create / preset generate | PASS |
+| Qwen hybrid clone+instruct | PASS |
+| VoiceBox clone | PASS |
+| VoiceBox clone+instruct | PASS |
+| Qwen3-ASR transcription | PASS |
+| S2-Pro local generation | PASS |
+| S2-Pro save voice | PASS |
+| S2-Pro saved voice TTS | PASS |
+| S2-Pro dialogue | PASS |
+| audio translation | PASS |
+| Applio/RVC single conversion | PASS |
+| Applio/RVC batch conversion | PASS |
+| Stem Separator | PASS |
+| ACE-Step generation | PASS |
+| VibeVoice generation | PASS |
+| MMAudio sound effect generation | PASS |
+
+대표 산출물:
+
+```text
+data/generated/tts-custom/2026-05-01/e2e-qwen-custom_11.wav
+data/generated/tts-custom/2026-05-01/e2e-qwen-model-select_5.wav
+data/generated/voice-design/2026-05-01/e2e-qwen-design_11.wav
+data/generated/voice-clone/2026-05-01/e2e-qwen-clone_10.wav
+data/generated/hybrid-clone-instruct/2026-05-01/e2e-qwen-hybrid_5.wav
+data/generated/voicebox_clone/2026-05-01/111025_e2e-voicebox-clone.wav
+data/generated/voicebox_clone_instruct/2026-05-01/111035_e2e-voicebox-clone-instruct.wav
+data/generated/s2-pro/2026-05-01/111156_e2e-s2pro.wav
+data/generated/s2-pro/2026-05-01/112404_e2e-s2pro-saved-voice.wav
+data/generated/s2-pro/2026-05-01/112737_e2e-s2pro-dialogue.wav
+data/generated/voice-changer/2026-05-01/113139_voice-conversion.wav
+data/generated/voice-changer/2026-05-01/113202_batch-voice-conversion-1.wav
+data/generated/audio-separation/2026-05-01/113211_live_input_12s-stems/live_input_12s_(other)_vocals_mel_band_roformer.wav
+data/generated/ace-step-music/2026-05-01/111053_e2e-ace-step.wav
+data/generated/vibevoice-tts/2026-05-01/113224_e2e-vibevoice.wav
+data/generated/sound-effects/2026-05-01/113406_short-soft-rain-on-a-window-clean-recording.wav
+```
+
+검증 중 발견하고 수정한 문제:
+
+- S2-Pro 저장 목소리 재사용은 Fish Speech runtime의 `torchcodec` 누락으로 실패했습니다. `scripts/install_fish_speech_runtime.py`가 Fish Speech 전용 venv에 `torchcodec`을 설치하도록 수정했습니다.
+- Applio/RVC 변환은 `beautifulsoup4`, `wget`, `noisereduce`, `pedalboard`, `torchcrepe`, `faiss-cpu`, `torchfcpe` 누락과 `contentvec`, `rmvpe.pt` 런타임 다운로드 의존 때문에 실패했습니다. 메인 `pyproject.toml`/`uv.lock`에 의존성을 추가했고, `scripts/download_models.sh`가 Applio runtime asset을 미리 받도록 수정했습니다.
+- Applio subprocess는 `MPLCONFIGDIR`을 프로젝트 내부 `data/cache/matplotlib`로 고정해 홈 디렉터리 쓰기 권한 문제를 피합니다.
+
+검증 후 `nvidia-smi` 기준 GPU 프로세스가 남아 있지 않았습니다.
+
+## 10. 관련 스크립트 정리
+
+현재 실험에서 기준으로 삼는 구현은 `qwen_extensions` 안의 역할별 canonical script입니다.
+
+- `qwen_extensions/finetuning/sft_custom_voice_12hz.py`
+- `qwen_extensions/fusion/make_voicebox_checkpoint.py`
+- `qwen_extensions/finetuning/sft_voicebox_12hz.py`
+- `qwen_extensions/inference/voicebox/clone.py`
+- `qwen_extensions/inference/voicebox/clone_instruct.py`
 
 예전 명령을 유지하기 위한 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 래퍼는 제거했습니다.
 재현 명령은 위 canonical script를 직접 호출합니다.

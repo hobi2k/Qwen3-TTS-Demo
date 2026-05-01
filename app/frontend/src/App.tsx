@@ -80,6 +80,7 @@ import type {
   SpeakerInfo,
   UploadResponse,
   VibeVoiceASRResponse,
+  VibeVoiceModelToolResponse,
   VibeVoiceRuntimeResponse,
   VibeVoiceTrainingResponse,
   VoiceChangerModelInfo,
@@ -764,22 +765,21 @@ function StudioApp() {
   const [vibeVoiceUploadedRef, setVibeVoiceUploadedRef] = useState<UploadResponse | null>(null);
   const [lastVibeVoiceRecord, setLastVibeVoiceRecord] = useState<GenerationRecord | null>(null);
   const [vibeVoiceAsrResult, setVibeVoiceAsrResult] = useState<VibeVoiceASRResponse | null>(null);
+  const [vibeVoiceModelToolResult, setVibeVoiceModelToolResult] = useState<VibeVoiceModelToolResponse | null>(null);
+  const [vibeVoiceAsrSource, setVibeVoiceAsrSource] = useState<"audio" | "folder" | "dataset">("audio");
   const [vibeVoiceTtsForm, setVibeVoiceTtsForm] = useState({
     model_profile: "realtime" as "realtime" | "tts_15b" | "tts_7b",
     output_name: "vibevoice-tts",
     text: "오늘은 조금 낮은 목소리로, 또렷하지만 자연스럽게 말해볼게.",
-    language: "auto",
     speaker_name: "Speaker 1",
     speaker_audio_path: "",
     speaker_names: "Speaker 1",
     speaker_audio_paths: "",
-    speaker_prompt_text: "",
+    checkpoint_path: "",
     cfg_scale: "1.3",
-    temperature: "0.95",
-    top_p: "0.95",
+    ddpm_steps: "5",
     seed: "",
     device: "auto",
-    precision: "auto",
     attn_implementation: "auto",
     inference_steps: "10",
     max_length_times: "2.0",
@@ -791,6 +791,10 @@ function StudioApp() {
   });
   const [vibeVoiceAsrForm, setVibeVoiceAsrForm] = useState({
     audio_path: "",
+    audio_dir: "",
+    dataset: "",
+    split: "test",
+    max_duration: "3600",
     language: "auto",
     task: "transcribe",
     context_info: "",
@@ -811,6 +815,17 @@ function StudioApp() {
     model_path: "",
     data_dir: "vibevoice/jenny_vibevoice_formatted",
     output_dir: "",
+    dataset_config_name: "",
+    train_split_name: "train",
+    eval_split_name: "validation",
+    text_column_name: "text",
+    audio_column_name: "audio",
+    voice_prompts_column_name: "voice_prompts",
+    train_jsonl: "",
+    validation_jsonl: "",
+    eval_split_size: "0",
+    ignore_verifications: false,
+    max_length: "",
     nproc_per_node: "1",
     num_train_epochs: "3",
     per_device_train_batch_size: "1",
@@ -824,12 +839,31 @@ function StudioApp() {
     lora_r: "16",
     lora_alpha: "32",
     lora_dropout: "0.05",
+    lora_target_modules: "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
+    lora_wrap_diffusion_head: false,
+    train_diffusion_head: true,
+    train_connectors: false,
+    layers_to_freeze: "",
+    ddpm_batch_mul: "4",
+    ce_loss_weight: "0.04",
+    diffusion_loss_weight: "1.4",
+    debug_save: false,
+    debug_ce_details: false,
     bf16: true,
     gradient_checkpointing: true,
     use_customized_context: true,
     max_audio_length: "",
     report_to: "none",
     extra_args: "",
+  });
+  const [vibeVoiceModelToolForm, setVibeVoiceModelToolForm] = useState({
+    tool: "merge" as "merge" | "verify_merge" | "convert_nnscaler",
+    base_model_path: "data/models/vibevoice/VibeVoice-1.5B",
+    checkpoint_path: "",
+    output_path: "data/models/vibevoice/merged-vibevoice",
+    output_format: "safetensors" as "safetensors" | "bin",
+    nnscaler_checkpoint_path: "",
+    config_path: "",
   });
   const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
   const [soundEffectForm, setSoundEffectForm] = useState({
@@ -1695,10 +1729,6 @@ function StudioApp() {
       speaker_audio_paths: prev.speaker_audio_paths.trim() ? prev.speaker_audio_paths : asset.path,
     }));
     setVibeVoiceAsrForm((prev) => ({ ...prev, audio_path: asset.path }));
-    const transcript = asset.transcript_text?.trim();
-    if (transcript) {
-      setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_prompt_text: transcript }));
-    }
     setMessage(`${asset.filename}을 VibeVoice 참조/ASR 음성으로 선택했습니다.`);
   }
 
@@ -1720,18 +1750,15 @@ function StudioApp() {
         text: vibeVoiceTtsForm.text,
         output_name: vibeVoiceTtsForm.output_name || undefined,
         model_profile: vibeVoiceTtsForm.model_profile,
-        language: vibeVoiceTtsForm.language,
         speaker_name: vibeVoiceTtsForm.speaker_name,
         speaker_audio_path: vibeVoiceTtsForm.speaker_audio_path || undefined,
         speaker_names: vibeVoiceTtsForm.speaker_names.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
         speaker_audio_paths: vibeVoiceTtsForm.speaker_audio_paths.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
-        speaker_prompt_text: vibeVoiceTtsForm.speaker_prompt_text,
+        checkpoint_path: vibeVoiceTtsForm.checkpoint_path,
         cfg_scale: Number(vibeVoiceTtsForm.cfg_scale || "1.3"),
-        temperature: Number(vibeVoiceTtsForm.temperature || "0.95"),
-        top_p: Number(vibeVoiceTtsForm.top_p || "0.95"),
+        ddpm_steps: Number(vibeVoiceTtsForm.ddpm_steps || "5"),
         seed: vibeVoiceTtsForm.seed.trim() ? Number(vibeVoiceTtsForm.seed) : undefined,
         device: vibeVoiceTtsForm.device,
-        precision: vibeVoiceTtsForm.precision,
         attn_implementation: vibeVoiceTtsForm.attn_implementation,
         inference_steps: Number(vibeVoiceTtsForm.inference_steps || "10"),
         max_length_times: Number(vibeVoiceTtsForm.max_length_times || "2.0"),
@@ -1750,12 +1777,16 @@ function StudioApp() {
   async function handleVibeVoiceASRSubmit(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
-      if (!vibeVoiceAsrForm.audio_path.trim()) {
-        setMessage("전사할 오디오를 먼저 선택하세요.");
+      if (!vibeVoiceAsrReady) {
+        setMessage("전사할 오디오, 폴더, 또는 데이터셋을 먼저 선택하세요.");
         return;
       }
       const result = await api.transcribeVibeVoice({
-        audio_path: vibeVoiceAsrForm.audio_path,
+        audio_path: vibeVoiceAsrSource === "audio" ? vibeVoiceAsrForm.audio_path : undefined,
+        audio_dir: vibeVoiceAsrSource === "folder" ? vibeVoiceAsrForm.audio_dir : undefined,
+        dataset: vibeVoiceAsrSource === "dataset" ? vibeVoiceAsrForm.dataset : undefined,
+        split: vibeVoiceAsrForm.split,
+        max_duration: Number(vibeVoiceAsrForm.max_duration || "3600"),
         language: vibeVoiceAsrForm.language,
         task: vibeVoiceAsrForm.task,
         context_info: vibeVoiceAsrForm.context_info,
@@ -1778,11 +1809,22 @@ function StudioApp() {
     event?.preventDefault();
     await runAction(async () => {
       const result = await api.trainVibeVoice({
-        training_mode: vibeVoiceTrainForm.training_mode,
+        training_mode: activeTab === "vibevoice_asr_train" ? "asr_lora" : "tts_lora",
         output_name: vibeVoiceTrainForm.output_name,
         model_path: vibeVoiceTrainForm.model_path,
         data_dir: vibeVoiceTrainForm.data_dir,
         output_dir: vibeVoiceTrainForm.output_dir,
+        dataset_config_name: vibeVoiceTrainForm.dataset_config_name,
+        train_split_name: vibeVoiceTrainForm.train_split_name,
+        eval_split_name: vibeVoiceTrainForm.eval_split_name,
+        text_column_name: vibeVoiceTrainForm.text_column_name,
+        audio_column_name: vibeVoiceTrainForm.audio_column_name,
+        voice_prompts_column_name: vibeVoiceTrainForm.voice_prompts_column_name,
+        train_jsonl: vibeVoiceTrainForm.train_jsonl,
+        validation_jsonl: vibeVoiceTrainForm.validation_jsonl,
+        eval_split_size: Number(vibeVoiceTrainForm.eval_split_size || "0"),
+        ignore_verifications: vibeVoiceTrainForm.ignore_verifications,
+        max_length: vibeVoiceTrainForm.max_length.trim() ? Number(vibeVoiceTrainForm.max_length) : undefined,
         nproc_per_node: Number(vibeVoiceTrainForm.nproc_per_node || "1"),
         num_train_epochs: Number(vibeVoiceTrainForm.num_train_epochs || "3"),
         per_device_train_batch_size: Number(vibeVoiceTrainForm.per_device_train_batch_size || "1"),
@@ -1796,6 +1838,16 @@ function StudioApp() {
         lora_r: Number(vibeVoiceTrainForm.lora_r || "16"),
         lora_alpha: Number(vibeVoiceTrainForm.lora_alpha || "32"),
         lora_dropout: Number(vibeVoiceTrainForm.lora_dropout || "0.05"),
+        lora_target_modules: vibeVoiceTrainForm.lora_target_modules,
+        lora_wrap_diffusion_head: vibeVoiceTrainForm.lora_wrap_diffusion_head,
+        train_diffusion_head: vibeVoiceTrainForm.train_diffusion_head,
+        train_connectors: vibeVoiceTrainForm.train_connectors,
+        layers_to_freeze: vibeVoiceTrainForm.layers_to_freeze,
+        ddpm_batch_mul: Number(vibeVoiceTrainForm.ddpm_batch_mul || "4"),
+        ce_loss_weight: Number(vibeVoiceTrainForm.ce_loss_weight || "0.04"),
+        diffusion_loss_weight: Number(vibeVoiceTrainForm.diffusion_loss_weight || "1.4"),
+        debug_save: vibeVoiceTrainForm.debug_save,
+        debug_ce_details: vibeVoiceTrainForm.debug_ce_details,
         bf16: vibeVoiceTrainForm.bf16,
         gradient_checkpointing: vibeVoiceTrainForm.gradient_checkpointing,
         use_customized_context: vibeVoiceTrainForm.use_customized_context,
@@ -1804,6 +1856,24 @@ function StudioApp() {
         extra_args: vibeVoiceTrainForm.extra_args.split(/\s+/).map((item) => item.trim()).filter(Boolean),
       });
       setVibeVoiceTrainResult(result);
+      await refreshAll();
+      setMessage(result.message);
+    });
+  }
+
+  async function handleVibeVoiceModelToolSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      const result = await api.runVibeVoiceModelTool({
+        tool: vibeVoiceModelToolForm.tool,
+        base_model_path: vibeVoiceModelToolForm.base_model_path,
+        checkpoint_path: vibeVoiceModelToolForm.checkpoint_path,
+        output_path: vibeVoiceModelToolForm.output_path,
+        output_format: vibeVoiceModelToolForm.output_format,
+        nnscaler_checkpoint_path: vibeVoiceModelToolForm.nnscaler_checkpoint_path,
+        config_path: vibeVoiceModelToolForm.config_path,
+      });
+      setVibeVoiceModelToolResult(result);
       await refreshAll();
       setMessage(result.message);
     });
@@ -3036,7 +3106,9 @@ function StudioApp() {
     "s2pro_train",
     "vibevoice_tts",
     "vibevoice_asr",
-    "vibevoice_train",
+    "vibevoice_tts_train",
+    "vibevoice_asr_train",
+    "vibevoice_model_tools",
     "effects",
     "mmaudio_train",
     "audio_editor",
@@ -3062,6 +3134,16 @@ function StudioApp() {
     "voicebox_fusion",
   ]);
   const canRunCurrentTab = renderableTabs.has(activeTab);
+  const vibeVoiceAsrReady =
+    (vibeVoiceAsrSource === "audio" && Boolean(vibeVoiceAsrForm.audio_path.trim())) ||
+    (vibeVoiceAsrSource === "folder" && Boolean(vibeVoiceAsrForm.audio_dir.trim())) ||
+    (vibeVoiceAsrSource === "dataset" && Boolean(vibeVoiceAsrForm.dataset.trim()));
+  const vibeVoiceModelToolReady =
+    Boolean(vibeVoiceModelToolForm.output_path.trim()) &&
+    (vibeVoiceModelToolForm.tool === "convert_nnscaler"
+      ? Boolean(vibeVoiceModelToolForm.nnscaler_checkpoint_path.trim())
+      : Boolean(vibeVoiceModelToolForm.base_model_path.trim()) &&
+        (vibeVoiceModelToolForm.tool === "verify_merge" || Boolean(vibeVoiceModelToolForm.checkpoint_path.trim())));
 
   async function handleRunCurrentTab() {
     if (!canRunCurrentTab) {
@@ -3082,7 +3164,8 @@ function StudioApp() {
     if (activeTab === "s2pro_train") return handleS2ProTrainSubmit();
     if (activeTab === "vibevoice_tts") return handleVibeVoiceTTSSubmit();
     if (activeTab === "vibevoice_asr") return handleVibeVoiceASRSubmit();
-    if (activeTab === "vibevoice_train") return handleVibeVoiceTrainSubmit();
+    if (activeTab === "vibevoice_tts_train" || activeTab === "vibevoice_asr_train") return handleVibeVoiceTrainSubmit();
+    if (activeTab === "vibevoice_model_tools") return handleVibeVoiceModelToolSubmit();
     if (activeTab === "effects") return handleSoundEffectSubmit();
     if (activeTab === "mmaudio_train") return handleMMAudioTrainSubmit();
     if (activeTab === "audio_editor") return handleAudioEditSubmit();
@@ -3179,8 +3262,14 @@ function StudioApp() {
             <button className={activeTab === "vibevoice_asr" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("vibevoice_asr")} type="button">
               <span>{t("tab.vibevoice_asr")}</span>
             </button>
-            <button className={activeTab === "vibevoice_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("vibevoice_train")} type="button">
-              <span>{t("tab.vibevoice_train")}</span>
+            <button className={activeTab === "vibevoice_tts_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => { setVibeVoiceTrainForm((prev) => ({ ...prev, training_mode: "tts_lora" })); setActiveTab("vibevoice_tts_train"); }} type="button">
+              <span>{t("tab.vibevoice_tts_train")}</span>
+            </button>
+            <button className={activeTab === "vibevoice_asr_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => { setVibeVoiceTrainForm((prev) => ({ ...prev, training_mode: "asr_lora" })); setActiveTab("vibevoice_asr_train"); }} type="button">
+              <span>{t("tab.vibevoice_asr_train")}</span>
+            </button>
+            <button className={activeTab === "vibevoice_model_tools" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("vibevoice_model_tools")} type="button">
+              <span>{t("tab.vibevoice_model_tools")}</span>
             </button>
           </div>
 
@@ -5119,7 +5208,7 @@ function StudioApp() {
             eyebrow="VIBEVOICE"
             eyebrowIcon={AudioLines}
             title="VibeVoice TTS"
-            subtitle="Microsoft VibeVoice vendor checkout으로 Realtime 0.5B와 1.5B TTS 모델을 실행합니다."
+            subtitle="Realtime 0.5B, Long-form 1.5B, 7B TTS를 실행하고 참조 음성 또는 LoRA checkpoint를 적용합니다."
             action={{
               label: "VibeVoice 생성",
               formId: "vibevoice-tts-form",
@@ -5161,10 +5250,6 @@ function StudioApp() {
                       <Label className="text-xs font-medium text-ink-muted">Output name</Label>
                       <Input value={vibeVoiceTtsForm.output_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, output_name: event.target.value }))} />
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                      <LanguageSelect value={vibeVoiceTtsForm.language} onChange={(language) => setVibeVoiceTtsForm((prev) => ({ ...prev, language }))} />
-                    </div>
                   </div>
                 </div>
 
@@ -5200,8 +5285,8 @@ function StudioApp() {
                     <Input value={vibeVoiceTtsForm.speaker_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_name: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Speaker prompt text</Label>
-                    <Textarea value={vibeVoiceTtsForm.speaker_prompt_text} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_prompt_text: event.target.value }))} className="min-h-[72px] resize-y border-line bg-canvas" />
+                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint path</Label>
+                    <Input value={vibeVoiceTtsForm.checkpoint_path} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="data/audio-tools/vibevoice_training/.../adapter" />
                   </div>
                 </div>
                 {vibeVoiceTtsForm.model_profile === "tts_15b" || vibeVoiceTtsForm.model_profile === "tts_7b" ? (
@@ -5255,12 +5340,8 @@ function StudioApp() {
                       <Input value={vibeVoiceTtsForm.cfg_scale} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, cfg_scale: event.target.value }))} />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Temperature</Label>
-                      <Input value={vibeVoiceTtsForm.temperature} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, temperature: event.target.value }))} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Top P</Label>
-                      <Input value={vibeVoiceTtsForm.top_p} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, top_p: event.target.value }))} />
+                      <Label className="text-xs font-medium text-ink-muted">Realtime DDPM steps</Label>
+                      <Input value={vibeVoiceTtsForm.ddpm_steps} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, ddpm_steps: event.target.value }))} />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Seed</Label>
@@ -5269,10 +5350,6 @@ function StudioApp() {
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Device</Label>
                       <Input value={vibeVoiceTtsForm.device} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, device: event.target.value }))} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Precision</Label>
-                      <Input value={vibeVoiceTtsForm.precision} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, precision: event.target.value }))} />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Attention</Label>
@@ -5332,27 +5409,44 @@ function StudioApp() {
             action={{
               label: "VibeVoice 전사",
               formId: "vibevoice-asr-form",
-              disabled: loading || !vibeVoiceAsrForm.audio_path.trim(),
+              disabled: loading || !vibeVoiceAsrReady,
               loading,
             }}
             meta={<Badge variant="secondary" className={vibeVoiceRuntime?.asr_ready ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>{vibeVoiceRuntime?.asr_ready ? "ASR ready" : "ASR missing"}</Badge>}
           />
           <form id="vibevoice-asr-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVibeVoiceASRSubmit}>
             <WorkspaceCard className="flex flex-col gap-4">
-              <Tabs defaultValue="gallery">
+              <Tabs value={vibeVoiceAsrSource} onValueChange={(value) => setVibeVoiceAsrSource(value as "audio" | "folder" | "dataset")}>
                 <TabsList className="grid w-full grid-cols-3 gap-1 bg-canvas border border-line p-1 h-auto">
-                  <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Gallery</TabsTrigger>
-                  <TabsTrigger value="upload" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Upload</TabsTrigger>
-                  <TabsTrigger value="path" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Path</TabsTrigger>
+                  <TabsTrigger value="audio" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Audio file</TabsTrigger>
+                  <TabsTrigger value="folder" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Folder</TabsTrigger>
+                  <TabsTrigger value="dataset" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">HF dataset</TabsTrigger>
                 </TabsList>
-                <TabsContent value="gallery" className="m-0 mt-3">
-                  <ServerAudioPicker assets={audioAssets} selectedPath={vibeVoiceAsrForm.audio_path} onSelect={handleSelectVibeVoiceAsset} />
+                <TabsContent value="audio" className="m-0 mt-3 flex flex-col gap-3">
+                  <Tabs defaultValue="gallery">
+                    <TabsList className="grid w-full grid-cols-3 gap-1 bg-canvas border border-line p-1 h-auto">
+                      <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Gallery</TabsTrigger>
+                      <TabsTrigger value="upload" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Upload</TabsTrigger>
+                      <TabsTrigger value="path" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Path</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="gallery" className="m-0 mt-3">
+                      <ServerAudioPicker assets={audioAssets} selectedPath={vibeVoiceAsrForm.audio_path} onSelect={handleSelectVibeVoiceAsset} />
+                    </TabsContent>
+                    <TabsContent value="upload" className="m-0 mt-3">
+                      <AudioUploadField id="vibevoice-asr-upload" buttonLabel={t("file_upload.choose", "파일 선택")} statusLabel={vibeVoiceUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음")} onFile={handleUploadVibeVoiceReference} />
+                    </TabsContent>
+                    <TabsContent value="path" className="m-0 mt-3">
+                      <Input value={vibeVoiceAsrForm.audio_path} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, audio_path: event.target.value }))} placeholder="data/uploads/... 또는 절대경로" />
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
-                <TabsContent value="upload" className="m-0 mt-3">
-                  <AudioUploadField id="vibevoice-asr-upload" buttonLabel={t("file_upload.choose", "파일 선택")} statusLabel={vibeVoiceUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음")} onFile={handleUploadVibeVoiceReference} />
+                <TabsContent value="folder" className="m-0 mt-3">
+                  <Input value={vibeVoiceAsrForm.audio_dir} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, audio_dir: event.target.value }))} placeholder="data/uploads 또는 /mnt/d/audio-folder" />
                 </TabsContent>
-                <TabsContent value="path" className="m-0 mt-3">
-                  <Input value={vibeVoiceAsrForm.audio_path} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, audio_path: event.target.value }))} placeholder="data/uploads/... 또는 절대경로" />
+                <TabsContent value="dataset" className="m-0 mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Input value={vibeVoiceAsrForm.dataset} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, dataset: event.target.value }))} placeholder="openslr/librispeech_asr" />
+                  <Input value={vibeVoiceAsrForm.split} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, split: event.target.value }))} placeholder="test.clean" />
+                  <Input value={vibeVoiceAsrForm.max_duration} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, max_duration: event.target.value }))} placeholder="max seconds" />
                 </TabsContent>
               </Tabs>
               {vibeVoiceAsrForm.audio_path ? (
@@ -5427,15 +5521,15 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
-      {activeTab === "vibevoice_train" ? (
+      {activeTab === "vibevoice_tts_train" || activeTab === "vibevoice_asr_train" ? (
         <WorkspaceShell>
           <WorkspaceHeader
             eyebrow="VIBEVOICE"
             eyebrowIcon={Database}
-            title="VibeVoice LoRA Train"
-            subtitle="공식 ASR LoRA fine-tuning을 실행합니다. TTS LoRA는 공식 지원이 아니라 command template이 있는 경우에만 실험적으로 실행합니다."
+            title={activeTab === "vibevoice_tts_train" ? "VibeVoice TTS Fine-tune" : "VibeVoice ASR Fine-tune"}
+            subtitle={activeTab === "vibevoice_tts_train" ? "VibeVoice TTS LoRA trainer의 dataset, column, LoRA, diffusion 옵션을 실행합니다." : "VibeVoice-ASR LoRA script가 있는 checkout에서 ASR fine-tuning을 실행합니다."}
             action={{
-              label: "VibeVoice 학습 시작",
+              label: activeTab === "vibevoice_tts_train" ? "TTS 학습 시작" : "ASR 학습 시작",
               formId: "vibevoice-train-form",
               disabled: loading || !vibeVoiceTrainForm.output_name.trim() || !vibeVoiceTrainForm.data_dir.trim(),
               loading,
@@ -5445,18 +5539,12 @@ function StudioApp() {
             <WorkspaceCard className="flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Training mode</Label>
-                  <Select value={vibeVoiceTrainForm.training_mode} onValueChange={(training_mode) => setVibeVoiceTrainForm((prev) => ({ ...prev, training_mode: training_mode as "asr_lora" | "tts_lora" }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tts_lora">TTS LoRA (community)</SelectItem>
-                      <SelectItem value="asr_lora">ASR LoRA (if checkout provides script)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">Run name</Label>
                   <Input value={vibeVoiceTrainForm.output_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Mode</Label>
+                  <Input value={activeTab === "vibevoice_tts_train" ? "TTS LoRA" : "ASR LoRA"} readOnly />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -5473,6 +5561,16 @@ function StudioApp() {
                   <Input placeholder="비우면 data/audio-tools/vibevoice_training 아래에 저장" value={vibeVoiceTrainForm.output_dir} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, output_dir: event.target.value }))} />
                 </div>
               </div>
+              {activeTab === "vibevoice_tts_train" ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Input value={vibeVoiceTrainForm.text_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, text_column_name: event.target.value }))} placeholder="text column" />
+                  <Input value={vibeVoiceTrainForm.audio_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, audio_column_name: event.target.value }))} placeholder="audio column" />
+                  <Input value={vibeVoiceTrainForm.voice_prompts_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, voice_prompts_column_name: event.target.value }))} placeholder="voice prompts column" />
+                  <Input value={vibeVoiceTrainForm.train_jsonl} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_jsonl: event.target.value }))} placeholder="local train JSONL" />
+                  <Input value={vibeVoiceTrainForm.validation_jsonl} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, validation_jsonl: event.target.value }))} placeholder="validation JSONL" />
+                  <Input value={vibeVoiceTrainForm.dataset_config_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, dataset_config_name: event.target.value }))} placeholder="dataset config" />
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">Processes</Label>
@@ -5521,9 +5619,24 @@ function StudioApp() {
                   <Input value={vibeVoiceTrainForm.save_steps} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, save_steps: event.target.value }))} placeholder="Save steps" />
                   <Input value={vibeVoiceTrainForm.report_to} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, report_to: event.target.value }))} placeholder="Report to" />
                   <Input value={vibeVoiceTrainForm.extra_args} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, extra_args: event.target.value }))} placeholder="Extra args" />
+                  <Input value={vibeVoiceTrainForm.train_split_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_split_name: event.target.value }))} placeholder="Train split" />
+                  <Input value={vibeVoiceTrainForm.eval_split_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, eval_split_name: event.target.value }))} placeholder="Eval split" />
+                  <Input value={vibeVoiceTrainForm.eval_split_size} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, eval_split_size: event.target.value }))} placeholder="Eval split size" />
+                  <Input value={vibeVoiceTrainForm.max_length} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_length: event.target.value }))} placeholder="Max length" />
+                  <Input value={vibeVoiceTrainForm.lora_target_modules} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_target_modules: event.target.value }))} placeholder="LoRA target modules" />
+                  <Input value={vibeVoiceTrainForm.layers_to_freeze} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, layers_to_freeze: event.target.value }))} placeholder="Layers to freeze" />
+                  <Input value={vibeVoiceTrainForm.ddpm_batch_mul} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, ddpm_batch_mul: event.target.value }))} placeholder="DDPM batch mul" />
+                  <Input value={vibeVoiceTrainForm.ce_loss_weight} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, ce_loss_weight: event.target.value }))} placeholder="CE loss weight" />
+                  <Input value={vibeVoiceTrainForm.diffusion_loss_weight} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, diffusion_loss_weight: event.target.value }))} placeholder="Diffusion loss weight" />
                   <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.bf16} onCheckedChange={(bf16) => setVibeVoiceTrainForm((prev) => ({ ...prev, bf16 }))} /> bf16</label>
                   <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.gradient_checkpointing} onCheckedChange={(gradient_checkpointing) => setVibeVoiceTrainForm((prev) => ({ ...prev, gradient_checkpointing }))} /> Gradient checkpointing</label>
                   <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.use_customized_context} onCheckedChange={(use_customized_context) => setVibeVoiceTrainForm((prev) => ({ ...prev, use_customized_context }))} /> Customized context</label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.ignore_verifications} onCheckedChange={(ignore_verifications) => setVibeVoiceTrainForm((prev) => ({ ...prev, ignore_verifications }))} /> Ignore verifications</label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.lora_wrap_diffusion_head} onCheckedChange={(lora_wrap_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_wrap_diffusion_head }))} /> LoRA diffusion head</label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_diffusion_head} onCheckedChange={(train_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_diffusion_head }))} /> Train diffusion head</label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_connectors} onCheckedChange={(train_connectors) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_connectors }))} /> Train connectors</label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_save} onCheckedChange={(debug_save) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_save }))} /> Debug save</label>
+                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_ce_details} onCheckedChange={(debug_ce_details) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_ce_details }))} /> Debug CE</label>
                 </div>
               </details>
             </WorkspaceCard>
@@ -5538,6 +5651,105 @@ function StudioApp() {
                   </div>
                 ) : (
                   <p className="text-xs text-ink-muted">ASR LoRA는 Microsoft 공식 `finetuning-asr/lora_finetune.py`를 사용합니다.</p>
+                )}
+              </WorkspaceCard>
+            </aside>
+          </form>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "vibevoice_model_tools" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow="VIBEVOICE"
+            eyebrowIcon={GitMerge}
+            title="VibeVoice Model Tools"
+            subtitle="학습된 LoRA를 병합하거나 NnScaler checkpoint를 Transformers 형식으로 변환합니다."
+            action={{
+              label: "도구 실행",
+              formId: "vibevoice-model-tool-form",
+              disabled: loading || !vibeVoiceModelToolReady,
+              loading,
+            }}
+            meta={
+              <Badge variant="secondary" className={vibeVoiceRuntime?.repo_ready ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
+                {vibeVoiceRuntime?.repo_ready ? "VibeVoice ready" : "Vendor missing"}
+              </Badge>
+            }
+          />
+
+          <form id="vibevoice-model-tool-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVibeVoiceModelToolSubmit}>
+            <WorkspaceCard className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[260px_minmax(0,1fr)]">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Tool</Label>
+                  <Select value={vibeVoiceModelToolForm.tool} onValueChange={(tool) => setVibeVoiceModelToolForm((prev) => ({ ...prev, tool: tool as "merge" | "verify_merge" | "convert_nnscaler" }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="merge">Merge LoRA into base model</SelectItem>
+                      <SelectItem value="verify_merge">Verify merged checkpoint</SelectItem>
+                      <SelectItem value="convert_nnscaler">Convert NnScaler checkpoint</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Output path</Label>
+                  <Input value={vibeVoiceModelToolForm.output_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, output_path: event.target.value }))} placeholder="data/models/vibevoice/merged-vibevoice" />
+                </div>
+              </div>
+
+              {vibeVoiceModelToolForm.tool === "convert_nnscaler" ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">NnScaler checkpoint</Label>
+                    <Input value={vibeVoiceModelToolForm.nnscaler_checkpoint_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, nnscaler_checkpoint_path: event.target.value }))} placeholder="path/to/nnscaler/checkpoint" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Config path</Label>
+                    <Input value={vibeVoiceModelToolForm.config_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, config_path: event.target.value }))} placeholder="optional config path" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Base model path</Label>
+                    <Input value={vibeVoiceModelToolForm.base_model_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, base_model_path: event.target.value }))} placeholder="data/models/vibevoice/VibeVoice-1.5B" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint path</Label>
+                    <Input value={vibeVoiceModelToolForm.checkpoint_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="data/audio-tools/vibevoice_training/.../adapter" disabled={vibeVoiceModelToolForm.tool === "verify_merge"} />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[240px_minmax(0,1fr)]">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Output format</Label>
+                  <Select value={vibeVoiceModelToolForm.output_format} onValueChange={(output_format) => setVibeVoiceModelToolForm((prev) => ({ ...prev, output_format: output_format as "safetensors" | "bin" }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="safetensors">safetensors</SelectItem>
+                      <SelectItem value="bin">PyTorch bin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="self-end text-xs leading-5 text-ink-subtle">
+                  병합 결과는 VibeVoice TTS의 `LoRA checkpoint path` 없이 바로 쓰는 self-contained 모델 폴더로 관리할 수 있습니다.
+                </p>
+              </div>
+            </WorkspaceCard>
+
+            <aside className="self-start">
+              <WorkspaceCard className="flex flex-col gap-3">
+                <strong className="text-sm font-medium text-ink">Result</strong>
+                {vibeVoiceModelToolResult ? (
+                  <div className="flex flex-col gap-2 text-xs text-ink-muted">
+                    <span>Status: <strong className="text-ink">{vibeVoiceModelToolResult.status}</strong></span>
+                    <span className="break-all">Output: {vibeVoiceModelToolResult.output_path}</span>
+                    <span className="break-all">Log: {vibeVoiceModelToolResult.log_path}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs leading-5 text-ink-muted">VibeVoice checkout에 포함된 공식 merge/convert utilities를 직접 호출합니다.</p>
                 )}
               </WorkspaceCard>
             </aside>

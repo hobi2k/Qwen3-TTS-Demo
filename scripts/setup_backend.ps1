@@ -8,6 +8,8 @@ $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "app\backend"
 $VenvDir = Join-Path $RootDir ".venv"
 $VendorDir = Join-Path $RootDir "vendor"
+$UpstreamQwenDir = Join-Path $VendorDir "Qwen3-TTS"
+$QwenExtensionsDir = Join-Path $RootDir "qwen_extensions"
 $MMAudioRepoUrlDefault = "https://github.com/hkchengrex/MMAudio.git"
 $ApplioRepoUrlDefault = "https://github.com/IAHispano/Applio.git"
 $FlashAttnWheelUrl = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
@@ -41,6 +43,14 @@ $PythonCmd = Resolve-Python -Requested $Python
 Write-Host "Using Python: $PythonCmd"
 Write-Host "Repo root: $RootDir"
 New-Item -ItemType Directory -Force -Path $VendorDir | Out-Null
+
+if (-not (Test-Path $UpstreamQwenDir)) {
+    throw "vendor\Qwen3-TTS is missing. This repository expects Qwen3-TTS to be vendored under $UpstreamQwenDir."
+}
+
+if (-not (Test-Path $QwenExtensionsDir)) {
+    throw "qwen_extensions is missing. CustomVoice/VoiceBox fine-tuning scripts are expected under $QwenExtensionsDir."
+}
 
 if (-not $env:UV_CACHE_DIR) {
     $env:UV_CACHE_DIR = Join-Path $RootDir ".uv-cache"

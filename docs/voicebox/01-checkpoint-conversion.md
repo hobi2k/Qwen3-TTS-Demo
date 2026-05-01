@@ -26,13 +26,13 @@
 ## 사용 스크립트
 
 - 변환 스크립트:
-  - [make_voicebox_checkpoint.py](../../Qwen3-TTS/fusion/make_voicebox_checkpoint.py)
+  - [make_voicebox_checkpoint.py](../../qwen_extensions/fusion/make_voicebox_checkpoint.py)
 
 ## 예시
 
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
-.venv/bin/python Qwen3-TTS/fusion/make_voicebox_checkpoint.py \
+.venv/bin/python qwen_extensions/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
   --output-checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final

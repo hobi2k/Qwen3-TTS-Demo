@@ -209,12 +209,10 @@ models/
 models/**
 !vendor/fish-speech/fish_speech/models/
 !vendor/fish-speech/fish_speech/models/**
-# Microsoft VibeVoice is cloned by scripts/download_models.sh and is not a
-# source subtree maintained by this repo.
-vendor/VibeVoice/
 data/models/
 data/models/**
 data/cache/**
+data/e2e/**
 data/generated/**
 data/audio-tools/**
 data/mmaudio/**
@@ -224,6 +222,8 @@ data/rvc-models/**
 !data/rvc-models/.gitkeep
 data/stem-separator-models/**
 !data/stem-separator-models/.gitkeep
+vendor/Applio/rvc/models/embedders/**
+vendor/Applio/rvc/models/predictors/**
 data/uploads/*
 !data/uploads/.gitkeep
 data/clone-prompts/**
@@ -235,6 +235,8 @@ data/source-datasets/**
 !data/source-datasets/.gitkeep
 data/finetune-runs/*
 !data/finetune-runs/.gitkeep
+ext_weights/
+weights/
 
 # Ruff stuff:
 .ruff_cache/

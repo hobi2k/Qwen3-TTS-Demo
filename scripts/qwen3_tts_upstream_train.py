@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Demo-side wrappers for pristine upstream Qwen3-TTS fine-tuning entrypoints.
 
-This CLI keeps the upstream ``Qwen3-TTS/`` tree untouched and provides three
+This CLI keeps the upstream ``vendor/Qwen3-TTS/`` tree untouched and provides three
 commands:
 
 ``prepare-data``
@@ -18,7 +18,7 @@ commands:
 The wrapper assumes the repository layout used by ``Qwen3-TTS-Demo``:
 
 * project root: ``/home/hosung/pytorch-demo/Qwen3-TTS-Demo``
-* upstream repo: ``Qwen3-TTS-Demo/Qwen3-TTS``
+* upstream repo: ``Qwen3-TTS-Demo/vendor/Qwen3-TTS``
 * canonical dataset: ``data/datasets/mai_ko_full``
 """
 
@@ -44,7 +44,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UPSTREAM_ROOT = REPO_ROOT / "Qwen3-TTS"
+UPSTREAM_ROOT = REPO_ROOT / "vendor" / "Qwen3-TTS"
 UPSTREAM_FINETUNING_DIR = UPSTREAM_ROOT / "finetuning"
 SAFE_PREPARE_DATA = REPO_ROOT / "scripts" / "qwen3_tts_prepare_data.py"
 UPSTREAM_BASE_SFT = UPSTREAM_FINETUNING_DIR / "sft_12hz.py"

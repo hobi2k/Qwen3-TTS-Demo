@@ -3,7 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/app/backend"
-UPSTREAM_DIR="${ROOT_DIR}/Qwen3-TTS"
+UPSTREAM_DIR="${ROOT_DIR}/vendor/Qwen3-TTS"
+QWEN_EXTENSIONS_DIR="${ROOT_DIR}/qwen_extensions"
 VENV_DIR="${ROOT_DIR}/.venv"
 VENDOR_DIR="${ROOT_DIR}/vendor"
 FLASH_ATTN_WHEEL_URL="https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
@@ -24,6 +25,16 @@ echo "Repo root: ${ROOT_DIR}"
 
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${ROOT_DIR}/.uv-cache}"
 mkdir -p "${VENDOR_DIR}"
+
+if [[ ! -d "${UPSTREAM_DIR}" ]]; then
+  echo "vendor/Qwen3-TTS is missing. This repository expects Qwen3-TTS to be vendored under ${UPSTREAM_DIR}." >&2
+  exit 1
+fi
+
+if [[ ! -d "${QWEN_EXTENSIONS_DIR}" ]]; then
+  echo "qwen_extensions is missing. CustomVoice/VoiceBox fine-tuning scripts are expected under ${QWEN_EXTENSIONS_DIR}." >&2
+  exit 1
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required but not installed." >&2

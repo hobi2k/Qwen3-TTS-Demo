@@ -190,12 +190,12 @@ uvicorn app.main:app --host 127.0.0.1 --port 8190
 ```env
 S2_PRO_RUNTIME=local
 S2_PRO_AUTO_START=1
-S2_PRO_START_TIMEOUT_SEC=120
+S2_PRO_START_TIMEOUT_SEC=600
 FISH_SPEECH_REPO_ROOT=vendor/fish-speech
 FISH_SPEECH_MODEL_DIR=data/models/fish-speech/s2-pro
 FISH_SPEECH_MODEL=s2-pro
 FISH_SPEECH_SERVER_URL=http://127.0.0.1:8080
-FISH_SPEECH_TIMEOUT_SEC=180
+FISH_SPEECH_TIMEOUT_SEC=600
 FISH_SPEECH_HOST=127.0.0.1
 FISH_SPEECH_PORT=8080
 FISH_SPEECH_HALF=1
@@ -213,7 +213,7 @@ FISH_SPEECH_TORCH_PROFILE=cu130
 - `S2_PRO_AUTO_START`
   `1`이면 백엔드가 로컬 엔진을 자동 시작합니다. `0`이면 사용자가 endpoint를 직접 켜야 합니다.
 - `S2_PRO_START_TIMEOUT_SEC`
-  자동 시작 후 `/v1/health`가 준비될 때까지 기다리는 시간입니다.
+  자동 시작 후 `/v1/health`가 준비될 때까지 기다리는 시간입니다. 첫 실행은 모델 warm-up이 길 수 있어 기본값을 600초로 둡니다.
 - `FISH_SPEECH_SERVER_URL`
   백엔드가 호출할 로컬 Fish Speech 호환 endpoint입니다. 기본은 `http://127.0.0.1:8080`.
 - `FISH_SPEECH_HOST`, `FISH_SPEECH_PORT`
@@ -242,7 +242,7 @@ S2_PRO_RUNTIME=api
 FISH_AUDIO_API_KEY=...
 FISH_AUDIO_API_URL=https://api.fish.audio
 FISH_AUDIO_MODEL=s2-pro
-FISH_AUDIO_TIMEOUT_SEC=180
+FISH_AUDIO_TIMEOUT_SEC=600
 ```
 
 `S2_PRO_RUNTIME=api`는 기본 provider를 API로 바꾸는 설정입니다. 기본값을 로컬로 두고 요청별로만 API를 쓰려면 `S2_PRO_RUNTIME=local`로 두거나 비워 두고, UI에서 해당 폼의 `Provider`만 `Fish Audio API`로 선택합니다.

@@ -50,7 +50,9 @@ export type TabKey =
   | "s2pro_train"
   | "vibevoice_tts"
   | "vibevoice_asr"
-  | "vibevoice_train"
+  | "vibevoice_tts_train"
+  | "vibevoice_asr_train"
+  | "vibevoice_model_tools"
   | "mmaudio_train"
   | "guide";
 export type AudioEffectsView = "explore" | "history";
@@ -256,10 +258,20 @@ export const PRODUCT_PAGES = {
     title: "VibeVoice ASR",
     description: "Microsoft VibeVoice-ASR 모델로 업로드/생성 음성을 전사합니다.",
   },
-  vibevoice_train: {
-    label: "LoRA Train",
-    title: "VibeVoice LoRA Train",
-    description: "공식 ASR LoRA fine-tuning과 실험적 TTS LoRA command path를 관리합니다.",
+  vibevoice_tts_train: {
+    label: "TTS Fine-tune",
+    title: "VibeVoice TTS Fine-tune",
+    description: "VibeVoice TTS LoRA 학습 옵션을 upstream trainer 기준으로 실행합니다.",
+  },
+  vibevoice_asr_train: {
+    label: "ASR Fine-tune",
+    title: "VibeVoice ASR Fine-tune",
+    description: "VibeVoice-ASR LoRA fine-tuning을 실행합니다.",
+  },
+  vibevoice_model_tools: {
+    label: "Model Tools",
+    title: "VibeVoice Model Tools",
+    description: "LoRA merge, merge 검증, NnScaler checkpoint 변환을 실행합니다.",
   },
   mmaudio_train: {
     label: "MMAudio 학습",

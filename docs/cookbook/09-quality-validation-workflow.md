@@ -114,6 +114,61 @@ python scripts/validate_speech_quality.py \
   --suite all
 ```
 
+### 전체 제품 표면 live E2E
+
+`scripts/live_e2e_verify.py`는 백엔드를 임시 포트로 직접 띄운 뒤, 프론트 정적 shell과 실제 백엔드 API를 호출합니다.
+`--include-heavy`를 붙이면 Qwen, S2-Pro, Applio/RVC, Stem Separator, ACE-Step, VibeVoice, MMAudio까지 실제 모델을 로드해 오디오 파일을 생성합니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+./.venv/bin/python scripts/live_e2e_verify.py --include-heavy
+```
+
+검증 범위:
+
+- 프론트 정적 shell
+- `/api/health`, `/api/bootstrap`, `/api/models`
+- 생성 갤러리와 오디오 자산 조회
+- Qwen CustomVoice, VoiceDesign, VoiceClone 실제 생성
+- Qwen clone prompt 생성, preset 생성, preset 기반 생성
+- Qwen hybrid clone+instruct 실제 생성
+- VoiceBox clone, VoiceBox clone+instruct 실제 생성
+- Qwen3-ASR 참조 음성 전사
+- S2-Pro local Fish Speech 실제 생성
+- S2-Pro 목소리 저장, 저장 목소리 재사용 TTS, dialogue 생성
+- Applio/RVC 단일 변환과 배치 변환
+- Stem Separator 실제 분리
+- ACE-Step 실제 음악 생성
+- VibeVoice 실제 TTS 생성
+- MMAudio 실제 효과음 생성
+- 오디오 변환, 노이즈 제거, 편집
+
+주의:
+
+- 이 명령은 smoke test가 아니라 live E2E입니다. 여러 대형 모델을 순차 로드하므로 10분 이상 걸릴 수 있습니다.
+- Qwen / S2-Pro / Applio / MMAudio / ACE-Step / VibeVoice가 실제 local runtime으로 동작하는지 확인합니다. API mock, fallback audio, simulation mode를 성공으로 처리하지 않습니다.
+- 훈련 endpoint는 장시간/파괴적 작업이므로 이 E2E에서 자동 실행하지 않습니다. 훈련 검증은 별도 학습 로그와 산출 체크포인트 품질 평가로 수행합니다.
+- MMAudio는 모델 초기화와 생성이 특히 느릴 수 있어 E2E 스크립트에서 마지막에 실행합니다.
+- 각 단계는 `[live-e2e] START/PASS/FAIL` 로그를 즉시 출력하므로, 멈춘 경우 어느 기능에서 걸렸는지 확인할 수 있습니다.
+- 완료 후 스크립트가 임시 uvicorn 프로세스 그룹을 종료합니다. 종료 후 `nvidia-smi`에서 GPU 프로세스가 남아 있지 않아야 합니다.
+
+### Fine-tuning 계열 검증 기준
+
+Fine-tuning 기능은 생성 기능과 검증 방식이 다릅니다. 실제 학습은 수십 분에서 수 시간 걸리고 기존 체크포인트를 만들거나 덮어쓸 수 있으므로, live E2E 스크립트는 학습 버튼을 자동으로 누르지 않습니다. 대신 아래 세 층으로 확인합니다.
+
+| 범위 | 확인 방법 | 현재 상태 |
+| --- | --- | --- |
+| Qwen dataset prepare | `qwen3_tts_prepare_data.py`와 `/api/datasets/{id}/prepare-for-training`가 같은 프로젝트 Python과 `qwen_extensions` 경로를 쓰는지 확인 | 정리됨 |
+| Qwen Base / CustomVoice / VoiceBox 학습 | `qwen_extensions/finetuning/*` canonical script, `QWEN_DEMO_OPTIMIZER`, `QWEN_DEMO_TRAIN_PRECISION`, `QWEN_DEMO_GRAD_ACCUM_STEPS`로 실행 | MAI full run 결과 문서화됨 |
+| VoiceBox fusion | `qwen_extensions/fusion/make_voicebox_checkpoint.py`로 speaker encoder 내장 여부 확인 | MAI VoiceBox 결과 문서화됨 |
+| S2-Pro fine-tune | `/api/s2-pro/train`이 Fish Speech `text2semantic_finetune`와 LoRA merge를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
+| Applio/RVC training | `/api/audio-tools/rvc-train`이 Applio preprocess/extract/train/index 순서로 실행 | 엔드포인트/자산 정리됨, 자동 full-run 제외 |
+| MMAudio training | `/api/audio-tools/mmaudio-train`이 upstream `train.py` full/continued training을 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
+| ACE-Step LoRA/LoKr | `/api/music/ace-step/train-adapter`가 preprocess 후 upstream `train.py fixed/vanilla`를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
+| VibeVoice training | `/api/vibevoice/train`이 ASR LoRA 또는 TTS trainer/template를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
+
+학습 기능을 실제로 끝까지 검증할 때는 한 번에 하나만 실행합니다. 동시에 여러 학습을 돌리면 VRAM 피크, CUDA allocator, subprocess cache가 겹쳐 WSL 안정성이 떨어질 수 있습니다.
+
 ### plain CustomVoice vs VoiceBox 비교
 
 ```bash
@@ -134,7 +189,7 @@ python scripts/evaluate_customvoice_voicebox_quality.py \
 ```bash
 cd ~/pytorch-demo/Qwen3-TTS-Demo
 source .venv/bin/activate
-python Qwen3-TTS/inference/voicebox/clone.py \
+python qwen_extensions/inference/voicebox/clone.py \
   --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
   --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
   --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \
@@ -146,7 +201,7 @@ python Qwen3-TTS/inference/voicebox/clone.py \
 ```
 
 ```bash
-python Qwen3-TTS/inference/voicebox/clone_instruct.py \
+python qwen_extensions/inference/voicebox/clone_instruct.py \
   --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
   --ref-audio data/datasets/mai_ko_full/audio/00002.wav \
   --ref-text "음, 훌륭해. 너희의 결심과 노력이 보여" \

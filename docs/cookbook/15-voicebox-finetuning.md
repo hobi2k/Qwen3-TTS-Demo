@@ -34,7 +34,7 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
-.venv/bin/python Qwen3-TTS/finetuning/sft_voicebox_12hz.py \
+.venv/bin/python qwen_extensions/finetuning/sft_voicebox_12hz.py \
   --train_jsonl data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl \
   --init_model_path data/finetune-runs/mai_ko_voicebox17b_full/final \
   --output_model_path data/finetune-runs/mai_ko_voicebox17b_full_extra1 \

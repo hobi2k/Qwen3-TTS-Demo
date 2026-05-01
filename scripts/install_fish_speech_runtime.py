@@ -74,8 +74,10 @@ def install_requirements(*, repo_root: Path, torch_version: str, torch_profile: 
         run(command)
 
     dependencies = fish_speech_dependencies(repo_root)
+    if "torchcodec" not in {requirement_name(item) for item in dependencies}:
+        dependencies.append("torchcodec")
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
-        constraints_path = Path(handle.name)
+        overrides_path = Path(handle.name)
         if torch_packages:
             for package in torch_packages:
                 handle.write(package + "\n")
@@ -83,10 +85,10 @@ def install_requirements(*, repo_root: Path, torch_version: str, torch_profile: 
 
     try:
         if dependencies:
-            run(["uv", "pip", "install", "--constraint", str(constraints_path), *dependencies])
+            run(["uv", "pip", "install", "--overrides", str(overrides_path), *dependencies])
         run(["uv", "pip", "install", "--no-deps", "-e", str(repo_root)])
     finally:
-        constraints_path.unlink(missing_ok=True)
+        overrides_path.unlink(missing_ok=True)
 
 
 def verify_runtime(expected_version: str, expected_profile: str) -> None:

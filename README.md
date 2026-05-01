@@ -36,7 +36,7 @@
 - `ACE-Step 작곡`
   ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 `LoRA / LoKr 학습` 탭에서는 upstream `train.py`를 호출해 텐서 폴더, 오디오 폴더, dataset JSON에서 ACE-Step 어댑터를 만들고 생성 LoRA 목록에 연결합니다.
 - `VibeVoice`
-  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B와 Long-form 1.5B를 선택해 생성하고, `VibeVoice ASR`은 context/hotwords/timestamps 옵션을 포함한 전사를 제공합니다. `VibeVoice LoRA Train`은 공식 ASR LoRA fine-tuning을 실행하며, TTS LoRA는 공식 trainer가 없으므로 command template 기반 실험 경로로만 표시합니다.
+  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, optional 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 학습은 `TTS Fine-tune`과 `ASR Fine-tune`으로 나뉘며, `Model Tools`에서 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -90,36 +90,40 @@ ACE-Step만 준비하려면:
 
 사전 요구 사항은 `uv`, `Node.js 18+`, `npm`, `ffmpeg`, `sox`입니다. `ffmpeg`와 `sox`는 스크립트가 경고만 띄우며 자동 설치하지 않습니다.
 
-VoiceBox 관련 스크립트는 이제 `Qwen3-TTS` 안에서 역할별로 분리합니다.
+VoiceBox와 CustomVoice 확장 스크립트는 이제 `qwen_extensions`를 기준으로 실행합니다.
+기존에 `vendor/Qwen3-TTS` 안에 추가해 둔 커스텀 파일은 당장 삭제하지 않고 호환용 복사본으로 남겨 둡니다.
+FastAPI 백엔드는 `QWEN_EXTENSIONS` 환경변수를 먼저 보고, 없으면 기본값 `qwen_extensions`를 사용합니다.
 
 - 1단계 plain `CustomVoice` 학습:
-  - [sft_custom_voice_12hz.py](Qwen3-TTS/finetuning/sft_custom_voice_12hz.py)
+  - [sft_custom_voice_12hz.py](qwen_extensions/finetuning/sft_custom_voice_12hz.py)
 - 2단계 `CustomVoice -> VoiceBox` 변환:
-  - [make_voicebox_checkpoint.py](Qwen3-TTS/fusion/make_voicebox_checkpoint.py)
+  - [make_voicebox_checkpoint.py](qwen_extensions/fusion/make_voicebox_checkpoint.py)
 - 3단계 `VoiceBox -> VoiceBox` 재학습:
-  - [sft_voicebox_12hz.py](Qwen3-TTS/finetuning/sft_voicebox_12hz.py)
+  - [sft_voicebox_12hz.py](qwen_extensions/finetuning/sft_voicebox_12hz.py)
 - VoiceBox 추론:
-  - [clone_instruct.py](Qwen3-TTS/inference/voicebox/clone_instruct.py)
+  - [clone_instruct.py](qwen_extensions/inference/voicebox/clone_instruct.py)
 
 보조 경로:
 
-- [sft_voicebox_bootstrap_12hz.py](Qwen3-TTS/finetuning/sft_voicebox_bootstrap_12hz.py)
+- [sft_voicebox_bootstrap_12hz.py](qwen_extensions/finetuning/sft_voicebox_bootstrap_12hz.py)
   - `CustomVoice + Base 1.7B`를 한 번에 묶는 보조 진입점
 
 예전 명령어 유지를 위한 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 래퍼는 제거했습니다.
-새 훈련 로직은 `Qwen3-TTS/finetuning`, 변환 로직은 `Qwen3-TTS/fusion`, 추론 로직은 `Qwen3-TTS/inference` 쪽 canonical script에만 반영합니다.
+새 훈련 로직은 `qwen_extensions/finetuning`, 변환 로직은 `qwen_extensions/fusion`, 추론 로직은 `qwen_extensions/inference` 쪽 canonical script에 반영합니다.
+`vendor/Qwen3-TTS` 내부 커스텀 복사본은 현재 단계에서만 유지하는 legacy mirror이며, 백엔드 실행 기준은 아닙니다.
 
 ## 현재 프로젝트 구조
 
 ```text
 Qwen3-TTS-Demo/
-  Qwen3-TTS/                 # upstream reference repo
+  vendor/Qwen3-TTS/                 # upstream reference repo
+  qwen_extensions/           # demo-owned Qwen training/fusion/inference scripts
   vendor/
     Applio/                  # vendored (tracked in this repo)
     MMAudio/                 # vendored (tracked in this repo)
     fish-speech/             # vendored (tracked in this repo)
     ACE-Step/                # vendored (tracked in this repo)
-    VibeVoice/               # downloaded vendor checkout, gitignored
+    VibeVoice/               # vendored VibeVoice source, tracked in this repo
   app/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript
@@ -294,13 +298,13 @@ FISH_AUDIO_API_KEY=
 
 ## VibeVoice 작업실
 
-`VIBEVOICE` 탭은 community-maintained VibeVoice code vendor를 Qwen/S2-Pro와 같은 wrapper 방식으로 붙인 화면입니다. 코드 checkout은 `vibevoice-community/VibeVoice` 하나만 사용하고, ASR/realtime처럼 공식 Hugging Face weight가 필요한 경우에만 `microsoft/*` 모델 repo를 받습니다.
+`VIBEVOICE` 탭은 vendored VibeVoice source를 Qwen/S2-Pro와 같은 wrapper 방식으로 붙인 화면입니다. VibeVoice 코드는 `vendor/VibeVoice`에 저장소 일부로 포함되어 있어 별도 git clone을 하지 않고, ASR/realtime처럼 Hugging Face weight가 필요한 모델 파일만 다운로드합니다.
 
 지원 모델:
 
 - `microsoft/VibeVoice-ASR`: VibeVoice ASR 탭과 공통 ASR 모델 선택에서 사용
 - `microsoft/VibeVoice-Realtime-0.5B`: VibeVoice TTS의 realtime 모델
-- `vibevoice/VibeVoice-1.5B`: 장문 TTS 모델 weight. 다운로드와 UI 선택을 지원하며, 앱에 포함된 `scripts/run_vibevoice_tts_15b.py`와 community checkout의 inference code로 기본 실행 경로를 제공합니다.
+- `vibevoice/VibeVoice-1.5B`: 장문 TTS 모델 weight. 다운로드와 UI 선택을 지원하며, 앱에 포함된 `scripts/run_vibevoice_tts_15b.py`와 vendored VibeVoice inference code로 기본 실행 경로를 제공합니다.
 - `vibevoice/VibeVoice-7B`: community 쪽 7B 장문 TTS 모델입니다. Microsoft official model zoo에는 enabled download로 남아 있지 않아 별도 opt-in 모델로 취급합니다.
 
 설치/다운로드:
@@ -309,7 +313,7 @@ FISH_AUDIO_API_KEY=
 ./scripts/download_models.sh vibevoice
 ```
 
-`all` 프로필에도 위 세 모델이 모두 포함됩니다. 기본 경로는 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice/*`입니다. 이 세 경로는 로컬 산출물이라 `.gitignore`에 들어가며, 저장소에는 앱 integration code와 문서만 남깁니다.
+`all` 프로필에도 위 세 모델이 모두 포함됩니다. `vendor/VibeVoice`는 Applio/MMAudio처럼 저장소에 포함된 vendor source입니다. `.venv-vibevoice`와 `data/models/vibevoice/*`만 로컬 산출물이라 `.gitignore`에 들어갑니다. `download_models.sh`는 VibeVoice 코드를 clone하지 않고, 이미 존재하는 `vendor/VibeVoice`를 사용해 전용 venv와 모델 weight만 준비합니다.
 
 7B 모델은 용량과 출처가 다르므로 기본 `all`에는 넣지 않고 아래처럼 따로 받습니다.
 
@@ -389,6 +393,7 @@ BACKEND_PORT=<BACKEND_PORT> npm run dev
 - `Qwen3-ASR-0.6B`
 - Fish Speech S2-Pro 로컬 모델
 - Applio/RVC 데모 모델과 index
+- Applio/RVC runtime asset: `contentvec` embedder, `rmvpe.pt`
 - MMAudio 일반/NSFW 효과음 모델
 - Stem separator 모델
 - 전용 `.venv-ace-step`, ACE-Step-1.5 음악 생성 checkpoint (소스는 이 레포에 vendored)
@@ -422,6 +427,13 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 현재 검증된 MAI full run은 `QWEN_DEMO_OPTIMIZER=adafactor`를 사용했습니다. 이 변경은 품질 향상 목적이 아니라
 학습을 끝까지 안정적으로 완료하기 위한 운영 선택입니다.
 
+Fine-tuning subprocess는 기본적으로 백엔드를 실행 중인 같은 Python을 사용합니다. 다른 interpreter를 강제로 쓰고 싶을 때만
+`QWEN_DEMO_PYTHON`을 설정합니다. Qwen prepare/fine-tune 작업은 `PYTHONPATH`에 `vendor/Qwen3-TTS`,
+`vendor/Qwen3-TTS/finetuning`, `qwen_extensions`를 같이 넣어 실행하므로 fresh clone에서도 확장 스크립트가 같은 방식으로 동작합니다.
+
+전체 live E2E는 생성/변환/분리 런타임을 실제로 실행합니다. 다만 fine-tuning endpoint는 장시간/파괴적 작업이므로 자동 E2E에 포함하지 않고,
+Qwen CustomVoice/VoiceBox full run, VoiceBox fusion, VoiceBox 추가 학습 결과와 각 학습 엔트리포인트 정합성을 문서와 별도 로그로 추적합니다.
+
 ## 현재 기준으로 꼭 알아둘 점
 
 - `텍스트 음성 변환`이 메인 TTS 화면입니다.
@@ -437,7 +449,6 @@ Linux + CUDA 환경에서는 `FlashAttention 2`를 우선 사용합니다.
 
 ## 남은 핵심 과제
 
-- `보이스박스` 화면에서 실제 실행 버튼과 진행 상태를 더 촘촘히 연결하는 작업
 - `MMAudio`와 `Applio/RVC` 운영 가이드를 더 다듬는 작업
 - 프런트 시각 언어를 더 제품 수준으로 밀어 올리는 작업
 

@@ -200,6 +200,18 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
   기본값은 `Qwen/Qwen3-ASR-1.7B`이며, 빠른 확인용으로 `Qwen/Qwen3-ASR-0.6B` 또는 `0.6b`를 지정할 수 있습니다.
 - `QWEN_DEMO_ASR_MAX_NEW_TOKENS`
   Qwen3-ASR 전사의 최대 생성 토큰 수입니다. 기본값은 `512`입니다.
+- `QWEN_EXTENSIONS`
+  CustomVoice 추가 학습, VoiceBox 변환, VoiceBox clone 실험처럼 데모가 추가한 Qwen 스크립트 위치입니다. 비워 두면 저장소 루트의 `qwen_extensions`를 사용합니다.
+- `QWEN_DEMO_PYTHON`
+  Qwen 데이터 준비/파인튜닝 subprocess에서 사용할 Python입니다. 비워 두면 백엔드와 같은 interpreter를 사용합니다. 일반적으로 비워 두는 것이 안전합니다.
+- `QWEN_DEMO_TRAIN_PRECISION`
+  Qwen CustomVoice/VoiceBox 학습 dtype 선택입니다. 비워 두면 CUDA에서는 `bf16`, CPU/MPS에서는 `fp32` 계열로 동작합니다. `fp32`, `float32`, `no`를 넣으면 mixed precision을 끕니다.
+- `QWEN_DEMO_OPTIMIZER`
+  Qwen CustomVoice/VoiceBox 학습 optimizer입니다. `adamw` 또는 `adafactor`를 씁니다. RTX 5080 16GB full run에서는 `adafactor`가 메모리 피크를 낮춰 안정적이었습니다.
+- `QWEN_DEMO_GRAD_ACCUM_STEPS`
+  Qwen CustomVoice/VoiceBox 학습 gradient accumulation step입니다. 기본값은 `1`입니다.
+- `QWEN_DEMO_LOG_EVERY`
+  Qwen CustomVoice/VoiceBox 학습 로그 출력 간격입니다. 기본값은 `10`, MAI 검증 run에서는 `25`를 사용했습니다.
 
 ### 외부 오디오 도구 공통
 
@@ -221,6 +233,10 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 - `APPLIO_RVC_MODEL_URL`
 - `APPLIO_RVC_INDEX_URL`
   기본 demo RVC pair가 아닌 다른 모델을 다운로드할 때 씁니다.
+- `APPLIO_CONTENTVEC_MODEL_URL`
+- `APPLIO_CONTENTVEC_CONFIG_URL`
+- `APPLIO_RMVPE_URL`
+  Applio가 변환 중 런타임 다운로드를 시도하지 않도록 `download_models.sh`가 미리 받는 embedder / predictor 자산입니다. 기본값은 IAHispano/Applio의 `contentvec`와 `rmvpe.pt`입니다.
 
 ### MMAudio
 
@@ -237,11 +253,12 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 - `S2_PRO_AUTO_START`
   `1`이면 백엔드가 Local S2-Pro 엔진을 자동 시작합니다.
 - `S2_PRO_START_TIMEOUT_SEC`
-  Local S2-Pro 엔진 readiness 대기 시간입니다.
+  Local S2-Pro 엔진 readiness 대기 시간입니다. 첫 실행은 Fish Speech 모델 warm-up 때문에 길 수 있어 기본값을 600초로 둡니다.
 - `FISH_SPEECH_MODEL_DIR`
 - `FISH_SPEECH_SERVER_URL`
 - `FISH_SPEECH_MODEL`
 - `FISH_SPEECH_TIMEOUT_SEC`
+  Local S2-Pro 생성 요청 제한 시간입니다. 첫 생성은 모델 warm-up까지 포함할 수 있어 기본값을 600초로 둡니다.
 - `FISH_SPEECH_HOST`
 - `FISH_SPEECH_PORT`
 - `FISH_SPEECH_VENV`
@@ -281,15 +298,16 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 ./scripts/download_models.sh vibevoice
 ```
 
-VibeVoice code vendor는 `vibevoice-community/VibeVoice` 하나만 사용합니다. `all` 프로필은 `microsoft/VibeVoice-ASR`, `microsoft/VibeVoice-Realtime-0.5B`, `vibevoice/VibeVoice-1.5B`를 모두 받습니다.
+VibeVoice code vendor는 `vendor/VibeVoice`에 저장소 일부로 포함되어 있어 별도 git clone을 하지 않습니다. `all` 프로필은 `microsoft/VibeVoice-ASR`, `microsoft/VibeVoice-Realtime-0.5B`, `vibevoice/VibeVoice-1.5B` 모델 weight를 모두 받습니다.
 7B community 모델은 크기와 출처가 달라 기본 `all`에 포함하지 않고 `./scripts/download_models.sh vibevoice-7b` 또는 `VIBEVOICE_INCLUDE_7B=1 ./scripts/download_models.sh vibevoice`로 받습니다.
 1.5B/7B TTS는 `scripts/run_vibevoice_tts_15b.py`와 `app/backend/app/vendor_patches/vibevoice/modeling_vibevoice_inference.py`를 통해 기본 실행됩니다.
 
-VibeVoice 로컬 산출물은 git에 넣지 않습니다.
+VibeVoice는 다른 벤더 폴더처럼 앱 안에 이미 있어야 합니다. 다운로드 스크립트는 `vendor/VibeVoice`가 없으면 clone으로 복구하지 않고 오류를 냅니다. 새로 clone한 사용자가 바로 쓸 수 있도록 이 폴더는 저장소에 포함되어야 합니다.
+
+VibeVoice의 로컬 산출물은 git에 넣지 않습니다.
 
 ```text
 .venv-vibevoice/
-vendor/VibeVoice/
 data/models/vibevoice/
 ```
 

@@ -26,7 +26,7 @@
 
 ## 원래 업스트림에 있던 학습 흐름
 
-업스트림 기준 출발점은 [Qwen3-TTS/finetuning/README.md](../../Qwen3-TTS/finetuning/README.md)와 `prepare_data.py`, `sft_12hz.py`입니다.
+업스트림 기준 출발점은 [vendor/Qwen3-TTS/finetuning/README.md](../../vendor/Qwen3-TTS/finetuning/README.md)와 `prepare_data.py`, `sft_12hz.py`입니다.
 
 원래 기본 흐름은 이렇습니다.
 
@@ -113,7 +113,7 @@
 
 ## 3. `sft_12hz.py`가 단순 실행 스크립트에서 공통 학습 엔진으로 확장되었습니다
 
-파일: [sft_12hz.py](../../Qwen3-TTS/finetuning/sft_12hz.py)
+파일: [sft_12hz.py](../../vendor/Qwen3-TTS/finetuning/sft_12hz.py)
 
 원래 이 파일은 `Base` 학습 진입점으로 쓰였습니다.  
 지금은 여전히 `Base Fine-Tune`의 기본 스크립트이지만, 동시에 **다른 학습 경로가 재사용하는 공통 코어** 역할도 합니다.
@@ -143,7 +143,7 @@
 
 ## 4. `CustomVoice Fine-Tune` 전용 스크립트가 추가되었습니다
 
-파일: [sft_custom_voice_12hz.py](../../Qwen3-TTS/finetuning/sft_custom_voice_12hz.py)
+파일: [sft_custom_voice_12hz.py](../../qwen_extensions/finetuning/sft_custom_voice_12hz.py)
 
 이 파일은 이번 변경에서 가장 중요한 학습 파이프라인 확장 중 하나입니다.
 
@@ -212,6 +212,9 @@ plain `CustomVoice` 결과 체크포인트는 여전히 self-contained라고 보
 
 - `base`면 `sft_12hz.py`
 - `custom_voice`면 `sft_custom_voice_12hz.py`
+- `voicebox`면 `sft_voicebox_12hz.py`
+
+실행 interpreter는 기본적으로 백엔드와 같은 Python입니다. 예전처럼 bare `python3`를 호출하면 시스템 Python이 잡혀 `torch`, `qwen-tts`, `flash_attn`, editable package가 빠질 수 있으므로, 백엔드는 `QWEN_DEMO_PYTHON`이 명시된 경우만 그 값을 사용하고 보통은 `sys.executable`을 씁니다.
 
 즉 현재 `학습 실행`은 단순 입력 폼이 아니라, **업스트림의 서로 다른 학습 진입점을 선택하는 런처 역할**을 합니다.
 

@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True)
     parser.add_argument("--speaker-names", nargs="+", default=["Speaker 1"])
     parser.add_argument("--speaker-audio", nargs="*", default=[])
+    parser.add_argument("--checkpoint-path", default="")
     parser.add_argument("--cfg-scale", type=float, default=1.3)
     parser.add_argument("--inference-steps", type=int, default=10)
     parser.add_argument("--max-length-times", type=float, default=2.0)
@@ -118,6 +119,7 @@ def main() -> None:
 
     import torch
     from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
+    from vibevoice.modular.lora_loading import load_lora_assets
     from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 
     device = normalize_device(args.device)
@@ -182,6 +184,9 @@ def main() -> None:
             raise
 
     model.eval()
+    if args.checkpoint_path:
+        report = load_lora_assets(model, args.checkpoint_path)
+        print(f"Loaded VibeVoice adapter assets: {report}")
     if hasattr(model, "set_ddpm_inference_steps"):
         model.set_ddpm_inference_steps(num_steps=args.inference_steps)
 

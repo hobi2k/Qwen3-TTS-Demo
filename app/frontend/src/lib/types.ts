@@ -230,18 +230,15 @@ export interface VibeVoiceTTSRequest {
   text: string;
   output_name?: string;
   model_profile: "realtime" | "tts_15b" | "1.5b" | "longform" | "tts_7b" | "7b" | "large";
-  language: string;
   speaker_name: string;
   speaker_audio_path?: string;
   speaker_names: string[];
   speaker_audio_paths: string[];
-  speaker_prompt_text: string;
+  checkpoint_path: string;
   cfg_scale: number;
-  temperature: number;
-  top_p: number;
+  ddpm_steps: number;
   seed?: number;
   device: string;
-  precision: string;
   attn_implementation: string;
   inference_steps: number;
   max_length_times: number;
@@ -253,7 +250,11 @@ export interface VibeVoiceTTSRequest {
 }
 
 export interface VibeVoiceASRRequest {
-  audio_path: string;
+  audio_path?: string;
+  audio_dir?: string;
+  dataset?: string;
+  split: string;
+  max_duration: number;
   language: string;
   task: string;
   context_info: string;
@@ -284,6 +285,17 @@ export interface VibeVoiceTrainingRequest {
   model_path: string;
   data_dir: string;
   output_dir: string;
+  dataset_config_name: string;
+  train_split_name: string;
+  eval_split_name: string;
+  text_column_name: string;
+  audio_column_name: string;
+  voice_prompts_column_name: string;
+  train_jsonl: string;
+  validation_jsonl: string;
+  eval_split_size: number;
+  ignore_verifications: boolean;
+  max_length?: number;
   nproc_per_node: number;
   num_train_epochs: number;
   per_device_train_batch_size: number;
@@ -297,6 +309,16 @@ export interface VibeVoiceTrainingRequest {
   lora_r: number;
   lora_alpha: number;
   lora_dropout: number;
+  lora_target_modules: string;
+  lora_wrap_diffusion_head: boolean;
+  train_diffusion_head: boolean;
+  train_connectors: boolean;
+  layers_to_freeze: string;
+  ddpm_batch_mul: number;
+  ce_loss_weight: number;
+  diffusion_loss_weight: number;
+  debug_save: boolean;
+  debug_ce_details: boolean;
   bf16: boolean;
   gradient_checkpointing: boolean;
   use_customized_context: boolean;
@@ -313,6 +335,27 @@ export interface VibeVoiceTrainingResponse {
   run_dir: string;
   log_path: string;
   adapter_path?: string | null;
+  command: string[];
+  meta: Record<string, unknown>;
+}
+
+export interface VibeVoiceModelToolRequest {
+  tool: "merge" | "verify_merge" | "convert_nnscaler";
+  base_model_path: string;
+  checkpoint_path: string;
+  output_path: string;
+  output_format: "safetensors" | "bin";
+  nnscaler_checkpoint_path: string;
+  config_path: string;
+}
+
+export interface VibeVoiceModelToolResponse {
+  status: string;
+  message: string;
+  run_id: string;
+  run_dir: string;
+  log_path: string;
+  output_path: string;
   command: string[];
   meta: Record<string, unknown>;
 }

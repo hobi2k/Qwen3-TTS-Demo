@@ -155,7 +155,7 @@ export QWEN_USE_PRIVATE_ASSET_REPO=1
 - S2-Pro는 `fish-speech/s2-pro/...` mirror에서 받습니다.
 - VibeVoice는 `vibevoice/VibeVoice-ASR/...`, `vibevoice/VibeVoice-Realtime-0.5B/...`, `vibevoice/VibeVoice-1.5B/...`, optional `vibevoice/VibeVoice-7B/...` mirror에서 받습니다.
 - ACE-Step은 `ace-step/...` mirror에서 받아 `data/models/ace-step`에 복구합니다.
-- 모델과 생성물 폴더는 gitignore 대상입니다. VibeVoice의 `vendor/VibeVoice`, `.venv-vibevoice`, `data/models/vibevoice`도 로컬 산출물이라 git에 올리지 않습니다.
+- 모델과 생성물 폴더는 gitignore 대상입니다. VibeVoice는 다른 벤더와 같이 `vendor/VibeVoice` source를 저장소에 포함하고, `.venv-vibevoice`와 `data/models/vibevoice`만 로컬 산출물로 둡니다.
 
 ## 남은 운영 과제
 

@@ -1,6 +1,6 @@
 # Qwen3-TTS Overview
 
-이 문서는 업스트림 `Qwen3-TTS/` 저장소를 현재 데모 구현 관점에서 읽는 요약입니다.
+이 문서는 업스트림 `vendor/Qwen3-TTS/` 저장소를 현재 데모 구현 관점에서 읽는 요약입니다.
 
 ## 업스트림에서 중요한 것
 
@@ -27,7 +27,7 @@
 ## 업스트림 구조
 
 ```text
-Qwen3-TTS/
+vendor/Qwen3-TTS/
   qwen_tts/
   examples/
   finetuning/
