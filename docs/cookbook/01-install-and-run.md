@@ -254,6 +254,18 @@ ACE-Step subprocess는 Transformers / matplotlib 캐시를 `data/cache/ace-step`
 - `MMAUDIO_COMMAND_TEMPLATE`
 - `MMAUDIO_NSFW_MODEL_URL`
 - `MMAUDIO_NSFW_COMMAND_TEMPLATE`
+- `MMAUDIO_EMPTY_STRING_URL`
+  MMAudio training에 필요한 empty-string text embedding입니다. 기본값은 upstream release의 `empty_string.pth`이며, `download_models.sh all`이 `vendor/MMAudio/ext_weights/empty_string.pth`로 미리 받습니다.
+
+MMAudio 주의:
+
+- 현재 메인 venv는 `torch/torchaudio 2.11.0+cu130` 기준입니다.
+- 이 torchaudio wheel은 legacy `torio.io` 모듈을 제공하지 않습니다.
+- 효과음 생성과 pre-extracted feature 기반 학습 진입점은 동작합니다.
+- 44k pre-extracted feature 학습 smoke는 `v1-44.pth`, `synchformer_state_dict.pth`, `empty_string.pth` 기준으로 통과했습니다.
+- raw video 평가/추출 유틸리티를 실제로 쓰려면 `torio` 호환 torch/torchaudio 빌드 또는 별도 video I/O 환경이 필요합니다.
+- 백엔드의 MMAudio 학습 실행은 `MPLCONFIGDIR`를 `data/runtime/matplotlib` 아래로 고정해 홈 디렉터리 쓰기 권한 문제를 피합니다.
+- 백엔드 training endpoint는 기본적으로 최종 샘플 평가를 학습 성공 조건에서 분리합니다. 필요할 때만 `run_final_sample=true`로 후처리 샘플링을 켭니다.
 
 ### S2-Pro
 

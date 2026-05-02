@@ -173,6 +173,21 @@ UI의 학습 탭은 아래 백엔드 엔드포인트를 호출합니다. 이 항
 | ACE-Step LoRA/LoKr adapter train | `POST /api/music/ace-step/train-adapter` | `vendor/ACE-Step/train.py fixed/vanilla` |
 | VibeVoice ASR/TTS train | `POST /api/vibevoice/train` | VibeVoice ASR LoRA script 또는 TTS trainer/template |
 
+2026-05-02 기준 훈련 진입점 smoke 결과:
+
+- Qwen Base/CustomVoice/VoiceBox: `scripts/live_training_step_smoke.py`로 실제 `Step 0` 진입 확인.
+- S2-Pro / VibeVoice / Applio/RVC / MMAudio / ACE-Step: `scripts/live_external_training_smoke.py`로 실제 backend training endpoint smoke 통과.
+- MMAudio: `train.py --help` 확인에 더해 44k pre-extracted feature fixture로 checkpoint, weights, EMA final 저장까지 확인했습니다. cu130 환경에서 raw video 평가/추출에 필요한 `torio`와 `av-benchmark`는 optional lazy dependency로 처리합니다.
+
+외부 엔진 전체 훈련 smoke:
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+./.venv/bin/python scripts/live_external_training_smoke.py --engines s2pro vibevoice applio mmaudio ace-step
+```
+
+이 스크립트는 disposable fixture를 `data/training-smoke/external` 아래에 만들고, 각 엔진을 하나씩 호출합니다. 산출물과 로그는 `data/audio-tools/*_training`, `vendor/Applio/logs/smoke_external_rvc`처럼 gitignored 위치에 생성됩니다.
+
 ## What Not To Do
 
 - 최상위 `voicebox/` 폴더를 다시 만들지 않습니다.

@@ -196,8 +196,11 @@ def train(cfg: DictConfig):
         log.info(f'Synthesized EMA saved to {save_dir}!')
     distributed.barrier()
 
-    log.info(f'Evaluation: {eval_cfg}')
-    sample(eval_cfg)
+    if cfg.get('skip_final_sample', False):
+        log.info('Skipping final sample pass.')
+    else:
+        log.info(f'Evaluation: {eval_cfg}')
+        sample(eval_cfg)
 
     # clean-up
     log.complete()

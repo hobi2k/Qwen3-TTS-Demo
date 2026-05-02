@@ -68,7 +68,7 @@ class TensorboardLogger:
             import git
             repo = git.Repo(".")
             git_info = str(repo.active_branch) + ' ' + str(repo.head.commit.hexsha)
-        except (ImportError, RuntimeError, TypeError):
+        except Exception:
             print('Failed to fetch git info. Defaulting to None')
             git_info = 'None'
 

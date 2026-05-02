@@ -1,6 +1,7 @@
 """Qwen3-TTS integration helpers and simulation fallback logic."""
 
 import importlib.util
+import gc
 import math
 import os
 import pickle
@@ -104,6 +105,52 @@ class QwenDemoEngine:
         )
         self._models[cache_key] = model
         return model
+
+    def release_runtime_cache(self) -> None:
+        """Release cached Qwen/ASR model objects and return CUDA memory to the driver.
+
+        The studio also launches ACE-Step, S2-Pro, VibeVoice, MMAudio, and RVC
+        in subprocesses. Keeping Qwen weights resident in this FastAPI process
+        after a generation can leave too little contiguous CUDA memory for those
+        subprocesses. This method is intentionally explicit so non-Qwen routes
+        can free the Qwen cache before starting another heavyweight runtime.
+        """
+
+        self._models.clear()
+        self._transcription_models.clear()
+        gc.collect()
+        if self._torch is not None and bool(self._torch.cuda.is_available()):
+            self._torch.cuda.empty_cache()
+            self._torch.cuda.ipc_collect()
+
+    def runtime_cache_status(self) -> Dict[str, Any]:
+        """Return the current in-process Qwen cache state.
+
+        Returns:
+            Counts for cached TTS and transcription models. The objects
+            themselves are intentionally not exposed because they may hold GPU
+            memory and cannot be serialized safely.
+        """
+
+        cuda_available = False
+        cuda_allocated_mb = 0.0
+        cuda_reserved_mb = 0.0
+        if self._torch is not None and bool(self._torch.cuda.is_available()):
+            cuda_available = True
+            cuda_allocated_mb = round(float(self._torch.cuda.memory_allocated()) / 1024 / 1024, 2)
+            cuda_reserved_mb = round(float(self._torch.cuda.memory_reserved()) / 1024 / 1024, 2)
+
+        return {
+            "cached_tts_models": len(self._models),
+            "cached_transcription_models": len(self._transcription_models),
+            "simulation_mode": self.simulation_mode,
+            "qwen_tts_available": self.qwen_tts_available,
+            "device": self.resolve_device(),
+            "attention_implementation": self.resolve_attention_implementation(),
+            "cuda_available": cuda_available,
+            "cuda_allocated_mb": cuda_allocated_mb,
+            "cuda_reserved_mb": cuda_reserved_mb,
+        }
 
     def _apply_seed(self, seed: Optional[int]) -> None:
         """가능한 난수원을 같은 시드로 맞춘다."""

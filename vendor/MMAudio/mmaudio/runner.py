@@ -9,8 +9,6 @@ from typing import Optional, Union
 import torch
 import torch.distributed
 import torch.optim as optim
-from av_bench.evaluate import evaluate
-from av_bench.extract import extract
 from nitrous_ema import PostHocEMA
 from omegaconf import DictConfig
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -26,6 +24,21 @@ from mmaudio.utils.log_integrator import Integrator
 from mmaudio.utils.logger import TensorboardLogger
 from mmaudio.utils.time_estimator import PartialTimeEstimator, TimeEstimator
 from mmaudio.utils.video_joiner import VideoJoiner
+
+
+def _load_av_benchmark_tools():
+    """Load optional av-benchmark helpers only when evaluation is requested."""
+
+    try:
+        from av_bench.evaluate import evaluate
+        from av_bench.extract import extract
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "MMAudio evaluation needs the optional av-benchmark package. "
+            "Install hkchengrex/av-benchmark or disable evaluation for a "
+            "training smoke run. Core training imports do not require it."
+        ) from error
+    return extract, evaluate
 
 
 class Runner:
@@ -475,6 +488,7 @@ class Runner:
     def eval(self, audio_dir: Path, it: int, data_cfg: DictConfig) -> dict[str, float]:
         with torch.amp.autocast('cuda', enabled=False):
             if local_rank == 0:
+                extract, evaluate = _load_av_benchmark_tools()
                 extract(audio_path=audio_dir,
                         output_path=audio_dir / 'cache',
                         device='cuda',

@@ -2,7 +2,8 @@ from pathlib import Path
 from typing import Union
 
 import torch
-from torio.io import StreamingMediaDecoder, StreamingMediaEncoder
+
+from mmaudio.utils.media_io import get_streaming_media_decoder, get_streaming_media_encoder
 
 
 class VideoJoiner:
@@ -29,7 +30,7 @@ def merge_audio_into_video(video_path: Union[str, Path], output_path: Union[str,
 
     frame_rate = 24
     # read the video
-    reader = StreamingMediaDecoder(video_path)
+    reader = get_streaming_media_decoder()(video_path)
     reader.add_basic_video_stream(
         frames_per_chunk=int(frame_rate * duration_seconds),
         # buffer_chunk_size=1, # does not work with this -- extracted audio would be too short
@@ -41,7 +42,7 @@ def merge_audio_into_video(video_path: Union[str, Path], output_path: Union[str,
     video_chunk = reader.pop_chunks()[0]
     t, _, h, w = video_chunk.shape
 
-    writer = StreamingMediaEncoder(output_path)
+    writer = get_streaming_media_encoder()(output_path)
     writer.add_audio_stream(
         sample_rate=sample_rate,
         num_channels=audio.shape[-1],

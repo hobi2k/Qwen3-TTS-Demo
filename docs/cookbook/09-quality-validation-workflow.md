@@ -161,13 +161,32 @@ Fine-tuning 기능은 생성 기능과 검증 방식이 다릅니다. 실제 학
 | Qwen dataset prepare | `qwen3_tts_prepare_data.py`와 `/api/datasets/{id}/prepare-for-training`가 같은 프로젝트 Python과 `qwen_extensions` 경로를 쓰는지 확인 | 정리됨 |
 | Qwen Base / CustomVoice / VoiceBox 학습 | `qwen_extensions/finetuning/*` canonical script, `QWEN_DEMO_OPTIMIZER`, `QWEN_DEMO_TRAIN_PRECISION`, `QWEN_DEMO_GRAD_ACCUM_STEPS`로 실행 | MAI full run 결과 문서화됨. 2026-05-01 step smoke 통과 |
 | VoiceBox fusion | `qwen_extensions/fusion/make_voicebox_checkpoint.py`로 speaker encoder 내장 여부 확인 | MAI VoiceBox 결과 문서화됨 |
-| S2-Pro fine-tune | `/api/s2-pro/train`이 Fish Speech `text2semantic_finetune`와 LoRA merge를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
-| Applio/RVC training | `/api/audio-tools/rvc-train`이 Applio preprocess/extract/train/index 순서로 실행 | 엔드포인트/자산 정리됨, 자동 full-run 제외 |
-| MMAudio training | `/api/audio-tools/mmaudio-train`이 upstream `train.py` full/continued training을 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
-| ACE-Step LoRA/LoKr | `/api/music/ace-step/train-adapter`가 preprocess 후 upstream `train.py fixed/vanilla`를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
-| VibeVoice training | `/api/vibevoice/train`이 ASR LoRA 또는 TTS trainer/template를 호출 | 엔드포인트/문서 정리됨, 자동 full-run 제외 |
+| S2-Pro fine-tune | `/api/s2-pro/train`이 Fish Speech `text2semantic_finetune`와 LoRA merge를 호출 | training endpoint smoke PASS |
+| Applio/RVC training | `/api/audio-tools/rvc-train`이 Applio preprocess/extract/train/index 순서로 실행 | training endpoint smoke PASS |
+| MMAudio training | `/api/audio-tools/mmaudio-train`이 upstream `train.py` full/continued training을 호출 | training endpoint smoke PASS |
+| ACE-Step LoRA/LoKr | `/api/music/ace-step/train-adapter`가 preprocess 후 upstream `train.py fixed/vanilla`를 호출 | training endpoint smoke PASS |
+| VibeVoice training | `/api/vibevoice/train`이 ASR LoRA 또는 TTS trainer/template를 호출 | training endpoint smoke PASS |
 
 학습 기능을 실제로 끝까지 검증할 때는 한 번에 하나만 실행합니다. 동시에 여러 학습을 돌리면 VRAM 피크, CUDA allocator, subprocess cache가 겹쳐 WSL 안정성이 떨어질 수 있습니다.
+
+### 외부 엔진 훈련 스모크
+
+Qwen 외 모델도 아래 명령으로 실제 backend training endpoint를 호출합니다. 이 검증은 help 출력이 아니라 tiny fixture로 학습 루프에 진입하고, 가능한 경우 체크포인트/adapter 산출까지 확인합니다.
+
+```bash
+cd ~/pytorch-demo/Qwen3-TTS-Demo
+./.venv/bin/python scripts/live_external_training_smoke.py --engines s2pro vibevoice applio mmaudio ace-step
+```
+
+2026-05-02 순차 실행 결과:
+
+| 엔진 | 결과 로그 |
+| --- | --- |
+| S2-Pro | `data/audio-tools/s2_pro_training/s2train_05b38f7348c3/train.log` |
+| VibeVoice | `data/audio-tools/vibevoice_training/2026-05-01/vibevoice_train_285e857178fc_smoke_vibevoice/train.log` |
+| Applio/RVC | `vendor/Applio/logs/smoke_external_rvc/smoke_external_rvc_1e_12s.pth` |
+| MMAudio | `data/audio-tools/mmaudio_training/mmtrain_3995af8d5d6b/train.log` |
+| ACE-Step | `data/audio-tools/ace_step_training/ace_train_8714b0a50e2a/train.log` |
 
 ### Qwen 학습 스텝 스모크
 
@@ -195,6 +214,27 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 | VoiceBox 1.7B | `Epoch 0 | Step 0 | Loss: 7.1637` |
 
 `accelerate`는 PyPI 최신 `1.13.0`도 스텝 진입은 통과했지만, `qwen-asr`와 `qwen-tts` 패키지가 `accelerate==1.12.0`을 요구하므로 프로젝트 환경은 `1.12.0`을 유지합니다. `project_dir`를 명시해 최신 계열의 logging 요구사항에도 맞도록 코드가 정리되어 있습니다.
+
+2026-05-02 재검증:
+
+- `scripts/live_training_step_smoke.py --timeout-seconds 900` 기준 Base / CustomVoice / VoiceBox 모두 `Step 0`까지 진입했습니다.
+- `npm run build`로 Next.js production build를 확인했습니다.
+- `python -m pip check` 결과 broken requirement가 없습니다.
+- `scripts/live_e2e_verify.py --port 8199` non-heavy HTTP E2E가 통과했습니다.
+- Qwen 생성 직후 ACE-Step을 실행하면 CUDA unknown error가 나던 경로를 재현했고, non-Qwen 대형 엔진 실행 전에 Qwen/ASR cache를 명시적으로 해제하도록 수정한 뒤 같은 순서의 Qwen -> ACE-Step 생성이 통과했습니다.
+- `scripts/live_e2e_verify.py --include-heavy --port 8202` full heavy HTTP E2E가 통과했습니다. 이 run에서 Qwen -> ACE-Step -> S2-Pro -> Applio/RVC -> Stem Separator -> VibeVoice -> MMAudio 순차 생성이 모두 성공했습니다.
+
+외부 훈련 진입점 smoke:
+
+| 엔진 | 확인 명령 | 결과 |
+| --- | --- | --- |
+| Fish Speech S2-Pro | `vendor/fish-speech/fish_speech/train.py --config-name text2semantic_finetune --help` | PASS |
+| Applio/RVC | `vendor/Applio/core.py train --help` | PASS |
+| ACE-Step | `vendor/ACE-Step/train.py --help` | PASS |
+| VibeVoice | `vendor/VibeVoice -m vibevoice.finetune.train_vibevoice --help` | PASS |
+| MMAudio | `vendor/MMAudio/train.py --help` | PASS |
+
+MMAudio는 torch/torchaudio cu130에서 `torio`가 빠진 점 때문에 비디오 평가/추출 도구를 lazy import로 바꿨습니다. 사운드 효과 생성과 pre-extracted feature 기반 학습 진입점은 유지되고, raw video 평가/추출을 실제로 사용할 때만 `torio` 호환 빌드 또는 별도 video I/O 환경이 필요하다는 명확한 오류를 냅니다.
 
 ### plain CustomVoice vs VoiceBox 비교
 

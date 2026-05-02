@@ -279,6 +279,25 @@ if ($env:MMAUDIO_CONFIG_URL) {
     }
 }
 
+$MMAudioEmptyStringUrl = if ($env:MMAUDIO_EMPTY_STRING_URL) { $env:MMAUDIO_EMPTY_STRING_URL } else { "https://github.com/hkchengrex/MMAudio/releases/download/v0.1/empty_string.pth" }
+if (($Profile -eq "all") -and (Test-Path $MMAudioDir) -and $MMAudioEmptyStringUrl) {
+    $ExtWeightsDir = Join-Path $MMAudioDir "ext_weights"
+    New-Item -ItemType Directory -Force -Path $ExtWeightsDir | Out-Null
+    $TargetEmptyString = Join-Path $ExtWeightsDir "empty_string.pth"
+    if (-not (Test-Path $TargetEmptyString)) {
+        if (Download-PrivateAsset -RepoPath "mmaudio/ext_weights/empty_string.pth" -TargetPath $TargetEmptyString) {
+            Write-Host "Downloaded MMAudio empty-string embedding from private asset repo."
+        }
+        else {
+            Write-Host "Downloading MMAudio empty-string embedding -> $TargetEmptyString"
+            Invoke-WebRequest -Uri $MMAudioEmptyStringUrl -OutFile $TargetEmptyString
+        }
+    }
+    else {
+        Write-Host "MMAudio empty-string embedding already present: $TargetEmptyString"
+    }
+}
+
 $MMAudioNsfwModelUrl = if ($env:MMAUDIO_NSFW_MODEL_URL) { $env:MMAUDIO_NSFW_MODEL_URL } else { "https://huggingface.co/phazei/NSFW_MMaudio/resolve/main/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" }
 if (($Profile -eq "all") -and $MMAudioNsfwModelUrl) {
     $NsfwFilename = if ($env:MMAUDIO_NSFW_MODEL_FILENAME) { $env:MMAUDIO_NSFW_MODEL_FILENAME } else { "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" }

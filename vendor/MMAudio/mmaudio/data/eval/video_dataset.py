@@ -8,9 +8,9 @@ import pandas as pd
 import torch
 from torch.utils.data.dataset import Dataset
 from torchvision.transforms import v2
-from torio.io import StreamingMediaDecoder
 
 from mmaudio.utils.dist_utils import local_rank
+from mmaudio.utils.media_io import get_streaming_media_decoder
 
 log = logging.getLogger()
 
@@ -58,7 +58,7 @@ class VideoDataset(Dataset):
         video_id = self.videos[idx]
         caption = self.captions[video_id]
 
-        reader = StreamingMediaDecoder(self.video_root / (video_id + '.mp4'))
+        reader = get_streaming_media_decoder()(self.video_root / (video_id + '.mp4'))
         reader.add_basic_video_stream(
             frames_per_chunk=int(_CLIP_FPS * self.duration_sec),
             frame_rate=_CLIP_FPS,

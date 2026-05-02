@@ -215,6 +215,10 @@ data/cache/**
 data/e2e/**
 data/generated/**
 data/audio-tools/**
+data/runtime/**
+data/training-smoke/**
+data/rvc-datasets/**
+data/s2-pro-voices/**
 data/mmaudio/**
 !data/mmaudio/
 !data/mmaudio/.gitkeep

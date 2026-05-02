@@ -293,6 +293,48 @@ def _local_server_running(config: FishSpeechConfig, *, timeout: float = 2.0) -> 
         return False
 
 
+def managed_s2_pro_runtime_status() -> Dict[str, Any]:
+    """Return the state of the backend-managed local S2-Pro process."""
+
+    process = _managed_s2_pro_process
+    config = fish_speech_config("local")
+    return {
+        "managed_process_pid": process.pid if process and process.poll() is None else None,
+        "managed_process_running": bool(process and process.poll() is None),
+        "local_server_reachable": bool(config and _local_server_running(config, timeout=1.0)),
+        "server_url": config.server_url if config else "",
+    }
+
+
+def stop_managed_s2_pro_server(*, timeout_sec: float = 20.0) -> Dict[str, Any]:
+    """Stop the local S2-Pro server started by this backend process.
+
+    Fish Speech keeps model weights resident in its HTTP worker.  When the user
+    switches from S2-Pro to ACE-Step, MMAudio, VibeVoice, or Applio, stopping
+    this managed process is the only reliable way to return that VRAM to the
+    driver.
+    """
+
+    global _managed_s2_pro_process
+
+    process = _managed_s2_pro_process
+    if process is None:
+        return {"stopped": False, "reason": "not_started"}
+    if process.poll() is not None:
+        _managed_s2_pro_process = None
+        return {"stopped": False, "reason": "already_exited", "returncode": process.returncode}
+
+    process.terminate()
+    try:
+        process.wait(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+    result = {"stopped": True, "returncode": process.returncode}
+    _managed_s2_pro_process = None
+    return result
+
+
 def _managed_server_env(config: FishSpeechConfig) -> Dict[str, str]:
     """Build environment variables for the managed Fish Speech server process."""
 

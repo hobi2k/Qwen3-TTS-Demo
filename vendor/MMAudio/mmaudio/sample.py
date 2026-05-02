@@ -11,11 +11,8 @@ from tqdm import tqdm
 
 from mmaudio.data.data_setup import setup_test_datasets
 from mmaudio.runner import Runner
-from mmaudio.utils.dist_utils import info_if_rank_zero
+from mmaudio.utils.dist_utils import info_if_rank_zero, local_rank, world_size
 from mmaudio.utils.logger import TensorboardLogger
-
-local_rank = int(os.environ['LOCAL_RANK'])
-world_size = int(os.environ['WORLD_SIZE'])
 
 
 def sample(cfg: DictConfig):

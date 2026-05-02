@@ -164,6 +164,17 @@ export const api = {
     return request<HealthResponse>("/api/health");
   },
 
+  runtimeStatus(): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>("/api/runtime/status");
+  },
+
+  unloadRuntime(includeS2Pro = true): Promise<Record<string, unknown>> {
+    const query = new URLSearchParams({ include_s2_pro: String(includeS2Pro) });
+    return request<Record<string, unknown>>(`/api/runtime/unload?${query.toString()}`, {
+      method: "POST",
+    });
+  },
+
   models(): Promise<ModelInfo[]> {
     return request<ModelInfo[]>("/api/models");
   },

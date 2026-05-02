@@ -359,7 +359,48 @@ data/generated/sound-effects/2026-05-01/113406_short-soft-rain-on-a-window-clean
 
 검증 후 `nvidia-smi` 기준 GPU 프로세스가 남아 있지 않았습니다.
 
-## 10. 관련 스크립트 정리
+## 10. 2026-05-02 프로덕션 준비 재검증
+
+이번 재검증의 목적은 “모델이 한 번 생성되는가”만 보는 것이 아니라, 데이터셋 준비, 학습 진입점, 외부 엔진 충돌, 프론트/백엔드 production readiness를 함께 확인하는 것입니다.
+
+확인한 항목:
+
+| 항목 | 결과 |
+| --- | --- |
+| Qwen Base 1.7B 학습 step smoke | PASS, `Epoch 0 | Step 0 | Loss: 14.1813` |
+| Qwen CustomVoice 1.7B 학습 step smoke | PASS, `Epoch 0 | Step 0 | Loss: 12.5594` |
+| Qwen VoiceBox 1.7B 학습 step smoke | PASS, `Epoch 0 | Step 0 | Loss: 7.1637` |
+| Fish Speech S2-Pro training CLI | PASS, `text2semantic_finetune` Hydra help 출력 |
+| Applio/RVC training CLI | PASS, `core.py train --help` 출력 |
+| ACE-Step training CLI | PASS, `train.py --help` 출력 |
+| VibeVoice training CLI | PASS, fine-tune help 출력 |
+| MMAudio training CLI | PASS, `train.py --help` 출력 |
+| S2-Pro training endpoint smoke | PASS, `s2train_05b38f7348c3/train.log` |
+| VibeVoice training endpoint smoke | PASS, `vibevoice_train_285e857178fc_smoke_vibevoice/train.log` |
+| Applio/RVC training endpoint smoke | PASS, `smoke_external_rvc_1e_12s.pth` |
+| MMAudio training endpoint smoke | PASS, `mmtrain_3995af8d5d6b/train.log` |
+| ACE-Step training endpoint smoke | PASS, `ace_train_8714b0a50e2a/train.log` |
+| Python dependency check | PASS, `No broken requirements found` |
+| Backend compile | PASS |
+| Frontend production build | PASS |
+| Non-heavy live HTTP E2E | PASS |
+| Full heavy live HTTP E2E | PASS |
+
+발견하고 수정한 문제:
+
+- Qwen 모델을 FastAPI 프로세스 안에 캐시한 뒤 ACE-Step/S2-Pro 같은 별도 GPU subprocess를 실행하면 CUDA allocator가 불안정해질 수 있었습니다. non-Qwen 대형 엔진을 시작하기 전에 Qwen/ASR cache를 비우는 명시적 release 경로를 추가했습니다.
+- Local S2-Pro는 Fish Speech HTTP 서버 프로세스가 모델 weight를 계속 들고 있을 수 있습니다. `GET /api/runtime/status`와 `POST /api/runtime/unload?include_s2_pro=true`를 추가했고, ACE-Step/MMAudio/VibeVoice/Applio/RVC/Stem Separator 실행 전에는 백엔드가 자동 시작한 S2-Pro 서버까지 내려 VRAM을 회수합니다.
+- `scripts/live_e2e_verify.py`가 backend stdout pipe에 막혀 장시간 검증에서 멈출 수 있었습니다. 백엔드 로그를 `data/runtime/live-e2e-backend.log`에 쓰도록 바꿔 non-blocking 상태 확인이 되게 했습니다.
+- MMAudio upstream train import가 `torio`와 `av-benchmark`를 즉시 요구했습니다. cu130 torch/torchaudio 환경에서 기본 학습 help와 pre-extracted feature training 진입점이 막히지 않도록 optional video/eval dependency를 lazy import로 바꿨습니다.
+- MMAudio full training은 마지막 sample pass가 evaluation config와 강하게 결합되어 있어, training endpoint에서는 기본적으로 `run_final_sample=false`로 학습/저장 성공과 후처리 샘플링을 분리했습니다. 실제 smoke에서는 44k pre-extracted fixture로 checkpoint, weights, EMA final 저장까지 확인했습니다.
+
+주의:
+
+- 2026-05-02의 full heavy E2E 첫 실행에서는 ACE-Step이 Qwen 생성 직후 CUDA unknown error를 냈습니다. 위 cache release 수정 뒤 `scripts/live_e2e_verify.py --include-heavy --port 8202` 전체 재실행이 통과했습니다.
+- 해당 full heavy run은 models 9, gallery 297, audio assets 297, clone prompts 8, presets 7, datasets 1, fine-tune runs 3, RVC models 1 상태에서 실행됐습니다.
+- 완료 후 `nvidia-smi` 기준 GPU 프로세스가 남아 있지 않았습니다.
+
+## 11. 관련 스크립트 정리
 
 현재 실험에서 기준으로 삼는 구현은 `qwen_extensions` 안의 역할별 canonical script입니다.
 
@@ -375,7 +416,7 @@ data/generated/sound-effects/2026-05-01/113406_short-soft-rain-on-a-window-clean
 
 현재 유지되는 진입점 목록은 [19-script-entrypoints.md](./19-script-entrypoints.md)를 봅니다.
 
-## 11. 2026-05-01 Qwen 학습 스텝 검증
+## 12. 2026-05-01 Qwen 학습 스텝 검증
 
 풀 트레이닝을 반복하지 않고, 실제 학습 루프가 첫 스텝까지 정상 진입하는지 확인했습니다.
 

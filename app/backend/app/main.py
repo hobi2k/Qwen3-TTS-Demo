@@ -1,5 +1,6 @@
 """FastAPI application for the Qwen3-TTS demo backend."""
 
+import gc
 import json
 import hashlib
 import os
@@ -31,7 +32,9 @@ from .fish_speech import (
     fish_speech_status,
     generate_s2_pro_audio,
     list_s2_pro_references,
+    managed_s2_pro_runtime_status,
     register_s2_pro_reference,
+    stop_managed_s2_pro_server,
 )
 from .qwen import QwenDemoEngine
 from .schemas import (
@@ -144,6 +147,72 @@ mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
 stem_separator_engine = StemSeparatorEngine(REPO_ROOT)
 ace_step_composer = AceStepComposer(REPO_ROOT)
 vibevoice_engine = VibeVoiceEngine(REPO_ROOT)
+
+
+def release_qwen_runtime_before_external_engine() -> None:
+    """Free Qwen GPU cache before launching a separate heavyweight runtime."""
+
+    engine.release_runtime_cache()
+
+
+def _python_cuda_status() -> Dict[str, Any]:
+    """Return CUDA memory state for this backend process without loading models."""
+
+    try:
+        import torch  # type: ignore
+    except Exception as exc:  # pragma: no cover - depends on optional torch env
+        return {"torch_available": False, "cuda_available": False, "error": str(exc)}
+
+    if not bool(torch.cuda.is_available()):
+        return {"torch_available": True, "cuda_available": False, "device_count": 0}
+
+    device_index = torch.cuda.current_device()
+    return {
+        "torch_available": True,
+        "cuda_available": True,
+        "device_count": torch.cuda.device_count(),
+        "current_device": device_index,
+        "device_name": torch.cuda.get_device_name(device_index),
+        "allocated_mb": round(float(torch.cuda.memory_allocated(device_index)) / 1024 / 1024, 2),
+        "reserved_mb": round(float(torch.cuda.memory_reserved(device_index)) / 1024 / 1024, 2),
+    }
+
+
+def release_python_cuda_cache() -> Dict[str, Any]:
+    """Run Python GC and return freeable CUDA cache to the driver."""
+
+    gc.collect()
+    try:
+        import torch  # type: ignore
+    except Exception as exc:  # pragma: no cover - depends on optional torch env
+        return {"released": False, "torch_available": False, "error": str(exc)}
+
+    if bool(torch.cuda.is_available()):
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    status = _python_cuda_status()
+    status["released"] = True
+    return status
+
+
+def release_resident_runtime_before_external_engine() -> Dict[str, Any]:
+    """Free resident model runtimes before launching another heavy engine.
+
+    Qwen and ASR models live inside this FastAPI process. Local S2-Pro can live
+    in a managed Fish Speech server process. ACE-Step, MMAudio, VibeVoice, and
+    Applio mostly run as short-lived subprocesses, so they do not need an
+    in-process unload hook here.
+    """
+
+    engine.release_runtime_cache()
+    s2_pro_result = stop_managed_s2_pro_server()
+    cuda_result = release_python_cuda_cache()
+    return {
+        "qwen": engine.runtime_cache_status(),
+        "s2_pro": s2_pro_result,
+        "cuda": cuda_result,
+        "subprocess_engines": ["ace-step", "mmaudio", "vibevoice", "applio-rvc", "stem-separator"],
+    }
 
 
 def default_model_id(category: str) -> str:
@@ -2227,6 +2296,47 @@ def health() -> HealthResponse:
     )
 
 
+@app.get("/api/runtime/status")
+def runtime_status() -> Dict[str, Any]:
+    """Return currently resident runtime state for model switching diagnostics."""
+
+    return {
+        "qwen": engine.runtime_cache_status(),
+        "s2_pro": managed_s2_pro_runtime_status(),
+        "cuda": _python_cuda_status(),
+        "external_engines": {
+            "ace_step": "subprocess_per_request",
+            "mmaudio": "subprocess_per_request",
+            "vibevoice": "subprocess_per_request",
+            "applio_rvc": "subprocess_per_request",
+            "stem_separator": "subprocess_or_lazy_model",
+        },
+    }
+
+
+@app.post("/api/runtime/unload")
+def unload_runtime(include_s2_pro: bool = True) -> Dict[str, Any]:
+    """Unload resident models so another studio feature can use the GPU.
+
+    Args:
+        include_s2_pro: When true, stop the backend-managed local S2-Pro server
+            as well as the in-process Qwen cache. Set false before an S2-Pro
+            request that only needs Qwen memory released.
+    """
+
+    engine.release_runtime_cache()
+    s2_pro_result: Dict[str, Any] = {"stopped": False, "reason": "not_requested"}
+    if include_s2_pro:
+        s2_pro_result = stop_managed_s2_pro_server()
+    cuda_result = release_python_cuda_cache()
+    return {
+        "status": "unloaded",
+        "qwen": engine.runtime_cache_status(),
+        "s2_pro": s2_pro_result,
+        "cuda": cuda_result,
+    }
+
+
 @app.get("/api/bootstrap", response_model=BootstrapResponse)
 def bootstrap() -> BootstrapResponse:
     """초기 화면 렌더에 필요한 공통 데이터를 한 번에 반환한다."""
@@ -2318,6 +2428,7 @@ def vibevoice_runtime() -> VibeVoiceRuntimeResponse:
 def transcribe_vibevoice_audio(payload: VibeVoiceASRRequest) -> VibeVoiceASRResponse:
     """Run Microsoft VibeVoice-ASR on a stored audio file."""
 
+    release_resident_runtime_before_external_engine()
     try:
         absolute_path = resolve_audio_absolute_path(payload.audio_path) if payload.audio_path.strip() else None
         audio_dir: Optional[Path] = None
@@ -2364,6 +2475,7 @@ def transcribe_vibevoice_audio(payload: VibeVoiceASRRequest) -> VibeVoiceASRResp
 def generate_vibevoice_tts(payload: VibeVoiceTTSRequest) -> GenerationResponse:
     """Generate speech through VibeVoice Realtime 0.5B or 1.5B vendor path."""
 
+    release_resident_runtime_before_external_engine()
     extension = audio_tool_format_or_422(payload.output_format)
     output_path = generated_audio_path("vibevoice-tts", payload.output_name or payload.text, extension)
     speaker_audio_path: Optional[Path] = None
@@ -2446,6 +2558,7 @@ def train_vibevoice(payload: VibeVoiceTrainingRequest) -> VibeVoiceTrainingRespo
     Microsoft `finetuning-asr/lora_finetune.py` script.
     """
 
+    release_resident_runtime_before_external_engine()
     status_info = vibevoice_engine.status()
     if not Path(status_info["repo_root"]).exists():
         raise HTTPException(status_code=400, detail=f"VibeVoice vendor repo not found: {status_info['repo_root']}")
@@ -2676,6 +2789,7 @@ def train_vibevoice(payload: VibeVoiceTrainingRequest) -> VibeVoiceTrainingRespo
 def run_vibevoice_model_tool(payload: VibeVoiceModelToolRequest) -> VibeVoiceModelToolResponse:
     """Run VibeVoice model merge, verification, or NnScaler conversion utilities."""
 
+    release_resident_runtime_before_external_engine()
     status_info = vibevoice_engine.status()
     repo_root = Path(status_info["repo_root"])
     if not repo_root.exists():
@@ -2868,6 +2982,7 @@ def train_rvc_voice_model(payload: RvcTrainingRequest) -> RvcTrainingResponse:
     이 엔드포인트는 Applio의 RVC 모델 만들기 단계다. 결과로 생성된
     `.pth`와 `.index`는 같은 화면의 변환 탭에서 바로 선택할 수 있다.
     """
+    release_resident_runtime_before_external_engine()
     if not voice_changer.is_available():
         raise HTTPException(status_code=400, detail="Applio repository is not available for RVC training.")
 
@@ -2927,6 +3042,7 @@ def audio_tool_jobs() -> List[AudioToolJob]:
 def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
     """텍스트 프롬프트에서 MMAudio 기반 효과음을 생성한다."""
 
+    release_resident_runtime_before_external_engine()
     output_path = generated_audio_path("sound-effects", payload.prompt, "wav")
     try:
         output_path, engine_meta = mmaudio_engine.generate(
@@ -2979,6 +3095,7 @@ def generate_sound_effect(payload: SoundEffectRequest) -> AudioToolResponse:
 def train_mmaudio(payload: MMAudioTrainingRequest) -> MMAudioTrainingResponse:
     """MMAudio full/continued training을 실행한다. LoRA/adapter 학습은 upstream에 없다."""
 
+    release_resident_runtime_before_external_engine()
     mmaudio_root = mmaudio_engine.mmaudio_root
     if mmaudio_root is None or not mmaudio_root.exists():
         raise HTTPException(status_code=400, detail="MMAudio repository is not available.")
@@ -3002,7 +3119,9 @@ def train_mmaudio(payload: MMAudioTrainingRequest) -> MMAudioTrainingResponse:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     command = [
-        "torchrun",
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
         "--standalone",
         f"--nproc_per_node={payload.nproc_per_node}",
         str(train_py),
@@ -3017,8 +3136,10 @@ def train_mmaudio(payload: MMAudioTrainingRequest) -> MMAudioTrainingResponse:
         f"example_train={str(payload.data_mode == 'example')}",
         f"save_weights_interval={payload.save_weights_interval}",
         f"save_checkpoint_interval={payload.save_checkpoint_interval}",
+        f"ema.checkpoint_every={payload.ema_checkpoint_interval}",
         f"val_interval={payload.val_interval}",
         f"eval_interval={payload.eval_interval}",
+        f"skip_final_sample={str(not payload.run_final_sample)}",
     ]
     if weights_path:
         command.append(f"weights={weights_path}")
@@ -3027,6 +3148,9 @@ def train_mmaudio(payload: MMAudioTrainingRequest) -> MMAudioTrainingResponse:
 
     env = os.environ.copy()
     env.setdefault("OMP_NUM_THREADS", "4")
+    matplotlib_cache_dir = storage.data_dir / "runtime" / "matplotlib"
+    matplotlib_cache_dir.mkdir(parents=True, exist_ok=True)
+    env.setdefault("MPLCONFIGDIR", str(matplotlib_cache_dir))
     result = _run_training_command(command, cwd=mmaudio_root, log_path=log_path, section="train", env=env)
     status = "completed" if result.returncode == 0 else "failed"
     weights = sorted(output_dir.glob("*.pth")) if output_dir.exists() else []
@@ -3155,6 +3279,7 @@ def _run_ace_step_audio_task(
     if not ace_step_composer.is_available():
         raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
 
+    release_resident_runtime_before_external_engine()
     payload_dict = _ace_step_base_payload(payload)
     payload_dict.update(extra_payload)
 
@@ -3225,6 +3350,7 @@ def generate_ace_step_music(payload: MusicCompositionRequest) -> GenerationRespo
 
     if not ace_step_composer.is_available():
         raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
+    release_resident_runtime_before_external_engine()
 
     duration_value = payload.duration if payload.duration is not None else 60.0
     if payload.audio_duration is not None:
@@ -3580,9 +3706,9 @@ def _ace_step_train_command(
     command = [
         ace_step_composer.python_executable,
         str(train_py),
-        payload.trainer_mode,
         "--plain",
         "--yes",
+        payload.trainer_mode,
         "--checkpoint-dir",
         str(checkpoint_dir),
         "--model-variant",
@@ -3653,6 +3779,7 @@ def _ace_step_train_command(
 def ace_step_train_adapter(payload: AceStepTrainingRequest) -> AceStepTrainingResponse:
     """ACE-Step upstream CLI로 LoRA/LoKr adapter를 학습한다."""
 
+    release_resident_runtime_before_external_engine()
     if not ace_step_composer.ace_step_root.exists():
         raise HTTPException(status_code=400, detail=ace_step_composer.availability_notes())
 
@@ -3681,9 +3808,9 @@ def ace_step_train_adapter(payload: AceStepTrainingRequest) -> AceStepTrainingRe
         preprocess_command = [
             ace_step_composer.python_executable,
             str(train_py),
-            payload.trainer_mode,
             "--plain",
             "--yes",
+            payload.trainer_mode,
             "--preprocess",
             "--checkpoint-dir",
             str(checkpoint_dir),
@@ -3842,6 +3969,7 @@ def change_voice(payload: VoiceChangerRequest) -> AudioToolResponse:
     Returns:
         변환된 오디오 결과.
     """
+    release_resident_runtime_before_external_engine()
     if not voice_changer.is_available():
         raise HTTPException(status_code=400, detail="Applio repository is not available for voice conversion.")
 
@@ -3898,6 +4026,7 @@ def change_voice(payload: VoiceChangerRequest) -> AudioToolResponse:
 def change_voice_batch(payload: VoiceChangerBatchRequest) -> AudioToolResponse:
     """Applio/RVC로 여러 오디오를 같은 목소리 모델로 일괄 변환한다."""
 
+    release_resident_runtime_before_external_engine()
     if not voice_changer.is_available():
         raise HTTPException(status_code=400, detail="Applio repository is not available for batch voice conversion.")
     if not payload.audio_paths:
@@ -3966,6 +4095,7 @@ def change_voice_batch(payload: VoiceChangerBatchRequest) -> AudioToolResponse:
 def blend_voice_models(payload: VoiceModelBlendRequest) -> RvcTrainingResponse:
     """두 Applio/RVC 모델을 섞어 새 voice model을 만든다."""
 
+    release_resident_runtime_before_external_engine()
     if not voice_changer.is_available():
         raise HTTPException(status_code=400, detail="Applio repository is not available for model blending.")
 
@@ -4275,6 +4405,7 @@ def denoise_audio(payload: AudioDenoiseRequest) -> AudioToolResponse:
 def separate_audio(payload: AudioSeparationRequest) -> AudioToolResponse:
     """AI stem separator 모델로 보컬/반주 또는 다중 stem을 분리한다."""
 
+    release_resident_runtime_before_external_engine()
     source_path = resolve_audio_absolute_path(payload.audio_path)
     base_label = asset_stem(payload.audio_path) or "source"
     extension = audio_tool_format_or_422(payload.output_format)
@@ -4452,6 +4583,7 @@ def s2_pro_capabilities() -> S2ProRuntimeResponse:
 def train_s2_pro(payload: S2ProTrainingRequest) -> S2ProTrainingResponse:
     """Fish Speech S2-Pro text2semantic LoRA/full fine-tuning을 실행한다."""
 
+    release_qwen_runtime_before_external_engine()
     repo_root = fish_speech_repo_root().resolve()
     if not repo_root.exists():
         raise HTTPException(status_code=400, detail=f"Fish Speech source is missing: {repo_root}")
@@ -4535,6 +4667,7 @@ def train_s2_pro(payload: S2ProTrainingRequest) -> S2ProTrainingResponse:
         f"project={project_name}",
         f"paths.run_dir={result_dir}",
         f"pretrained_ckpt_path={pretrained_ckpt}",
+        f"tokenizer.model_path={pretrained_ckpt}",
         f"train_dataset.proto_files=[{proto_dir}]",
         f"val_dataset.proto_files=[{proto_dir}]",
         f"data.batch_size={payload.batch_size}",
@@ -4643,6 +4776,7 @@ def s2_pro_voices() -> List[S2ProVoiceRecord]:
 def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
     """Register a reusable S2-Pro voice and save it as an app asset."""
 
+    release_qwen_runtime_before_external_engine()
     reference_audio_path = resolve_audio_absolute_path(payload.reference_audio_path)
     reference_audio_rel = storage.relpath(reference_audio_path)
     runtime_source = normalize_s2pro_runtime_source(payload.runtime_source)
@@ -4724,6 +4858,7 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
 def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
     """Generate audio through a local or hosted S2-Pro runtime and save it."""
 
+    release_qwen_runtime_before_external_engine()
     output_format = audio_tool_format_or_422(payload.output_format)
     runtime_source = normalize_s2pro_runtime_source(payload.runtime_source)
     reference_audio_path: Optional[Path] = None

@@ -813,8 +813,10 @@ class MMAudioTrainingRequest(BaseModel):
     debug: bool = False
     save_weights_interval: int = Field(1000, ge=1, le=1000000)
     save_checkpoint_interval: int = Field(1000, ge=1, le=1000000)
+    ema_checkpoint_interval: int = Field(5000, ge=1, le=1000000)
     val_interval: int = Field(5000, ge=1, le=1000000)
     eval_interval: int = Field(20000, ge=1, le=1000000)
+    run_final_sample: bool = False
 
 
 class MMAudioTrainingResponse(BaseModel):

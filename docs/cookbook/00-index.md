@@ -33,6 +33,7 @@
 18. [ACE-Step 작곡](./22-ace-step-music.md)
 19. [VibeVoice 작업실](./23-vibevoice-workspace.md)
 20. [Qwen Extensions 구조](./24-qwen-extensions.md)
+21. [Vendor upstream delta register](./25-vendor-upstream-deltas.md)
 
 ## 현재 문서 맵
 
@@ -83,6 +84,8 @@
   VibeVoice TTS, ASR, TTS/ASR fine-tuning, model tools, vendor/model 관리 기준
 - [24-qwen-extensions.md](./24-qwen-extensions.md)
   `vendor/Qwen3-TTS`를 보존하면서 데모 전용 Qwen/VoiceBox 스크립트를 `qwen_extensions`로 실행하는 구조
+- [25-vendor-upstream-deltas.md](./25-vendor-upstream-deltas.md)
+  MMAudio를 포함해 upstream vendor source와 달라진 점, 재적용 기준, 업데이트 검증 절차
 
 ### 현재 기능에서 중요한 두 문서
 

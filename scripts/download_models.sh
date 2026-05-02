@@ -429,6 +429,22 @@ if [[ -n "${MMAUDIO_CONFIG_URL:-}" ]]; then
   fi
 fi
 
+MMAUDIO_EMPTY_STRING_URL="${MMAUDIO_EMPTY_STRING_URL:-https://github.com/hkchengrex/MMAudio/releases/download/v0.1/empty_string.pth}"
+if [[ "${PROFILE}" == "all" && -d "${MMAUDIO_DIR}" && -n "${MMAUDIO_EMPTY_STRING_URL:-}" ]]; then
+  TARGET_EMPTY_STRING="${MMAUDIO_DIR}/ext_weights/empty_string.pth"
+  mkdir -p "$(dirname "${TARGET_EMPTY_STRING}")"
+  if [[ ! -f "${TARGET_EMPTY_STRING}" ]]; then
+    if [[ -n "${PRIVATE_ASSET_REPO_ID}" ]] && download_private_asset "mmaudio/ext_weights/empty_string.pth" "${TARGET_EMPTY_STRING}"; then
+      echo "Downloaded MMAudio empty-string embedding from private asset repo."
+    else
+      echo "Downloading MMAudio empty-string embedding -> ${TARGET_EMPTY_STRING}"
+      curl -L "${MMAUDIO_EMPTY_STRING_URL}" -o "${TARGET_EMPTY_STRING}"
+    fi
+  else
+    echo "MMAudio empty-string embedding already present: ${TARGET_EMPTY_STRING}"
+  fi
+fi
+
 MMAUDIO_NSFW_MODEL_URL="${MMAUDIO_NSFW_MODEL_URL:-https://huggingface.co/phazei/NSFW_MMaudio/resolve/main/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors}"
 if [[ "${PROFILE}" == "all" && -n "${MMAUDIO_NSFW_MODEL_URL:-}" ]]; then
   TARGET_NSFW_MODEL="${MMAUDIO_MODELS_DIR}/nsfw/${MMAUDIO_NSFW_MODEL_FILENAME:-mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors}"
