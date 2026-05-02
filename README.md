@@ -391,6 +391,20 @@ uvicorn app.main:app --host 127.0.0.1 --port 8190
 - `http://127.0.0.1:8190/`
 - 같은 서버에서 `/api/*`와 빌드된 프런트를 함께 제공합니다.
 
+Docker Compose 배포 준비:
+
+```bash
+cp .env.docker.example .env
+docker compose build voice-studio
+docker compose --profile setup run --rm model-setup
+docker compose up voice-studio
+```
+
+Docker 구성은 모델과 생성물을 이미지에 넣지 않고 `data/`, `logs/`,
+`weights/`, `ext_weights/`를 볼륨으로 사용합니다. 자세한 내용은
+[docs/cookbook/26-docker-deployment.md](docs/cookbook/26-docker-deployment.md)를
+참고하세요.
+
 모델 전환 중 VRAM이 남아 있으면 다음 기능이 불안정해질 수 있습니다.
 백엔드는 heavy engine 진입 전에 resident runtime을 정리합니다.
 

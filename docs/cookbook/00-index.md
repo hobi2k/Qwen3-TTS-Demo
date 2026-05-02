@@ -34,6 +34,7 @@
 19. [VibeVoice 작업실](./23-vibevoice-workspace.md)
 20. [Qwen Extensions 구조](./24-qwen-extensions.md)
 21. [Vendor upstream delta register](./25-vendor-upstream-deltas.md)
+22. [Docker Compose 배포](./26-docker-deployment.md)
 
 ## 현재 문서 맵
 
@@ -86,6 +87,8 @@
   `vendor/Qwen3-TTS`를 보존하면서 데모 전용 Qwen/VoiceBox 스크립트를 `qwen_extensions`로 실행하는 구조
 - [25-vendor-upstream-deltas.md](./25-vendor-upstream-deltas.md)
   MMAudio를 포함해 upstream vendor source와 달라진 점, 재적용 기준, 업데이트 검증 절차
+- [26-docker-deployment.md](./26-docker-deployment.md)
+  Dockerfile, docker-compose, GPU runtime, 모델 볼륨, setup profile 기준
 
 ### 현재 기능에서 중요한 두 문서
 

@@ -1,0 +1,105 @@
+name: qwen3-tts-demo
+
+x-voice-studio-common: &voice-studio-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      CUDA_BASE_IMAGE: ${CUDA_BASE_IMAGE:-nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04}
+      TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu130}
+      TORCH_VERSION: ${TORCH_VERSION:-2.11.0}
+      TORCHAUDIO_VERSION: ${TORCHAUDIO_VERSION:-2.11.0}
+      TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.26.0}
+  image: qwen3-tts-demo:local
+  gpus: all
+  shm_size: "16gb"
+  ipc: host
+  ulimits:
+    memlock:
+      soft: -1
+      hard: -1
+    stack: 67108864
+  environment:
+    BACKEND_PORT: ${BACKEND_PORT:-8190}
+    QWEN_DEMO_SIMULATION: ${QWEN_DEMO_SIMULATION:-0}
+    QWEN_DEMO_DEVICE: ${QWEN_DEMO_DEVICE:-cuda:0}
+    QWEN_DEMO_ATTN_IMPL: ${QWEN_DEMO_ATTN_IMPL:-flash_attention_2}
+    QWEN_DEMO_PYTHON: /app/.venv/bin/python
+    QWEN_EXTENSIONS: /app/qwen_extensions
+    HF_HOME: /app/data/cache/huggingface
+    TORCH_HOME: /app/data/cache/torch
+    XDG_CACHE_HOME: /app/data/cache
+    MPLCONFIGDIR: /app/data/cache/matplotlib
+    HF_TOKEN: ${HF_TOKEN:-}
+    PRIVATE_ASSET_REPO_ID: ${PRIVATE_ASSET_REPO_ID:-}
+    PRIVATE_ASSET_REVISION: ${PRIVATE_ASSET_REVISION:-main}
+    QWEN_USE_PRIVATE_ASSET_REPO: ${QWEN_USE_PRIVATE_ASSET_REPO:-0}
+    HF_HUB_ENABLE_HF_TRANSFER: ${HF_HUB_ENABLE_HF_TRANSFER:-1}
+    S2_PRO_RUNTIME: ${S2_PRO_RUNTIME:-local}
+    S2_PRO_AUTO_START: ${S2_PRO_AUTO_START:-1}
+    FISH_SPEECH_SERVER_URL: http://127.0.0.1:8080
+    FISH_SPEECH_MODEL: ${FISH_SPEECH_MODEL:-s2-pro}
+    FISH_SPEECH_VENV: /app/.venv-fish-speech
+    FISH_SPEECH_PYTHON: /app/.venv-fish-speech/bin/python
+    FISH_AUDIO_API_KEY: ${FISH_AUDIO_API_KEY:-}
+    FISH_AUDIO_API_URL: ${FISH_AUDIO_API_URL:-https://api.fish.audio}
+    APPLIO_REPO_ROOT: /app/vendor/Applio
+    APPLIO_PYTHON_EXECUTABLE: /app/.venv/bin/python
+    APPLIO_MODEL_DIR: /app/data/rvc-models
+    MMAUDIO_REPO_ROOT: /app/vendor/MMAudio
+    MMAUDIO_PYTHON_EXECUTABLE: /app/.venv/bin/python
+    FISH_SPEECH_REPO_ROOT: /app/vendor/fish-speech
+    ACE_STEP_REPO_ROOT: /app/vendor/ACE-Step
+    ACE_STEP_VENV: /app/.venv-ace-step
+    ACE_STEP_PYTHON: /app/.venv-ace-step/bin/python
+    ACE_STEP_CHECKPOINT_PATH: /app/data/models/ace-step
+    ACE_STEP_LORA_DIR: /app/data/models/ace-step/loras
+    VIBEVOICE_REPO_ROOT: /app/vendor/VibeVoice
+    VIBEVOICE_MODEL_DIR: /app/data/models/vibevoice
+    VIBEVOICE_PYTHON: /app/.venv-vibevoice/bin/python
+  volumes:
+    - ./data:/app/data
+    - ./logs:/app/logs
+    - ./weights:/app/weights
+    - ./ext_weights:/app/ext_weights
+    - fish-speech-venv:/app/.venv-fish-speech
+    - ace-step-venv:/app/.venv-ace-step
+    - vibevoice-venv:/app/.venv-vibevoice
+    - hf-cache:/root/.cache/huggingface
+    - uv-cache:/root/.cache/uv
+  restart: unless-stopped
+
+services:
+  voice-studio:
+    <<: *voice-studio-common
+    ports:
+      - "${BACKEND_PORT:-8190}:${BACKEND_PORT:-8190}"
+    command: >
+      bash -lc "cd /app/app/backend &&
+      exec uvicorn app.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8190}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/app/.venv/bin/python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.getenv('BACKEND_PORT', '8190') + '/api/health', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+  model-setup:
+    <<: *voice-studio-common
+    profiles: ["setup"]
+    restart: "no"
+    command: >
+      bash -lc "cd /app &&
+      ./scripts/download_models.sh all"
+
+volumes:
+  fish-speech-venv:
+  ace-step-venv:
+  vibevoice-venv:
+  hf-cache:
+  uv-cache:
+

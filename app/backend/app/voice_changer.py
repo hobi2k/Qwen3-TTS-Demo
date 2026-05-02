@@ -372,7 +372,10 @@ class ApplioVoiceChanger:
                 f"{completed.returncode}.\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}"
             )
         if not output_path.exists():
-            raise VoiceChangerError(f"Applio did not create output file: {output_path}")
+            raise VoiceChangerError(
+                "Applio finished without creating the requested output file: "
+                f"{output_path}\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}"
+            )
 
         return output_path, {
             "engine": "applio_rvc",
@@ -485,9 +488,9 @@ def resolve_voice_model_roots(repo_root: Path, applio_root: Path) -> List[Path]:
     candidates = [Path(configured).expanduser()] if configured else []
     candidates.extend(
         [
-            applio_root / "logs",
-            applio_root / "assets" / "weights",
             repo_root / "data" / "rvc-models",
+            applio_root / "assets" / "weights",
+            applio_root / "logs",
             repo_root / "vendor" / "Applio" / "logs",
         ]
     )
@@ -501,6 +504,42 @@ def resolve_voice_model_roots(repo_root: Path, applio_root: Path) -> List[Path]:
         if path.exists():
             resolved.append(path)
     return resolved
+
+
+def _is_rvc_inference_weight(model_path: Path) -> bool:
+    """Return whether a `.pth` file is suitable for RVC inference.
+
+    Applio training folders contain discriminator/generator checkpoints named
+    `D_*.pth` and `G_*.pth`. Those are training internals, not user-selectable
+    conversion models, and feeding them into `core.py infer` can return without
+    producing an output file. The UI catalog should only expose exported RVC
+    weights such as `my-voice.pth` or `my-voice_1e_100s.pth`.
+    """
+
+    name = model_path.name
+    if not name.lower().endswith(".pth"):
+        return False
+    if name.startswith(("D_", "G_")):
+        return False
+    return True
+
+
+def _voice_model_sort_priority(repo_root: Path, applio_root: Path, model_path: Path) -> int:
+    """Prefer stable user/downloaded RVC models over raw training directories."""
+
+    resolved = model_path.resolve()
+    data_models = (repo_root / "data" / "rvc-models").resolve()
+    assets_weights = (applio_root / "assets" / "weights").resolve()
+    try:
+        resolved.relative_to(data_models)
+        return 0
+    except ValueError:
+        pass
+    try:
+        resolved.relative_to(assets_weights)
+        return 1
+    except ValueError:
+        return 2
 
 
 def _best_index_for_model(model_path: Path, index_paths: List[Path]) -> Optional[Path]:
@@ -517,10 +556,12 @@ def _best_index_for_model(model_path: Path, index_paths: List[Path]) -> Optional
 
 
 def list_available_voice_models(repo_root: Path, applio_root: Path) -> List[Dict[str, Optional[str]]]:
-    models: List[Dict[str, Optional[str]]] = []
+    models: List[Dict[str, Any]] = []
     seen = set()
     for root in resolve_voice_model_roots(repo_root, applio_root):
         for model_path in sorted(root.rglob("*.pth")):
+            if not _is_rvc_inference_weight(model_path):
+                continue
             key = str(model_path.resolve())
             if key in seen:
                 continue
@@ -534,7 +575,10 @@ def list_available_voice_models(repo_root: Path, applio_root: Path) -> List[Dict
                     "label": label,
                     "model_path": str(model_path.resolve()),
                     "index_path": str(best_index.resolve()) if best_index else None,
+                    "_sort_priority": _voice_model_sort_priority(repo_root, applio_root, model_path),
                 }
             )
-    models.sort(key=lambda item: item["label"].lower())
+    models.sort(key=lambda item: (item["_sort_priority"], item["label"].lower()))
+    for item in models:
+        item.pop("_sort_priority", None)
     return models

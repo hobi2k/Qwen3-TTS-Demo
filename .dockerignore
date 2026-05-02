@@ -1,0 +1,55 @@
+.git
+.gitignore
+.dockerignore
+
+# Python local environments and caches
+.venv
+.venv-*
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.cache
+.uv-cache
+
+# Frontend local build artifacts
+app/frontend/node_modules
+app/frontend/.next
+app/frontend/.next-*
+app/frontend/out
+app/frontend/dist
+app/frontend/.turbo
+app/frontend/npm-debug.log*
+
+# Runtime/model artifacts are mounted as volumes in docker-compose.
+data
+logs
+models
+weights
+ext_weights
+sidestep.log
+
+# Vendored runtime artifacts; keep source code, drop nested envs/logs/checkpoints.
+vendor/**/.git
+vendor/**/.venv
+vendor/**/.venv-*
+vendor/**/__pycache__
+vendor/Applio/logs
+vendor/Applio/rvc/models
+vendor/ACE-Step/checkpoints
+vendor/ACE-Step/outputs
+vendor/fish-speech/checkpoints
+vendor/VibeVoice/outputs
+vendor/MMAudio/outputs
+vendor/MMAudio/weights
+vendor/MMAudio/ext_weights
+
+# Local validation outputs
+test/results
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
