@@ -151,14 +151,19 @@ UI의 학습 탭은 아래 백엔드 엔드포인트를 호출합니다. 이 항
 
 학습용 데이터셋 준비 UI도 Qwen 전용으로 두지 않습니다. 현재 프런트엔드는 아래처럼 모델군별 데이터셋 탭을 따로 둡니다.
 
+Qwen 외 모델군은 공통 데이터셋 생성 API인 `POST /api/audio-datasets/build`를 사용해
+생성 갤러리 또는 폴더 경로를 `data/datasets/<dataset_id>/` 아래로 먼저 정리합니다.
+전사가 없는 샘플은 선택한 ASR 모델로 자동 전사하고, S2-Pro/ACE-Step처럼 이미 전처리된
+자산을 받는 모델은 prepared 미니 탭에서 기존 proto/tensor 폴더를 바로 넘깁니다.
+
 | 데이터셋 탭 | 목적 | 학습 탭으로 넘기는 값 |
 | --- | --- | --- |
 | Qwen 데이터셋 만들기 | Qwen Base/CustomVoice/VoiceBox용 `audio/`, `raw.jsonl`, `prepared.jsonl`, `manifest.json` 생성 | `dataset_id` |
-| S2-Pro 데이터셋 | Fish Speech `text2semantic_finetune`용 `wav + .lab` 폴더 또는 proto 폴더 선택 | `lab_audio_dir` 또는 `proto_dir` |
-| VibeVoice 데이터셋 | VibeVoice TTS/ASR용 local dataset path, HF dataset id, train/validation JSONL 지정 | `data_dir`, `train_jsonl`, `validation_jsonl` |
-| Applio RVC 데이터셋 | 같은 화자의 생성 갤러리 WAV 묶음 또는 정리된 WAV 폴더 선택 | `audio_paths` 또는 `dataset_path` |
-| ACE-Step 데이터셋 | LoRA/LoKr 학습용 tensor 폴더, 오디오 폴더, dataset JSON 지정 | `tensor_dir`, `audio_dir`, `dataset_json` |
-| MMAudio 데이터셋 | upstream `example_train` 검증 모드 또는 Hydra config 등록 데이터셋 모드 선택 | `data_mode` |
+| S2-Pro 데이터셋 | 생성 갤러리/폴더 입력을 `wav + .lab` raw voice folder로 만들거나 prepared proto 폴더 선택 | `lab_audio_dir` 또는 `proto_dir` |
+| VibeVoice 데이터셋 | 생성 갤러리/폴더 입력을 VibeVoice TTS/ASR용 `train.jsonl`, `validation.jsonl`로 정리 | `data_dir`, `train_jsonl`, `validation_jsonl` |
+| Applio RVC 데이터셋 | 생성 갤러리/폴더 입력을 같은 화자의 RVC WAV 폴더로 정리 | `dataset_path` |
+| ACE-Step 데이터셋 | 생성 갤러리/폴더 입력을 `dataset.json`으로 만들거나 prepared tensor 폴더 선택 | `tensor_dir`, `audio_dir`, `dataset_json` |
+| MMAudio 데이터셋 | 효과음/오디오 샘플을 manifest/dataset JSON으로 정리하고 upstream 학습 모드 선택 | `data_mode` 및 정리된 dataset folder |
 
 중요한 구분은 “모든 모델이 Qwen처럼 JSONL 하나로 끝나지 않는다”는 점입니다. S2-Pro, VibeVoice, ACE-Step, MMAudio, Applio는 upstream trainer가 기대하는 입력 형식이 서로 다르므로, UI도 하나의 범용 데이터셋 폼으로 뭉치지 않고 모델별 준비 탭으로 나눕니다.
 

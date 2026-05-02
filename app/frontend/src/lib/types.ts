@@ -370,6 +370,7 @@ export interface BootstrapResponse {
   clone_prompts: ClonePromptRecord[];
   presets: CharacterPreset[];
   datasets: FineTuneDataset[];
+  audio_datasets: AudioDatasetRecord[];
   finetune_runs: FineTuneRun[];
   audio_tool_capabilities: AudioToolCapability[];
   audio_tool_jobs: AudioToolJob[];
@@ -422,6 +423,38 @@ export interface CreateDatasetRequest {
   ref_audio_path: string;
   samples: DatasetSampleInput[];
   sample_folder_path?: string;
+}
+
+export interface BuildAudioDatasetRequest {
+  name: string;
+  target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
+  source_type: "gallery" | "folder";
+  samples: DatasetSampleInput[];
+  sample_folder_path?: string;
+  ref_audio_path?: string;
+  transcribe: boolean;
+  asr_model_id?: string;
+}
+
+export interface AudioDatasetBuildResponse {
+  id: string;
+  name: string;
+  target: string;
+  dataset_root_path: string;
+  audio_dir_path: string;
+  lab_audio_dir_path?: string | null;
+  train_jsonl_path?: string | null;
+  validation_jsonl_path?: string | null;
+  dataset_json_path?: string | null;
+  manifest_path: string;
+  sample_count: number;
+  message: string;
+}
+
+export interface AudioDatasetRecord extends AudioDatasetBuildResponse {
+  source_type: string;
+  reference_audio_path?: string | null;
+  created_at?: string | null;
 }
 
 export interface PrepareDatasetRequest {

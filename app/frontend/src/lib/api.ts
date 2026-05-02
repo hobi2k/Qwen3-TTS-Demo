@@ -21,7 +21,10 @@ import type {
   AudioToolJob,
   AudioToolResponse,
   AudioTranslateRequest,
+  AudioDatasetBuildResponse,
+  AudioDatasetRecord,
   BootstrapResponse,
+  BuildAudioDatasetRequest,
   CharacterPreset,
   CloneFromSampleRequest,
   CloneFromUploadRequest,
@@ -257,6 +260,17 @@ export const api = {
     return request<FineTuneDataset[]>("/api/datasets");
   },
 
+  audioDatasets(): Promise<AudioDatasetRecord[]> {
+    return request<AudioDatasetRecord[]>("/api/audio-datasets");
+  },
+
+  deleteAudioDataset(datasetId: string): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(
+      `/api/audio-datasets/${encodeURIComponent(datasetId)}`,
+      { method: "DELETE" },
+    );
+  },
+
   runs(): Promise<FineTuneRun[]> {
     return request<FineTuneRun[]>("/api/finetune-runs");
   },
@@ -357,6 +371,14 @@ export const api = {
 
   createDataset(payload: CreateDatasetRequest): Promise<FineTuneDataset> {
     return request<FineTuneDataset>("/api/datasets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  buildAudioDataset(payload: BuildAudioDatasetRequest): Promise<AudioDatasetBuildResponse> {
+    return request<AudioDatasetBuildResponse>("/api/audio-datasets/build", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

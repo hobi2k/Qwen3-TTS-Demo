@@ -402,6 +402,44 @@ class DatasetSampleInput(BaseModel):
     text: Optional[str] = None
 
 
+class AudioDatasetBuildRequest(BaseModel):
+    """모델별 학습 탭에 넘길 raw/prepared 오디오 데이터셋 생성 요청."""
+
+    name: str = Field(..., min_length=1)
+    target: str = Field(..., pattern="^(s2_pro|vibevoice|rvc|mmaudio|ace_step)$")
+    source_type: str = Field("gallery", pattern="^(gallery|folder)$")
+    samples: List[DatasetSampleInput] = Field(default_factory=list)
+    sample_folder_path: Optional[str] = None
+    ref_audio_path: Optional[str] = None
+    transcribe: bool = True
+    asr_model_id: Optional[str] = None
+
+
+class AudioDatasetBuildResponse(BaseModel):
+    """모델별 raw/prepared 데이터셋 생성 결과."""
+
+    id: str
+    name: str
+    target: str
+    dataset_root_path: str
+    audio_dir_path: str
+    lab_audio_dir_path: Optional[str] = None
+    train_jsonl_path: Optional[str] = None
+    validation_jsonl_path: Optional[str] = None
+    dataset_json_path: Optional[str] = None
+    manifest_path: str
+    sample_count: int
+    message: str
+
+
+class AudioDatasetRecord(AudioDatasetBuildResponse):
+    """프런트엔드가 학습 탭에서 다시 선택할 수 있는 모델별 데이터셋 레코드."""
+
+    source_type: str = "gallery"
+    reference_audio_path: Optional[str] = None
+    created_at: Optional[str] = None
+
+
 class AudioTranscriptionRequest(BaseModel):
     """저장된 음성 파일을 Qwen3-ASR로 전사하는 요청 스키마."""
 
@@ -1144,6 +1182,7 @@ class BootstrapResponse(BaseModel):
     clone_prompts: List[ClonePromptRecord] = Field(default_factory=list)
     presets: List[CharacterPreset]
     datasets: List["FineTuneDataset"]
+    audio_datasets: List[AudioDatasetRecord] = Field(default_factory=list)
     finetune_runs: List["FineTuneRun"]
     audio_tool_capabilities: List[AudioToolCapability] = Field(default_factory=list)
     audio_tool_jobs: List[AudioToolJob] = Field(default_factory=list)

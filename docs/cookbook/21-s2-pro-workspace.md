@@ -30,6 +30,12 @@ S2-Pro는 하나의 페이지 안에 모든 기능을 밀어 넣지 않습니다
   - 저장 목소리와 `<|speaker:i|>` 태그를 사용해 대화형 음성을 만듭니다.
 - `S2-Pro 다국어 TTS`
   - 저장 목소리를 유지한 채 여러 언어 문장을 생성합니다.
+- `S2-Pro 데이터셋`
+  - 상단 미니 탭에서 `생성 갤러리`, `폴더 경로`, `Prepared proto`를 고릅니다.
+  - 생성 갤러리/폴더 입력은 `wav + .lab` raw voice folder를 만들고, 전사가 없으면 ASR로 채웁니다.
+  - Prepared proto는 이미 전처리된 Fish Speech proto 폴더를 그대로 학습 탭으로 보냅니다.
+
+데이터셋 생성의 공통 규칙은 [27-cross-engine-datasets.md](27-cross-engine-datasets.md)에 따릅니다.
 
 ## 태그 정책
 

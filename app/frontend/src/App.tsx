@@ -62,6 +62,7 @@ import type {
   AceStepRuntimeResponse,
   AceStepTrainingResponse,
   AceStepUnderstandResponse,
+  AudioDatasetBuildResponse,
   AsrModelInfo,
   AudioAsset,
   AudioToolCapability,
@@ -69,6 +70,7 @@ import type {
   CharacterPreset,
   ClonePromptRecord,
   FineTuneDataset,
+  AudioDatasetRecord,
   FineTuneRun,
   GenerationRecord,
   HealthResponse,
@@ -103,6 +105,9 @@ type AceStepMode =
   | "create_sample"
   | "format_sample"
   | "lora_train";
+
+type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "rvc" | "datasets";
+type GalleryFilter = "all" | "speech" | "preset" | "effect" | "music" | "rvc" | "utility";
 
 type AceStepTabKey = Extract<
   TabKey,
@@ -493,12 +498,21 @@ function gallerySelectionKey(record: GenerationRecord): string {
   return `${record.id}::${record.output_audio_path}`;
 }
 
-function galleryAccentForMode(mode: string): string {
-  if (mode.includes("ace")) return "music";
-  if (mode.includes("sound")) return "effect";
-  if (mode.includes("voice_changer") || mode.includes("audio_separation")) return "audio";
-  if (mode.includes("clone") || mode.includes("voicebox")) return "voice";
-  if (mode.includes("design")) return "design";
+function galleryFilterForRecord(record: GenerationRecord): GalleryFilter {
+  const mode = record.mode.toLowerCase();
+  const meta = record.meta || {};
+  if (mode.includes("ace") || mode.includes("music")) return "music";
+  if (mode.includes("sound") || mode.includes("mmaudio")) return "effect";
+  if (mode.includes("voice_changer") || mode.includes("rvc")) return "rvc";
+  if (mode.includes("audio_separation") || mode.includes("denoise") || mode.includes("convert")) return "utility";
+  if (
+    mode.includes("preset") ||
+    mode.includes("hybrid") ||
+    typeof meta.preset_id === "string" ||
+    typeof meta.clone_prompt_path === "string"
+  ) {
+    return "preset";
+  }
   return "speech";
 }
 
@@ -535,6 +549,17 @@ function getRecordModelLabel(record: GenerationRecord): string {
   return typeof model === "string" && model.trim() ? basenameFromPath(model).replace(/\.[^.]+$/, "") : getModeLabel(record.mode);
 }
 
+function audioDatasetTargetLabel(target: string): string {
+  const labels: Record<string, string> = {
+    s2_pro: "S2-Pro",
+    vibevoice: "VibeVoice",
+    rvc: "RVC",
+    mmaudio: "MMAudio",
+    ace_step: "ACE-Step",
+  };
+  return labels[target] || target;
+}
+
 function makeWaveBars(seed: string, count = 48): number[] {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
@@ -565,10 +590,271 @@ function guessMatchingCustomVoiceModel(
   return matched?.model_id || fallbackModelId;
 }
 
+function ToolDatasetBuilder({
+  title,
+  subtitle,
+  source,
+  setSource,
+  assets,
+  selectedPaths,
+  onAddAsset,
+  onRemoveAsset,
+  folderPath,
+  setFolderPath,
+  datasetName,
+  setDatasetName,
+  onBuild,
+  lastBuild,
+  asrModelId,
+  setAsrModelId,
+  asrModels,
+  preparedLabel,
+  preparedPath,
+  setPreparedPath,
+  onUsePrepared,
+}: {
+  title: string;
+  subtitle: string;
+  source: "gallery" | "folder" | "prepared";
+  setSource: (value: "gallery" | "folder" | "prepared") => void;
+  assets: AudioAsset[];
+  selectedPaths: string[];
+  onAddAsset: (asset: AudioAsset) => void;
+  onRemoveAsset: (path: string) => void;
+  folderPath: string;
+  setFolderPath: (value: string) => void;
+  datasetName: string;
+  setDatasetName: (value: string) => void;
+  onBuild: () => void;
+  lastBuild?: AudioDatasetBuildResponse | null;
+  asrModelId: string;
+  setAsrModelId: (value: string) => void;
+  asrModels: AsrModelInfo[];
+  preparedLabel?: string;
+  preparedPath?: string;
+  setPreparedPath?: (value: string) => void;
+  onUsePrepared?: () => void;
+}) {
+  const selectedAssets = selectedPaths
+    .map((path) => assets.find((asset) => asset.path === path))
+    .filter((asset): asset is AudioAsset => Boolean(asset));
+
+  return (
+    <WorkspaceCard className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-lg font-semibold text-ink">{title}</h3>
+        <p className="max-w-4xl text-sm leading-relaxed text-ink-muted">{subtitle}</p>
+      </div>
+
+      <Tabs value={source} onValueChange={(value) => setSource(value as "gallery" | "folder" | "prepared")}>
+        <TabsList className={`grid h-auto w-full gap-1 border border-line bg-canvas p-1 ${preparedLabel ? "grid-cols-3" : "grid-cols-2"}`}>
+          <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+            생성 갤러리
+          </TabsTrigger>
+          <TabsTrigger value="folder" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+            폴더 경로
+          </TabsTrigger>
+          {preparedLabel ? (
+            <TabsTrigger value="prepared" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+              {preparedLabel}
+            </TabsTrigger>
+          ) : null}
+        </TabsList>
+
+        <TabsContent value="gallery" className="m-0 mt-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <ServerAudioPicker assets={assets} selectedPath="" onSelect={onAddAsset} />
+            <section className="rounded-md border border-line bg-canvas/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <strong className="text-sm font-medium text-ink">선택한 샘플</strong>
+                  <p className="mt-1 text-xs text-ink-muted">전사가 없는 샘플은 ASR로 자동 전사됩니다.</p>
+                </div>
+                <Badge variant="outline">{selectedAssets.length}</Badge>
+              </div>
+              <div className="mt-3 flex flex-col gap-2">
+                <Label className="text-xs font-medium text-ink-muted">ASR 모델</Label>
+                <Select value={asrModelId} onValueChange={setAsrModelId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {asrModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="mt-3 flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
+                {selectedAssets.length ? (
+                  selectedAssets.map((asset) => (
+                    <article key={asset.path} className="rounded-md border border-line bg-surface p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <strong className="block truncate text-sm font-medium text-ink">{asset.filename}</strong>
+                          <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{asset.transcript_text || asset.text_preview || "자동 전사 예정"}</p>
+                        </div>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveAsset(asset.path)}>
+                          제거
+                        </Button>
+                      </div>
+                      <audio controls className="mt-3 h-8 w-full" src={mediaUrl(asset.url)} />
+                    </article>
+                  ))
+                ) : (
+                  <p className="rounded-md border border-dashed border-line bg-sunken/40 p-4 text-xs text-ink-muted">
+                    왼쪽 생성 갤러리에서 학습에 넣을 음성을 선택하세요.
+                  </p>
+                )}
+              </div>
+            </section>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="folder" className="m-0 mt-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs font-medium text-ink-muted">샘플 폴더 경로</Label>
+              <Input
+                placeholder="/mnt/d/tts_data/my_voice/wavs"
+                value={folderPath}
+                onChange={(event) => setFolderPath(normalizeDatasetPath(event.target.value))}
+              />
+              <p className="text-xs leading-relaxed text-ink-muted">
+                폴더 안의 wav/mp3/flac 파일을 가져옵니다. 같은 이름의 txt/lab 파일이 있으면 전사로 쓰고, 없으면 선택한 ASR 모델로 전사합니다.
+              </p>
+            </div>
+            <article className="rounded-md border border-line bg-canvas/60 p-3">
+              <strong className="text-sm font-medium text-ink">정리 결과</strong>
+              <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                생성 후 `audio`, `lab_audio`, `train.jsonl`, `validation.jsonl`, `dataset.json`, `manifest.json`이 한 데이터셋 폴더에 모입니다.
+              </p>
+            </article>
+          </div>
+        </TabsContent>
+
+        {preparedLabel ? (
+          <TabsContent value="prepared" className="m-0 mt-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-medium text-ink-muted">{preparedLabel} 경로</Label>
+                <Input
+                  placeholder="data/prepared/my_dataset"
+                  value={preparedPath || ""}
+                  onChange={(event) => setPreparedPath?.(normalizeDatasetPath(event.target.value))}
+                />
+                <p className="text-xs leading-relaxed text-ink-muted">
+                  이미 전처리가 끝난 데이터는 다시 복사하지 않고 학습 탭으로 바로 연결합니다.
+                </p>
+              </div>
+              <Button type="button" onClick={onUsePrepared} className="self-end">
+                학습으로 보내기
+              </Button>
+            </div>
+          </TabsContent>
+        ) : null}
+      </Tabs>
+
+      {source !== "prepared" ? (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-medium text-ink-muted">데이터셋 이름</Label>
+            <Input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} />
+          </div>
+          <Button type="button" onClick={onBuild} className="self-end">
+            데이터셋 만들기
+          </Button>
+        </div>
+      ) : null}
+
+      {lastBuild ? (
+        <article className="rounded-md border border-line bg-accent-soft/40 p-3 text-sm text-ink">
+          <strong className="font-medium">{lastBuild.name}</strong>
+          <span className="ml-2 text-ink-muted">샘플 {lastBuild.sample_count}개 준비됨</span>
+          <p className="mt-1 break-all text-xs text-ink-muted">{lastBuild.dataset_root_path}</p>
+        </article>
+      ) : null}
+    </WorkspaceCard>
+  );
+}
+
+function TrainingDatasetConnector({
+  title,
+  target,
+  datasets,
+  activePath,
+  pathLabel,
+  onUse,
+  onCreateDataset,
+  guidance,
+}: {
+  title: string;
+  target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
+  datasets: AudioDatasetRecord[];
+  activePath: string;
+  pathLabel: string;
+  onUse: (dataset: AudioDatasetRecord) => void;
+  onCreateDataset: () => void;
+  guidance: string;
+}) {
+  const compatibleDatasets = datasets.filter((dataset) => dataset.target === target);
+  const [selectedId, setSelectedId] = useState("");
+  const selectedDataset =
+    compatibleDatasets.find((dataset) => dataset.id === selectedId) ??
+    compatibleDatasets.find((dataset) => dataset.dataset_root_path === activePath || dataset.audio_dir_path === activePath) ??
+    compatibleDatasets[0] ??
+    null;
+
+  return (
+    <WorkspaceCard className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
+        <p className="text-sm leading-relaxed text-ink-muted">{guidance}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs font-medium text-ink-muted">준비된 데이터셋</Label>
+          <Select
+            value={selectedDataset?.id || ""}
+            onValueChange={setSelectedId}
+            disabled={!compatibleDatasets.length}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="먼저 데이터셋을 준비하세요" />
+            </SelectTrigger>
+            <SelectContent>
+              {compatibleDatasets.map((dataset) => (
+                <SelectItem key={dataset.id} value={dataset.id}>
+                  {dataset.name} · {dataset.sample_count} samples
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button type="button" onClick={() => selectedDataset && onUse(selectedDataset)} disabled={!selectedDataset} className="self-end">
+          학습 입력에 적용
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="rounded-md border border-line bg-canvas/60 px-3 py-2">
+          <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">{pathLabel}</span>
+          <p className="mt-1 break-all text-sm text-ink">{activePath || "아직 연결된 데이터셋 경로가 없습니다."}</p>
+        </div>
+        <Button type="button" variant="outline" onClick={onCreateDataset} className="self-end">
+          데이터셋 만들기
+        </Button>
+      </div>
+    </WorkspaceCard>
+  );
+}
+
 function StudioApp() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
-  const [voiceGalleryView, setVoiceGalleryView] = useState<"trained" | "qwen" | "s2pro" | "rvc">("trained");
+  const [voiceGalleryView, setVoiceGalleryView] = useState<VoiceLibraryView>("trained");
+  const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>("all");
   const [activeGuideIndex, setActiveGuideIndex] = useState(0);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
   const [ttsSideView, setTtsSideView] = useState<"settings" | "history">("settings");
@@ -583,6 +869,7 @@ function StudioApp() {
   const [clonePrompts, setClonePrompts] = useState<ClonePromptRecord[]>([]);
   const [presets, setPresets] = useState<CharacterPreset[]>([]);
   const [datasets, setDatasets] = useState<FineTuneDataset[]>([]);
+  const [audioDatasets, setAudioDatasets] = useState<AudioDatasetRecord[]>([]);
   const [runs, setRuns] = useState<FineTuneRun[]>([]);
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -618,6 +905,35 @@ function StudioApp() {
   const [cloneEngine, setCloneEngine] = useState<"base_prompt" | "voicebox">("base_prompt");
   const [presetWorkflow, setPresetWorkflow] = useState<"base" | "hybrid" | "voicebox" | "voicebox_instruct">("base");
   const [datasetInputMode, setDatasetInputMode] = useState<"gallery" | "paths">("gallery");
+  const [toolDatasetSource, setToolDatasetSource] = useState<Record<string, "gallery" | "folder" | "prepared">>({
+    s2_pro: "gallery",
+    vibevoice: "gallery",
+    rvc: "gallery",
+    mmaudio: "gallery",
+    ace_step: "folder",
+  });
+  const [toolDatasetSamples, setToolDatasetSamples] = useState<Record<string, string[]>>({
+    s2_pro: [],
+    vibevoice: [],
+    rvc: [],
+    mmaudio: [],
+    ace_step: [],
+  });
+  const [toolDatasetFolders, setToolDatasetFolders] = useState<Record<string, string>>({
+    s2_pro: "",
+    vibevoice: "",
+    rvc: "",
+    mmaudio: "",
+    ace_step: "",
+  });
+  const [toolDatasetNames, setToolDatasetNames] = useState<Record<string, string>>({
+    s2_pro: "s2pro-voice-dataset",
+    vibevoice: "vibevoice-voice-dataset",
+    rvc: "rvc-voice-dataset",
+    mmaudio: "mmaudio-effect-dataset",
+    ace_step: "ace-step-music-dataset",
+  });
+  const [toolDatasetLastBuild, setToolDatasetLastBuild] = useState<AudioDatasetBuildResponse | null>(null);
   const [selectedClonePrompt, setSelectedClonePrompt] = useState<ClonePromptRecord | null>(null);
   const [presetForm, setPresetForm] = useState({
     name: "",
@@ -1103,6 +1419,7 @@ function StudioApp() {
     setClonePrompts(data.clone_prompts || []);
     setPresets(data.presets);
     setDatasets(data.datasets);
+    setAudioDatasets(data.audio_datasets || []);
     setRuns(data.finetune_runs);
     setAudioToolCapabilities(data.audio_tool_capabilities || []);
     setVoiceChangerModels(data.voice_changer_models || []);
@@ -1379,12 +1696,16 @@ function StudioApp() {
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
   const currentAceStepMode = isAceStepTab(activeTab) ? ACE_STEP_TAB_TO_MODE[activeTab] : aceStepMode;
   const aceComposerBars = makeWaveBars(`${aceStepForm.prompt}|${aceStepForm.lyrics}|${aceStepForm.audio_duration}`, 72);
-  const galleryStats = {
-    total: history.length,
-    speech: history.filter((record) => galleryAccentForMode(record.mode) === "speech" || galleryAccentForMode(record.mode) === "voice").length,
-    music: history.filter((record) => galleryAccentForMode(record.mode) === "music").length,
-    audio: history.filter((record) => ["audio", "effect"].includes(galleryAccentForMode(record.mode))).length,
+  const galleryBuckets = {
+    all: history.length,
+    speech: history.filter((record) => galleryFilterForRecord(record) === "speech").length,
+    preset: history.filter((record) => galleryFilterForRecord(record) === "preset").length,
+    effect: history.filter((record) => galleryFilterForRecord(record) === "effect").length,
+    music: history.filter((record) => galleryFilterForRecord(record) === "music").length,
+    rvc: history.filter((record) => galleryFilterForRecord(record) === "rvc").length,
+    utility: history.filter((record) => galleryFilterForRecord(record) === "utility").length,
   };
+  const filteredHistory = history.filter((record) => galleryFilter === "all" || galleryFilterForRecord(record) === galleryFilter);
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
   function selectS2ProVoice(voiceId: string) {
     const voice = s2ProVoices.find((item) => item.id === voiceId || item.reference_id === voiceId);
@@ -2344,6 +2665,138 @@ function StudioApp() {
   function handleSelectDatasetReferenceAsset(asset: AudioAsset) {
     setDatasetForm((prev) => ({ ...prev, ref_audio_path: asset.path }));
     setMessage(`${asset.filename} 파일을 기준 음성으로 선택했습니다.`);
+  }
+
+  function addToolDatasetAsset(target: string, asset: AudioAsset) {
+    setToolDatasetSamples((prev) => {
+      const current = prev[target] ?? [];
+      if (current.includes(asset.path)) return prev;
+      return { ...prev, [target]: [...current, asset.path] };
+    });
+    setMessage(`${asset.filename} 파일을 ${target} 데이터셋 샘플로 추가했습니다.`);
+  }
+
+  function removeToolDatasetAsset(target: string, audioPath: string) {
+    setToolDatasetSamples((prev) => ({
+      ...prev,
+      [target]: (prev[target] ?? []).filter((item) => item !== audioPath),
+    }));
+  }
+
+  async function buildToolDataset(target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step") {
+    const source = toolDatasetSource[target] ?? "gallery";
+    const selectedPaths = toolDatasetSamples[target] ?? [];
+    const folder = normalizeDatasetPath(toolDatasetFolders[target] ?? "");
+    const name = toolDatasetNames[target]?.trim() || `${target}-dataset`;
+
+    if (source === "gallery" && selectedPaths.length === 0) {
+      setMessage("생성 갤러리에서 데이터셋에 넣을 음성을 먼저 선택하세요.");
+      return;
+    }
+    if (source === "folder" && !folder) {
+      setMessage("데이터셋으로 사용할 폴더 경로를 입력하세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await api.buildAudioDataset({
+        name,
+        target,
+        source_type: source === "folder" ? "folder" : "gallery",
+        samples: source === "gallery" ? selectedPaths.map((audio_path) => ({ audio_path, text: assetTextByPath.get(audio_path) || "" })) : [],
+        sample_folder_path: source === "folder" ? folder : undefined,
+        ref_audio_path: selectedPaths[0],
+        transcribe: true,
+        asr_model_id: asrModelId,
+      });
+      setToolDatasetLastBuild(result);
+      const record: AudioDatasetRecord = {
+        ...result,
+        source_type: source === "folder" ? "folder" : "gallery",
+        reference_audio_path: selectedPaths[0] || undefined,
+        created_at: new Date().toISOString(),
+      };
+      setAudioDatasets((prev) => [record, ...prev.filter((item) => item.id !== record.id)]);
+
+      if (target === "s2_pro") {
+        setS2ProTrainSource("lab_audio_dir");
+        setS2ProTrainForm((prev) => ({
+          ...prev,
+          lab_audio_dir: result.lab_audio_dir_path || result.audio_dir_path,
+          output_name: prev.output_name || name,
+        }));
+      } else if (target === "vibevoice") {
+        setVibeVoiceTrainForm((prev) => ({
+          ...prev,
+          data_dir: result.dataset_root_path,
+          train_jsonl: result.train_jsonl_path || prev.train_jsonl,
+          validation_jsonl: result.validation_jsonl_path || prev.validation_jsonl,
+          output_name: prev.output_name || name,
+        }));
+      } else if (target === "rvc") {
+        setRvcTrainSource("folder");
+        setRvcTrainForm((prev) => ({ ...prev, dataset_path: result.audio_dir_path, model_name: prev.model_name || name }));
+      } else if (target === "ace_step") {
+        setAceStepTrainSource("dataset_json");
+        setAceStepTrainForm((prev) => ({ ...prev, dataset_json: result.dataset_json_path || prev.dataset_json, audio_dir: result.audio_dir_path, output_name: prev.output_name || name }));
+      } else if (target === "mmaudio") {
+        setMMAudioTrainForm((prev) => ({
+          ...prev,
+          output_name: prev.output_name || name,
+          data_mode: "configured",
+        }));
+      }
+
+      setMessage(`${name} 데이터셋을 준비했습니다. 샘플 ${result.sample_count}개를 학습 탭으로 넘길 수 있습니다.`);
+    });
+  }
+
+  function sendAudioDatasetToTraining(dataset: AudioDatasetRecord) {
+    const name = dataset.name || dataset.id;
+    if (dataset.target === "s2_pro") {
+      setS2ProTrainSource("lab_audio_dir");
+      setS2ProTrainForm((prev) => ({
+        ...prev,
+        lab_audio_dir: dataset.lab_audio_dir_path || dataset.audio_dir_path,
+        output_name: prev.output_name || name,
+      }));
+      setActiveTab("s2pro_train");
+    } else if (dataset.target === "vibevoice") {
+      setVibeVoiceTrainForm((prev) => ({
+        ...prev,
+        data_dir: dataset.dataset_root_path,
+        train_jsonl: dataset.train_jsonl_path || prev.train_jsonl,
+        validation_jsonl: dataset.validation_jsonl_path || prev.validation_jsonl,
+        output_name: prev.output_name || name,
+      }));
+      setActiveTab("vibevoice_tts_train");
+    } else if (dataset.target === "rvc") {
+      setRvcTrainSource("folder");
+      setRvcTrainForm((prev) => ({ ...prev, dataset_path: dataset.audio_dir_path, model_name: prev.model_name || name }));
+      setActiveTab("applio_train");
+    } else if (dataset.target === "ace_step") {
+      setAceStepTrainSource("dataset_json");
+      setAceStepTrainForm((prev) => ({
+        ...prev,
+        dataset_json: dataset.dataset_json_path || prev.dataset_json,
+        audio_dir: dataset.audio_dir_path,
+        output_name: prev.output_name || name,
+      }));
+      setActiveTab("ace_lora_train");
+    } else if (dataset.target === "mmaudio") {
+      setMMAudioTrainForm((prev) => ({ ...prev, output_name: prev.output_name || name, data_mode: "configured" }));
+      setActiveTab("mmaudio_train");
+    }
+    setMessage(`${name} 데이터셋을 ${audioDatasetTargetLabel(dataset.target)} 학습 탭에 연결했습니다.`);
+  }
+
+  async function handleDeleteAudioDataset(dataset: AudioDatasetRecord) {
+    await runAction(async () => {
+      setAudioDatasets((prev) => prev.filter((item) => item.id !== dataset.id));
+      await api.deleteAudioDataset(dataset.id);
+      await refreshAll();
+      setMessage(`${dataset.name || dataset.id} 데이터셋을 삭제했습니다.`);
+    });
   }
 
   function handleSelectCloneModel(modelId: string) {
@@ -3477,7 +3930,7 @@ function StudioApp() {
             onValueChange={(value) => setVoiceGalleryView(value as typeof voiceGalleryView)}
             className="flex flex-col gap-5"
           >
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 bg-surface border border-line p-1 h-auto">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-1 bg-surface border border-line p-1 h-auto">
               <TabsTrigger value="trained" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.trained", "훈련한 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{latestFineTunedModels.length}</span>
               </TabsTrigger>
@@ -3489,6 +3942,9 @@ function StudioApp() {
               </TabsTrigger>
               <TabsTrigger value="rvc" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.rvc", "RVC 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voiceChangerModels.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="datasets" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.datasets", "데이터셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{audioDatasets.length}</span>
               </TabsTrigger>
             </TabsList>
 
@@ -3816,6 +4272,58 @@ function StudioApp() {
                   />
                 )}
               </TabsContent>
+
+              <TabsContent value="datasets" className="m-0 flex flex-col gap-3">
+                {audioDatasets.length ? (
+                  audioDatasets.map((dataset) => (
+                    <WorkspaceCard key={dataset.id} className="flex flex-wrap items-center gap-4">
+                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
+                        <span className="font-mono text-xs font-semibold text-accent">{audioDatasetTargetLabel(dataset.target).slice(0, 3).toUpperCase()}</span>
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <strong className="text-sm font-medium text-ink">{dataset.name}</strong>
+                          <span className="text-xs text-ink-muted">{audioDatasetTargetLabel(dataset.target)} · {dataset.sample_count} samples</span>
+                        </div>
+                        <p className="break-all text-sm text-ink-muted">
+                          {dataset.dataset_root_path}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{dataset.source_type}</Badge>
+                          {dataset.train_jsonl_path ? <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">train.jsonl</Badge> : null}
+                          {dataset.lab_audio_dir_path ? <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">lab audio</Badge> : null}
+                          {dataset.dataset_json_path ? <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">dataset.json</Badge> : null}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => sendAudioDatasetToTraining(dataset)} type="button">
+                          {t("voices.datasets.useInTraining", "학습에 연결")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-danger hover:bg-danger/10"
+                          onClick={() => void handleDeleteAudioDataset(dataset)}
+                          type="button"
+                        >
+                          {t("action.delete", "삭제")}
+                        </Button>
+                      </div>
+                    </WorkspaceCard>
+                  ))
+                ) : (
+                  <WorkspaceEmptyState
+                    icon={Database}
+                    title={t("voices.datasets.emptyTitle", "준비된 데이터셋이 없습니다.")}
+                    body={t("voices.datasets.emptyBody", "각 엔진의 학습 탭에서 생성 갤러리나 폴더로 데이터셋을 만들면 여기에서 확인하고 삭제할 수 있습니다.")}
+                    action={
+                      <Button onClick={() => setActiveTab("dataset")} type="button">
+                        {t("voices.datasets.gotoDataset", "Qwen 데이터셋 만들기")}
+                      </Button>
+                    }
+                  />
+                )}
+              </TabsContent>
             </div>
           </Tabs>
         </WorkspaceShell>
@@ -3830,18 +4338,31 @@ function StudioApp() {
             subtitle={t("gallery.description")}
             meta={
               <div className="mt-2 flex flex-wrap gap-2" aria-label="생성 통계">
-                <Badge variant="secondary" className="bg-canvas text-ink-muted">
-                  <b className="mr-1 text-ink">{galleryStats.total}</b>{t("gallery.total")}
-                </Badge>
-                <Badge variant="secondary" className="bg-canvas text-ink-muted">
-                  <b className="mr-1 text-ink">{galleryStats.speech}</b>{t("gallery.speech")}
-                </Badge>
-                <Badge variant="secondary" className="bg-canvas text-ink-muted">
-                  <b className="mr-1 text-ink">{galleryStats.music}</b>{t("gallery.music")}
-                </Badge>
-                <Badge variant="secondary" className="bg-canvas text-ink-muted">
-                  <b className="mr-1 text-ink">{galleryStats.audio}</b>{t("gallery.audio")}
-                </Badge>
+                {([
+                  ["all", t("gallery.total", "전체")],
+                  ["speech", t("gallery.speech", "음성")],
+                  ["preset", t("gallery.preset", "프리셋 음성")],
+                  ["effect", t("gallery.effect", "사운드 이펙트")],
+                  ["music", t("gallery.music", "ACE-Step 음악")],
+                  ["rvc", t("gallery.rvc", "RVC 변환")],
+                  ["utility", t("gallery.utility", "정제/분리")],
+                ] as Array<[GalleryFilter, string]>).map(([filter, label]) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => {
+                      setGalleryFilter(filter);
+                      setSelectedGalleryIds([]);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      galleryFilter === filter
+                        ? "border-accent-edge bg-accent-soft text-accent-ink"
+                        : "border-line bg-canvas text-ink-muted hover:border-line-strong"
+                    }`}
+                  >
+                    <b className="mr-1 text-ink">{galleryBuckets[filter]}</b>{label}
+                  </button>
+                ))}
               </div>
             }
           />
@@ -3853,7 +4374,7 @@ function StudioApp() {
                 <span className="text-xs text-ink-muted">{t("gallery.selectionHint")}</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" disabled={!history.length} onClick={() => setSelectedGalleryIds(history.map((record) => gallerySelectionKey(record)))} type="button">
+                <Button variant="outline" size="sm" disabled={!filteredHistory.length} onClick={() => setSelectedGalleryIds(filteredHistory.map((record) => gallerySelectionKey(record)))} type="button">
                   {t("action.selectAll")}
                 </Button>
                 <Button variant="outline" size="sm" disabled={!selectedGalleryIds.length} onClick={() => setSelectedGalleryIds([])} type="button">
@@ -3865,9 +4386,10 @@ function StudioApp() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              {history.length ? history.map((record) => {
+              {filteredHistory.length ? filteredHistory.map((record) => {
                 const selectionKey = gallerySelectionKey(record);
                 const isSelected = selectedGalleryIds.includes(selectionKey);
+                const filterKind = galleryFilterForRecord(record);
                 return (
                 <article
                   key={selectionKey}
@@ -3884,7 +4406,16 @@ function StudioApp() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <small className="text-[10px] uppercase tracking-allcaps font-mono text-ink-subtle">{getModeLabel(record.mode)} · {recordLanguageLabel(record)}</small>
                     <strong className="line-clamp-1 text-sm font-medium text-ink">{getRecordDisplayTitle(record)}</strong>
-                    <span className="text-xs text-ink-muted">{getRecordModelLabel(record)}</span>
+                    <span className="text-xs text-ink-muted">
+                      {filterKind === "preset" ? t("gallery.kind.preset", "프리셋 기반 음성") : null}
+                      {filterKind === "effect" ? t("gallery.kind.effect", "사운드 이펙트") : null}
+                      {filterKind === "music" ? t("gallery.kind.music", "ACE-Step 음악") : null}
+                      {filterKind === "rvc" ? t("gallery.kind.rvc", "RVC 변환") : null}
+                      {filterKind === "utility" ? t("gallery.kind.utility", "정제/분리 결과") : null}
+                      {filterKind === "speech" ? t("gallery.kind.speech", "음성 생성") : null}
+                      {" · "}
+                      {getRecordModelLabel(record)}
+                    </span>
                   </div>
                   <time className="shrink-0 text-[10px] font-mono uppercase tracking-wide text-ink-subtle">{formatShortDate(record.created_at)}</time>
                   <audio controls src={mediaUrl(record.output_audio_url)} className="h-8 w-full sm:w-auto sm:flex-1 max-w-[280px]" />
@@ -3903,8 +4434,8 @@ function StudioApp() {
               }) : (
                 <WorkspaceEmptyState
                   icon={Headphones}
-                  title={t("gallery.emptyTitle")}
-                  body={t("gallery.emptyDescription")}
+                  title={galleryFilter === "all" ? t("gallery.emptyTitle") : t("gallery.emptyFilteredTitle", "이 분류에는 생성 결과가 없습니다.")}
+                  body={galleryFilter === "all" ? t("gallery.emptyDescription") : t("gallery.emptyFilteredDescription", "다른 분류를 선택하거나 새 결과를 생성하면 이곳에 표시됩니다.")}
                   action={
                     <Button onClick={() => setActiveTab("tts")} type="button">{t("action.firstVoice")}</Button>
                   }
@@ -5605,6 +6136,25 @@ function StudioApp() {
               loading,
             }}
           />
+          <TrainingDatasetConnector
+            title="학습 데이터셋"
+            target="vibevoice"
+            datasets={audioDatasets}
+            activePath={vibeVoiceTrainForm.train_jsonl || vibeVoiceTrainForm.data_dir}
+            pathLabel="VibeVoice train JSONL / dataset dir"
+            guidance="생성 갤러리나 폴더에서 만든 VibeVoice 데이터셋을 선택하면 train/validation JSONL과 dataset root가 학습 폼에 들어갑니다."
+            onCreateDataset={() => setActiveTab("vibevoice_dataset")}
+            onUse={(dataset) => {
+              setVibeVoiceTrainForm((prev) => ({
+                ...prev,
+                data_dir: dataset.dataset_root_path,
+                train_jsonl: dataset.train_jsonl_path || prev.train_jsonl,
+                validation_jsonl: dataset.validation_jsonl_path || prev.validation_jsonl,
+                output_name: prev.output_name || dataset.name,
+              }));
+              setMessage(`${dataset.name} 데이터셋을 VibeVoice 학습 입력에 연결했습니다.`);
+            }}
+          />
           <form id="vibevoice-train-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVibeVoiceTrainSubmit}>
             <WorkspaceCard className="flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -5851,6 +6401,24 @@ function StudioApp() {
                 </Badge>
               ) : null
             }
+          />
+          <TrainingDatasetConnector
+            title="학습 데이터셋"
+            target="s2_pro"
+            datasets={audioDatasets}
+            activePath={s2ProTrainSource === "protos" ? s2ProTrainForm.proto_dir : s2ProTrainForm.lab_audio_dir}
+            pathLabel={s2ProTrainSource === "protos" ? "Prepared proto" : "Raw voice folder"}
+            guidance="생성 갤러리나 폴더에서 만든 raw voice folder를 바로 연결하거나, 데이터셋 탭에서 prepared proto를 지정한 뒤 학습할 수 있습니다."
+            onCreateDataset={() => setActiveTab("s2pro_dataset")}
+            onUse={(dataset) => {
+              setS2ProTrainSource("lab_audio_dir");
+              setS2ProTrainForm((prev) => ({
+                ...prev,
+                lab_audio_dir: dataset.lab_audio_dir_path || dataset.audio_dir_path,
+                output_name: prev.output_name || dataset.name,
+              }));
+              setMessage(`${dataset.name} 데이터셋을 S2-Pro 학습 입력에 연결했습니다.`);
+            }}
           />
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
@@ -6174,6 +6742,20 @@ function StudioApp() {
               formId: "mmaudio-train-form",
               disabled: loading || !mmaudioTrainForm.output_name.trim(),
               loading,
+            }}
+          />
+          <TrainingDatasetConnector
+            title="학습 데이터셋"
+            target="mmaudio"
+            datasets={audioDatasets}
+            activePath={toolDatasetLastBuild?.target === "mmaudio" ? toolDatasetLastBuild.dataset_root_path : ""}
+            pathLabel="MMAudio dataset manifest"
+            guidance="MMAudio는 upstream config 학습이 중심이지만, 앱에서 만든 효과음/오디오 데이터셋 manifest를 기준으로 학습 설정을 맞출 수 있습니다."
+            onCreateDataset={() => setActiveTab("mmaudio_dataset")}
+            onUse={(dataset) => {
+              setMMAudioTrainForm((prev) => ({ ...prev, data_mode: "configured", output_name: prev.output_name || dataset.name }));
+              setToolDatasetLastBuild(dataset);
+              setMessage(`${dataset.name} 데이터셋을 MMAudio 학습 입력에 연결했습니다.`);
             }}
           />
 
@@ -6894,6 +7476,34 @@ function StudioApp() {
             ) : null}
 
             {currentAceStepMode === "lora_train" ? (
+              <TrainingDatasetConnector
+                title="학습 데이터셋"
+                target="ace_step"
+                datasets={audioDatasets}
+                activePath={
+                  aceStepTrainSource === "tensors"
+                    ? aceStepTrainForm.tensor_dir
+                    : aceStepTrainSource === "audio_dir"
+                      ? aceStepTrainForm.audio_dir
+                      : aceStepTrainForm.dataset_json
+                }
+                pathLabel={aceStepTrainSource === "tensors" ? "Prepared tensor" : aceStepTrainSource === "audio_dir" ? "Audio folder" : "Dataset JSON"}
+                guidance="생성 갤러리나 폴더에서 만든 dataset.json을 연결하거나, prepared tensor 폴더를 데이터셋 탭에서 연결해 학습을 시작합니다."
+                onCreateDataset={() => setActiveTab("ace_dataset")}
+                onUse={(dataset) => {
+                  setAceStepTrainSource("dataset_json");
+                  setAceStepTrainForm((prev) => ({
+                    ...prev,
+                    dataset_json: dataset.dataset_json_path || prev.dataset_json,
+                    audio_dir: dataset.audio_dir_path,
+                    output_name: prev.output_name || dataset.name,
+                  }));
+                  setMessage(`${dataset.name} 데이터셋을 ACE-Step 학습 입력에 연결했습니다.`);
+                }}
+              />
+            ) : null}
+
+            {currentAceStepMode === "lora_train" ? (
               <WorkspaceCard>
                 <form className="flex flex-col gap-5" onSubmit={handleAceStepTrainAdapterSubmit}>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -7243,6 +7853,24 @@ function StudioApp() {
               formId: "applio-train-form",
               disabled: loading || !rvcTrainForm.model_name || !rvcTrainSourceReady,
               loading,
+            }}
+          />
+          <TrainingDatasetConnector
+            title="학습 데이터셋"
+            target="rvc"
+            datasets={audioDatasets}
+            activePath={rvcTrainForm.dataset_path}
+            pathLabel="RVC WAV folder"
+            guidance="생성 갤러리나 폴더에서 만든 RVC 데이터셋을 선택하면 목표 화자 WAV 폴더가 학습 입력에 들어갑니다."
+            onCreateDataset={() => setActiveTab("applio_dataset")}
+            onUse={(dataset) => {
+              setRvcTrainSource("folder");
+              setRvcTrainForm((prev) => ({
+                ...prev,
+                dataset_path: dataset.audio_dir_path,
+                model_name: prev.model_name || dataset.name,
+              }));
+              setMessage(`${dataset.name} 데이터셋을 RVC 학습 입력에 연결했습니다.`);
             }}
           />
 
@@ -8317,72 +8945,57 @@ function StudioApp() {
             eyebrow="S2-PRO DATASET"
             eyebrowIcon={Database}
             title="S2-Pro 데이터셋 준비"
-            subtitle="Fish Speech 학습은 proto 폴더를 쓰거나, wav와 같은 이름의 .lab 전사가 있는 음성 폴더에서 proto를 만들 수 있습니다."
+            subtitle="생성 갤러리 음성이나 폴더를 raw voice folder로 정리하고, 이미 만든 prepared proto도 학습으로 바로 넘깁니다."
             action={{
               label: "S2-Pro 학습으로 보내기",
               onClick: sendS2DatasetToTraining,
             }}
           />
-          <WorkspaceCard className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              <label className="rounded-md border border-line bg-canvas/60 p-3">
-                <input
-                  className="sr-only"
-                  type="radio"
-                  checked={s2ProTrainSource === "lab_audio_dir"}
-                  onChange={() => setS2ProTrainSource("lab_audio_dir")}
-                />
-                <span className="text-xs font-semibold uppercase tracking-allcaps text-accent">Raw voice folder</span>
-                <strong className="mt-2 block text-sm font-medium text-ink">wav + lab 폴더</strong>
-                <p className="mt-1 text-xs text-ink-muted">각 wav 옆에 같은 파일명의 .lab 전사가 있는 폴더를 사용합니다.</p>
-              </label>
-              <label className="rounded-md border border-line bg-canvas/60 p-3">
-                <input
-                  className="sr-only"
-                  type="radio"
-                  checked={s2ProTrainSource === "protos"}
-                  onChange={() => setS2ProTrainSource("protos")}
-                />
-                <span className="text-xs font-semibold uppercase tracking-allcaps text-accent">Prepared proto</span>
-                <strong className="mt-2 block text-sm font-medium text-ink">proto 폴더</strong>
-                <p className="mt-1 text-xs text-ink-muted">이미 VQ/proto 전처리가 끝난 경우 그대로 학습에 연결합니다.</p>
-              </label>
-              <article className="rounded-md border border-line bg-canvas/60 p-3">
-                <span className="text-xs font-semibold uppercase tracking-allcaps text-ink-subtle">Recommendation</span>
-                <p className="mt-2 text-xs text-ink-muted">목소리 LoRA는 최소 10~20분, 가능하면 30분 이상 깨끗한 발화를 권장합니다.</p>
-              </article>
+          <ToolDatasetBuilder
+            title="Raw voice folder 또는 prepared proto 선택"
+            subtitle="raw voice folder는 wav와 같은 이름의 .lab 전사를 함께 준비합니다. prepared proto는 이미 전처리된 Fish Speech proto 폴더를 그대로 씁니다."
+            source={toolDatasetSource.s2_pro ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, s2_pro: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.s2_pro ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("s2_pro", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("s2_pro", path)}
+            folderPath={toolDatasetFolders.s2_pro ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, s2_pro: value }))}
+            datasetName={toolDatasetNames.s2_pro ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, s2_pro: value }))}
+            onBuild={() => buildToolDataset("s2_pro")}
+            lastBuild={toolDatasetLastBuild?.target === "s2_pro" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+            preparedLabel="Prepared proto"
+            preparedPath={s2ProTrainForm.proto_dir}
+            setPreparedPath={(value) => setS2ProTrainForm((prev) => ({ ...prev, proto_dir: value }))}
+            onUsePrepared={() => {
+              if (!s2ProTrainForm.proto_dir.trim()) {
+                setMessage("Prepared proto 폴더를 입력하세요.");
+                return;
+              }
+              setS2ProTrainSource("protos");
+              setActiveTab("s2pro_train");
+              setMessage("Prepared proto를 S2-Pro 학습 탭으로 넘겼습니다.");
+            }}
+          />
+          <WorkspaceCard className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium text-ink-muted">모델 이름</Label>
+              <Input value={s2ProTrainForm.output_name} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
             </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">wav + lab 폴더</Label>
-                <Input
-                  placeholder="/mnt/d/tts_data/s2pro_mai/lab_audio"
-                  value={s2ProTrainForm.lab_audio_dir}
-                  onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, lab_audio_dir: normalizeDatasetPath(event.target.value) }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">proto 폴더</Label>
-                <Input
-                  placeholder="data/protos/mai_s2pro"
-                  value={s2ProTrainForm.proto_dir}
-                  onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, proto_dir: normalizeDatasetPath(event.target.value) }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">모델 이름</Label>
-                <Input value={s2ProTrainForm.output_name} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">학습 방식</Label>
-                <Select value={s2ProTrainForm.training_type} onValueChange={(value) => setS2ProTrainForm((prev) => ({ ...prev, training_type: value as "lora" | "full" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lora">LoRA</SelectItem>
-                    <SelectItem value="full">Full checkpoint</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium text-ink-muted">학습 방식</Label>
+              <Select value={s2ProTrainForm.training_type} onValueChange={(value) => setS2ProTrainForm((prev) => ({ ...prev, training_type: value as "lora" | "full" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lora">LoRA</SelectItem>
+                  <SelectItem value="full">Full checkpoint</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </WorkspaceCard>
         </WorkspaceShell>
@@ -8394,39 +9007,32 @@ function StudioApp() {
             eyebrow="VIBEVOICE DATASET"
             eyebrowIcon={Database}
             title="VibeVoice 데이터셋 준비"
-            subtitle="TTS는 text/audio/voice_prompts 컬럼 또는 JSONL을, ASR은 전사용 오디오 폴더나 ASR 데이터셋 폴더를 사용합니다."
+            subtitle="생성 갤러리나 폴더에서 TTS/ASR 학습에 쓸 JSONL을 만들고, 전사가 없으면 ASR로 채웁니다."
             action={{
               label: "TTS 학습으로 보내기",
               onClick: () => sendVibeVoiceDatasetToTraining("tts_lora"),
             }}
           />
+          <ToolDatasetBuilder
+            title="VibeVoice JSONL 만들기"
+            subtitle="선택한 음성은 audio/text/voice_prompts 필드를 가진 train.jsonl과 validation.jsonl로 정리됩니다."
+            source={toolDatasetSource.vibevoice ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, vibevoice: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.vibevoice ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("vibevoice", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("vibevoice", path)}
+            folderPath={toolDatasetFolders.vibevoice ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, vibevoice: value }))}
+            datasetName={toolDatasetNames.vibevoice ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, vibevoice: value }))}
+            onBuild={() => buildToolDataset("vibevoice")}
+            lastBuild={toolDatasetLastBuild?.target === "vibevoice" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+          />
           <WorkspaceCard className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Dataset path 또는 HF dataset id</Label>
-                <Input
-                  placeholder="data/datasets/vibevoice_mai 또는 org/dataset"
-                  value={vibeVoiceTrainForm.data_dir}
-                  onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, data_dir: normalizeDatasetPath(event.target.value) }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Train JSONL</Label>
-                <Input
-                  placeholder="data/datasets/vibevoice_mai/train.jsonl"
-                  value={vibeVoiceTrainForm.train_jsonl}
-                  onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_jsonl: normalizeDatasetPath(event.target.value) }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Validation JSONL</Label>
-                <Input
-                  placeholder="data/datasets/vibevoice_mai/validation.jsonl"
-                  value={vibeVoiceTrainForm.validation_jsonl}
-                  onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, validation_jsonl: normalizeDatasetPath(event.target.value) }))}
-                />
-              </div>
-            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">Text column</Label>
@@ -8455,48 +9061,32 @@ function StudioApp() {
             eyebrow="APPLIO / RVC DATASET"
             eyebrowIcon={Database}
             title="Applio RVC 데이터셋 준비"
-            subtitle="RVC는 같은 목표 화자의 깨끗한 WAV 묶음이 필요합니다. 생성 갤러리에서 고르거나 정리된 폴더를 지정하세요."
+            subtitle="같은 목표 화자의 깨끗한 음성을 생성 갤러리나 폴더에서 모아 RVC 학습 폴더로 정리합니다."
             action={{
               label: "RVC 학습으로 보내기",
               onClick: sendRvcDatasetToTraining,
             }}
           />
+          <ToolDatasetBuilder
+            title="RVC 화자 폴더 만들기"
+            subtitle="선택한 음성을 변환 가능한 WAV 폴더로 복사합니다. RVC는 전사를 쓰지 않지만, manifest에는 ASR 텍스트도 남겨 추적할 수 있습니다."
+            source={toolDatasetSource.rvc ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, rvc: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.rvc ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("rvc", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("rvc", path)}
+            folderPath={toolDatasetFolders.rvc ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, rvc: value }))}
+            datasetName={toolDatasetNames.rvc ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, rvc: value }))}
+            onBuild={() => buildToolDataset("rvc")}
+            lastBuild={toolDatasetLastBuild?.target === "rvc" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+          />
           <WorkspaceCard className="flex flex-col gap-4">
-            <Tabs value={rvcTrainSource} onValueChange={(value) => setRvcTrainSource(value as "gallery" | "folder")}>
-              <TabsList className="grid w-full grid-cols-2 gap-1 bg-canvas border border-line p-1 h-auto">
-                <TabsTrigger value="gallery" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">생성 갤러리</TabsTrigger>
-                <TabsTrigger value="folder" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">폴더 경로</TabsTrigger>
-              </TabsList>
-              <TabsContent value="gallery" className="m-0 mt-4">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-                  <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addRvcTrainAsset} />
-                  <section className="rounded-md border border-line bg-canvas/60 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <strong className="text-sm font-medium text-ink">선택한 WAV</strong>
-                      <Button variant="outline" size="sm" onClick={() => setRvcTrainAudioPaths([])} type="button">비우기</Button>
-                    </div>
-                    <div className="mt-3 flex max-h-80 flex-col gap-2 overflow-y-auto">
-                      {selectedRvcTrainAssets.length ? selectedRvcTrainAssets.map((asset) => (
-                        <article key={asset.path} className="rounded-md border border-line bg-surface p-2">
-                          <strong className="block truncate text-xs font-medium text-ink">{asset.filename}</strong>
-                          <audio controls className="mt-2 h-8 w-full" src={mediaUrl(asset.url)} />
-                        </article>
-                      )) : <p className="text-xs text-ink-muted">아직 선택한 학습 음성이 없습니다.</p>}
-                    </div>
-                  </section>
-                </div>
-              </TabsContent>
-              <TabsContent value="folder" className="m-0 mt-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">목표 화자 WAV 폴더</Label>
-                  <Input
-                    placeholder="/mnt/d/voice/rvc_dataset/wavs"
-                    value={rvcTrainForm.dataset_path}
-                    onChange={(event) => setRvcTrainForm((prev) => ({ ...prev, dataset_path: normalizeDatasetPath(event.target.value) }))}
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">RVC 모델 이름</Label>
@@ -8528,34 +9118,44 @@ function StudioApp() {
             eyebrow="ACE-STEP DATASET"
             eyebrowIcon={Database}
             title="ACE-Step 데이터셋 준비"
-            subtitle="LoRA/LoKr 학습은 전처리된 tensor 폴더가 가장 안정적이고, 오디오 폴더나 dataset JSON도 학습 탭에서 전처리할 수 있습니다."
+            subtitle="생성 갤러리나 폴더를 음악 학습용 dataset.json으로 정리하고, 기존 tensor/json도 바로 연결합니다."
             action={{
               label: "ACE-Step 학습으로 보내기",
               onClick: sendAceDatasetToTraining,
             }}
           />
+          <ToolDatasetBuilder
+            title="ACE-Step 학습 데이터 만들기"
+            subtitle="오디오와 설명 텍스트를 dataset.json으로 묶습니다. tensor 전처리가 끝난 폴더가 있다면 Prepared tensor로 바로 보낼 수 있습니다."
+            source={toolDatasetSource.ace_step ?? "folder"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, ace_step: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.ace_step ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("ace_step", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("ace_step", path)}
+            folderPath={toolDatasetFolders.ace_step ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, ace_step: value }))}
+            datasetName={toolDatasetNames.ace_step ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, ace_step: value }))}
+            onBuild={() => buildToolDataset("ace_step")}
+            lastBuild={toolDatasetLastBuild?.target === "ace_step" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+            preparedLabel="Prepared tensor"
+            preparedPath={aceStepTrainForm.tensor_dir}
+            setPreparedPath={(value) => setAceStepTrainForm((prev) => ({ ...prev, tensor_dir: value }))}
+            onUsePrepared={() => {
+              if (!aceStepTrainForm.tensor_dir.trim()) {
+                setMessage("Prepared tensor 폴더를 입력하세요.");
+                return;
+              }
+              setAceStepTrainSource("tensors");
+              setActiveTab("ace_lora_train");
+              setMessage("Prepared tensor를 ACE-Step 학습 탭으로 넘겼습니다.");
+            }}
+          />
           <WorkspaceCard className="flex flex-col gap-4">
-            <Tabs value={aceStepTrainSource} onValueChange={(value) => setAceStepTrainSource(value as "tensors" | "audio_dir" | "dataset_json")}>
-              <TabsList className="grid w-full grid-cols-3 gap-1 bg-canvas border border-line p-1 h-auto">
-                <TabsTrigger value="tensors" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">Tensor folder</TabsTrigger>
-                <TabsTrigger value="audio_dir" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">Audio folder</TabsTrigger>
-                <TabsTrigger value="dataset_json" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">Dataset JSON</TabsTrigger>
-              </TabsList>
-              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Tensor folder</Label>
-                  <Input value={aceStepTrainForm.tensor_dir} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, tensor_dir: normalizeDatasetPath(event.target.value) }))} placeholder="data/datasets/ace_style/tensors" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Audio folder</Label>
-                  <Input value={aceStepTrainForm.audio_dir} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, audio_dir: normalizeDatasetPath(event.target.value) }))} placeholder="data/datasets/ace_style/audio" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Dataset JSON</Label>
-                  <Input value={aceStepTrainForm.dataset_json} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, dataset_json: normalizeDatasetPath(event.target.value) }))} placeholder="data/datasets/ace_style/dataset.json" />
-                </div>
-              </div>
-            </Tabs>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">Adapter 이름</Label>
@@ -8586,11 +9186,30 @@ function StudioApp() {
             eyebrow="MMAUDIO DATASET"
             eyebrowIcon={Database}
             title="MMAudio 데이터셋 준비"
-            subtitle="MMAudio upstream 학습은 example 데이터 또는 configs에 등록된 데이터셋을 사용합니다. 여기서 모드를 정하고 학습 탭으로 넘깁니다."
+            subtitle="효과음/오디오 샘플을 갤러리나 폴더에서 모아 manifest와 dataset.json으로 정리하고, upstream 학습 모드도 함께 선택합니다."
             action={{
               label: "MMAudio 학습으로 보내기",
               onClick: () => sendMMAudioDatasetToTraining(mmaudioTrainForm.data_mode),
             }}
+          />
+          <ToolDatasetBuilder
+            title="MMAudio 샘플 묶음 만들기"
+            subtitle="생성 갤러리의 효과음이나 폴더 오디오를 한 데이터셋 폴더로 모읍니다. 텍스트는 프롬프트/캡션으로 저장되고, 없으면 ASR로 채웁니다."
+            source={toolDatasetSource.mmaudio ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, mmaudio: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.mmaudio ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("mmaudio", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("mmaudio", path)}
+            folderPath={toolDatasetFolders.mmaudio ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, mmaudio: value }))}
+            datasetName={toolDatasetNames.mmaudio ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, mmaudio: value }))}
+            onBuild={() => buildToolDataset("mmaudio")}
+            lastBuild={toolDatasetLastBuild?.target === "mmaudio" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
           />
           <WorkspaceCard className="flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

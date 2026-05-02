@@ -13,9 +13,9 @@
 - `프리셋 기반 생성`
   저장한 프리셋을 기준으로 반복 생성하거나, 프리셋 위에 말투 지시를 덧입혀 생성합니다.
 - `나의 목소리들`
-  저장한 프리셋과 최종 학습 모델만 관리하는 화면입니다.
+  훈련한 모델, Qwen/S2-Pro 프리셋, RVC 모델, 공용 데이터셋을 한곳에서 확인하고 삭제하는 운영 라이브러리입니다.
 - `생성 갤러리`
-  최근 생성 결과를 갤러리처럼 모아 보고, 선택 삭제/개별 삭제하는 화면입니다.
+  생성 결과를 음성, 프리셋 음성, 사운드 이펙트, ACE-Step 음악, RVC 변환, 정제/분리 결과로 구분해 보고, 현재 분류 기준으로 선택 삭제/개별 삭제하는 화면입니다.
 - `Qwen 데이터셋 만들기 / 학습 실행`
   Qwen 계열 학습용 오디오와 텍스트를 정리해 `data/datasets/<dataset_id>/` 구조로 저장한 뒤 `Base`, `CustomVoice`, `VoiceBox` 학습을 실행합니다.
 - `VoiceBox 융합`
@@ -27,7 +27,7 @@
 - `사운드 효과 / MMAudio 학습`
   `MMAudio` 기반 효과음 생성 화면과 upstream `train.py` 기반 full/continued training 화면입니다. MMAudio upstream에는 LoRA/adapter 학습 경로가 없어 학습 탭은 기존 weight 이어학습 또는 전체 학습만 다룹니다.
 - `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS / 데이터셋 / LoRA-Full 학습`
-  Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다. 학습 탭은 Fish Speech `text2semantic_finetune`을 호출해 LoRA 또는 full fine-tuning을 실행하고, LoRA는 필요하면 merged checkpoint로 변환합니다.
+  Fish Speech S2-Pro 방식의 기능별 작업실입니다. 저장한 목소리는 S2-Pro에서 계속 쓰고, 같은 참조 자산을 Qwen 복제/TTS 흐름에도 넘길 수 있습니다. 데이터셋 탭은 생성 갤러리/폴더 입력으로 raw voice folder를 만들거나 prepared proto를 직접 연결합니다. 학습 탭은 Fish Speech `text2semantic_finetune`을 호출해 LoRA 또는 full fine-tuning을 실행하고, LoRA는 필요하면 merged checkpoint로 변환합니다.
 - `Applio`
   `오디오 분리`, `RVC 데이터셋`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 이 기능은 TTS나 목소리 저장에는 필요 없고, RVC용 보컬 추출/반주 제거가 필요할 때만 씁니다. 기본 보컬 모델은 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델인 `vocals_mel_band_roformer.ckpt` 하나만 사용합니다.
@@ -61,6 +61,7 @@
 - S2-Pro 작업실: [docs/cookbook/21-s2-pro-workspace.md](docs/cookbook/21-s2-pro-workspace.md)
 - ACE-Step 작곡: [docs/cookbook/22-ace-step-music.md](docs/cookbook/22-ace-step-music.md)
 - VibeVoice 작업실: [docs/cookbook/23-vibevoice-workspace.md](docs/cookbook/23-vibevoice-workspace.md)
+- Qwen 외 엔진 데이터셋 빌더: [docs/cookbook/27-cross-engine-datasets.md](docs/cookbook/27-cross-engine-datasets.md)
 - Vendor upstream 변경점: [docs/cookbook/25-vendor-upstream-deltas.md](docs/cookbook/25-vendor-upstream-deltas.md)
 
 ## Clone 후 전체 준비
@@ -177,7 +178,7 @@ Qwen3-TTS-Demo/
 
 ### 1. 데이터셋은 `data/datasets/<dataset_id>/` 안에 모읍니다
 
-학습용 데이터는 흩어두지 않습니다.
+학습용 데이터는 흩어두지 않습니다. Qwen 외 모델도 `POST /api/audio-datasets/build`와 각 모델의 데이터셋 탭을 통해 생성 갤러리/폴더 경로/prepared 입력을 같은 루트로 정리합니다. 준비된 외부 모델 데이터셋은 bootstrap의 `audio_datasets` 목록으로 다시 읽히며, S2-Pro/VibeVoice/RVC/MMAudio/ACE-Step 학습 탭에서 Qwen처럼 선택해 학습 입력에 적용할 수 있습니다.
 
 ```text
 data/datasets/mai_ko_full/
@@ -203,8 +204,9 @@ data/datasets/mai_ko_full/
 
 최근 생성 이력을 모든 탭에 반복 노출하지 않습니다.
 
-- 생성 결과는 `생성 갤러리`에서만 관리합니다.
-- `나의 목소리들`은 S2-Pro 저장 목소리 프로젝트, 저장 프리셋, 최종 학습 모델만 보여줍니다.
+- 생성 결과는 `생성 갤러리`에서만 관리하며, 프리셋 음성/효과음/음악/RVC 변환/정제 결과를 분류해 보여줍니다.
+- `나의 목소리들`은 재사용 가능한 자산 운영 화면입니다. 훈련 모델, Qwen 프리셋, S2-Pro 프리셋, RVC 모델, 만들어진 공용 데이터셋을 확인하고 삭제할 수 있습니다.
+- 공용 데이터셋은 `나의 목소리들 > 데이터셋`에서 각 엔진의 학습 탭으로 다시 연결할 수 있습니다.
 
 ### 3. 학습 결과는 중간 체크포인트가 아니라 “최종 선택 모델” 중심으로 보여줍니다
 

@@ -56,6 +56,9 @@ from .schemas import (
     AudioDenoiseRequest,
     AudioEditRequest,
     AudioSeparationRequest,
+    AudioDatasetBuildRequest,
+    AudioDatasetBuildResponse,
+    AudioDatasetRecord,
     AudioToolAsset,
     AudioToolCapability,
     AudioToolJob,
@@ -1140,12 +1143,55 @@ def samples_from_audio_folder(folder_path: str) -> List[Dict[str, str]]:
     for audio_path in sorted(path for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in audio_extensions):
         text = ""
         for text_root in text_roots:
-            candidate = text_root / f"{audio_path.stem}.txt"
-            if candidate.exists():
-                text = candidate.read_text(encoding="utf-8").strip()
+            for suffix in (".txt", ".lab"):
+                candidate = text_root / f"{audio_path.stem}{suffix}"
+                if candidate.exists():
+                    text = candidate.read_text(encoding="utf-8").strip()
+                    break
+            if text:
                 break
         samples.append({"audio_path": str(audio_path), "text": text})
     return samples
+
+
+def copy_audio_as_dataset_wav(source_audio_path: str, target_path: Path) -> None:
+    """Copy an audio file into a dataset folder as WAV when needed."""
+
+    source = Path(resolve_repo_audio_path(source_audio_path))
+    if not source.exists() or not source.is_file():
+        raise HTTPException(status_code=400, detail=f"Dataset audio not found: {source_audio_path}")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    if source.suffix.lower() == ".wav":
+        shutil.copy2(source, target_path)
+        return
+    audio, sample_rate = librosa.load(str(source), sr=None, mono=False)
+    if isinstance(audio, np.ndarray) and audio.ndim == 2:
+        audio = audio.T
+    sf.write(target_path, audio, sample_rate)
+
+
+def normalize_tool_dataset_samples(payload: AudioDatasetBuildRequest) -> List[Dict[str, str]]:
+    """Collect gallery or folder samples and fill missing text with ASR."""
+
+    incoming_samples: List[Any] = list(payload.samples)
+    if payload.source_type == "folder":
+        if not payload.sample_folder_path:
+            raise HTTPException(status_code=400, detail="sample_folder_path is required for folder datasets.")
+        incoming_samples = samples_from_audio_folder(payload.sample_folder_path)
+
+    normalized: List[Dict[str, str]] = []
+    for sample in incoming_samples:
+        audio_path = str(getattr(sample, "audio_path", "") if not isinstance(sample, dict) else sample.get("audio_path", "")).strip()
+        text = str(getattr(sample, "text", "") if not isinstance(sample, dict) else sample.get("text", "") or "").strip()
+        if not audio_path:
+            continue
+        if payload.transcribe and not text:
+            text = transcribe_audio_or_raise(audio_path, model_id=payload.asr_model_id).text.strip()
+        normalized.append({"audio_path": audio_path, "text": text})
+
+    if not normalized:
+        raise HTTPException(status_code=400, detail="At least one dataset sample is required.")
+    return normalized
 
 
 def copy_audio_into_dataset(dataset_dir: Path, source_audio_path: str, filename: str) -> str:
@@ -1663,6 +1709,43 @@ def list_dataset_records() -> List[FineTuneDataset]:
 
     datasets = sorted(by_id.values(), key=lambda item: item.created_at or "", reverse=True)
     return datasets
+
+
+def list_audio_dataset_records() -> List[AudioDatasetRecord]:
+    """Qwen 외 엔진용 데이터셋 manifest를 최신순으로 반환한다."""
+
+    records: List[AudioDatasetRecord] = []
+    valid_targets = {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step"}
+    for path in sorted(storage.datasets_dir.glob("*/manifest.json"), reverse=True):
+        try:
+            record = storage.read_json(path)
+        except Exception:
+            continue
+        if record.get("target") not in valid_targets:
+            continue
+        try:
+            records.append(
+                AudioDatasetRecord(
+                    id=str(record.get("id") or path.parent.name),
+                    name=str(record.get("name") or path.parent.name),
+                    target=str(record["target"]),
+                    dataset_root_path=str(record.get("dataset_root_path") or storage.relpath(path.parent)),
+                    audio_dir_path=str(record.get("audio_dir_path") or ""),
+                    lab_audio_dir_path=record.get("lab_audio_dir_path"),
+                    train_jsonl_path=record.get("train_jsonl_path"),
+                    validation_jsonl_path=record.get("validation_jsonl_path"),
+                    dataset_json_path=record.get("dataset_json_path"),
+                    manifest_path=str(record.get("manifest_path") or storage.relpath(path)),
+                    sample_count=int(record.get("sample_count") or 0),
+                    message=str(record.get("message") or ""),
+                    source_type=str(record.get("source_type") or "gallery"),
+                    reference_audio_path=record.get("reference_audio_path"),
+                    created_at=record.get("created_at"),
+                )
+            )
+        except Exception:
+            continue
+    return sorted(records, key=lambda item: item.created_at or "", reverse=True)
 
 
 def list_finetune_run_records() -> List[FineTuneRun]:
@@ -2351,6 +2434,7 @@ def bootstrap() -> BootstrapResponse:
         clone_prompts=list_clone_prompt_records(),
         presets=list_preset_records(),
         datasets=list_dataset_records(),
+        audio_datasets=list_audio_dataset_records(),
         finetune_runs=list_finetune_run_records(),
         audio_tool_capabilities=audio_tool_capabilities(),
         audio_tool_jobs=list_audio_tool_jobs(),
@@ -5779,6 +5863,111 @@ def create_dataset(payload: FineTuneDatasetCreateRequest) -> FineTuneDataset:
     return FineTuneDataset(**record)
 
 
+@app.post("/api/audio-datasets/build", response_model=AudioDatasetBuildResponse)
+def build_audio_tool_dataset(payload: AudioDatasetBuildRequest) -> AudioDatasetBuildResponse:
+    """Create a model-specific dataset folder from gallery audio or a folder path.
+
+    The endpoint gives non-Qwen training flows the same basic UX as the Qwen
+    dataset builder: generated-gallery selection, folder-path intake, optional
+    ASR for missing transcripts, and a concrete prepared path to hand to each
+    trainer. It does not launch training; it only creates organized assets.
+    """
+
+    samples = normalize_tool_dataset_samples(payload)
+    dataset_id = storage.unique_dataset_id(f"{payload.target}_{payload.name}")
+    dataset_dir = storage.dataset_dir(dataset_id)
+    audio_dir = dataset_dir / "audio"
+    lab_audio_dir = dataset_dir / "lab_audio"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    lab_audio_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_samples: List[Dict[str, Any]] = []
+    jsonl_records: List[str] = []
+    ace_records: List[Dict[str, Any]] = []
+
+    ref_audio_path = payload.ref_audio_path or samples[0]["audio_path"]
+    ref_target = dataset_dir / "reference.wav"
+    copy_audio_as_dataset_wav(ref_audio_path, ref_target)
+
+    for index, sample in enumerate(samples, start=1):
+        source = Path(resolve_repo_audio_path(sample["audio_path"]))
+        slug = storage.slugify(source.stem, default=f"sample-{index}")
+        wav_name = f"{index:05d}_{slug}.wav"
+        audio_target = audio_dir / wav_name
+        lab_target = lab_audio_dir / wav_name
+        copy_audio_as_dataset_wav(sample["audio_path"], audio_target)
+        copy_audio_as_dataset_wav(sample["audio_path"], lab_target)
+        text = sample["text"].strip()
+        (lab_target.with_suffix(".lab")).write_text(text + "\n", encoding="utf-8")
+
+        audio_rel = storage.relpath(audio_target)
+        lab_audio_rel = storage.relpath(lab_target)
+        manifest_samples.append(
+            {
+                "source_audio_path": sample["audio_path"],
+                "audio_path": audio_rel,
+                "lab_audio_path": lab_audio_rel,
+                "lab_path": storage.relpath(lab_target.with_suffix(".lab")),
+                "text": text,
+            }
+        )
+        jsonl_records.append(
+            json.dumps(
+                {
+                    "audio": audio_rel,
+                    "audio_path": audio_rel,
+                    "text": text,
+                    "voice_prompts": [storage.relpath(ref_target)],
+                },
+                ensure_ascii=False,
+            )
+        )
+        ace_records.append({"audio_path": audio_rel, "prompt": text})
+
+    train_jsonl_path = dataset_dir / "train.jsonl"
+    validation_jsonl_path = dataset_dir / "validation.jsonl"
+    dataset_json_path = dataset_dir / "dataset.json"
+    manifest_path = storage.dataset_manifest_path(dataset_id)
+
+    train_jsonl_path.write_text("\n".join(jsonl_records) + "\n", encoding="utf-8")
+    validation_jsonl_path.write_text((jsonl_records[-1] if jsonl_records else "") + "\n", encoding="utf-8")
+    dataset_json_path.write_text(json.dumps({"samples": ace_records}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    manifest = {
+        "id": dataset_id,
+        "name": payload.name,
+        "target": payload.target,
+        "source_type": payload.source_type,
+        "dataset_root_path": storage.relpath(dataset_dir),
+        "audio_dir_path": storage.relpath(audio_dir),
+        "lab_audio_dir_path": storage.relpath(lab_audio_dir),
+        "reference_audio_path": storage.relpath(ref_target),
+        "train_jsonl_path": storage.relpath(train_jsonl_path),
+        "validation_jsonl_path": storage.relpath(validation_jsonl_path),
+        "dataset_json_path": storage.relpath(dataset_json_path),
+        "sample_count": len(manifest_samples),
+        "samples": manifest_samples,
+        "created_at": utc_now(),
+    }
+    storage.write_json(manifest_path, manifest)
+
+    return AudioDatasetBuildResponse(
+        id=dataset_id,
+        name=payload.name,
+        target=payload.target,
+        dataset_root_path=storage.relpath(dataset_dir),
+        audio_dir_path=storage.relpath(audio_dir),
+        lab_audio_dir_path=storage.relpath(lab_audio_dir),
+        train_jsonl_path=storage.relpath(train_jsonl_path),
+        validation_jsonl_path=storage.relpath(validation_jsonl_path),
+        dataset_json_path=storage.relpath(dataset_json_path),
+        manifest_path=storage.relpath(manifest_path),
+        sample_count=len(manifest_samples),
+        message=f"{payload.target} dataset prepared with {len(manifest_samples)} samples.",
+    )
+
+
 @app.get("/api/datasets", response_model=List[FineTuneDataset])
 def list_datasets() -> List[FineTuneDataset]:
     """저장된 파인튜닝 데이터셋 목록을 반환한다.
@@ -5788,6 +5977,42 @@ def list_datasets() -> List[FineTuneDataset]:
     """
 
     return list_dataset_records()
+
+
+@app.get("/api/audio-datasets", response_model=List[AudioDatasetRecord])
+def list_audio_datasets() -> List[AudioDatasetRecord]:
+    """Qwen 외 엔진용으로 준비된 데이터셋 목록을 반환한다."""
+
+    return list_audio_dataset_records()
+
+
+@app.delete("/api/audio-datasets/{dataset_id}", response_model=VoiceAssetDeleteResponse)
+def delete_audio_dataset(dataset_id: str) -> VoiceAssetDeleteResponse:
+    """공용 오디오 데이터셋 폴더 전체를 삭제한다.
+
+    Args:
+        dataset_id: 삭제할 데이터셋 식별자.
+
+    Returns:
+        삭제된 파일 개수와 데이터셋 식별자.
+    """
+
+    dataset_dir = storage.dataset_dir(dataset_id)
+    manifest_path = dataset_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Audio dataset not found.")
+
+    try:
+        record = storage.read_json(manifest_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid audio dataset manifest: {exc}") from exc
+
+    if record.get("target") not in {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step"}:
+        raise HTTPException(status_code=400, detail="This endpoint only deletes cross-engine audio datasets.")
+
+    removed = sum(1 for item in dataset_dir.rglob("*") if item.is_file())
+    shutil.rmtree(dataset_dir)
+    return VoiceAssetDeleteResponse(kind="audio_dataset", asset_id=dataset_id, removed_files=removed)
 
 
 @app.get("/api/datasets/{dataset_id}", response_model=FineTuneDataset)

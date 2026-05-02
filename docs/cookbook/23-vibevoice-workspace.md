@@ -17,6 +17,20 @@ VibeVoice는 Qwen/S2-Pro를 대체하는 하나의 단일 TTS 탭이 아니라, 
 - `VibeVoice Model Tools`
   TTS LoRA merge, merge 검증, NnScaler checkpoint 변환을 실행합니다.
 
+## 데이터셋 준비
+
+VibeVoice 데이터셋 탭은 직접 JSONL 경로만 받는 화면이 아닙니다.
+
+- `생성 갤러리`
+  앱에서 만든 음성을 골라 `train.jsonl`, `validation.jsonl`로 정리합니다.
+- `폴더 경로`
+  오디오 폴더를 스캔하고, 같은 이름의 `.txt`/`.lab`가 있으면 텍스트로 사용합니다.
+- `ASR 자동 전사`
+  텍스트가 없는 샘플은 선택한 ASR 모델로 전사합니다.
+
+생성된 JSONL 기본 컬럼은 `text`, `audio`, `voice_prompts`이며, 학습 탭의 column 설정에서 바꿀 수 있습니다.
+공통 폴더 구조는 [27-cross-engine-datasets.md](27-cross-engine-datasets.md)에 정리되어 있습니다.
+
 ## 설치와 다운로드
 
 ```bash
