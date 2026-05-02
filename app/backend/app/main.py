@@ -9,8 +9,10 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List, Optional
 
 import librosa
@@ -21,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+from starlette.background import BackgroundTask
 
 from .ace_step import AceStepComposer, AceStepError
 from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
@@ -107,6 +110,7 @@ from .schemas import (
     UniversalInferenceRequest,
     VibeVoiceASRRequest,
     VibeVoiceASRResponse,
+    VibeVoiceModelAsset,
     VibeVoiceRuntimeResponse,
     VibeVoiceTTSRequest,
     VibeVoiceModelToolRequest,
@@ -906,6 +910,75 @@ def voice_image_url_for(kind: str, asset_id: Optional[str]) -> Optional[str]:
     if not matches:
         return None
     return audio_url_for(storage.relpath(matches[0]))
+
+
+def _resolve_repo_path(value: Any) -> Optional[Path]:
+    """레코드 안의 상대/절대 경로를 프로젝트 내부 실제 파일로 안전하게 해석한다."""
+
+    if not value:
+        return None
+    candidate = Path(str(value))
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    try:
+        resolved = candidate.resolve()
+    except Exception:
+        return None
+    repo_root = REPO_ROOT.resolve()
+    if repo_root not in (resolved, *resolved.parents):
+        return None
+    return resolved if resolved.exists() else None
+
+
+def _add_archive_path(zip_file: zipfile.ZipFile, source: Path, archive_root: str, seen: set[str]) -> None:
+    """파일 또는 디렉터리를 zip에 추가하되 중복과 프로젝트 외부 경로를 피한다."""
+
+    try:
+        resolved = source.resolve()
+    except Exception:
+        return
+    if not resolved.exists():
+        return
+
+    if resolved.is_dir():
+        for child in sorted(resolved.rglob("*")):
+            if child.is_file():
+                _add_archive_path(zip_file, child, f"{archive_root}/{resolved.name}", seen)
+        return
+
+    key = str(resolved)
+    if key in seen:
+        return
+    seen.add(key)
+
+    try:
+        relative = resolved.relative_to(REPO_ROOT)
+    except ValueError:
+        relative = Path(resolved.name)
+    zip_file.write(resolved, f"{archive_root}/{relative.as_posix()}")
+
+
+def _archive_response(name: str, paths: List[Path], readme: str = "") -> FileResponse:
+    """여러 자산 파일을 임시 zip으로 묶어 다운로드 응답을 만든다."""
+
+    archive_name = f"{storage.slugify(name, default='voice-studio-asset')}.zip"
+    temp = NamedTemporaryFile(delete=False, suffix=".zip", prefix="download_", dir=str(storage.data_dir))
+    temp_path = Path(temp.name)
+    temp.close()
+
+    seen: set[str] = set()
+    with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as zip_file:
+        for path in paths:
+            _add_archive_path(zip_file, path, storage.slugify(name, default="asset"), seen)
+        if readme or not seen:
+            zip_file.writestr(f"{storage.slugify(name, default='asset')}/README.txt", readme or "No local files were available for this asset.")
+
+    return FileResponse(
+        temp_path,
+        media_type="application/zip",
+        filename=archive_name,
+        background=BackgroundTask(lambda path: Path(path).unlink(missing_ok=True), str(temp_path)),
+    )
 
 
 def get_preset_record(preset_id: str) -> JsonDict:
@@ -2506,6 +2579,73 @@ def vibevoice_runtime() -> VibeVoiceRuntimeResponse:
     """VibeVoice vendor checkout/model availability."""
 
     return VibeVoiceRuntimeResponse(**vibevoice_engine.status())
+
+
+def _path_mtime_iso(path: Path) -> str:
+    """Return a stable ISO timestamp for file-system discovered assets."""
+
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+    except OSError:
+        return utc_now()
+
+
+def list_vibevoice_model_assets() -> List[VibeVoiceModelAsset]:
+    """List VibeVoice models/adapters that can be selected instead of typed paths."""
+
+    records: Dict[str, VibeVoiceModelAsset] = {}
+
+    def add_asset(path: Path, *, name: str, kind: str, notes: str = "") -> None:
+        if not path.exists():
+            return
+        relpath = storage.relpath(path)
+        records[relpath] = VibeVoiceModelAsset(
+            id=hashlib.sha1(relpath.encode("utf-8")).hexdigest()[:12],
+            name=name,
+            kind=kind,
+            path=relpath,
+            created_at=_path_mtime_iso(path),
+            notes=notes,
+        )
+
+    stock_profiles = [
+        ("tts_15b", "VibeVoice-1.5B", "base_model", "기본 TTS 모델"),
+        ("tts_7b", "VibeVoice-7B", "base_model", "대형 TTS 모델"),
+        ("realtime", "VibeVoice-Realtime-0.5B", "base_model", "Realtime TTS 모델"),
+        ("asr", "VibeVoice-ASR", "asr_model", "ASR 모델"),
+    ]
+    for profile, label, kind, notes in stock_profiles:
+        try:
+            add_asset(vibevoice_engine.model_path(profile), name=label, kind=kind, notes=notes)
+        except Exception:
+            continue
+
+    model_root = vibevoice_engine.model_root
+    if model_root.exists():
+        stock_names = {"VibeVoice-ASR", "VibeVoice-Realtime-0.5B", "VibeVoice-1.5B", "VibeVoice-7B"}
+        for candidate in sorted(model_root.iterdir(), key=lambda item: item.stat().st_mtime if item.exists() else 0, reverse=True):
+            if candidate.name in stock_names:
+                continue
+            if candidate.is_dir():
+                add_asset(candidate, name=candidate.name, kind="merged_model", notes="병합 또는 변환된 VibeVoice 모델")
+            elif candidate.suffix.lower() in {".safetensors", ".bin", ".pt", ".pth"}:
+                add_asset(candidate, name=candidate.stem, kind="model_file", notes="VibeVoice 모델 파일")
+
+    training_root = storage.audio_tools_dir / "vibevoice_training"
+    if training_root.exists():
+        for adapter_dir in sorted(training_root.glob("**/adapter"), key=lambda item: item.stat().st_mtime if item.exists() else 0, reverse=True):
+            if adapter_dir.is_dir():
+                run_name = adapter_dir.parent.name
+                add_asset(adapter_dir, name=run_name, kind="lora_adapter", notes="VibeVoice 학습 결과 LoRA adapter")
+
+    return sorted(records.values(), key=lambda item: item.created_at or "", reverse=True)
+
+
+@app.get("/api/vibevoice/model-assets", response_model=List[VibeVoiceModelAsset])
+def vibevoice_model_assets() -> List[VibeVoiceModelAsset]:
+    """Return selectable VibeVoice model assets for the Web UI."""
+
+    return list_vibevoice_model_assets()
 
 
 @app.post("/api/vibevoice/asr", response_model=VibeVoiceASRResponse)
@@ -5509,6 +5649,27 @@ def clone_prompt_from_upload(payload: ClonePromptCreateFromUploadRequest) -> Clo
     )
 
 
+@app.get("/api/clone-prompts/{prompt_id}/download")
+def download_clone_prompt(prompt_id: str) -> FileResponse:
+    """Qwen clone prompt 자산과 참조 파일을 zip으로 다운로드한다."""
+
+    record = storage.get_record(storage.clone_prompts_dir, prompt_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Clone prompt not found.")
+
+    paths = storage.find_record_paths(storage.clone_prompts_dir, prompt_id)
+    for key in ("prompt_path", "reference_audio_path"):
+        resolved = _resolve_repo_path(record.get(key))
+        if resolved:
+            paths.append(resolved)
+
+    return _archive_response(
+        str(record.get("name") or record.get("source_type") or prompt_id),
+        paths,
+        readme="Qwen clone prompt archive. Import the .pkl prompt and metadata back into Voice Studio when needed.",
+    )
+
+
 @app.get("/api/presets", response_model=List[CharacterPreset])
 def list_presets() -> List[CharacterPreset]:
     """저장된 캐릭터 프리셋 목록을 반환한다.
@@ -5574,6 +5735,30 @@ def get_preset(preset_id: str) -> CharacterPreset:
     return CharacterPreset(**record)
 
 
+@app.get("/api/presets/{preset_id}/download")
+def download_preset(preset_id: str) -> FileResponse:
+    """Qwen 프리셋 메타데이터, clone prompt, 참조 음성, 이미지를 zip으로 다운로드한다."""
+
+    record = get_preset_record(preset_id)
+    paths = storage.find_record_paths(storage.presets_dir, preset_id)
+
+    for key in ("reference_audio_path", "clone_prompt_path"):
+        resolved = _resolve_repo_path(record.get(key))
+        if resolved:
+            paths.append(resolved)
+
+    clone_prompt_id = clone_prompt_id_from_path(record.get("clone_prompt_path"))
+    if clone_prompt_id:
+        paths.extend(storage.find_record_paths(storage.clone_prompts_dir, clone_prompt_id))
+
+    paths.extend(_voice_image_paths_for("preset", preset_id))
+    return _archive_response(
+        str(record.get("name") or preset_id),
+        paths,
+        readme="Qwen preset archive. Contains preset metadata, clone prompt assets, reference audio, and optional card image.",
+    )
+
+
 @app.delete("/api/presets/{preset_id}", response_model=VoiceAssetDeleteResponse)
 def delete_preset(preset_id: str) -> VoiceAssetDeleteResponse:
     """저장된 캐릭터 프리셋과 부속 이미지를 함께 삭제한다.
@@ -5602,6 +5787,24 @@ def delete_preset(preset_id: str) -> VoiceAssetDeleteResponse:
     return VoiceAssetDeleteResponse(kind="preset", asset_id=preset_id, removed_files=removed)
 
 
+@app.get("/api/s2-pro/voices/{voice_id}/download")
+def download_s2_pro_voice(voice_id: str) -> FileResponse:
+    """S2-Pro 저장 목소리 메타데이터와 참조 음성을 zip으로 다운로드한다."""
+
+    record = get_s2pro_voice_record(voice_id)
+    paths = storage.find_record_paths(storage.s2pro_voices_dir, record.id)
+    for key in ("reference_audio_path", "qwen_clone_prompt_path"):
+        resolved = _resolve_repo_path(getattr(record, key, None))
+        if resolved:
+            paths.append(resolved)
+    paths.extend(_voice_image_paths_for("s2pro", record.id))
+    return _archive_response(
+        record.name or record.id,
+        paths,
+        readme="S2-Pro voice archive. Contains reusable voice metadata, reference audio, optional Qwen bridge prompt, and card image.",
+    )
+
+
 @app.delete("/api/s2-pro/voices/{voice_id}", response_model=VoiceAssetDeleteResponse)
 def delete_s2_pro_voice(voice_id: str) -> VoiceAssetDeleteResponse:
     """저장된 S2-Pro 보이스를 메타데이터와 부속 이미지까지 삭제한다.
@@ -5628,6 +5831,27 @@ def delete_s2_pro_voice(voice_id: str) -> VoiceAssetDeleteResponse:
         except FileNotFoundError:
             continue
     return VoiceAssetDeleteResponse(kind="s2pro", asset_id=record.id, removed_files=removed)
+
+
+@app.get("/api/audio-tools/voice-models/{model_id}/download")
+def download_voice_changer_model(model_id: str) -> FileResponse:
+    """RVC 모델의 `.pth`, `.index`, 카드 이미지를 zip으로 다운로드한다."""
+
+    matches = [item for item in list_voice_changer_models() if item.id == model_id]
+    if not matches:
+        raise HTTPException(status_code=404, detail="Voice changer model not found.")
+    target = matches[0]
+    paths: List[Path] = []
+    for path_str in (target.model_path, target.index_path):
+        resolved = _resolve_repo_path(path_str)
+        if resolved:
+            paths.append(resolved)
+    paths.extend(_voice_image_paths_for("rvc", model_id))
+    return _archive_response(
+        target.label or model_id,
+        paths,
+        readme="RVC model archive. Contains the model checkpoint, optional index, and optional card image.",
+    )
 
 
 @app.delete("/api/audio-tools/voice-models/{model_id}", response_model=VoiceAssetDeleteResponse)
@@ -5979,6 +6203,56 @@ def list_datasets() -> List[FineTuneDataset]:
     return list_dataset_records()
 
 
+@app.delete("/api/datasets/{dataset_id}", response_model=VoiceAssetDeleteResponse)
+def delete_finetune_dataset(dataset_id: str) -> VoiceAssetDeleteResponse:
+    """Qwen 계열 파인튜닝 데이터셋을 삭제한다.
+
+    Args:
+        dataset_id: 삭제할 Qwen 데이터셋 식별자.
+
+    Returns:
+        삭제된 파일 개수와 데이터셋 식별자.
+    """
+
+    get_dataset_record(dataset_id)
+    dataset_dir = storage.dataset_dir(dataset_id)
+    removed = 0
+    if dataset_dir.exists():
+        removed += sum(1 for item in dataset_dir.rglob("*") if item.is_file())
+        shutil.rmtree(dataset_dir)
+
+    for record_path in storage.find_record_paths(storage.datasets_dir, dataset_id):
+        try:
+            if record_path.exists():
+                record_path.unlink()
+                removed += 1
+        except FileNotFoundError:
+            continue
+
+    return VoiceAssetDeleteResponse(kind="dataset", asset_id=dataset_id, removed_files=removed)
+
+
+@app.get("/api/datasets/{dataset_id}/download")
+def download_finetune_dataset(dataset_id: str) -> FileResponse:
+    """Qwen 계열 데이터셋 폴더와 레거시 레코드를 zip으로 다운로드한다."""
+
+    record = get_dataset_record(dataset_id)
+    paths: List[Path] = []
+    dataset_dir = storage.dataset_dir(dataset_id)
+    if dataset_dir.exists():
+        paths.append(dataset_dir)
+    paths.extend(storage.find_record_paths(storage.datasets_dir, dataset_id))
+    for key in ("raw_jsonl_path", "prepared_jsonl_path", "manifest_path", "ref_audio_path"):
+        resolved = _resolve_repo_path(record.get(key))
+        if resolved:
+            paths.append(resolved)
+    return _archive_response(
+        str(record.get("name") or dataset_id),
+        paths,
+        readme="Qwen fine-tuning dataset archive. Contains audio assets, transcript JSONL files, manifest, and reference audio when available.",
+    )
+
+
 @app.get("/api/audio-datasets", response_model=List[AudioDatasetRecord])
 def list_audio_datasets() -> List[AudioDatasetRecord]:
     """Qwen 외 엔진용으로 준비된 데이터셋 목록을 반환한다."""
@@ -6013,6 +6287,27 @@ def delete_audio_dataset(dataset_id: str) -> VoiceAssetDeleteResponse:
     removed = sum(1 for item in dataset_dir.rglob("*") if item.is_file())
     shutil.rmtree(dataset_dir)
     return VoiceAssetDeleteResponse(kind="audio_dataset", asset_id=dataset_id, removed_files=removed)
+
+
+@app.get("/api/audio-datasets/{dataset_id}/download")
+def download_audio_dataset(dataset_id: str) -> FileResponse:
+    """S2-Pro/VibeVoice/RVC/MMAudio/ACE-Step용 공용 데이터셋을 zip으로 다운로드한다."""
+
+    dataset_dir = storage.dataset_dir(dataset_id)
+    manifest_path = dataset_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Audio dataset not found.")
+    try:
+        record = storage.read_json(manifest_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid audio dataset manifest: {exc}") from exc
+    if record.get("target") not in {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step"}:
+        raise HTTPException(status_code=400, detail="This endpoint only downloads cross-engine audio datasets.")
+    return _archive_response(
+        str(record.get("name") or dataset_id),
+        [dataset_dir],
+        readme="Cross-engine dataset archive. Contains normalized audio, manifests, transcripts, and engine-specific prepared files.",
+    )
 
 
 @app.get("/api/datasets/{dataset_id}", response_model=FineTuneDataset)
@@ -6228,6 +6523,75 @@ def get_finetune_run(run_id: str) -> FineTuneRun:
     if not payload:
         raise HTTPException(status_code=404, detail="Fine-tuning run not found.")
     return FineTuneRun(**payload)
+
+
+@app.get("/api/finetune-runs/{run_id}/download")
+def download_finetune_run(run_id: str) -> FileResponse:
+    """완료된 fine-tuned 모델 run 폴더와 실행 메타데이터를 zip으로 다운로드한다."""
+
+    payload = storage.get_record(storage.finetune_runs_dir, run_id)
+    run_root = storage.finetune_runs_dir.resolve()
+    run_dir = (storage.finetune_runs_dir / run_id).resolve()
+    if run_root not in (run_dir, *run_dir.parents):
+        raise HTTPException(status_code=400, detail="Invalid fine-tuning run id.")
+
+    record_paths = storage.find_record_paths(storage.finetune_runs_dir, run_id)
+    if not run_dir.exists() and not payload and not record_paths:
+        raise HTTPException(status_code=404, detail="Fine-tuning run not found.")
+
+    paths: List[Path] = []
+    if run_dir.exists():
+        paths.append(run_dir)
+    paths.extend(record_paths)
+    if payload:
+        for key in ("dataset_path", "final_checkpoint_path", "log_path"):
+            resolved = _resolve_repo_path(payload.get(key))
+            if resolved:
+                paths.append(resolved)
+
+    return _archive_response(
+        str((payload or {}).get("output_name") or run_id),
+        paths,
+        readme="Fine-tuned model archive. Contains the run folder, final checkpoint files, logs, and run metadata when available.",
+    )
+
+
+@app.delete("/api/finetune-runs/{run_id}", response_model=VoiceAssetDeleteResponse)
+def delete_finetune_run(run_id: str) -> VoiceAssetDeleteResponse:
+    """완료된 Qwen fine-tuned 모델 run 폴더와 실행 레코드를 삭제한다.
+
+    기본 모델은 `data/finetune-runs` 밖에 있으므로 이 엔드포인트로 삭제되지 않는다.
+
+    Args:
+        run_id: 삭제할 fine-tuning 실행 식별자.
+
+    Returns:
+        삭제 결과와 제거된 파일 개수.
+    """
+
+    run_root = storage.finetune_runs_dir.resolve()
+    run_dir = (storage.finetune_runs_dir / run_id).resolve()
+    if run_root not in (run_dir, *run_dir.parents):
+        raise HTTPException(status_code=400, detail="Invalid fine-tuning run id.")
+
+    record_paths = storage.find_record_paths(storage.finetune_runs_dir, run_id)
+    if not run_dir.exists() and not record_paths:
+        raise HTTPException(status_code=404, detail="Fine-tuning run not found.")
+
+    removed = 0
+    if run_dir.exists():
+        removed += sum(1 for item in run_dir.rglob("*") if item.is_file())
+        shutil.rmtree(run_dir)
+
+    for record_path in record_paths:
+        try:
+            if record_path.exists():
+                record_path.unlink()
+                removed += 1
+        except FileNotFoundError:
+            continue
+
+    return VoiceAssetDeleteResponse(kind="finetune_run", asset_id=run_id, removed_files=removed)
 
 
 @app.get("/", include_in_schema=False)

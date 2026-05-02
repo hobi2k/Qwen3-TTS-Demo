@@ -1040,6 +1040,17 @@ class VibeVoiceModelToolResponse(BaseModel):
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
+class VibeVoiceModelAsset(BaseModel):
+    """VibeVoice 도구에서 선택할 수 있는 로컬 모델/어댑터 자산."""
+
+    id: str
+    name: str
+    kind: str
+    path: str
+    created_at: Optional[str] = None
+    notes: str = ""
+
+
 class AudioConvertRequest(BaseModel):
     """오디오 포맷/샘플레이트 변환 요청 스키마다."""
 
