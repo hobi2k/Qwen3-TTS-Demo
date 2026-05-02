@@ -909,6 +909,8 @@ function StudioApp() {
   const [voiceGalleryView, setVoiceGalleryView] = useState<VoiceLibraryView>("trained");
   const [datasetLibraryTarget, setDatasetLibraryTarget] = useState<DatasetLibraryTarget>("qwen");
   const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>("all");
+  const [gallerySortMode, setGallerySortMode] = useState<"recent" | "preset">("recent");
+  const [galleryPresetFilter, setGalleryPresetFilter] = useState("all");
   const [activeGuideIndex, setActiveGuideIndex] = useState(0);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
   const [ttsSideView, setTtsSideView] = useState<"settings" | "history">("settings");
@@ -922,10 +924,14 @@ function StudioApp() {
   const [selectedGalleryIds, setSelectedGalleryIds] = useState<string[]>([]);
   const [clonePrompts, setClonePrompts] = useState<ClonePromptRecord[]>([]);
   const [presets, setPresets] = useState<CharacterPreset[]>([]);
+  const [editingPresetId, setEditingPresetId] = useState("");
+  const [presetEditForm, setPresetEditForm] = useState({ name: "", notes: "" });
   const [datasets, setDatasets] = useState<FineTuneDataset[]>([]);
   const [audioDatasets, setAudioDatasets] = useState<AudioDatasetRecord[]>([]);
   const [selectedMMAudioDatasetId, setSelectedMMAudioDatasetId] = useState("");
   const [runs, setRuns] = useState<FineTuneRun[]>([]);
+  const [editingModelRunId, setEditingModelRunId] = useState("");
+  const [modelEditName, setModelEditName] = useState("");
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const bootstrapLoadedRef = useRef(false);
@@ -1788,7 +1794,25 @@ function StudioApp() {
     rvc: history.filter((record) => galleryFilterForRecord(record) === "rvc").length,
     utility: history.filter((record) => galleryFilterForRecord(record) === "utility").length,
   };
-  const filteredHistory = history.filter((record) => galleryFilter === "all" || galleryFilterForRecord(record) === galleryFilter);
+  const galleryPresetOptions = Array.from(
+    history.reduce((items, record) => {
+      const key = galleryPresetKey(record);
+      if (key !== "none") {
+        items.set(key, galleryPresetDescription(record));
+      }
+      return items;
+    }, new Map<string, string>()),
+  ).sort((a, b) => a[1].localeCompare(b[1], locale));
+  const filteredHistory = history
+    .filter((record) => galleryFilter === "all" || galleryFilterForRecord(record) === galleryFilter)
+    .filter((record) => galleryPresetFilter === "all" || galleryPresetKey(record) === galleryPresetFilter)
+    .sort((a, b) => {
+      if (gallerySortMode === "preset") {
+        const labelCompare = galleryPresetDescription(a).localeCompare(galleryPresetDescription(b), locale);
+        if (labelCompare !== 0) return labelCompare;
+      }
+      return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    });
   const datasetLibraryBuckets: Record<DatasetLibraryTarget, number> = {
     qwen: datasets.length,
     s2_pro: audioDatasets.filter((dataset) => dataset.target === "s2_pro").length,
@@ -1862,6 +1886,34 @@ function StudioApp() {
   const presetPromptPaths = new Set(presets.map((preset) => preset.clone_prompt_path).filter(Boolean));
   const rawQwenClonePrompts = clonePrompts.filter((prompt) => !presetPromptPaths.has(prompt.prompt_path));
   const qwenVoiceAssetCount = presets.length + rawQwenClonePrompts.length;
+  function galleryPresetKey(record: GenerationRecord): string {
+    const filterKind = galleryFilterForRecord(record);
+    const meta = record.meta || {};
+    if (filterKind === "s2pro_preset") {
+      const referenceId = String(meta.s2_pro_reference_id || meta.reference_id || meta.voice_id || "");
+      const voice = s2ProVoices.find(
+        (item) =>
+          item.id === referenceId ||
+          item.reference_id === referenceId ||
+          item.reference_audio_path === record.source_ref_audio_path,
+      );
+      return voice ? `s2:${voice.id || voice.reference_id}` : referenceId ? `s2:${referenceId}` : "s2:unknown";
+    }
+    if (filterKind === "qwen_preset") {
+      const clonePromptPath = typeof meta.clone_prompt_path === "string" ? meta.clone_prompt_path : "";
+      const metaPresetId = typeof meta.preset_id === "string" ? meta.preset_id : "";
+      const preset = presets.find(
+        (item) =>
+          item.id === record.preset_id ||
+          item.id === metaPresetId ||
+          (!!clonePromptPath && item.clone_prompt_path === clonePromptPath) ||
+          item.reference_audio_path === record.source_ref_audio_path,
+      );
+      return preset ? `qwen:${preset.id}` : metaPresetId ? `qwen:${metaPresetId}` : "qwen:unknown";
+    }
+    return "none";
+  }
+
   function galleryPresetDescription(record: GenerationRecord): string {
     const filterKind = galleryFilterForRecord(record);
     const meta = record.meta || {};
@@ -2375,6 +2427,36 @@ function StudioApp() {
 
   function toggleGallerySelection(recordId: string) {
     setSelectedGalleryIds((prev) => (prev.includes(recordId) ? prev.filter((id) => id !== recordId) : [...prev, recordId]));
+  }
+
+  function startPresetEdit(preset: CharacterPreset) {
+    setEditingPresetId(preset.id);
+    setPresetEditForm({ name: preset.name, notes: preset.notes || "" });
+  }
+
+  async function handleSavePresetEdit(presetId: string) {
+    await runAction(async () => {
+      const updated = await api.updatePreset(presetId, presetEditForm);
+      setPresets((items) => items.map((item) => (item.id === presetId ? updated : item)));
+      setEditingPresetId("");
+      setMessage("프리셋 정보를 수정했습니다.");
+    });
+  }
+
+  function startModelEdit(model: ModelInfo) {
+    const runId = fineTuneRunIdFromModel(model);
+    setEditingModelRunId(runId);
+    setModelEditName(displayModelName(model));
+  }
+
+  async function handleSaveModelEdit(runId: string) {
+    await runAction(async () => {
+      const updated = await api.updateFineTuneRun(runId, { display_name: modelEditName });
+      setRuns((items) => items.map((item) => (item.id === runId ? updated : item)));
+      setEditingModelRunId("");
+      await refreshAll();
+      setMessage("모델 이름을 수정했습니다.");
+    });
   }
 
   async function handleDeleteHistoryRecord(recordId: string) {
@@ -4100,17 +4182,50 @@ function StudioApp() {
             <div className="flex flex-col gap-3">
               <TabsContent value="trained" className="m-0 flex flex-col gap-3">
                 {latestFineTunedModels.length ? (
-                  latestFineTunedModels.map((model) => (
+                  latestFineTunedModels.map((model) => {
+                    const runId = fineTuneRunIdFromModel(model);
+                    const isEditing = editingModelRunId === runId;
+                    return (
                     <WorkspaceCard key={model.model_id} className="flex flex-wrap items-center gap-4">
-                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
-                        <MiniWaveform dense />
-                      </div>
+                      <VoiceAssetAvatar
+                        kind="trained"
+                        assetId={runId}
+                        imageUrl={model.image_url}
+                        alt={displayModelName(model)}
+                        fallback={<MiniWaveform dense />}
+                        onChange={(nextUrl) =>
+                          setModels((items) =>
+                            items.map((item) => (item.model_id === model.model_id ? { ...item, image_url: nextUrl } : item)),
+                          )
+                        }
+                      />
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <strong className="text-sm font-medium text-ink">{displayModelName(model)}</strong>
-                          <span className="text-xs text-ink-muted">{model.default_speaker ? t("voices.trained.speaker", "{name} 목소리").replace("{name}", model.default_speaker) : t("voices.trained.fallback", "학습 모델")}</span>
-                        </div>
-                        <p className="text-sm text-ink-muted">{model.notes || t("voices.trained.note", "바로 선택해서 텍스트 음성 변환에 사용할 수 있는 학습 결과입니다.")}</p>
+                        {isEditing ? (
+                          <div className="flex flex-col gap-2">
+                            <Label className="text-xs font-medium text-ink-muted">{t("voices.trained.editName", "모델 이름")}</Label>
+                            <div className="flex flex-wrap gap-2">
+                              <Input
+                                value={modelEditName}
+                                onChange={(event) => setModelEditName(event.target.value)}
+                                className="min-w-[220px] flex-1"
+                              />
+                              <Button size="sm" disabled={!modelEditName.trim()} onClick={() => handleSaveModelEdit(runId)} type="button">
+                                {t("action.save", "저장")}
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => setEditingModelRunId("")} type="button">
+                                {t("action.cancel", "취소")}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex flex-wrap items-baseline gap-2">
+                              <strong className="text-sm font-medium text-ink">{displayModelName(model)}</strong>
+                              <span className="text-xs text-ink-muted">{model.default_speaker ? t("voices.trained.speaker", "{name} 목소리").replace("{name}", model.default_speaker) : t("voices.trained.fallback", "학습 모델")}</span>
+                            </div>
+                            <p className="text-sm text-ink-muted">{model.notes || t("voices.trained.note", "바로 선택해서 텍스트 음성 변환에 사용할 수 있는 학습 결과입니다.")}</p>
+                          </>
+                        )}
                         <div className="flex flex-wrap gap-1.5">
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.source}</Badge>
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.default_speaker || "speaker"}</Badge>
@@ -4119,8 +4234,11 @@ function StudioApp() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <DownloadAssetButton
-                          href={apiUrl(`/api/finetune-runs/${encodeURIComponent(fineTuneRunIdFromModel(model))}/download`)}
+                          href={apiUrl(`/api/finetune-runs/${encodeURIComponent(runId)}/download`)}
                         />
+                        <Button variant="outline" size="sm" onClick={() => startModelEdit(model)} type="button">
+                          {t("action.edit", "수정")}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -4138,10 +4256,9 @@ function StudioApp() {
                         </Button>
                         <DeleteAssetButton
                           kind="trained"
-                          assetId={fineTuneRunIdFromModel(model)}
+                          assetId={runId}
                           assetName={displayModelName(model)}
                           onDeleted={() => {
-                            const runId = fineTuneRunIdFromModel(model);
                             setModels((items) => items.filter((item) => item.model_id !== model.model_id));
                             setRuns((items) => items.filter((item) => item.id !== runId));
                             void refreshAll();
@@ -4149,7 +4266,8 @@ function StudioApp() {
                         />
                       </div>
                     </WorkspaceCard>
-                  ))
+                    );
+                  })
                 ) : (
                   <WorkspaceEmptyState
                     icon={Library}
@@ -4167,7 +4285,9 @@ function StudioApp() {
               <TabsContent value="qwen" className="m-0 flex flex-col gap-3">
                 {qwenVoiceAssetCount ? (
                   <>
-                    {presets.map((preset) => (
+                    {presets.map((preset) => {
+                      const isEditing = editingPresetId === preset.id;
+                      return (
                       <WorkspaceCard key={preset.id} className="flex flex-wrap items-center gap-4">
                         <VoiceAssetAvatar
                           kind="preset"
@@ -4182,11 +4302,33 @@ function StudioApp() {
                           }
                         />
                         <div className="flex min-w-0 flex-1 flex-col gap-2">
-                          <div className="flex flex-wrap items-baseline gap-2">
-                            <strong className="text-sm font-medium text-ink">{preset.name}</strong>
-                            <span className="text-xs text-ink-muted">{preset.language} · {formatDate(preset.created_at)}</span>
-                          </div>
-                          <p className="text-sm text-ink-muted line-clamp-2">{preset.reference_text}</p>
+                          {isEditing ? (
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(220px,0.5fr)_minmax(260px,1fr)]">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-medium text-ink-muted">{t("voices.qwen.editName", "프리셋 이름")}</Label>
+                                <Input
+                                  value={presetEditForm.name}
+                                  onChange={(event) => setPresetEditForm((prev) => ({ ...prev, name: event.target.value }))}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-medium text-ink-muted">{t("voices.qwen.editNotes", "프리셋 설명")}</Label>
+                                <Textarea
+                                  value={presetEditForm.notes}
+                                  onChange={(event) => setPresetEditForm((prev) => ({ ...prev, notes: event.target.value }))}
+                                  className="min-h-20"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex flex-wrap items-baseline gap-2">
+                                <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                                <span className="text-xs text-ink-muted">{preset.language} · {formatDate(preset.created_at)}</span>
+                              </div>
+                              <p className="text-sm text-ink-muted line-clamp-2">{preset.notes || preset.reference_text}</p>
+                            </>
+                          )}
                           <div className="flex flex-wrap gap-1.5">
                             <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">Qwen 프리셋</Badge>
                             <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{preset.source_type}</Badge>
@@ -4196,6 +4338,20 @@ function StudioApp() {
                           <DownloadAssetButton
                             href={apiUrl(`/api/presets/${encodeURIComponent(preset.id)}/download`)}
                           />
+                          {isEditing ? (
+                            <>
+                              <Button size="sm" disabled={!presetEditForm.name.trim()} onClick={() => handleSavePresetEdit(preset.id)} type="button">
+                                {t("action.save", "저장")}
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => setEditingPresetId("")} type="button">
+                                {t("action.cancel", "취소")}
+                              </Button>
+                            </>
+                          ) : (
+                            <Button variant="outline" size="sm" onClick={() => startPresetEdit(preset)} type="button">
+                              {t("action.edit", "수정")}
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -4231,7 +4387,8 @@ function StudioApp() {
                           />
                         </div>
                       </WorkspaceCard>
-                    ))}
+                      );
+                    })}
                     {rawQwenClonePrompts.map((prompt) => (
                       <WorkspaceCard key={prompt.id} className="flex flex-wrap items-center gap-4">
                         <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
@@ -4593,6 +4750,7 @@ function StudioApp() {
                     type="button"
                     onClick={() => {
                       setGalleryFilter(filter);
+                      setGalleryPresetFilter("all");
                       setSelectedGalleryIds([]);
                     }}
                     className={`rounded-full border px-3 py-1 text-xs transition ${
@@ -4615,6 +4773,40 @@ function StudioApp() {
                 <span className="text-xs text-ink-muted">{t("gallery.selectionHint")}</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Select
+                  value={gallerySortMode}
+                  onValueChange={(value) => {
+                    setGallerySortMode(value as "recent" | "preset");
+                    setSelectedGalleryIds([]);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[130px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">{t("gallery.sort.recent", "최신순")}</SelectItem>
+                    <SelectItem value="preset">{t("gallery.sort.preset", "프리셋별")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={galleryPresetFilter}
+                  onValueChange={(value) => {
+                    setGalleryPresetFilter(value);
+                    setSelectedGalleryIds([]);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("gallery.presetFilter.all", "전체 프리셋")}</SelectItem>
+                    {galleryPresetOptions.map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button variant="outline" size="sm" disabled={!filteredHistory.length} onClick={() => setSelectedGalleryIds(filteredHistory.map((record) => gallerySelectionKey(record)))} type="button">
                   {t("action.selectAll")}
                 </Button>

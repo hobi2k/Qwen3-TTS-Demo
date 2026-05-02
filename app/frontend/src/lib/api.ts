@@ -58,6 +58,8 @@ import type {
   SpeakerInfo,
   UploadResponse,
   UniversalInferenceRequest,
+  UpdateFineTuneRunRequest,
+  UpdatePresetRequest,
   VibeVoiceASRRequest,
   VibeVoiceASRResponse,
   VibeVoiceModelAsset,
@@ -233,6 +235,14 @@ export const api = {
     });
   },
 
+  updatePreset(presetId: string, payload: UpdatePresetRequest): Promise<CharacterPreset> {
+    return request<CharacterPreset>(`/api/presets/${encodeURIComponent(presetId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
   deleteS2ProVoice(voiceId: string): Promise<VoiceAssetDeleteResponse> {
     return request<VoiceAssetDeleteResponse>(`/api/s2-pro/voices/${voiceId}`, {
       method: "DELETE",
@@ -293,6 +303,14 @@ export const api = {
       `/api/finetune-runs/${encodeURIComponent(runId)}`,
       { method: "DELETE" },
     );
+  },
+
+  updateFineTuneRun(runId: string, payload: UpdateFineTuneRunRequest): Promise<FineTuneRun> {
+    return request<FineTuneRun>(`/api/finetune-runs/${encodeURIComponent(runId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
 
   audioToolCapabilities(): Promise<AudioToolCapability[]> {

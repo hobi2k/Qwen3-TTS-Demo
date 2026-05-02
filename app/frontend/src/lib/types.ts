@@ -31,6 +31,7 @@ export interface ModelInfo {
   default_speaker?: string | null;
   model_family?: string | null;
   speaker_encoder_included?: boolean;
+  image_url?: string | null;
 }
 
 export interface SpeakerInfo {
@@ -125,7 +126,12 @@ export interface CharacterPreset {
   image_url?: string | null;
 }
 
-export type VoiceAssetKind = "preset" | "s2pro" | "rvc";
+export interface UpdatePresetRequest {
+  name?: string;
+  notes?: string;
+}
+
+export type VoiceAssetKind = "preset" | "s2pro" | "rvc" | "trained";
 
 export interface VoiceImageUploadResponse {
   kind: VoiceAssetKind;
@@ -172,6 +178,12 @@ export interface FineTuneRun {
   finished_at?: string | null;
   log_path?: string | null;
   command?: string[] | null;
+  output_name?: string | null;
+  display_name?: string | null;
+}
+
+export interface UpdateFineTuneRunRequest {
+  display_name: string;
 }
 
 export interface AudioToolCapability {

@@ -71,6 +71,7 @@ from .schemas import (
     AudioTranscriptionResponse,
     CharacterPreset,
     CharacterPresetCreateRequest,
+    CharacterPresetUpdateRequest,
     ClonePromptCreateFromSampleRequest,
     ClonePromptCreateFromUploadRequest,
     ClonePromptRecord,
@@ -79,6 +80,7 @@ from .schemas import (
     FineTuneDatasetCreateRequest,
     FineTuneRun,
     FineTuneRunCreateRequest,
+    FineTuneRunUpdateRequest,
     GalleryItem,
     GenerationDeleteBatchRequest,
     GenerationDeleteResponse,
@@ -380,6 +382,8 @@ def infer_finetune_run_record(run_dir: Path) -> Optional[FineTuneRun]:
         is_selectable=True,
         stage_label="학습 완료",
         summary_label=summary_label,
+        output_name=run_dir.name,
+        display_name=None,
         model_family=model_family,
         speaker_encoder_included=speaker_encoder_included,
     )
@@ -436,7 +440,8 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
 
         run_name = checkpoint_dir.parent.name
         checkpoint_name = checkpoint_dir.name
-        label = run_name
+        run_record = storage.get_record(storage.finetune_runs_dir, run_dir.name) or {}
+        label = str(run_record.get("display_name") or run_record.get("output_name") or run_name).strip() or run_name
         notes = f"바로 추론에 사용할 수 있는 최종 모델입니다."
         if custom_names:
             notes = f"{notes} 목소리: {', '.join(custom_names)}"
@@ -459,6 +464,7 @@ def scan_finetuned_model_infos() -> List[ModelInfo]:
                 default_speaker=default_speaker,
                 model_family=model_family,
                 speaker_encoder_included=speaker_encoder_included,
+                image_url=voice_image_url_for("trained", run_name),
             )
         )
 
@@ -883,7 +889,7 @@ def delete_generation_record_files(record_id: str) -> int:
     return 1 if deleted_any else 0
 
 
-VOICE_ASSET_KINDS = {"preset", "s2pro", "rvc"}
+VOICE_ASSET_KINDS = {"preset", "s2pro", "rvc", "trained"}
 VOICE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 VOICE_IMAGE_MAX_BYTES = 4 * 1024 * 1024  # 4 MB cap keeps card images snappy.
 
@@ -1852,6 +1858,9 @@ def list_finetune_run_records() -> List[FineTuneRun]:
         record["summary_label"] = (
             "CustomVoice 학습 모델" if record.get("training_mode") == "custom_voice" else "Base 학습 모델"
         )
+        output_name = str(record.get("output_name") or Path(str(record.get("output_model_path") or record["id"])).name)
+        record["output_name"] = output_name
+        record.setdefault("display_name", output_name)
         try:
             parsed = FineTuneRun(**record)
             items.append(parsed)
@@ -5735,6 +5744,32 @@ def get_preset(preset_id: str) -> CharacterPreset:
     return CharacterPreset(**record)
 
 
+@app.patch("/api/presets/{preset_id}", response_model=CharacterPreset)
+def update_preset(preset_id: str, payload: CharacterPresetUpdateRequest) -> CharacterPreset:
+    """프리셋의 사용자 표시 이름과 설명을 수정한다."""
+
+    record = get_preset_record(preset_id)
+    updates: Dict[str, Any] = {}
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Preset name cannot be empty.")
+        updates["name"] = name
+    if payload.notes is not None:
+        updates["notes"] = payload.notes.strip()
+
+    if updates:
+        record.update(updates)
+        paths = storage.find_record_paths(storage.presets_dir, preset_id)
+        if not paths:
+            raise HTTPException(status_code=404, detail="Preset metadata file not found.")
+        for path in paths:
+            storage.write_json(path, record)
+
+    record["image_url"] = voice_image_url_for("preset", preset_id)
+    return CharacterPreset(**record)
+
+
 @app.get("/api/presets/{preset_id}/download")
 def download_preset(preset_id: str) -> FileResponse:
     """Qwen 프리셋 메타데이터, clone prompt, 참조 음성, 이미지를 zip으로 다운로드한다."""
@@ -5895,10 +5930,10 @@ async def upload_voice_image(
     asset_id: str,
     file: UploadFile = File(...),
 ) -> VoiceImageUploadResponse:
-    """프리셋, S2-Pro 보이스, RVC 모델 카드에 사용할 이미지를 업로드한다.
+    """프리셋, 훈련 모델, S2-Pro 보이스, RVC 모델 카드에 사용할 이미지를 업로드한다.
 
     Args:
-        kind: 자산 종류 (`preset`, `s2pro`, `rvc`).
+        kind: 자산 종류 (`preset`, `trained`, `s2pro`, `rvc`).
         asset_id: 자산 식별자.
         file: 업로드한 이미지 파일.
 
@@ -5940,7 +5975,7 @@ async def upload_voice_image(
 
 @app.delete("/api/voice-images/{kind}/{asset_id}", response_model=VoiceAssetDeleteResponse)
 def delete_voice_image(kind: str, asset_id: str) -> VoiceAssetDeleteResponse:
-    """프리셋, S2-Pro 보이스, RVC 모델 카드에 등록된 이미지를 제거한다."""
+    """프리셋, 훈련 모델, S2-Pro 보이스, RVC 모델 카드에 등록된 이미지를 제거한다."""
 
     _voice_image_dir(kind)  # validates kind
     removed = 0
@@ -6483,6 +6518,8 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
         "is_selectable": bool(final_checkpoint) and status == "completed",
         "stage_label": "학습 완료" if status == "completed" else "학습 실패",
         "summary_label": "CustomVoice 학습 모델" if payload.training_mode == "custom_voice" else "Base 학습 모델",
+        "output_name": payload.output_name,
+        "display_name": payload.output_name,
     }
     storage.write_json(
         storage.named_record_path(
@@ -6525,6 +6562,53 @@ def get_finetune_run(run_id: str) -> FineTuneRun:
     return FineTuneRun(**payload)
 
 
+@app.patch("/api/finetune-runs/{run_id}", response_model=FineTuneRun)
+def update_finetune_run(run_id: str, payload: FineTuneRunUpdateRequest) -> FineTuneRun:
+    """학습 결과 모델의 라이브러리 표시명을 수정한다.
+
+    기존 체크포인트 파일명은 바꾸지 않고 메타데이터만 갱신한다. 이렇게 해야
+    이미 연결된 추론 경로와 다운로드 아카이브가 깨지지 않는다.
+    """
+
+    display_name = (payload.display_name or "").strip()
+    if not display_name:
+        raise HTTPException(status_code=400, detail="Model name cannot be empty.")
+
+    record_paths = storage.find_record_paths(storage.finetune_runs_dir, run_id)
+    record = storage.get_record(storage.finetune_runs_dir, run_id)
+
+    if not record:
+        run_root = storage.finetune_runs_dir.resolve()
+        run_dir = (storage.finetune_runs_dir / run_id).resolve()
+        if run_root not in (run_dir, *run_dir.parents) or not run_dir.exists():
+            raise HTTPException(status_code=404, detail="Fine-tuning run not found.")
+        inferred = infer_finetune_run_record(run_dir)
+        if inferred is None:
+            raise HTTPException(status_code=404, detail="Fine-tuning run metadata not found.")
+        record = inferred.model_dump()
+        created_at = parse_created_at(str(record.get("created_at") or utc_now()))
+        record_paths = [
+            storage.named_record_path(
+                root=storage.finetune_runs_dir,
+                category=str(record.get("training_mode") or "finetuned"),
+                label=display_name,
+                record_id=run_id,
+                created_at=created_at,
+            )
+        ]
+
+    output_name = str(record.get("output_name") or Path(str(record.get("output_model_path") or run_id)).name)
+    record["output_name"] = output_name
+    record["display_name"] = display_name
+
+    if not record_paths:
+        record_paths = [storage.record_path(storage.finetune_runs_dir, run_id)]
+    for path in record_paths:
+        storage.write_json(path, record)
+
+    return FineTuneRun(**record)
+
+
 @app.get("/api/finetune-runs/{run_id}/download")
 def download_finetune_run(run_id: str) -> FileResponse:
     """완료된 fine-tuned 모델 run 폴더와 실행 메타데이터를 zip으로 다운로드한다."""
@@ -6543,14 +6627,16 @@ def download_finetune_run(run_id: str) -> FileResponse:
     if run_dir.exists():
         paths.append(run_dir)
     paths.extend(record_paths)
+    paths.extend(_voice_image_paths_for("trained", run_id))
     if payload:
         for key in ("dataset_path", "final_checkpoint_path", "log_path"):
             resolved = _resolve_repo_path(payload.get(key))
             if resolved:
                 paths.append(resolved)
 
+    archive_label = str((payload or {}).get("display_name") or (payload or {}).get("output_name") or run_id)
     return _archive_response(
-        str((payload or {}).get("output_name") or run_id),
+        archive_label,
         paths,
         readme="Fine-tuned model archive. Contains the run folder, final checkpoint files, logs, and run metadata when available.",
     )
@@ -6588,6 +6674,13 @@ def delete_finetune_run(run_id: str) -> VoiceAssetDeleteResponse:
             if record_path.exists():
                 record_path.unlink()
                 removed += 1
+        except FileNotFoundError:
+            continue
+
+    for image_path in _voice_image_paths_for("trained", run_id):
+        try:
+            image_path.unlink()
+            removed += 1
         except FileNotFoundError:
             continue
 

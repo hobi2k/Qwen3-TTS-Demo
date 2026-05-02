@@ -36,6 +36,7 @@ class ModelInfo(BaseModel):
     default_speaker: Optional[str] = None
     model_family: Optional[str] = None
     speaker_encoder_included: bool = False
+    image_url: Optional[str] = None
 
 
 class AudioAsset(BaseModel):
@@ -355,6 +356,13 @@ class CharacterPresetCreateRequest(BaseModel):
     reference_audio_path: str
     clone_prompt_path: str
     notes: str = ""
+
+
+class CharacterPresetUpdateRequest(BaseModel):
+    """저장된 캐릭터 프리셋의 표시 정보를 수정하는 요청."""
+
+    name: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class CharacterPreset(BaseModel):
@@ -1271,6 +1279,12 @@ class FineTuneRunCreateRequest(BaseModel):
     simulate_only: bool = False
 
 
+class FineTuneRunUpdateRequest(BaseModel):
+    """파인튜닝 결과 모델의 라이브러리 표시명을 수정하는 요청."""
+
+    display_name: Optional[str] = None
+
+
 class FineTuneRun(BaseModel):
     """파인튜닝 실행 결과 메타데이터 스키마다."""
 
@@ -1294,5 +1308,7 @@ class FineTuneRun(BaseModel):
     is_selectable: bool = False
     stage_label: str = ""
     summary_label: str = ""
+    output_name: Optional[str] = None
+    display_name: Optional[str] = None
     model_family: Optional[str] = None
     speaker_encoder_included: bool = False
