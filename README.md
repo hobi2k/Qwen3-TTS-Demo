@@ -13,9 +13,9 @@
 - `프리셋 기반 생성`
   저장한 프리셋을 기준으로 반복 생성하거나, 프리셋 위에 말투 지시를 덧입혀 생성합니다.
 - `나의 목소리들`
-  훈련한 모델, Qwen/S2-Pro 프리셋, RVC 모델, 공용 데이터셋을 한곳에서 확인하고 삭제하는 운영 라이브러리입니다.
+  훈련한 모델, Qwen/S2-Pro 프리셋, RVC 모델, Qwen/S2-Pro/VibeVoice/RVC/MMAudio/ACE-Step 데이터셋을 한곳에서 확인하고 삭제하는 운영 라이브러리입니다.
 - `생성 갤러리`
-  생성 결과를 음성, 프리셋 음성, 사운드 이펙트, ACE-Step 음악, RVC 변환, 정제/분리 결과로 구분해 보고, 현재 분류 기준으로 선택 삭제/개별 삭제하는 화면입니다.
+  생성 결과를 음성, Qwen 프리셋 음성, S2-Pro 프리셋 음성, 사운드 이펙트, ACE-Step 음악, RVC 변환, 정제/분리 결과로 구분해 보고, 현재 분류 기준으로 선택 삭제/개별 삭제하는 화면입니다.
 - `Qwen 데이터셋 만들기 / 학습 실행`
   Qwen 계열 학습용 오디오와 텍스트를 정리해 `data/datasets/<dataset_id>/` 구조로 저장한 뒤 `Base`, `CustomVoice`, `VoiceBox` 학습을 실행합니다.
 - `VoiceBox 융합`
@@ -32,11 +32,11 @@
   `오디오 분리`, `RVC 데이터셋`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 이 기능은 TTS나 목소리 저장에는 필요 없고, RVC용 보컬 추출/반주 제거가 필요할 때만 씁니다. 기본 보컬 모델은 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델인 `vocals_mel_band_roformer.ckpt` 하나만 사용합니다.
 - `MMAudio 데이터셋 / 사운드 효과 / MMAudio 학습`
-  효과음 생성과 MMAudio upstream full/continued training을 분리합니다. 학습 전에는 `example_train` 검증용 모드와 Hydra config에 등록된 실제 데이터셋 모드를 먼저 선택합니다.
+  효과음 생성, 데이터셋 준비, MMAudio upstream full/continued training을 분리합니다. 데이터셋 탭에서 샘플을 프로젝트 폴더로 정리하고, 학습 탭에서는 준비된 MMAudio 데이터셋을 선택한 뒤 모델/반복 수 같은 학습 설정만 조정합니다.
 - `ACE-Step 작곡 / 데이터셋 / LoRA-LoKr 학습`
-  ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 데이터셋 탭에서는 tensor 폴더, 오디오 폴더, dataset JSON을 정리하고, `LoRA / LoKr 학습` 탭에서는 upstream `train.py`를 호출해 ACE-Step 어댑터를 만듭니다.
+  ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 데이터셋 탭에서 음악 학습 세트를 먼저 준비하고, `LoRA / LoKr 학습` 탭에서는 준비된 데이터셋을 선택해 upstream `train.py`로 ACE-Step 어댑터를 만듭니다.
 - `VibeVoice`
-  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, optional 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR JSONL 또는 폴더 구조를 먼저 지정하고, 학습은 `TTS Fine-tune`과 `ASR Fine-tune`으로 나뉘며, `Model Tools`에서 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
+  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, optional 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR 학습 세트를 먼저 만들고, 학습은 `TTS Fine-tune`과 `ASR Fine-tune` 탭에서 준비된 데이터셋을 선택해 실행합니다. `Model Tools`에서는 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -204,9 +204,12 @@ data/datasets/mai_ko_full/
 
 최근 생성 이력을 모든 탭에 반복 노출하지 않습니다.
 
-- 생성 결과는 `생성 갤러리`에서만 관리하며, 프리셋 음성/효과음/음악/RVC 변환/정제 결과를 분류해 보여줍니다.
-- `나의 목소리들`은 재사용 가능한 자산 운영 화면입니다. 훈련 모델, Qwen 프리셋, S2-Pro 프리셋, RVC 모델, 만들어진 공용 데이터셋을 확인하고 삭제할 수 있습니다.
+- 생성 결과는 `생성 갤러리`에서만 관리하며, Qwen 프리셋 음성/S2-Pro 프리셋 음성/효과음/음악/RVC 변환/정제 결과를 분류해 보여줍니다.
+- `나의 목소리들`은 재사용 가능한 자산 운영 화면입니다. 훈련 모델, Qwen 프리셋, S2-Pro 프리셋, RVC 모델, Qwen 및 외부 엔진용 데이터셋을 확인하고 다운로드/삭제할 수 있습니다.
+- 훈련 모델 삭제는 fine-tuning run 폴더와 실행 기록을 함께 제거합니다. 기본 모델은 `나의 목소리들`에 표시하지 않으므로 삭제 대상이 아닙니다.
 - 공용 데이터셋은 `나의 목소리들 > 데이터셋`에서 각 엔진의 학습 탭으로 다시 연결할 수 있습니다.
+- 운영 화면의 카드에는 내부 파일 경로를 표시하지 않습니다. 사용자는 모델명, 프리셋명, 샘플 수, 생성 종류만 보고 관리하며, 실제 경로는 경로 입력 모드와 문서/로그에서만 다룹니다.
+- 다운로드는 zip 묶음으로 제공됩니다. 데이터셋은 오디오/전사/manifest를, 프리셋은 메타데이터/참조 음성/clone prompt를, 훈련 모델은 run 폴더와 최종 체크포인트를 함께 담습니다.
 
 ### 3. 학습 결과는 중간 체크포인트가 아니라 “최종 선택 모델” 중심으로 보여줍니다
 

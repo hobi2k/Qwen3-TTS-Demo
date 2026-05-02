@@ -60,6 +60,7 @@ import type {
   UniversalInferenceRequest,
   VibeVoiceASRRequest,
   VibeVoiceASRResponse,
+  VibeVoiceModelAsset,
   VibeVoiceRuntimeResponse,
   VibeVoiceTTSRequest,
   VibeVoiceModelToolRequest,
@@ -90,6 +91,18 @@ function apiCandidates(path: string): string[] {
   candidates.push(path);
 
   return Array.from(new Set(candidates));
+}
+
+export function apiUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  const configuredBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+  if (configuredBase) {
+    return `${configuredBase}${normalized}`;
+  }
+  if (typeof window !== "undefined" && window.location.port && window.location.port !== "8190") {
+    return `http://127.0.0.1:8190${normalized}`;
+  }
+  return normalized;
 }
 
 function friendlyError(status: number, detail: string): string {
@@ -275,6 +288,13 @@ export const api = {
     return request<FineTuneRun[]>("/api/finetune-runs");
   },
 
+  deleteFineTuneRun(runId: string): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(
+      `/api/finetune-runs/${encodeURIComponent(runId)}`,
+      { method: "DELETE" },
+    );
+  },
+
   audioToolCapabilities(): Promise<AudioToolCapability[]> {
     return request<AudioToolCapability[]>("/api/audio-tools/capabilities");
   },
@@ -377,6 +397,13 @@ export const api = {
     });
   },
 
+  deleteDataset(datasetId: string): Promise<VoiceAssetDeleteResponse> {
+    return request<VoiceAssetDeleteResponse>(
+      `/api/datasets/${encodeURIComponent(datasetId)}`,
+      { method: "DELETE" },
+    );
+  },
+
   buildAudioDataset(payload: BuildAudioDatasetRequest): Promise<AudioDatasetBuildResponse> {
     return request<AudioDatasetBuildResponse>("/api/audio-datasets/build", {
       method: "POST",
@@ -459,6 +486,10 @@ export const api = {
 
   vibeVoiceRuntime(): Promise<VibeVoiceRuntimeResponse> {
     return request<VibeVoiceRuntimeResponse>("/api/vibevoice/runtime");
+  },
+
+  vibeVoiceModelAssets(): Promise<VibeVoiceModelAsset[]> {
+    return request<VibeVoiceModelAsset[]>("/api/vibevoice/model-assets");
   },
 
   generateVibeVoiceTTS(payload: VibeVoiceTTSRequest): Promise<GenerationResponse> {

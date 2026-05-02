@@ -24,10 +24,10 @@ import {
   WorkspaceResultHeader,
   WorkspaceFieldLabel,
 } from "./components/workspace";
-import { VoiceAssetAvatar, DeleteAssetButton } from "./components/voice-asset";
+import { VoiceAssetAvatar, DeleteAssetButton, DownloadAssetButton } from "./components/voice-asset";
 import { toast } from "sonner";
 
-import { api } from "./lib/api";
+import { api, apiUrl } from "./lib/api";
 import {
   AudioCard,
   basenameFromPath,
@@ -82,6 +82,7 @@ import type {
   SpeakerInfo,
   UploadResponse,
   VibeVoiceASRResponse,
+  VibeVoiceModelAsset,
   VibeVoiceModelToolResponse,
   VibeVoiceRuntimeResponse,
   VibeVoiceTrainingResponse,
@@ -107,7 +108,8 @@ type AceStepMode =
   | "lora_train";
 
 type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "rvc" | "datasets";
-type GalleryFilter = "all" | "speech" | "preset" | "effect" | "music" | "rvc" | "utility";
+type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
+type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "effect" | "music" | "rvc" | "utility";
 
 type AceStepTabKey = Extract<
   TabKey,
@@ -506,12 +508,19 @@ function galleryFilterForRecord(record: GenerationRecord): GalleryFilter {
   if (mode.includes("voice_changer") || mode.includes("rvc")) return "rvc";
   if (mode.includes("audio_separation") || mode.includes("denoise") || mode.includes("convert")) return "utility";
   if (
+    mode.startsWith("s2_pro") &&
+    (typeof meta.s2_pro_reference_id === "string" || typeof meta.reference_id === "string" || Boolean(record.source_ref_audio_path))
+  ) {
+    return "s2pro_preset";
+  }
+  if (
     mode.includes("preset") ||
     mode.includes("hybrid") ||
+    Boolean(record.preset_id) ||
     typeof meta.preset_id === "string" ||
     typeof meta.clone_prompt_path === "string"
   ) {
-    return "preset";
+    return "qwen_preset";
   }
   return "speech";
 }
@@ -551,6 +560,7 @@ function getRecordModelLabel(record: GenerationRecord): string {
 
 function audioDatasetTargetLabel(target: string): string {
   const labels: Record<string, string> = {
+    qwen: "Qwen",
     s2_pro: "S2-Pro",
     vibevoice: "VibeVoice",
     rvc: "RVC",
@@ -558,6 +568,48 @@ function audioDatasetTargetLabel(target: string): string {
     ace_step: "ACE-Step",
   };
   return labels[target] || target;
+}
+
+function audioDatasetTargetShort(target: string): string {
+  const labels: Record<string, string> = {
+    qwen: "QW",
+    s2_pro: "S2",
+    vibevoice: "VB",
+    rvc: "RV",
+    mmaudio: "MM",
+    ace_step: "AC",
+  };
+  return labels[target] || target.slice(0, 2).toUpperCase();
+}
+
+function clonePromptDisplayName(prompt: ClonePromptRecord): string {
+  const sourceLabels: Record<string, string> = {
+    voice_design: "목소리 설계 스타일",
+    uploaded_reference: "업로드 스타일",
+    generated_sample: "생성 음성 스타일",
+  };
+  const label = sourceLabels[prompt.source_type] || "Qwen 스타일";
+  return `${label} · ${formatShortDate(prompt.created_at)}`;
+}
+
+function fineTuneRunIdFromModel(model: ModelInfo): string {
+  const pathParts = model.model_id.replace(/\\/g, "/").split("/").filter(Boolean);
+  const lastPart = pathParts[pathParts.length - 1] || "";
+  if (lastPart === "final" || lastPart.startsWith("checkpoint")) {
+    return pathParts[pathParts.length - 2] || model.key.replace(/^ft_/, "");
+  }
+  return lastPart || model.key.replace(/^ft_/, "");
+}
+
+function vibeVoiceAssetKindLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    base_model: "Base model",
+    asr_model: "ASR model",
+    merged_model: "Merged model",
+    model_file: "Model file",
+    lora_adapter: "LoRA adapter",
+  };
+  return labels[kind] || kind;
 }
 
 function makeWaveBars(seed: string, count = 48): number[] {
@@ -737,7 +789,7 @@ function ToolDatasetBuilder({
 
         {preparedLabel ? (
           <TabsContent value="prepared" className="m-0 mt-4">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
               <div className="flex flex-col gap-2">
                 <Label className="text-xs font-medium text-ink-muted">{preparedLabel} 경로</Label>
                 <Input
@@ -749,7 +801,7 @@ function ToolDatasetBuilder({
                   이미 전처리가 끝난 데이터는 다시 복사하지 않고 학습 탭으로 바로 연결합니다.
                 </p>
               </div>
-              <Button type="button" onClick={onUsePrepared} className="self-end">
+              <Button type="button" onClick={onUsePrepared} className="h-11 self-start lg:mt-6">
                 학습으로 보내기
               </Button>
             </div>
@@ -772,8 +824,7 @@ function ToolDatasetBuilder({
       {lastBuild ? (
         <article className="rounded-md border border-line bg-accent-soft/40 p-3 text-sm text-ink">
           <strong className="font-medium">{lastBuild.name}</strong>
-          <span className="ml-2 text-ink-muted">샘플 {lastBuild.sample_count}개 준비됨</span>
-          <p className="mt-1 break-all text-xs text-ink-muted">{lastBuild.dataset_root_path}</p>
+          <span className="ml-2 text-ink-muted">{audioDatasetTargetLabel(lastBuild.target)} · 샘플 {lastBuild.sample_count}개 준비됨</span>
         </article>
       ) : null}
     </WorkspaceCard>
@@ -840,7 +891,9 @@ function TrainingDatasetConnector({
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
         <div className="rounded-md border border-line bg-canvas/60 px-3 py-2">
           <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">{pathLabel}</span>
-          <p className="mt-1 break-all text-sm text-ink">{activePath || "아직 연결된 데이터셋 경로가 없습니다."}</p>
+          <p className="mt-1 text-sm text-ink">
+            {activePath ? "학습 입력에 데이터셋이 연결되어 있습니다." : "아직 연결된 데이터셋이 없습니다."}
+          </p>
         </div>
         <Button type="button" variant="outline" onClick={onCreateDataset} className="self-end">
           데이터셋 만들기
@@ -854,6 +907,7 @@ function StudioApp() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [voiceGalleryView, setVoiceGalleryView] = useState<VoiceLibraryView>("trained");
+  const [datasetLibraryTarget, setDatasetLibraryTarget] = useState<DatasetLibraryTarget>("qwen");
   const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>("all");
   const [activeGuideIndex, setActiveGuideIndex] = useState(0);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(true);
@@ -870,6 +924,7 @@ function StudioApp() {
   const [presets, setPresets] = useState<CharacterPreset[]>([]);
   const [datasets, setDatasets] = useState<FineTuneDataset[]>([]);
   const [audioDatasets, setAudioDatasets] = useState<AudioDatasetRecord[]>([]);
+  const [selectedMMAudioDatasetId, setSelectedMMAudioDatasetId] = useState("");
   const [runs, setRuns] = useState<FineTuneRun[]>([]);
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -1023,6 +1078,7 @@ function StudioApp() {
   const [audioToolCapabilities, setAudioToolCapabilities] = useState<AudioToolCapability[]>([]);
   const [voiceChangerModels, setVoiceChangerModels] = useState<VoiceChangerModelInfo[]>([]);
   const [s2ProRuntime, setS2ProRuntime] = useState<S2ProRuntimeResponse | null>(null);
+  const [vibeVoiceModelAssets, setVibeVoiceModelAssets] = useState<VibeVoiceModelAsset[]>([]);
   const [s2ProMode, setS2ProMode] = useState<S2ProMode>("tagged");
   const [s2ProVoices, setS2ProVoices] = useState<S2ProVoiceRecord[]>([]);
   const [selectedS2VoiceId, setSelectedS2VoiceId] = useState("");
@@ -1058,7 +1114,7 @@ function StudioApp() {
   const [s2ProTrainForm, setS2ProTrainForm] = useState({
     output_name: "my-s2pro-voice",
     training_type: "lora" as "lora" | "full",
-    proto_dir: "data/protos",
+    proto_dir: "",
     lab_audio_dir: "",
     pretrained_ckpt_path: "",
     lora_config: "r_8_alpha_16",
@@ -1129,8 +1185,7 @@ function StudioApp() {
     training_mode: "tts_lora" as "asr_lora" | "tts_lora",
     output_name: "vibevoice-tts-lora",
     model_path: "",
-    data_dir: "vibevoice/jenny_vibevoice_formatted",
-    output_dir: "",
+    data_dir: "",
     dataset_config_name: "",
     train_split_name: "train",
     eval_split_name: "validation",
@@ -1176,10 +1231,15 @@ function StudioApp() {
     tool: "merge" as "merge" | "verify_merge" | "convert_nnscaler",
     base_model_path: "data/models/vibevoice/VibeVoice-1.5B",
     checkpoint_path: "",
-    output_path: "data/models/vibevoice/merged-vibevoice",
+    output_name: "merged-vibevoice",
     output_format: "safetensors" as "safetensors" | "bin",
     nnscaler_checkpoint_path: "",
     config_path: "",
+  });
+  const [vibeVoiceModelToolSource, setVibeVoiceModelToolSource] = useState({
+    base: "library" as "library" | "path",
+    checkpoint: "library" as "library" | "path",
+    nnscaler: "library" as "library" | "path",
   });
   const [audioEffectsSearch, setAudioEffectsSearch] = useState("");
   const [soundEffectForm, setSoundEffectForm] = useState({
@@ -1198,7 +1258,7 @@ function StudioApp() {
     model: "small_16k",
     weights_path: "",
     checkpoint_path: "",
-    data_mode: "example" as "configured" | "example",
+    data_mode: "configured" as "configured" | "example",
     nproc_per_node: "1",
     num_iterations: "10000",
     batch_size: "1",
@@ -1361,8 +1421,6 @@ function StudioApp() {
     index_algorithm: "Auto",
     checkpointing: true,
   });
-  const [rvcTrainSource, setRvcTrainSource] = useState<"gallery" | "folder">("gallery");
-  const [rvcTrainAudioPaths, setRvcTrainAudioPaths] = useState<string[]>([]);
   const [lastRvcTrainingResult, setLastRvcTrainingResult] = useState<string>("");
   const [audioConvertForm, setAudioConvertForm] = useState({
     audio_path: "",
@@ -1432,8 +1490,10 @@ function StudioApp() {
     }
     try {
       setVibeVoiceRuntime(await api.vibeVoiceRuntime());
+      setVibeVoiceModelAssets(await api.vibeVoiceModelAssets());
     } catch {
       setVibeVoiceRuntime(null);
+      setVibeVoiceModelAssets([]);
     }
   }
 
@@ -1688,6 +1748,17 @@ function StudioApp() {
   const audioSeparationAvailable = audioToolCapabilityMap.get("audio_separation")?.available ?? true;
   const aceStepAvailable = audioToolCapabilityMap.get("ace_step")?.available ?? false;
   const aceStepNotes = audioToolCapabilityMap.get("ace_step")?.notes || "";
+  const vibeVoiceBaseAssets = vibeVoiceModelAssets.filter((asset) =>
+    ["base_model", "merged_model", "model_file"].includes(asset.kind),
+  );
+  const vibeVoiceAdapterAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "lora_adapter");
+  const vibeVoiceNnScalerAssets = vibeVoiceModelAssets.filter((asset) =>
+    ["model_file", "merged_model", "lora_adapter"].includes(asset.kind),
+  );
+  const vibeVoiceTtsTrainingAssets = vibeVoiceModelAssets.filter(
+    (asset) => ["base_model", "merged_model", "model_file"].includes(asset.kind) && !asset.name.toLowerCase().includes("asr"),
+  );
+  const vibeVoiceAsrTrainingAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "asr_model" || asset.name.toLowerCase().includes("asr"));
   const pageMeta = PRODUCT_PAGES[activeTab];
   const pageTitle = t(`page.${activeTab}.title`, pageMeta.title);
   const pageDescription = t(`page.${activeTab}.description`, pageMeta.description);
@@ -1696,16 +1767,37 @@ function StudioApp() {
   const currentS2ProMode = isS2ProTab(activeTab) ? s2ProTabToMode(activeTab) : s2ProMode;
   const currentAceStepMode = isAceStepTab(activeTab) ? ACE_STEP_TAB_TO_MODE[activeTab] : aceStepMode;
   const aceComposerBars = makeWaveBars(`${aceStepForm.prompt}|${aceStepForm.lyrics}|${aceStepForm.audio_duration}`, 72);
+
+  useEffect(() => {
+    const firstBase = vibeVoiceBaseAssets[0]?.path;
+    const firstAdapter = vibeVoiceAdapterAssets[0]?.path;
+    setVibeVoiceModelToolForm((prev) => ({
+      ...prev,
+      base_model_path: prev.base_model_path || firstBase || "",
+      checkpoint_path: prev.checkpoint_path || firstAdapter || "",
+    }));
+  }, [vibeVoiceBaseAssets[0]?.path, vibeVoiceAdapterAssets[0]?.path]);
+
   const galleryBuckets = {
     all: history.length,
     speech: history.filter((record) => galleryFilterForRecord(record) === "speech").length,
-    preset: history.filter((record) => galleryFilterForRecord(record) === "preset").length,
+    qwen_preset: history.filter((record) => galleryFilterForRecord(record) === "qwen_preset").length,
+    s2pro_preset: history.filter((record) => galleryFilterForRecord(record) === "s2pro_preset").length,
     effect: history.filter((record) => galleryFilterForRecord(record) === "effect").length,
     music: history.filter((record) => galleryFilterForRecord(record) === "music").length,
     rvc: history.filter((record) => galleryFilterForRecord(record) === "rvc").length,
     utility: history.filter((record) => galleryFilterForRecord(record) === "utility").length,
   };
   const filteredHistory = history.filter((record) => galleryFilter === "all" || galleryFilterForRecord(record) === galleryFilter);
+  const datasetLibraryBuckets: Record<DatasetLibraryTarget, number> = {
+    qwen: datasets.length,
+    s2_pro: audioDatasets.filter((dataset) => dataset.target === "s2_pro").length,
+    vibevoice: audioDatasets.filter((dataset) => dataset.target === "vibevoice").length,
+    rvc: audioDatasets.filter((dataset) => dataset.target === "rvc").length,
+    mmaudio: audioDatasets.filter((dataset) => dataset.target === "mmaudio").length,
+    ace_step: audioDatasets.filter((dataset) => dataset.target === "ace_step").length,
+  };
+  const visibleAudioDatasets = audioDatasets.filter((dataset) => dataset.target === datasetLibraryTarget);
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
   function selectS2ProVoice(voiceId: string) {
     const voice = s2ProVoices.find((item) => item.id === voiceId || item.reference_id === voiceId);
@@ -1770,6 +1862,37 @@ function StudioApp() {
   const presetPromptPaths = new Set(presets.map((preset) => preset.clone_prompt_path).filter(Boolean));
   const rawQwenClonePrompts = clonePrompts.filter((prompt) => !presetPromptPaths.has(prompt.prompt_path));
   const qwenVoiceAssetCount = presets.length + rawQwenClonePrompts.length;
+  function galleryPresetDescription(record: GenerationRecord): string {
+    const filterKind = galleryFilterForRecord(record);
+    const meta = record.meta || {};
+    if (filterKind === "s2pro_preset") {
+      const referenceId = String(meta.s2_pro_reference_id || meta.reference_id || meta.voice_id || "");
+      const voice = s2ProVoices.find(
+        (item) =>
+          item.id === referenceId ||
+          item.reference_id === referenceId ||
+          item.reference_audio_path === record.source_ref_audio_path,
+      );
+      return voice ? `S2-Pro 프리셋 · ${voice.name}` : "S2-Pro 프리셋";
+    }
+    if (filterKind === "qwen_preset") {
+      const clonePromptPath = typeof meta.clone_prompt_path === "string" ? meta.clone_prompt_path : "";
+      const metaPresetId = typeof meta.preset_id === "string" ? meta.preset_id : "";
+      const preset = presets.find(
+        (item) =>
+          item.id === record.preset_id ||
+          item.id === metaPresetId ||
+          (!!clonePromptPath && item.clone_prompt_path === clonePromptPath) ||
+          item.reference_audio_path === record.source_ref_audio_path,
+      );
+      return preset ? `Qwen 프리셋 · ${preset.name}` : "Qwen 프리셋";
+    }
+    if (filterKind === "effect") return "사운드 이펙트";
+    if (filterKind === "music") return "ACE-Step 음악";
+    if (filterKind === "rvc") return "RVC 변환";
+    if (filterKind === "utility") return "정제/분리 결과";
+    return "음성 생성";
+  }
   const filteredS2TagCategories = S2_PRO_TAG_CATEGORIES.map((category) => ({
     ...category,
     tags: category.tags.filter((tag) => {
@@ -1794,14 +1917,14 @@ function StudioApp() {
         : t("separation.modelHelp.roformer", "일반 보컬/반주 분리 기본값입니다. 단일 Roformer 모델로 보컬과 나머지 소리를 나눕니다.");
   const selectedApplioBatchAssets = applioBatchPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
   const selectedApplioBatchExternalPaths = applioBatchPaths.filter((path) => !audioAssetByPath.has(path));
-  const selectedRvcTrainAssets = rvcTrainAudioPaths.map((path) => audioAssetByPath.get(path)).filter((asset): asset is AudioAsset => Boolean(asset));
   const selectedBlendModelA = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_a) ?? null;
   const selectedBlendModelB = voiceChangerModels.find((item) => item.model_path === applioBlendForm.model_path_b) ?? null;
+  const selectedMMAudioDataset = audioDatasets.find((dataset) => dataset.id === selectedMMAudioDatasetId && dataset.target === "mmaudio") ?? null;
   const selectedDatasetReferenceAsset = datasetForm.ref_audio_path ? audioAssetByPath.get(datasetForm.ref_audio_path) ?? null : null;
   const selectedDatasetSampleAssets = datasetSamples
     .filter((sample) => sample.audio_path.trim())
     .map((sample, index) => ({ sample, index, asset: audioAssetByPath.get(sample.audio_path) ?? null }));
-  const rvcTrainSourceReady = rvcTrainSource === "gallery" ? rvcTrainAudioPaths.length > 0 : Boolean(rvcTrainForm.dataset_path.trim());
+  const rvcTrainSourceReady = Boolean(rvcTrainForm.dataset_path.trim());
   const filteredSoundEffectLibrary = SOUND_EFFECT_LIBRARY.filter((item) => {
     const query = audioEffectsSearch.trim().toLowerCase();
     if (!query) return true;
@@ -2134,7 +2257,7 @@ function StudioApp() {
         output_name: vibeVoiceTrainForm.output_name,
         model_path: vibeVoiceTrainForm.model_path,
         data_dir: vibeVoiceTrainForm.data_dir,
-        output_dir: vibeVoiceTrainForm.output_dir,
+        output_dir: "",
         dataset_config_name: vibeVoiceTrainForm.dataset_config_name,
         train_split_name: vibeVoiceTrainForm.train_split_name,
         eval_split_name: vibeVoiceTrainForm.eval_split_name,
@@ -2185,11 +2308,12 @@ function StudioApp() {
   async function handleVibeVoiceModelToolSubmit(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      const outputName = storageFriendlyName(vibeVoiceModelToolForm.output_name || "merged-vibevoice");
       const result = await api.runVibeVoiceModelTool({
         tool: vibeVoiceModelToolForm.tool,
         base_model_path: vibeVoiceModelToolForm.base_model_path,
         checkpoint_path: vibeVoiceModelToolForm.checkpoint_path,
-        output_path: vibeVoiceModelToolForm.output_path,
+        output_path: `data/models/vibevoice/${outputName}`,
         output_format: vibeVoiceModelToolForm.output_format,
         nnscaler_checkpoint_path: vibeVoiceModelToolForm.nnscaler_checkpoint_path,
         config_path: vibeVoiceModelToolForm.config_path,
@@ -2204,7 +2328,7 @@ function StudioApp() {
     event?.preventDefault();
     const sourceValue = s2ProTrainSource === "protos" ? s2ProTrainForm.proto_dir : s2ProTrainForm.lab_audio_dir;
     if (!sourceValue.trim()) {
-      setMessage("S2-Pro 학습 입력 경로를 먼저 넣어주세요.");
+      setMessage("S2-Pro 학습 데이터셋을 먼저 연결하세요.");
       return;
     }
     await runAction(async () => {
@@ -2301,6 +2425,10 @@ function StudioApp() {
 
   async function handleMMAudioTrainSubmit(event?: FormEvent) {
     event?.preventDefault();
+    if (!selectedMMAudioDataset) {
+      setMessage("MMAudio 학습 데이터셋을 먼저 연결하세요.");
+      return;
+    }
     await runAction(async () => {
       const result = await api.trainMMAudio({
         output_name: mmaudioTrainForm.output_name,
@@ -2734,12 +2862,12 @@ function StudioApp() {
           output_name: prev.output_name || name,
         }));
       } else if (target === "rvc") {
-        setRvcTrainSource("folder");
         setRvcTrainForm((prev) => ({ ...prev, dataset_path: result.audio_dir_path, model_name: prev.model_name || name }));
       } else if (target === "ace_step") {
         setAceStepTrainSource("dataset_json");
         setAceStepTrainForm((prev) => ({ ...prev, dataset_json: result.dataset_json_path || prev.dataset_json, audio_dir: result.audio_dir_path, output_name: prev.output_name || name }));
       } else if (target === "mmaudio") {
+        setSelectedMMAudioDatasetId(record.id);
         setMMAudioTrainForm((prev) => ({
           ...prev,
           output_name: prev.output_name || name,
@@ -2771,7 +2899,6 @@ function StudioApp() {
       }));
       setActiveTab("vibevoice_tts_train");
     } else if (dataset.target === "rvc") {
-      setRvcTrainSource("folder");
       setRvcTrainForm((prev) => ({ ...prev, dataset_path: dataset.audio_dir_path, model_name: prev.model_name || name }));
       setActiveTab("applio_train");
     } else if (dataset.target === "ace_step") {
@@ -2784,15 +2911,42 @@ function StudioApp() {
       }));
       setActiveTab("ace_lora_train");
     } else if (dataset.target === "mmaudio") {
+      setSelectedMMAudioDatasetId(dataset.id);
       setMMAudioTrainForm((prev) => ({ ...prev, output_name: prev.output_name || name, data_mode: "configured" }));
       setActiveTab("mmaudio_train");
     }
     setMessage(`${name} 데이터셋을 ${audioDatasetTargetLabel(dataset.target)} 학습 탭에 연결했습니다.`);
   }
 
+  function sendQwenDatasetToTraining(dataset: FineTuneDataset) {
+    setSelectedDatasetId(dataset.id);
+    setRunForm((prev) => ({
+      ...prev,
+      speaker_name: dataset.speaker_name || prev.speaker_name,
+      output_name: prev.output_name || dataset.name,
+    }));
+    setActiveTab("training");
+    setMessage(`${dataset.name} 데이터셋을 Qwen 학습 탭에 연결했습니다.`);
+  }
+
+  async function handleDeleteQwenDataset(dataset: FineTuneDataset) {
+    await runAction(async () => {
+      setDatasets((prev) => prev.filter((item) => item.id !== dataset.id));
+      if (selectedDatasetId === dataset.id) {
+        setSelectedDatasetId("");
+      }
+      await api.deleteDataset(dataset.id);
+      await refreshAll();
+      setMessage(`${dataset.name} 데이터셋을 삭제했습니다.`);
+    });
+  }
+
   async function handleDeleteAudioDataset(dataset: AudioDatasetRecord) {
     await runAction(async () => {
       setAudioDatasets((prev) => prev.filter((item) => item.id !== dataset.id));
+      if (selectedMMAudioDatasetId === dataset.id) {
+        setSelectedMMAudioDatasetId("");
+      }
       await api.deleteAudioDataset(dataset.id);
       await refreshAll();
       setMessage(`${dataset.name || dataset.id} 데이터셋을 삭제했습니다.`);
@@ -2846,17 +3000,16 @@ function StudioApp() {
 
   async function handleRvcTrainSubmit(event?: FormEvent) {
     event?.preventDefault();
-    const datasetPath = rvcTrainSource === "folder" ? rvcTrainForm.dataset_path.trim() : "";
-    const audioPaths = rvcTrainSource === "gallery" ? rvcTrainAudioPaths : [];
-    if (!datasetPath && audioPaths.length === 0) {
-      setMessage(rvcTrainSource === "gallery" ? t("applio_train.gallery.empty", "아직 선택한 학습 음성이 없습니다.") : t("applio_train.datasetRequired", "학습할 WAV 폴더 경로를 입력하세요."));
+    const datasetPath = rvcTrainForm.dataset_path.trim();
+    if (!datasetPath) {
+      setMessage(t("applio_train.datasetRequired", "학습할 RVC 데이터셋을 먼저 연결하세요."));
       return;
     }
     await runAction(async () => {
       const result = await api.trainRvcModel({
         model_name: rvcTrainForm.model_name,
         dataset_path: datasetPath,
-        audio_paths: audioPaths,
+        audio_paths: [],
         sample_rate: Number(rvcTrainForm.sample_rate || "40000"),
         total_epoch: Number(rvcTrainForm.total_epoch || "100"),
         batch_size: Number(rvcTrainForm.batch_size || "4"),
@@ -2919,16 +3072,6 @@ function StudioApp() {
 
   function addApplioBatchAsset(asset: AudioAsset) {
     setApplioBatchPaths((prev) => (prev.includes(asset.path) ? prev : [...prev, asset.path]));
-  }
-
-  function addRvcTrainAsset(asset: AudioAsset) {
-    setRvcTrainAudioPaths((prev) => (prev.includes(asset.path) ? prev : [...prev, asset.path]));
-    if (!rvcTrainForm.model_name || rvcTrainForm.model_name === "my-rvc-voice") {
-      setRvcTrainForm((prev) => ({
-        ...prev,
-        model_name: storageFriendlyName(asset.filename || "rvc-voice"),
-      }));
-    }
   }
 
   function addApplioBatchManualPath() {
@@ -3592,7 +3735,7 @@ function StudioApp() {
     (vibeVoiceAsrSource === "folder" && Boolean(vibeVoiceAsrForm.audio_dir.trim())) ||
     (vibeVoiceAsrSource === "dataset" && Boolean(vibeVoiceAsrForm.dataset.trim()));
   const vibeVoiceModelToolReady =
-    Boolean(vibeVoiceModelToolForm.output_path.trim()) &&
+    Boolean(vibeVoiceModelToolForm.output_name.trim()) &&
     (vibeVoiceModelToolForm.tool === "convert_nnscaler"
       ? Boolean(vibeVoiceModelToolForm.nnscaler_checkpoint_path.trim())
       : Boolean(vibeVoiceModelToolForm.base_model_path.trim()) &&
@@ -3650,7 +3793,7 @@ function StudioApp() {
         ? Boolean(s2ProTrainForm.lab_audio_dir.trim())
         : Boolean(s2ProTrainForm.proto_dir.trim());
     if (!sourceReady) {
-      setMessage("S2-Pro 데이터셋 경로를 먼저 입력하세요.");
+      setMessage("S2-Pro 데이터셋을 먼저 준비하거나 선택하세요.");
       return;
     }
     setActiveTab("s2pro_train");
@@ -3663,7 +3806,7 @@ function StudioApp() {
       Boolean(vibeVoiceTrainForm.train_jsonl.trim()) ||
       Boolean(vibeVoiceTrainForm.validation_jsonl.trim());
     if (!hasDataset) {
-      setMessage("VibeVoice 데이터셋 경로나 JSONL을 먼저 입력하세요.");
+      setMessage("VibeVoice 데이터셋을 먼저 준비하거나 선택하세요.");
       return;
     }
     setVibeVoiceTrainForm((prev) => ({ ...prev, training_mode: mode }));
@@ -3673,7 +3816,7 @@ function StudioApp() {
 
   function sendRvcDatasetToTraining() {
     if (!rvcTrainSourceReady) {
-      setMessage("RVC 학습에 사용할 생성 갤러리 음성 또는 폴더 경로를 먼저 지정하세요.");
+      setMessage("RVC 학습 데이터셋을 먼저 준비하거나 선택하세요.");
       return;
     }
     setActiveTab("applio_train");
@@ -3686,17 +3829,23 @@ function StudioApp() {
       (aceStepTrainSource === "audio_dir" && aceStepTrainForm.audio_dir.trim()) ||
       (aceStepTrainSource === "dataset_json" && aceStepTrainForm.dataset_json.trim());
     if (!hasDataset) {
-      setMessage("ACE-Step 학습에 사용할 tensor, 오디오 폴더, dataset JSON 중 하나를 입력하세요.");
+      setMessage("ACE-Step 학습 데이터셋을 먼저 준비하거나 선택하세요.");
       return;
     }
     setActiveTab("ace_lora_train");
     setMessage("ACE-Step 데이터셋 설정을 LoRA / LoKr 학습 탭에 반영했습니다.");
   }
 
-  function sendMMAudioDatasetToTraining(mode: "example" | "configured") {
-    setMMAudioTrainForm((prev) => ({ ...prev, data_mode: mode }));
+  function sendMMAudioDatasetToTraining() {
+    if (!selectedMMAudioDataset && toolDatasetLastBuild?.target !== "mmaudio") {
+      setMessage("먼저 MMAudio 데이터셋을 만들거나 선택하세요.");
+      return;
+    }
+    if (!selectedMMAudioDataset && toolDatasetLastBuild?.target === "mmaudio") {
+      setSelectedMMAudioDatasetId(toolDatasetLastBuild.id);
+    }
     setActiveTab("mmaudio_train");
-    setMessage(mode === "example" ? "MMAudio example 데이터 모드로 이동했습니다." : "MMAudio configured 데이터 모드로 이동했습니다.");
+    setMessage("MMAudio 데이터셋을 학습 탭에 연결했습니다.");
   }
 
   return (
@@ -3944,7 +4093,7 @@ function StudioApp() {
                 {t("voices.tab.rvc", "RVC 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voiceChangerModels.length}</span>
               </TabsTrigger>
               <TabsTrigger value="datasets" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                {t("voices.tab.datasets", "데이터셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{audioDatasets.length}</span>
+                {t("voices.tab.datasets", "데이터셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{datasets.length + audioDatasets.length}</span>
               </TabsTrigger>
             </TabsList>
 
@@ -3969,6 +4118,9 @@ function StudioApp() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        <DownloadAssetButton
+                          href={apiUrl(`/api/finetune-runs/${encodeURIComponent(fineTuneRunIdFromModel(model))}/download`)}
+                        />
                         <Button
                           variant="outline"
                           size="sm"
@@ -3984,6 +4136,17 @@ function StudioApp() {
                         >
                           {t("voices.trained.useInTts", "텍스트 음성 변환에서 사용")}
                         </Button>
+                        <DeleteAssetButton
+                          kind="trained"
+                          assetId={fineTuneRunIdFromModel(model)}
+                          assetName={displayModelName(model)}
+                          onDeleted={() => {
+                            const runId = fineTuneRunIdFromModel(model);
+                            setModels((items) => items.filter((item) => item.model_id !== model.model_id));
+                            setRuns((items) => items.filter((item) => item.id !== runId));
+                            void refreshAll();
+                          }}
+                        />
                       </div>
                     </WorkspaceCard>
                   ))
@@ -4030,6 +4193,9 @@ function StudioApp() {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
+                          <DownloadAssetButton
+                            href={apiUrl(`/api/presets/${encodeURIComponent(preset.id)}/download`)}
+                          />
                           <Button
                             variant="outline"
                             size="sm"
@@ -4073,7 +4239,7 @@ function StudioApp() {
                         </div>
                         <div className="flex min-w-0 flex-1 flex-col gap-2">
                           <div className="flex flex-wrap items-baseline gap-2">
-                            <strong className="text-sm font-medium text-ink">{basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, "")}</strong>
+                            <strong className="text-sm font-medium text-ink">{clonePromptDisplayName(prompt)}</strong>
                             <span className="text-xs text-ink-muted">{formatDate(prompt.created_at)}</span>
                           </div>
                           <p className="text-sm text-ink-muted line-clamp-2">{prompt.reference_text || t("voices.qwen.noText", "참조 텍스트가 저장되지 않았습니다.")}</p>
@@ -4084,6 +4250,9 @@ function StudioApp() {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          <DownloadAssetButton
+                            href={apiUrl(`/api/clone-prompts/${encodeURIComponent(prompt.id)}/download`)}
+                          />
                           <Button
                             variant="outline"
                             size="sm"
@@ -4100,7 +4269,7 @@ function StudioApp() {
                             size="sm"
                             onClick={() =>
                               createS2VoiceFromQwenAsset({
-                                name: basenameFromPath(prompt.prompt_path).replace(/\.[^.]+$/, ""),
+                                name: clonePromptDisplayName(prompt),
                                 reference_audio_path: prompt.reference_audio_path,
                                 reference_text: prompt.reference_text,
                                 language: "Auto",
@@ -4159,6 +4328,9 @@ function StudioApp() {
                         <audio controls src={mediaUrl(voice.reference_audio_url)} className="mt-1 h-8 w-full" />
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        <DownloadAssetButton
+                          href={apiUrl(`/api/s2-pro/voices/${encodeURIComponent(voice.id)}/download`)}
+                        />
                         <Button variant="outline" size="sm" onClick={() => { selectS2ProVoice(voice.id); openS2ProTab("s2pro_tagged"); }} type="button">
                           {t("voices.s2pro.useInS2Pro", "S2-Pro에서 사용")}
                         </Button>
@@ -4223,11 +4395,14 @@ function StudioApp() {
                         </div>
                         <p className="text-sm text-ink-muted">{t("voices.rvc.note", "기존 음성을 이 목소리로 변환할 때 사용하는 RVC 모델입니다.")}</p>
                         <div className="flex flex-wrap gap-1.5">
-                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{basenameFromPath(model.model_path)}</Badge>
-                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.index_path ? basenameFromPath(model.index_path) : t("voices.rvc.noIndex", "index 없음")}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.id}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.index_path ? t("voices.rvc.hasIndex", "index 포함") : t("voices.rvc.noIndex", "index 없음")}</Badge>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        <DownloadAssetButton
+                          href={apiUrl(`/api/audio-tools/voice-models/${encodeURIComponent(model.id)}/download`)}
+                        />
                         <Button
                           variant="outline"
                           size="sm"
@@ -4274,20 +4449,80 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="datasets" className="m-0 flex flex-col gap-3">
-                {audioDatasets.length ? (
-                  audioDatasets.map((dataset) => (
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ["qwen", "Qwen"],
+                    ["s2_pro", "S2-Pro"],
+                    ["vibevoice", "VibeVoice"],
+                    ["rvc", "RVC"],
+                    ["mmaudio", "MMAudio"],
+                    ["ace_step", "ACE-Step"],
+                  ] as Array<[DatasetLibraryTarget, string]>).map(([target, label]) => (
+                    <button
+                      key={target}
+                      type="button"
+                      onClick={() => setDatasetLibraryTarget(target)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                        datasetLibraryTarget === target
+                          ? "border-accent-edge bg-accent-soft text-accent-ink"
+                          : "border-line bg-canvas text-ink-muted hover:border-line-strong"
+                      }`}
+                    >
+                      <b className="mr-1 text-ink">{datasetLibraryBuckets[target]}</b>{label}
+                    </button>
+                  ))}
+                </div>
+
+                {datasetLibraryTarget === "qwen" && datasets.length ? (
+                  datasets.map((dataset) => (
                     <WorkspaceCard key={dataset.id} className="flex flex-wrap items-center gap-4">
                       <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
-                        <span className="font-mono text-xs font-semibold text-accent">{audioDatasetTargetLabel(dataset.target).slice(0, 3).toUpperCase()}</span>
+                        <span className="font-mono text-xs font-semibold text-accent">{audioDatasetTargetShort("qwen")}</span>
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <strong className="text-sm font-medium text-ink">{dataset.name}</strong>
+                          <span className="text-xs text-ink-muted">Qwen · {dataset.sample_count} samples · {dataset.speaker_name}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{dataset.source_type}</Badge>
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">raw.jsonl</Badge>
+                          {dataset.prepared_jsonl_path ? <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">prepared</Badge> : null}
+                          {dataset.manifest_path ? <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">manifest</Badge> : null}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <DownloadAssetButton
+                          href={apiUrl(`/api/datasets/${encodeURIComponent(dataset.id)}/download`)}
+                        />
+                        <Button variant="outline" size="sm" onClick={() => sendQwenDatasetToTraining(dataset)} type="button">
+                          {t("voices.datasets.useInTraining", "학습에 연결")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-danger hover:bg-danger/10"
+                          onClick={() => void handleDeleteQwenDataset(dataset)}
+                          type="button"
+                        >
+                          {t("action.delete", "삭제")}
+                        </Button>
+                      </div>
+                    </WorkspaceCard>
+                  ))
+                ) : null}
+
+                {datasetLibraryTarget !== "qwen" && visibleAudioDatasets.length ? (
+                  visibleAudioDatasets.map((dataset) => (
+                    <WorkspaceCard key={dataset.id} className="flex flex-wrap items-center gap-4">
+                      <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
+                        <span className="font-mono text-xs font-semibold text-accent">{audioDatasetTargetShort(dataset.target)}</span>
                       </div>
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <div className="flex flex-wrap items-baseline gap-2">
                           <strong className="text-sm font-medium text-ink">{dataset.name}</strong>
                           <span className="text-xs text-ink-muted">{audioDatasetTargetLabel(dataset.target)} · {dataset.sample_count} samples</span>
                         </div>
-                        <p className="break-all text-sm text-ink-muted">
-                          {dataset.dataset_root_path}
-                        </p>
                         <div className="flex flex-wrap gap-1.5">
                           <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{dataset.source_type}</Badge>
                           {dataset.train_jsonl_path ? <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">train.jsonl</Badge> : null}
@@ -4296,6 +4531,9 @@ function StudioApp() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        <DownloadAssetButton
+                          href={apiUrl(`/api/audio-datasets/${encodeURIComponent(dataset.id)}/download`)}
+                        />
                         <Button variant="outline" size="sm" onClick={() => sendAudioDatasetToTraining(dataset)} type="button">
                           {t("voices.datasets.useInTraining", "학습에 연결")}
                         </Button>
@@ -4311,18 +4549,20 @@ function StudioApp() {
                       </div>
                     </WorkspaceCard>
                   ))
-                ) : (
+                ) : null}
+
+                {datasetLibraryBuckets[datasetLibraryTarget] === 0 ? (
                   <WorkspaceEmptyState
                     icon={Database}
-                    title={t("voices.datasets.emptyTitle", "준비된 데이터셋이 없습니다.")}
+                    title={t("voices.datasets.emptyTitle", "{target} 데이터셋이 없습니다.").replace("{target}", audioDatasetTargetLabel(datasetLibraryTarget))}
                     body={t("voices.datasets.emptyBody", "각 엔진의 학습 탭에서 생성 갤러리나 폴더로 데이터셋을 만들면 여기에서 확인하고 삭제할 수 있습니다.")}
                     action={
-                      <Button onClick={() => setActiveTab("dataset")} type="button">
+                      <Button onClick={() => setActiveTab(datasetLibraryTarget === "qwen" ? "dataset" : datasetLibraryTarget === "s2_pro" ? "s2pro_dataset" : datasetLibraryTarget === "vibevoice" ? "vibevoice_dataset" : datasetLibraryTarget === "rvc" ? "applio_dataset" : datasetLibraryTarget === "mmaudio" ? "mmaudio_dataset" : "ace_dataset")} type="button">
                         {t("voices.datasets.gotoDataset", "Qwen 데이터셋 만들기")}
                       </Button>
                     }
                   />
-                )}
+                ) : null}
               </TabsContent>
             </div>
           </Tabs>
@@ -4341,7 +4581,8 @@ function StudioApp() {
                 {([
                   ["all", t("gallery.total", "전체")],
                   ["speech", t("gallery.speech", "음성")],
-                  ["preset", t("gallery.preset", "프리셋 음성")],
+                  ["qwen_preset", t("gallery.qwenPreset", "Qwen 프리셋 음성")],
+                  ["s2pro_preset", t("gallery.s2proPreset", "S2-Pro 프리셋 음성")],
                   ["effect", t("gallery.effect", "사운드 이펙트")],
                   ["music", t("gallery.music", "ACE-Step 음악")],
                   ["rvc", t("gallery.rvc", "RVC 변환")],
@@ -4389,7 +4630,6 @@ function StudioApp() {
               {filteredHistory.length ? filteredHistory.map((record) => {
                 const selectionKey = gallerySelectionKey(record);
                 const isSelected = selectedGalleryIds.includes(selectionKey);
-                const filterKind = galleryFilterForRecord(record);
                 return (
                 <article
                   key={selectionKey}
@@ -4407,14 +4647,7 @@ function StudioApp() {
                     <small className="text-[10px] uppercase tracking-allcaps font-mono text-ink-subtle">{getModeLabel(record.mode)} · {recordLanguageLabel(record)}</small>
                     <strong className="line-clamp-1 text-sm font-medium text-ink">{getRecordDisplayTitle(record)}</strong>
                     <span className="text-xs text-ink-muted">
-                      {filterKind === "preset" ? t("gallery.kind.preset", "프리셋 기반 음성") : null}
-                      {filterKind === "effect" ? t("gallery.kind.effect", "사운드 이펙트") : null}
-                      {filterKind === "music" ? t("gallery.kind.music", "ACE-Step 음악") : null}
-                      {filterKind === "rvc" ? t("gallery.kind.rvc", "RVC 변환") : null}
-                      {filterKind === "utility" ? t("gallery.kind.utility", "정제/분리 결과") : null}
-                      {filterKind === "speech" ? t("gallery.kind.speech", "음성 생성") : null}
-                      {" · "}
-                      {getRecordModelLabel(record)}
+                      {galleryPresetDescription(record)} · {getRecordModelLabel(record)}
                     </span>
                   </div>
                   <time className="shrink-0 text-[10px] font-mono uppercase tracking-wide text-ink-subtle">{formatShortDate(record.created_at)}</time>
@@ -5793,7 +6026,7 @@ function StudioApp() {
                 {selectedS2Voice ? (
                   <div className="rounded-md border border-line bg-canvas/60 p-3">
                     <strong className="text-sm font-medium text-ink">{selectedS2Voice.name}</strong>
-                    <p className="mt-1 text-xs text-ink-muted font-mono">{selectedS2Voice.reference_id}</p>
+                    <p className="mt-1 text-xs text-ink-muted">저장된 S2-Pro 목소리를 사용합니다.</p>
                   </div>
                 ) : null}
               </WorkspaceCard>
@@ -6141,8 +6374,8 @@ function StudioApp() {
             target="vibevoice"
             datasets={audioDatasets}
             activePath={vibeVoiceTrainForm.train_jsonl || vibeVoiceTrainForm.data_dir}
-            pathLabel="VibeVoice train JSONL / dataset dir"
-            guidance="생성 갤러리나 폴더에서 만든 VibeVoice 데이터셋을 선택하면 train/validation JSONL과 dataset root가 학습 폼에 들어갑니다."
+            pathLabel="Prepared dataset"
+            guidance="VibeVoice 데이터셋 탭에서 만든 학습 세트를 선택해 연결합니다. 훈련 탭에서는 파일 경로나 폴더를 다시 입력하지 않습니다."
             onCreateDataset={() => setActiveTab("vibevoice_dataset")}
             onUse={(dataset) => {
               setVibeVoiceTrainForm((prev) => ({
@@ -6167,28 +6400,58 @@ function StudioApp() {
                   <Input value={activeTab === "vibevoice_tts_train" ? "TTS LoRA" : "ASR LoRA"} readOnly />
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Model path</Label>
-                  <Input placeholder={vibeVoiceTrainForm.training_mode === "asr_lora" ? "data/models/vibevoice/VibeVoice-ASR" : "data/models/vibevoice/VibeVoice-1.5B"} value={vibeVoiceTrainForm.model_path} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, model_path: event.target.value }))} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Data dir</Label>
-                  <Input placeholder={vibeVoiceTrainForm.training_mode === "tts_lora" ? "HF dataset id 또는 local dataset path" : "vendor/VibeVoice/finetuning-asr/toy_dataset"} value={vibeVoiceTrainForm.data_dir} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, data_dir: event.target.value }))} />
-                </div>
-                <div className="flex flex-col gap-1.5 sm:col-span-2">
-                  <Label className="text-xs font-medium text-ink-muted">Output dir</Label>
-                  <Input placeholder="비우면 data/audio-tools/vibevoice_training 아래에 저장" value={vibeVoiceTrainForm.output_dir} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, output_dir: event.target.value }))} />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">Training model</Label>
+                <Select
+                  value={vibeVoiceTrainForm.model_path || "__default__"}
+                  onValueChange={(model_path) => setVibeVoiceTrainForm((prev) => ({ ...prev, model_path: model_path === "__default__" ? "" : model_path }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">
+                      {activeTab === "vibevoice_tts_train" ? "VibeVoice-1.5B 기본 모델" : "VibeVoice-ASR 기본 모델"}
+                    </SelectItem>
+                    {(activeTab === "vibevoice_tts_train" ? vibeVoiceTtsTrainingAssets : vibeVoiceAsrTrainingAssets).map((asset) => (
+                      <SelectItem key={asset.id} value={asset.path}>
+                        {asset.name} · {vibeVoiceAssetKindLabel(asset.kind)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[11px] text-ink-subtle">
+                  저장된 VibeVoice 모델을 고르면 그 모델에서 이어서 학습합니다. 기본값은 다운로드된 공식 모델을 자동으로 사용합니다.
+                </span>
               </div>
               {activeTab === "vibevoice_tts_train" ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <Input value={vibeVoiceTrainForm.text_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, text_column_name: event.target.value }))} placeholder="text column" />
-                  <Input value={vibeVoiceTrainForm.audio_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, audio_column_name: event.target.value }))} placeholder="audio column" />
-                  <Input value={vibeVoiceTrainForm.voice_prompts_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, voice_prompts_column_name: event.target.value }))} placeholder="voice prompts column" />
-                  <Input value={vibeVoiceTrainForm.train_jsonl} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_jsonl: event.target.value }))} placeholder="local train JSONL" />
-                  <Input value={vibeVoiceTrainForm.validation_jsonl} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, validation_jsonl: event.target.value }))} placeholder="validation JSONL" />
-                  <Input value={vibeVoiceTrainForm.dataset_config_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, dataset_config_name: event.target.value }))} placeholder="dataset config" />
+                <div className="rounded-md border border-line bg-canvas/60 p-3">
+                  <div className="flex flex-col gap-1">
+                    <strong className="text-sm font-medium text-ink">Dataset columns</strong>
+                    <p className="text-xs leading-5 text-ink-muted">
+                      VibeVoice TTS 학습 스크립트가 데이터셋에서 어떤 열을 읽을지 정합니다. 데이터셋 탭에서 만든 기본 구조를 쓰면 보통 그대로 두면 됩니다.
+                    </p>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Text column</Label>
+                      <Input value={vibeVoiceTrainForm.text_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, text_column_name: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">읽을 문장/전사 텍스트가 들어 있는 열입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Audio column</Label>
+                      <Input value={vibeVoiceTrainForm.audio_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, audio_column_name: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">학습 음성 파일 경로나 오디오 객체가 들어 있는 열입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Voice prompts column</Label>
+                      <Input value={vibeVoiceTrainForm.voice_prompts_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, voice_prompts_column_name: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">화자/참조 음색 prompt 정보가 들어 있는 열입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Dataset config</Label>
+                      <Input value={vibeVoiceTrainForm.dataset_config_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, dataset_config_name: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">Hugging Face dataset config가 있을 때만 씁니다.</span>
+                    </div>
+                  </div>
                 </div>
               ) : null}
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -6230,33 +6493,113 @@ function StudioApp() {
                   Advanced training settings
                   <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                 </summary>
-                <div className="grid grid-cols-2 gap-3 border-t border-line px-3 py-3 lg:grid-cols-4">
-                  <Input value={vibeVoiceTrainForm.warmup_ratio} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, warmup_ratio: event.target.value }))} placeholder="Warmup ratio" />
-                  <Input value={vibeVoiceTrainForm.weight_decay} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, weight_decay: event.target.value }))} placeholder="Weight decay" />
-                  <Input value={vibeVoiceTrainForm.max_grad_norm} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_grad_norm: event.target.value }))} placeholder="Max grad norm" />
-                  <Input value={vibeVoiceTrainForm.max_audio_length} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_audio_length: event.target.value }))} placeholder="Max audio sec" />
-                  <Input value={vibeVoiceTrainForm.logging_steps} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, logging_steps: event.target.value }))} placeholder="Logging steps" />
-                  <Input value={vibeVoiceTrainForm.save_steps} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, save_steps: event.target.value }))} placeholder="Save steps" />
-                  <Input value={vibeVoiceTrainForm.report_to} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, report_to: event.target.value }))} placeholder="Report to" />
-                  <Input value={vibeVoiceTrainForm.extra_args} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, extra_args: event.target.value }))} placeholder="Extra args" />
-                  <Input value={vibeVoiceTrainForm.train_split_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_split_name: event.target.value }))} placeholder="Train split" />
-                  <Input value={vibeVoiceTrainForm.eval_split_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, eval_split_name: event.target.value }))} placeholder="Eval split" />
-                  <Input value={vibeVoiceTrainForm.eval_split_size} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, eval_split_size: event.target.value }))} placeholder="Eval split size" />
-                  <Input value={vibeVoiceTrainForm.max_length} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_length: event.target.value }))} placeholder="Max length" />
-                  <Input value={vibeVoiceTrainForm.lora_target_modules} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_target_modules: event.target.value }))} placeholder="LoRA target modules" />
-                  <Input value={vibeVoiceTrainForm.layers_to_freeze} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, layers_to_freeze: event.target.value }))} placeholder="Layers to freeze" />
-                  <Input value={vibeVoiceTrainForm.ddpm_batch_mul} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, ddpm_batch_mul: event.target.value }))} placeholder="DDPM batch mul" />
-                  <Input value={vibeVoiceTrainForm.ce_loss_weight} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, ce_loss_weight: event.target.value }))} placeholder="CE loss weight" />
-                  <Input value={vibeVoiceTrainForm.diffusion_loss_weight} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, diffusion_loss_weight: event.target.value }))} placeholder="Diffusion loss weight" />
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.bf16} onCheckedChange={(bf16) => setVibeVoiceTrainForm((prev) => ({ ...prev, bf16 }))} /> bf16</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.gradient_checkpointing} onCheckedChange={(gradient_checkpointing) => setVibeVoiceTrainForm((prev) => ({ ...prev, gradient_checkpointing }))} /> Gradient checkpointing</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.use_customized_context} onCheckedChange={(use_customized_context) => setVibeVoiceTrainForm((prev) => ({ ...prev, use_customized_context }))} /> Customized context</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.ignore_verifications} onCheckedChange={(ignore_verifications) => setVibeVoiceTrainForm((prev) => ({ ...prev, ignore_verifications }))} /> Ignore verifications</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.lora_wrap_diffusion_head} onCheckedChange={(lora_wrap_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_wrap_diffusion_head }))} /> LoRA diffusion head</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_diffusion_head} onCheckedChange={(train_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_diffusion_head }))} /> Train diffusion head</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_connectors} onCheckedChange={(train_connectors) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_connectors }))} /> Train connectors</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_save} onCheckedChange={(debug_save) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_save }))} /> Debug save</label>
-                  <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_ce_details} onCheckedChange={(debug_ce_details) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_ce_details }))} /> Debug CE</label>
+                <div className="border-t border-line px-3 py-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Warmup ratio</Label>
+                      <Input value={vibeVoiceTrainForm.warmup_ratio} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, warmup_ratio: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">초반 학습률을 천천히 올리는 비율입니다. 작은 데이터셋에서는 급격한 손상을 줄입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Weight decay</Label>
+                      <Input value={vibeVoiceTrainForm.weight_decay} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, weight_decay: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">가중치가 과하게 커지는 것을 억제하는 정규화 값입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Max grad norm</Label>
+                      <Input value={vibeVoiceTrainForm.max_grad_norm} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_grad_norm: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">gradient 폭주를 막기 위한 clipping 한계입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Max audio sec</Label>
+                      <Input value={vibeVoiceTrainForm.max_audio_length} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_audio_length: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">너무 긴 샘플을 제외할 때 쓰는 최대 음성 길이입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Logging steps</Label>
+                      <Input value={vibeVoiceTrainForm.logging_steps} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, logging_steps: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">몇 step마다 로그를 남길지 정합니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Save steps</Label>
+                      <Input value={vibeVoiceTrainForm.save_steps} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, save_steps: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">몇 step마다 중간 checkpoint를 저장할지 정합니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Train split</Label>
+                      <Input value={vibeVoiceTrainForm.train_split_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_split_name: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">학습에 사용할 데이터셋 split 이름입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Eval split</Label>
+                      <Input value={vibeVoiceTrainForm.eval_split_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, eval_split_name: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">검증에 사용할 split 이름입니다. 없으면 비워둘 수 있습니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Eval split size</Label>
+                      <Input value={vibeVoiceTrainForm.eval_split_size} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, eval_split_size: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">검증 split이 없을 때 학습 데이터에서 떼어낼 비율입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Max length</Label>
+                      <Input value={vibeVoiceTrainForm.max_length} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, max_length: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">토큰 기준 최대 길이입니다. OOM이 나면 낮춥니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LoRA target modules</Label>
+                      <Input value={vibeVoiceTrainForm.lora_target_modules} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_target_modules: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">LoRA를 붙일 transformer 모듈 목록입니다.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Layers to freeze</Label>
+                      <Input value={vibeVoiceTrainForm.layers_to_freeze} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, layers_to_freeze: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">고정할 layer 범위입니다. 비우면 기본 trainer 설정을 따릅니다.</span>
+                    </div>
+                    {activeTab === "vibevoice_tts_train" ? (
+                      <>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">DDPM batch mul</Label>
+                          <Input value={vibeVoiceTrainForm.ddpm_batch_mul} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, ddpm_batch_mul: event.target.value }))} />
+                          <span className="text-[11px] text-ink-subtle">확산 음성 헤드의 내부 batch 배율입니다. 메모리 피크가 높으면 낮춥니다.</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">CE loss weight</Label>
+                          <Input value={vibeVoiceTrainForm.ce_loss_weight} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, ce_loss_weight: event.target.value }))} />
+                          <span className="text-[11px] text-ink-subtle">텍스트/토큰 예측 손실의 비중입니다. 말 내용 유지에 관여합니다.</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">Diffusion loss weight</Label>
+                          <Input value={vibeVoiceTrainForm.diffusion_loss_weight} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, diffusion_loss_weight: event.target.value }))} />
+                          <span className="text-[11px] text-ink-subtle">음색/음향 생성 확산 손실의 비중입니다. 음색 적응에 관여합니다.</span>
+                        </div>
+                      </>
+                    ) : null}
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Report to</Label>
+                      <Input value={vibeVoiceTrainForm.report_to} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, report_to: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">wandb/tensorboard 같은 로깅 백엔드입니다. 기본값 none.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <Label className="text-xs font-medium text-ink-muted">Extra args</Label>
+                      <Input value={vibeVoiceTrainForm.extra_args} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, extra_args: event.target.value }))} />
+                      <span className="text-[11px] text-ink-subtle">UI에 없는 upstream 인자를 공백으로 구분해 추가합니다.</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.bf16} onCheckedChange={(bf16) => setVibeVoiceTrainForm((prev) => ({ ...prev, bf16 }))} /> <strong className="ml-2 text-ink">bf16</strong><span className="mt-1 block">GPU 메모리를 줄이는 mixed precision입니다.</span></label>
+                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.gradient_checkpointing} onCheckedChange={(gradient_checkpointing) => setVibeVoiceTrainForm((prev) => ({ ...prev, gradient_checkpointing }))} /> <strong className="ml-2 text-ink">Gradient checkpointing</strong><span className="mt-1 block">속도를 조금 포기하고 VRAM 사용량을 낮춥니다.</span></label>
+                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.use_customized_context} onCheckedChange={(use_customized_context) => setVibeVoiceTrainForm((prev) => ({ ...prev, use_customized_context }))} /> <strong className="ml-2 text-ink">Customized context</strong><span className="mt-1 block">ASR 학습에서 문맥 정보를 함께 쓰는 옵션입니다.</span></label>
+                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.ignore_verifications} onCheckedChange={(ignore_verifications) => setVibeVoiceTrainForm((prev) => ({ ...prev, ignore_verifications }))} /> <strong className="ml-2 text-ink">Ignore verifications</strong><span className="mt-1 block">데이터 검증 실패를 무시합니다. 디버깅 외에는 권장하지 않습니다.</span></label>
+                    {activeTab === "vibevoice_tts_train" ? (
+                      <>
+                        <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.lora_wrap_diffusion_head} onCheckedChange={(lora_wrap_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_wrap_diffusion_head }))} /> <strong className="ml-2 text-ink">LoRA diffusion head</strong><span className="mt-1 block">확산 음성 헤드에도 LoRA wrapper를 적용합니다.</span></label>
+                        <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_diffusion_head} onCheckedChange={(train_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_diffusion_head }))} /> <strong className="ml-2 text-ink">Train diffusion head</strong><span className="mt-1 block">음색과 음향 품질에 직접 관여하는 diffusion head를 학습합니다.</span></label>
+                        <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_connectors} onCheckedChange={(train_connectors) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_connectors }))} /> <strong className="ml-2 text-ink">Train connectors</strong><span className="mt-1 block">텍스트 모델과 음성 생성부 사이 연결층까지 조정합니다.</span></label>
+                      </>
+                    ) : null}
+                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_save} onCheckedChange={(debug_save) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_save }))} /> <strong className="ml-2 text-ink">Debug save</strong><span className="mt-1 block">중간 디버그 산출물을 저장합니다.</span></label>
+                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_ce_details} onCheckedChange={(debug_ce_details) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_ce_details }))} /> <strong className="ml-2 text-ink">Debug CE</strong><span className="mt-1 block">CE loss 상세 값을 로그에 남깁니다.</span></label>
+                  </div>
                 </div>
               </details>
             </WorkspaceCard>
@@ -6266,8 +6609,8 @@ function StudioApp() {
                 {vibeVoiceTrainResult ? (
                   <div className="flex flex-col gap-2 text-xs text-ink-muted">
                     <span>Status: <strong className="text-ink">{vibeVoiceTrainResult.status}</strong></span>
-                    <span className="break-all">Log: {vibeVoiceTrainResult.log_path}</span>
-                    <span className="break-all">Adapter: {vibeVoiceTrainResult.adapter_path || "-"}</span>
+                    <span>{vibeVoiceTrainResult.adapter_path ? "Adapter saved" : "Adapter pending"}</span>
+                    <span>{vibeVoiceTrainResult.log_path ? "Training log saved" : "Training log pending"}</span>
                   </div>
                 ) : (
                   <p className="text-xs text-ink-muted">ASR LoRA는 Microsoft 공식 `finetuning-asr/lora_finetune.py`를 사용합니다.</p>
@@ -6313,17 +6656,35 @@ function StudioApp() {
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Output path</Label>
-                  <Input value={vibeVoiceModelToolForm.output_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, output_path: event.target.value }))} placeholder="data/models/vibevoice/merged-vibevoice" />
+                  <Label className="text-xs font-medium text-ink-muted">Model name</Label>
+                  <Input value={vibeVoiceModelToolForm.output_name} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, output_name: event.target.value }))} placeholder="merged-vibevoice" />
                 </div>
               </div>
 
               {vibeVoiceModelToolForm.tool === "convert_nnscaler" ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
+                  <Tabs value={vibeVoiceModelToolSource.nnscaler} onValueChange={(value) => setVibeVoiceModelToolSource((prev) => ({ ...prev, nnscaler: value as "library" | "path" }))} className="flex flex-col gap-2">
                     <Label className="text-xs font-medium text-ink-muted">NnScaler checkpoint</Label>
-                    <Input value={vibeVoiceModelToolForm.nnscaler_checkpoint_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, nnscaler_checkpoint_path: event.target.value }))} placeholder="path/to/nnscaler/checkpoint" />
-                  </div>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="library">생성된 모델에서 선택</TabsTrigger>
+                      <TabsTrigger value="path">직접 경로</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="library" className="m-0">
+                      <Select value={vibeVoiceModelToolForm.nnscaler_checkpoint_path} onValueChange={(nnscaler_checkpoint_path) => setVibeVoiceModelToolForm((prev) => ({ ...prev, nnscaler_checkpoint_path }))}>
+                        <SelectTrigger><SelectValue placeholder="변환할 checkpoint 선택" /></SelectTrigger>
+                        <SelectContent>
+                          {vibeVoiceNnScalerAssets.length ? vibeVoiceNnScalerAssets.map((asset) => (
+                            <SelectItem key={asset.id} value={asset.path}>{asset.name} · {vibeVoiceAssetKindLabel(asset.kind)}</SelectItem>
+                          )) : (
+                            <SelectItem value="__none" disabled>아직 선택 가능한 자산이 없습니다</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </TabsContent>
+                    <TabsContent value="path" className="m-0">
+                      <Input value={vibeVoiceModelToolForm.nnscaler_checkpoint_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, nnscaler_checkpoint_path: event.target.value }))} placeholder="path/to/nnscaler/checkpoint" />
+                    </TabsContent>
+                  </Tabs>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Config path</Label>
                     <Input value={vibeVoiceModelToolForm.config_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, config_path: event.target.value }))} placeholder="optional config path" />
@@ -6331,14 +6692,50 @@ function StudioApp() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Base model path</Label>
-                    <Input value={vibeVoiceModelToolForm.base_model_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, base_model_path: event.target.value }))} placeholder="data/models/vibevoice/VibeVoice-1.5B" />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint path</Label>
-                    <Input value={vibeVoiceModelToolForm.checkpoint_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="data/audio-tools/vibevoice_training/.../adapter" disabled={vibeVoiceModelToolForm.tool === "verify_merge"} />
-                  </div>
+                  <Tabs value={vibeVoiceModelToolSource.base} onValueChange={(value) => setVibeVoiceModelToolSource((prev) => ({ ...prev, base: value as "library" | "path" }))} className="flex flex-col gap-2">
+                    <Label className="text-xs font-medium text-ink-muted">Base model</Label>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="library">생성된 모델에서 선택</TabsTrigger>
+                      <TabsTrigger value="path">직접 경로</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="library" className="m-0">
+                      <Select value={vibeVoiceModelToolForm.base_model_path} onValueChange={(base_model_path) => setVibeVoiceModelToolForm((prev) => ({ ...prev, base_model_path }))}>
+                        <SelectTrigger><SelectValue placeholder="Base 모델 선택" /></SelectTrigger>
+                        <SelectContent>
+                          {vibeVoiceBaseAssets.length ? vibeVoiceBaseAssets.map((asset) => (
+                            <SelectItem key={asset.id} value={asset.path}>{asset.name} · {vibeVoiceAssetKindLabel(asset.kind)}</SelectItem>
+                          )) : (
+                            <SelectItem value="__none" disabled>아직 선택 가능한 모델이 없습니다</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </TabsContent>
+                    <TabsContent value="path" className="m-0">
+                      <Input value={vibeVoiceModelToolForm.base_model_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, base_model_path: event.target.value }))} placeholder="data/models/vibevoice/VibeVoice-1.5B" />
+                    </TabsContent>
+                  </Tabs>
+                  <Tabs value={vibeVoiceModelToolSource.checkpoint} onValueChange={(value) => setVibeVoiceModelToolSource((prev) => ({ ...prev, checkpoint: value as "library" | "path" }))} className="flex flex-col gap-2">
+                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint</Label>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="library" disabled={vibeVoiceModelToolForm.tool === "verify_merge"}>생성된 모델에서 선택</TabsTrigger>
+                      <TabsTrigger value="path" disabled={vibeVoiceModelToolForm.tool === "verify_merge"}>직접 경로</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="library" className="m-0">
+                      <Select value={vibeVoiceModelToolForm.checkpoint_path} onValueChange={(checkpoint_path) => setVibeVoiceModelToolForm((prev) => ({ ...prev, checkpoint_path }))} disabled={vibeVoiceModelToolForm.tool === "verify_merge"}>
+                        <SelectTrigger><SelectValue placeholder="학습 결과 adapter 선택" /></SelectTrigger>
+                        <SelectContent>
+                          {vibeVoiceAdapterAssets.length ? vibeVoiceAdapterAssets.map((asset) => (
+                            <SelectItem key={asset.id} value={asset.path}>{asset.name} · {vibeVoiceAssetKindLabel(asset.kind)}</SelectItem>
+                          )) : (
+                            <SelectItem value="__none" disabled>아직 학습된 adapter가 없습니다</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </TabsContent>
+                    <TabsContent value="path" className="m-0">
+                      <Input value={vibeVoiceModelToolForm.checkpoint_path} onChange={(event) => setVibeVoiceModelToolForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="data/audio-tools/vibevoice_training/.../adapter" disabled={vibeVoiceModelToolForm.tool === "verify_merge"} />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               )}
 
@@ -6365,8 +6762,8 @@ function StudioApp() {
                 {vibeVoiceModelToolResult ? (
                   <div className="flex flex-col gap-2 text-xs text-ink-muted">
                     <span>Status: <strong className="text-ink">{vibeVoiceModelToolResult.status}</strong></span>
-                    <span className="break-all">Output: {vibeVoiceModelToolResult.output_path}</span>
-                    <span className="break-all">Log: {vibeVoiceModelToolResult.log_path}</span>
+                    <span>{vibeVoiceModelToolResult.output_path ? "Model output saved" : "Model output pending"}</span>
+                    <span>{vibeVoiceModelToolResult.log_path ? "Operation log saved" : "Operation log pending"}</span>
                   </div>
                 ) : (
                   <p className="text-xs leading-5 text-ink-muted">VibeVoice checkout에 포함된 공식 merge/convert utilities를 직접 호출합니다.</p>
@@ -6441,36 +6838,6 @@ function StudioApp() {
                   </div>
                 </div>
 
-                <Tabs value={s2ProTrainSource} onValueChange={(value) => setS2ProTrainSource(value as "protos" | "lab_audio_dir")} className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Training data source</Label>
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="protos">Protobuf dataset</TabsTrigger>
-                      <TabsTrigger value="lab_audio_dir">Audio + .lab folder</TabsTrigger>
-                    </TabsList>
-                  </div>
-                  <TabsContent value="protos" className="mt-0">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Proto directory</Label>
-                      <Input placeholder="data/protos 또는 절대경로" value={s2ProTrainForm.proto_dir} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, proto_dir: event.target.value }))} />
-                      <span className="text-[11px] text-ink-subtle">Fish Speech `tools/llama/build_dataset.py`가 만든 protobuf 폴더를 바로 사용합니다.</span>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="lab_audio_dir" className="mt-0">
-                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-xs font-medium text-ink-muted">Audio + .lab folder</Label>
-                        <Input placeholder="data/s2pro-datasets/my-speaker 또는 절대경로" value={s2ProTrainForm.lab_audio_dir} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, lab_audio_dir: event.target.value }))} />
-                        <span className="text-[11px] text-ink-subtle">같은 이름의 `.wav/.mp3/.flac`와 `.lab` 텍스트를 VQ 추출 후 protobuf로 묶습니다.</span>
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-xs font-medium text-ink-muted">VQ batch</Label>
-                        <Input value={s2ProTrainForm.vq_batch_size} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, vq_batch_size: event.target.value }))} />
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Max steps</Label>
@@ -6516,6 +6883,10 @@ function StudioApp() {
                   </summary>
                   <div className="grid grid-cols-1 gap-3 border-t border-line px-3 py-3 sm:grid-cols-3">
                     <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">VQ batch</Label>
+                      <Input value={s2ProTrainForm.vq_batch_size} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, vq_batch_size: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Pretrained checkpoint</Label>
                       <Input placeholder="비우면 data/models/fish-speech/s2-pro" value={s2ProTrainForm.pretrained_ckpt_path} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, pretrained_ckpt_path: event.target.value }))} />
                     </div>
@@ -6550,9 +6921,9 @@ function StudioApp() {
                 {s2ProTrainResult ? (
                   <div className="flex flex-col gap-2 text-xs text-ink-muted">
                     <span>Status: <strong className="text-ink">{s2ProTrainResult.status}</strong></span>
-                    <span className="break-all">Log: {s2ProTrainResult.log_path}</span>
-                    <span className="break-all">Checkpoint: {s2ProTrainResult.final_checkpoint_path || "-"}</span>
-                    <span className="break-all">Merged: {s2ProTrainResult.merged_model_path || "-"}</span>
+                    <span>{s2ProTrainResult.final_checkpoint_path ? "Checkpoint saved" : "Checkpoint pending"}</span>
+                    <span>{s2ProTrainResult.merged_model_path ? "Merged model saved" : "Merged model not created"}</span>
+                    <span>{s2ProTrainResult.log_path ? "Training log saved" : "Training log pending"}</span>
                   </div>
                 ) : (
                   <p className="text-xs text-ink-muted">S2-Pro 학습 결과가 여기에 표시됩니다.</p>
@@ -6740,7 +7111,7 @@ function StudioApp() {
             action={{
               label: t("mmaudio.train.submit", "MMAudio 학습 시작"),
               formId: "mmaudio-train-form",
-              disabled: loading || !mmaudioTrainForm.output_name.trim(),
+              disabled: loading || !mmaudioTrainForm.output_name.trim() || !selectedMMAudioDataset,
               loading,
             }}
           />
@@ -6748,11 +7119,12 @@ function StudioApp() {
             title="학습 데이터셋"
             target="mmaudio"
             datasets={audioDatasets}
-            activePath={toolDatasetLastBuild?.target === "mmaudio" ? toolDatasetLastBuild.dataset_root_path : ""}
-            pathLabel="MMAudio dataset manifest"
-            guidance="MMAudio는 upstream config 학습이 중심이지만, 앱에서 만든 효과음/오디오 데이터셋 manifest를 기준으로 학습 설정을 맞출 수 있습니다."
+            activePath={selectedMMAudioDataset?.dataset_root_path || ""}
+            pathLabel="Prepared dataset"
+            guidance="데이터셋 탭에서 만든 MMAudio 데이터셋을 선택해 학습 입력에 연결합니다. 훈련 탭에서는 데이터 경로를 다시 입력하지 않습니다."
             onCreateDataset={() => setActiveTab("mmaudio_dataset")}
             onUse={(dataset) => {
+              setSelectedMMAudioDatasetId(dataset.id);
               setMMAudioTrainForm((prev) => ({ ...prev, data_mode: "configured", output_name: prev.output_name || dataset.name }));
               setToolDatasetLastBuild(dataset);
               setMessage(`${dataset.name} 데이터셋을 MMAudio 학습 입력에 연결했습니다.`);
@@ -6782,17 +7154,6 @@ function StudioApp() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Data mode</Label>
-                    <Select value={mmaudioTrainForm.data_mode} onValueChange={(data_mode) => setMMAudioTrainForm((prev) => ({ ...prev, data_mode: data_mode as "configured" | "example" }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="example">Example data</SelectItem>
-                        <SelectItem value="configured">Configured dataset</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <span className="text-[11px] text-ink-subtle">Configured는 `vendor/MMAudio/config/data/base.yaml` 설정을 그대로 사용합니다.</span>
-                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Pretrained weights</Label>
                     <Input placeholder="weights/mmaudio_small_16k.pth 또는 절대경로" value={mmaudioTrainForm.weights_path} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, weights_path: event.target.value }))} />
@@ -6855,8 +7216,8 @@ function StudioApp() {
                 {mmaudioTrainResult ? (
                   <div className="flex flex-col gap-2 text-xs text-ink-muted">
                     <span>Status: <strong className="text-ink">{mmaudioTrainResult.status}</strong></span>
-                    <span className="break-all">Log: {mmaudioTrainResult.log_path}</span>
-                    <span className="break-all">Weights: {mmaudioTrainResult.final_weights_path || "-"}</span>
+                    <span>{mmaudioTrainResult.final_weights_path ? "Weights saved" : "Weights pending"}</span>
+                    <span>{mmaudioTrainResult.log_path ? "Training log saved" : "Training log pending"}</span>
                   </div>
                 ) : (
                   <p className="text-xs text-ink-muted">MMAudio 학습 결과가 여기에 표시됩니다.</p>
@@ -7487,8 +7848,8 @@ function StudioApp() {
                       ? aceStepTrainForm.audio_dir
                       : aceStepTrainForm.dataset_json
                 }
-                pathLabel={aceStepTrainSource === "tensors" ? "Prepared tensor" : aceStepTrainSource === "audio_dir" ? "Audio folder" : "Dataset JSON"}
-                guidance="생성 갤러리나 폴더에서 만든 dataset.json을 연결하거나, prepared tensor 폴더를 데이터셋 탭에서 연결해 학습을 시작합니다."
+                pathLabel="Prepared dataset"
+                guidance="ACE-Step 데이터셋 탭에서 만든 학습 세트를 선택해 연결합니다. 훈련 탭에서는 파일 경로나 폴더를 다시 입력하지 않습니다."
                 onCreateDataset={() => setActiveTab("ace_dataset")}
                 onUse={(dataset) => {
                   setAceStepTrainSource("dataset_json");
@@ -7561,77 +7922,6 @@ function StudioApp() {
                     </div>
                   </div>
 
-                  <Tabs value={aceStepTrainSource} onValueChange={(value) => setAceStepTrainSource(value as "tensors" | "audio_dir" | "dataset_json")} className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">{t("ace.train.source.title", "Training data source")}</Label>
-                      <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="tensors">Tensors</TabsTrigger>
-                        <TabsTrigger value="audio_dir">Audio folder</TabsTrigger>
-                        <TabsTrigger value="dataset_json">Dataset JSON</TabsTrigger>
-                      </TabsList>
-                    </div>
-
-                    <TabsContent value="tensors" className="mt-0">
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-xs font-medium text-ink-muted">Tensor directory</Label>
-                        <Input
-                          placeholder="data/ace-step/tensors/my-dataset 또는 절대경로"
-                          value={aceStepTrainForm.tensor_dir}
-                          onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, tensor_dir: event.target.value }))}
-                        />
-                        <span className="text-[11px] text-ink-subtle">
-                          {t("ace.train.tensorHint", "이미 ACE-Step preprocess가 끝난 tensor 폴더를 바로 학습합니다.")}
-                        </span>
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="audio_dir" className="mt-0">
-                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-xs font-medium text-ink-muted">Audio folder</Label>
-                          <Input
-                            placeholder="data/generated/voice-clean 또는 절대경로"
-                            value={aceStepTrainForm.audio_dir}
-                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, audio_dir: event.target.value }))}
-                          />
-                          <span className="text-[11px] text-ink-subtle">
-                            {t("ace.train.audioHint", "WAV/MP3/FLAC 폴더를 먼저 tensor로 변환한 뒤 같은 실행에서 학습합니다.")}
-                          </span>
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-xs font-medium text-ink-muted">Max duration</Label>
-                          <Input
-                            value={aceStepTrainForm.max_duration}
-                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, max_duration: event.target.value }))}
-                          />
-                        </div>
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="dataset_json" className="mt-0">
-                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-xs font-medium text-ink-muted">Dataset JSON</Label>
-                          <Input
-                            placeholder="data/ace-step/datasets/my-dataset.json 또는 절대경로"
-                            value={aceStepTrainForm.dataset_json}
-                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, dataset_json: event.target.value }))}
-                          />
-                          <span className="text-[11px] text-ink-subtle">
-                            {t("ace.train.jsonHint", "ACE-Step 형식의 dataset JSON을 tensor로 변환한 뒤 학습합니다.")}
-                          </span>
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-xs font-medium text-ink-muted">Max duration</Label>
-                          <Input
-                            value={aceStepTrainForm.max_duration}
-                            onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, max_duration: event.target.value }))}
-                          />
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Model variant</Label>
@@ -7675,6 +7965,13 @@ function StudioApp() {
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Workers</Label>
                       <Input value={aceStepTrainForm.num_workers} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, num_workers: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Max duration</Label>
+                      <Input
+                        value={aceStepTrainForm.max_duration}
+                        onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, max_duration: event.target.value }))}
+                      />
                     </div>
                   </div>
 
@@ -7781,19 +8078,19 @@ function StudioApp() {
                 <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                   <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
                     <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Output</span>
-                    <span className="break-all text-ink">{aceStepTrainResult.output_dir || "-"}</span>
+                    <span className="text-ink">{aceStepTrainResult.output_dir ? "Training output saved" : "Training output pending"}</span>
                   </div>
                   <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
                     <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Adapter</span>
-                    <span className="break-all text-ink">{aceStepTrainResult.final_adapter_path || "-"}</span>
+                    <span className="text-ink">{aceStepTrainResult.final_adapter_path ? "Adapter saved" : "Adapter pending"}</span>
                   </div>
                   <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
-                    <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Tensor directory</span>
-                    <span className="break-all text-ink">{aceStepTrainResult.tensor_dir || "-"}</span>
+                    <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Prepared data</span>
+                    <span className="text-ink">{aceStepTrainResult.tensor_dir ? "Training tensors ready" : "No tensor cache linked"}</span>
                   </div>
                   <div className="flex flex-col gap-1 rounded-md border border-line bg-canvas/60 p-3">
                     <span className="text-[11px] uppercase tracking-allcaps text-ink-subtle">Log</span>
-                    <span className="break-all text-ink">{aceStepTrainResult.log_path || "-"}</span>
+                    <span className="text-ink">{aceStepTrainResult.log_path ? "Training log saved" : "Training log pending"}</span>
                   </div>
                 </div>
                 {aceStepTrainResult.final_adapter_path ? (
@@ -7860,11 +8157,10 @@ function StudioApp() {
             target="rvc"
             datasets={audioDatasets}
             activePath={rvcTrainForm.dataset_path}
-            pathLabel="RVC WAV folder"
-            guidance="생성 갤러리나 폴더에서 만든 RVC 데이터셋을 선택하면 목표 화자 WAV 폴더가 학습 입력에 들어갑니다."
+            pathLabel="Prepared dataset"
+            guidance="RVC 데이터셋 탭에서 만든 목표 목소리 데이터셋을 선택해 연결합니다. 훈련 탭에서는 파일 경로나 폴더를 다시 입력하지 않습니다."
             onCreateDataset={() => setActiveTab("applio_dataset")}
             onUse={(dataset) => {
-              setRvcTrainSource("folder");
               setRvcTrainForm((prev) => ({
                 ...prev,
                 dataset_path: dataset.audio_dir_path,
@@ -7879,7 +8175,7 @@ function StudioApp() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-2">
                 <div className="rounded-md border border-line bg-canvas/60 p-3">
                   <strong className="text-sm font-medium text-ink">{t("applio_train.requirements", "준비물")}</strong>
-                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.requirementsBody", "목표 목소리만 깨끗하게 들어 있는 WAV를 생성 갤러리에서 고르거나, 준비된 WAV 폴더를 입력하세요. 같은 화자 음성 10분 이상을 권장합니다.")}</p>
+                  <p className="mt-1 text-xs text-ink-muted">{t("applio_train.requirementsBody", "데이터셋 탭에서 목표 목소리만 깨끗하게 들어 있는 WAV 묶음을 먼저 준비한 뒤 이 화면에 연결하세요. 같은 화자 음성 10분 이상을 권장합니다.")}</p>
                 </div>
                 <div className="rounded-md border border-line bg-canvas/60 p-3">
                   <strong className="text-sm font-medium text-ink">{t("applio_train.outputs", "결과물")}</strong>
@@ -7891,74 +8187,6 @@ function StudioApp() {
                 <Input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, model_name: event.target.value })} />
                 <span className="text-[11px] text-ink-subtle">{t("applio_train.modelNameHint", "예: mai-rvc, narrator-clean. 화면에는 이 이름으로 표시됩니다.")}</span>
               </div>
-
-              <Tabs value={rvcTrainSource} onValueChange={(value) => setRvcTrainSource(value as "gallery" | "folder")} className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">{t("applio_train.source.title", "학습 데이터 입력 방식")}</Label>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="gallery">{t("applio_train.source.gallery", "생성 갤러리")}</TabsTrigger>
-                    <TabsTrigger value="folder">{t("applio_train.source.folder", "폴더 경로")}</TabsTrigger>
-                  </TabsList>
-                </div>
-
-                <TabsContent value="gallery" className="mt-0">
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
-                    <div className="flex flex-col gap-2">
-                      <div>
-                        <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.title", "생성 갤러리에서 목표 음성 선택")}</strong>
-                        <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.body", "같은 화자의 깨끗한 WAV 결과를 여러 개 고르면 백엔드가 RVC 학습용 폴더를 자동으로 만듭니다.")}</p>
-                      </div>
-                      <ServerAudioPicker assets={generatedAudioAssets} selectedPath="" onSelect={addRvcTrainAsset} />
-                    </div>
-                    <div className="rounded-md border border-line bg-canvas/60 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <strong className="text-sm font-medium text-ink">{t("applio_train.gallery.selected", "선택한 학습 음성")}</strong>
-                        <Button variant="outline" size="sm" onClick={() => setRvcTrainAudioPaths([])} type="button">
-                          {t("applio_train.gallery.clear", "비우기")}
-                        </Button>
-                      </div>
-                      <p className="mt-1 text-xs text-ink-muted">{t("applio_train.gallery.count", "{n}개 선택됨").replace("{n}", String(rvcTrainAudioPaths.length))}</p>
-                      <div className="mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
-                        {selectedRvcTrainAssets.length ? selectedRvcTrainAssets.map((asset) => (
-                          <article key={asset.path} className="rounded-md border border-line bg-surface p-2">
-                            <div className="flex items-center gap-2">
-                              <div className="min-w-0 flex-1">
-                                <strong className="block truncate text-xs font-medium text-ink">{asset.filename}</strong>
-                                <span className="text-[10px] text-ink-subtle">{asset.source === "generated" ? t("applio_batch.gallery", "생성 갤러리") : t("applio_batch.upload", "업로드")}</span>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-danger hover:bg-danger/10"
-                                onClick={() => setRvcTrainAudioPaths((prev) => prev.filter((path) => path !== asset.path))}
-                                type="button"
-                              >
-                                {t("applio_batch.remove", "제거")}
-                              </Button>
-                            </div>
-                          </article>
-                        )) : (
-                          <p className="text-xs text-ink-muted">{t("applio_train.gallery.empty", "아직 선택한 학습 음성이 없습니다.")}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="folder" className="mt-0">
-                  <div className="rounded-md border border-line bg-canvas/60 p-3">
-                    <div className="flex flex-col gap-1.5">
-                      <strong className="text-sm font-medium text-ink">{t("applio_train.folder.title", "준비된 WAV 폴더 사용")}</strong>
-                      <p className="text-xs text-ink-muted">{t("applio_train.folder.body", "이미 같은 화자의 WAV 파일을 한 폴더에 정리해 둔 경우 이 경로만 사용합니다. 생성 갤러리 선택은 이 모드에서 요청에 포함되지 않습니다.")}</p>
-                    </div>
-                    <div className="mt-3 flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">{t("applio_train.datasetPath", "목표 목소리 폴더")}</Label>
-                      <Input placeholder="/mnt/d/voice/rvc_dataset/wavs" value={rvcTrainForm.dataset_path} onChange={(event) => setRvcTrainForm({ ...rvcTrainForm, dataset_path: event.target.value })} />
-                      <span className="text-[11px] text-ink-subtle">{t("applio_train.datasetHint", "이미 정리된 WAV 폴더가 있으면 직접 입력하세요.")}</span>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
@@ -8982,22 +9210,6 @@ function StudioApp() {
               setMessage("Prepared proto를 S2-Pro 학습 탭으로 넘겼습니다.");
             }}
           />
-          <WorkspaceCard className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-medium text-ink-muted">모델 이름</Label>
-              <Input value={s2ProTrainForm.output_name} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-medium text-ink-muted">학습 방식</Label>
-              <Select value={s2ProTrainForm.training_type} onValueChange={(value) => setS2ProTrainForm((prev) => ({ ...prev, training_type: value as "lora" | "full" }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lora">LoRA</SelectItem>
-                  <SelectItem value="full">Full checkpoint</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </WorkspaceCard>
         </WorkspaceShell>
       ) : null}
 
@@ -9032,26 +9244,6 @@ function StudioApp() {
             setAsrModelId={setAsrModelId}
             asrModels={asrModels}
           />
-          <WorkspaceCard className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Text column</Label>
-                <Input value={vibeVoiceTrainForm.text_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, text_column_name: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Audio column</Label>
-                <Input value={vibeVoiceTrainForm.audio_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, audio_column_name: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Voice prompts column</Label>
-                <Input value={vibeVoiceTrainForm.voice_prompts_column_name} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, voice_prompts_column_name: event.target.value }))} />
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={() => sendVibeVoiceDatasetToTraining("tts_lora")}>TTS 학습으로 보내기</Button>
-              <Button type="button" variant="outline" onClick={() => sendVibeVoiceDatasetToTraining("asr_lora")}>ASR 학습으로 보내기</Button>
-            </div>
-          </WorkspaceCard>
         </WorkspaceShell>
       ) : null}
 
@@ -9086,29 +9278,6 @@ function StudioApp() {
             setAsrModelId={setAsrModelId}
             asrModels={asrModels}
           />
-          <WorkspaceCard className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">RVC 모델 이름</Label>
-                <Input value={rvcTrainForm.model_name} onChange={(event) => setRvcTrainForm((prev) => ({ ...prev, model_name: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">샘플레이트</Label>
-                <Select value={rvcTrainForm.sample_rate} onValueChange={(value) => setRvcTrainForm((prev) => ({ ...prev, sample_rate: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="40000">40k</SelectItem>
-                    <SelectItem value="48000">48k</SelectItem>
-                    <SelectItem value="32000">32k</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">권장</Label>
-                <div className="rounded-md border border-line bg-canvas/60 px-3 py-2 text-xs text-ink-muted">10분 이상, 노이즈 적은 단일 화자</div>
-              </div>
-            </div>
-          </WorkspaceCard>
         </WorkspaceShell>
       ) : null}
 
@@ -9155,28 +9324,6 @@ function StudioApp() {
               setMessage("Prepared tensor를 ACE-Step 학습 탭으로 넘겼습니다.");
             }}
           />
-          <WorkspaceCard className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Adapter 이름</Label>
-                <Input value={aceStepTrainForm.output_name} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Adapter type</Label>
-                <Select value={aceStepTrainForm.adapter_type} onValueChange={(value) => setAceStepTrainForm((prev) => ({ ...prev, adapter_type: value as "lora" | "lokr" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lokr">LoKr</SelectItem>
-                    <SelectItem value="lora">LoRA</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Model variant</Label>
-                <Input value={aceStepTrainForm.model_variant} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, model_variant: event.target.value }))} />
-              </div>
-            </div>
-          </WorkspaceCard>
         </WorkspaceShell>
       ) : null}
 
@@ -9186,10 +9333,10 @@ function StudioApp() {
             eyebrow="MMAUDIO DATASET"
             eyebrowIcon={Database}
             title="MMAudio 데이터셋 준비"
-            subtitle="효과음/오디오 샘플을 갤러리나 폴더에서 모아 manifest와 dataset.json으로 정리하고, upstream 학습 모드도 함께 선택합니다."
+            subtitle="효과음/오디오 샘플을 갤러리나 폴더에서 모아 프로젝트 데이터셋으로 정리합니다. 학습 탭에서는 이 데이터셋을 선택만 합니다."
             action={{
               label: "MMAudio 학습으로 보내기",
-              onClick: () => sendMMAudioDatasetToTraining(mmaudioTrainForm.data_mode),
+              onClick: () => sendMMAudioDatasetToTraining(),
             }}
           />
           <ToolDatasetBuilder
@@ -9211,36 +9358,6 @@ function StudioApp() {
             setAsrModelId={setAsrModelId}
             asrModels={asrModels}
           />
-          <WorkspaceCard className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <label className="rounded-md border border-line bg-canvas/60 p-3">
-                <input className="sr-only" type="radio" checked={mmaudioTrainForm.data_mode === "example"} onChange={() => setMMAudioTrainForm((prev) => ({ ...prev, data_mode: "example" }))} />
-                <span className="text-xs font-semibold uppercase tracking-allcaps text-accent">Example mode</span>
-                <strong className="mt-2 block text-sm font-medium text-ink">upstream example_train</strong>
-                <p className="mt-1 text-xs text-ink-muted">설치 검증과 짧은 smoke training에 사용합니다.</p>
-              </label>
-              <label className="rounded-md border border-line bg-canvas/60 p-3">
-                <input className="sr-only" type="radio" checked={mmaudioTrainForm.data_mode === "configured"} onChange={() => setMMAudioTrainForm((prev) => ({ ...prev, data_mode: "configured" }))} />
-                <span className="text-xs font-semibold uppercase tracking-allcaps text-accent">Configured mode</span>
-                <strong className="mt-2 block text-sm font-medium text-ink">MMAudio config 데이터셋</strong>
-                <p className="mt-1 text-xs text-ink-muted">vendor/MMAudio의 Hydra config에 등록된 실제 데이터셋으로 학습합니다.</p>
-              </label>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Run name</Label>
-                <Input value={mmaudioTrainForm.output_name} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                <Input value={mmaudioTrainForm.model} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, model: event.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium text-ink-muted">Start weights</Label>
-                <Input value={mmaudioTrainForm.weights_path} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, weights_path: normalizeDatasetPath(event.target.value) }))} placeholder="data/models/mmaudio/..." />
-              </div>
-            </div>
-          </WorkspaceCard>
         </WorkspaceShell>
       ) : null}
 

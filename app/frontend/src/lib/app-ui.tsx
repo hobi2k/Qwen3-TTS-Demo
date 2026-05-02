@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { AudioAsset, AudioToolJob, GenerationRecord, ModelInfo } from "./types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2186,6 +2187,22 @@ export function ServerAudioPicker({
   onSelect: (asset: AudioAsset) => void;
 }) {
   const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredAssets = normalizedQuery
+    ? assets.filter((asset) =>
+        [
+          asset.filename,
+          asset.path,
+          asset.text_preview,
+          asset.source,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : assets;
 
   if (assets.length === 0) {
     return (
@@ -2201,46 +2218,73 @@ export function ServerAudioPicker({
   }
 
   return (
-    <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
-      {assets.map((asset) => {
-        const isSelected = asset.path === selectedPath;
-        return (
-          <article
-            key={asset.id}
-            className={`rounded-md border p-3 transition ${
-              isSelected
-                ? "border-accent-edge bg-accent-soft/40"
-                : "border-line bg-canvas/60 hover:border-line-strong hover:bg-canvas"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <strong className="truncate text-sm font-medium text-ink">{asset.filename}</strong>
-                <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
-                  {asset.source === "generated"
-                    ? t("serverAudio.source.generated", "생성된 음성")
-                    : t("serverAudio.source.uploaded", "업로드된 음성")}
-                </span>
-              </div>
-              <Button
-                variant={isSelected ? "default" : "outline"}
-                size="sm"
-                onClick={() => onSelect(asset)}
-                type="button"
-                className="shrink-0"
+    <div className="flex flex-col gap-2">
+      <div className="sticky top-0 z-10 rounded-md border border-line bg-surface/95 p-2 backdrop-blur">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("serverAudio.search.placeholder", "생성 음성 검색")}
+          className="h-9"
+        />
+        <p className="mt-1 text-[11px] text-ink-subtle">
+          {t("serverAudio.search.count", "{shown} / {total}개 표시")
+            .replace("{shown}", String(filteredAssets.length))
+            .replace("{total}", String(assets.length))}
+        </p>
+      </div>
+
+      <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+        {filteredAssets.length ? (
+          filteredAssets.map((asset) => {
+            const isSelected = asset.path === selectedPath;
+            return (
+              <article
+                key={asset.id}
+                className={`rounded-md border p-3 transition ${
+                  isSelected
+                    ? "border-accent-edge bg-accent-soft/40"
+                    : "border-line bg-canvas/60 hover:border-line-strong hover:bg-canvas"
+                }`}
               >
-                {isSelected
-                  ? t("serverAudio.selected", "선택됨")
-                  : t("serverAudio.select", "선택")}
-              </Button>
-            </div>
-            <audio controls className="mt-2 h-8 w-full" src={mediaUrl(asset.url)} />
-            {asset.text_preview ? (
-              <p className="mt-2 line-clamp-2 text-xs text-ink-muted">{asset.text_preview}</p>
-            ) : null}
-          </article>
-        );
-      })}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <strong className="truncate text-sm font-medium text-ink">{asset.filename}</strong>
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">
+                      {asset.source === "generated"
+                        ? t("serverAudio.source.generated", "생성된 음성")
+                        : t("serverAudio.source.uploaded", "업로드된 음성")}
+                    </span>
+                  </div>
+                  <Button
+                    variant={isSelected ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onSelect(asset)}
+                    type="button"
+                    className="shrink-0"
+                  >
+                    {isSelected
+                      ? t("serverAudio.selected", "선택됨")
+                      : t("serverAudio.select", "선택")}
+                  </Button>
+                </div>
+                <audio controls className="mt-2 h-8 w-full" src={mediaUrl(asset.url)} />
+                {asset.text_preview ? (
+                  <p className="mt-2 line-clamp-2 text-xs text-ink-muted">{asset.text_preview}</p>
+                ) : null}
+              </article>
+            );
+          })
+        ) : (
+          <div className="rounded-md border border-dashed border-line bg-sunken/40 p-4 text-center">
+            <strong className="block text-sm font-medium text-ink">
+              {t("serverAudio.search.emptyTitle", "검색 결과가 없습니다")}
+            </strong>
+            <p className="mt-1 text-xs text-ink-muted">
+              {t("serverAudio.search.emptyBody", "파일명이나 대사 일부로 다시 검색해 보세요.")}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

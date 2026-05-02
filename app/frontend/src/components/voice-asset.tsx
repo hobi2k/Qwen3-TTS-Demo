@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, ReactNode, useRef, useState } from "react";
-import { Camera, Loader2, Trash2, X } from "lucide-react";
+import { Camera, Download, Loader2, Trash2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { mediaUrl } from "@/lib/app-ui";
 import { useTranslation } from "@/lib/i18n";
@@ -122,7 +122,7 @@ export function VoiceAssetAvatar({
 }
 
 interface DeleteAssetButtonProps {
-  kind: VoiceAssetKind;
+  kind: VoiceAssetKind | "trained";
   assetId: string;
   assetName: string;
   onDeleted: () => void;
@@ -146,6 +146,7 @@ export function DeleteAssetButton({
       if (kind === "preset") await api.deletePreset(assetId);
       else if (kind === "s2pro") await api.deleteS2ProVoice(assetId);
       else if (kind === "rvc") await api.deleteVoiceChangerModel(assetId);
+      else if (kind === "trained") await api.deleteFineTuneRun(assetId);
       toast.success(t("voiceAsset.delete.success", "삭제했습니다."));
       onDeleted();
       setOpen(false);
@@ -178,7 +179,9 @@ export function DeleteAssetButton({
                 ? t("voiceAsset.delete.rvcWarning", " — 모델 .pth/.index 파일이 함께 삭제되며 되돌릴 수 없습니다.")
                 : kind === "preset"
                   ? t("voiceAsset.delete.presetWarning", " — 프리셋 메타데이터가 삭제됩니다. 참조 음성 파일은 보존됩니다.")
-                  : t("voiceAsset.delete.s2proWarning", " — S2-Pro 보이스 메타데이터가 삭제됩니다.")}
+                  : kind === "trained"
+                    ? t("voiceAsset.delete.trainedWarning", " — 학습 결과 폴더와 실행 기록이 함께 삭제되며 되돌릴 수 없습니다.")
+                    : t("voiceAsset.delete.s2proWarning", " — S2-Pro 보이스 메타데이터가 삭제됩니다.")}
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -198,5 +201,29 @@ export function DeleteAssetButton({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+interface DownloadAssetButtonProps {
+  href: string;
+  label?: string;
+  size?: "sm" | "default";
+}
+
+export function DownloadAssetButton({
+  href,
+  label,
+  size = "sm",
+}: DownloadAssetButtonProps) {
+  const { t } = useTranslation();
+  const accessibleLabel = label || t("action.download", "다운로드");
+
+  return (
+    <Button asChild variant="outline" size={size} aria-label={accessibleLabel}>
+      <a href={href} download>
+        <Download className="size-4" />
+        <span className="ml-2">{accessibleLabel}</span>
+      </a>
+    </Button>
   );
 }

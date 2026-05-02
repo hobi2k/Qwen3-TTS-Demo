@@ -360,6 +360,15 @@ export interface VibeVoiceModelToolResponse {
   meta: Record<string, unknown>;
 }
 
+export interface VibeVoiceModelAsset {
+  id: string;
+  name: string;
+  kind: "base_model" | "asr_model" | "merged_model" | "model_file" | "lora_adapter" | string;
+  path: string;
+  created_at?: string | null;
+  notes: string;
+}
+
 export interface BootstrapResponse {
   health: HealthResponse;
   models: ModelInfo[];
