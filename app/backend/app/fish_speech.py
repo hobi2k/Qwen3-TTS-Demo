@@ -41,6 +41,7 @@ RuntimeSource = Optional[str]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 _managed_s2_pro_process: Optional[subprocess.Popen[str]] = None
+S2_PRO_RECOMMENDED_VRAM_MB = 24 * 1024
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -134,6 +135,48 @@ def fish_speech_model_dir() -> Path:
     return Path(configured).expanduser() if configured else REPO_ROOT / "data" / "models" / "fish-speech" / "s2-pro"
 
 
+def _local_gpu_memory_mb() -> Optional[int]:
+    """Return the largest visible NVIDIA GPU VRAM size, if it can be queried."""
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+        )
+    except Exception:
+        return None
+
+    totals: List[int] = []
+    for line in result.stdout.splitlines():
+        value = line.strip()
+        if not value:
+            continue
+        try:
+            totals.append(int(value))
+        except ValueError:
+            continue
+    return max(totals) if totals else None
+
+
+def _local_gpu_vram_warning(total_mb: Optional[int]) -> str:
+    """Return an actionable warning when local S2-Pro is below official guidance."""
+
+    if total_mb is None:
+        return ""
+    if total_mb >= S2_PRO_RECOMMENDED_VRAM_MB:
+        return ""
+    total_gb = total_mb / 1024
+    recommended_gb = S2_PRO_RECOMMENDED_VRAM_MB // 1024
+    return (
+        f"Fish Audio S2 로컬 추론은 {recommended_gb}GB 이상 VRAM을 권장합니다. "
+        f"현재 감지된 최대 GPU는 {total_gb:.1f}GB라 로컬 S2-Pro가 매우 느리거나 실패할 수 있습니다. "
+        "Fish Audio API 또는 24GB+ GPU를 사용하세요."
+    )
+
+
 def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSource = None) -> Dict[str, Any]:
     """Return Fish Speech/Fish Audio runtime status.
 
@@ -158,6 +201,8 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
     missing_model_files = [filename for filename in required_model_files if not (model_dir / filename).exists()]
     server_running = False
     server_error = ""
+    local_gpu_vram_mb = _local_gpu_memory_mb()
+    local_gpu_vram_warning = _local_gpu_vram_warning(local_gpu_vram_mb)
 
     api_key_configured = bool(config and config.api_key)
 
@@ -195,6 +240,11 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
         "available_runtimes": ["local", "api"],
         "managed_server": config.source == "local_fish_speech_server" if config else False,
         "auto_start": _env_flag("S2_PRO_AUTO_START", True),
+        "recommended_vram_mb": S2_PRO_RECOMMENDED_VRAM_MB,
+        "local_gpu_vram_mb": local_gpu_vram_mb,
+        "local_gpu_vram_ok": local_gpu_vram_mb is None or local_gpu_vram_mb >= S2_PRO_RECOMMENDED_VRAM_MB,
+        "local_gpu_vram_warning": local_gpu_vram_warning,
+        "allow_low_vram_local": _env_flag("S2_PRO_ALLOW_LOW_VRAM", False),
     }
     if status["runtime_mode"] == "api":
         status["notes"] = (
@@ -206,6 +256,8 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
         status["notes"] = f"Fish Speech source is missing: {status['repo_root']}"
     elif not status["model_ready"]:
         status["notes"] = f"S2-Pro model files are missing under {status['model_dir']}"
+    elif local_gpu_vram_warning:
+        status["notes"] = local_gpu_vram_warning
     else:
         status["notes"] = f"Local S2-Pro engine ready: {status['model']}"
     return status

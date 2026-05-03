@@ -147,6 +147,19 @@ DEFAULT_QWEN_EXTENSIONS_DIR = REPO_ROOT / "qwen_extensions"
 DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
 load_dotenv(BACKEND_DIR / ".env")
 
+
+def prefer_upstream_qwen_imports() -> None:
+    """Make in-process Qwen inference import the bundled upstream checkout first."""
+
+    for path in (UPSTREAM_QWEN_DIR, UPSTREAM_QWEN_DIR / "finetuning"):
+        if path.exists():
+            path_text = str(path)
+            if path_text not in sys.path:
+                sys.path.insert(0, path_text)
+
+
+prefer_upstream_qwen_imports()
+
 storage = Storage(REPO_ROOT)
 engine = QwenDemoEngine(storage)
 s2_pro_engine = S2ProEngine(REPO_ROOT)
@@ -227,7 +240,7 @@ def default_model_id(category: str) -> str:
     defaults = {
         "custom_voice": ("Qwen3-TTS-12Hz-0.6B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"),
         "voice_design": ("Qwen3-TTS-12Hz-1.7B-VoiceDesign", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"),
-        "base_clone": ("Qwen3-TTS-12Hz-0.6B-Base", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        "base_clone": ("Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
         "tokenizer": ("Qwen3-TTS-Tokenizer-12Hz", "Qwen/Qwen3-TTS-Tokenizer-12Hz"),
     }
     configured = {
@@ -518,10 +531,9 @@ def build_model_catalog() -> List[ModelInfo]:
             key="base_clone_0_6b",
             category="base_clone",
             label="Base 0.6B",
-            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-Base", default_model_id("base_clone")),
+            model_id=model_path_or_repo("Qwen3-TTS-12Hz-0.6B-Base", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
             supports_instruction=False,
             notes="참조 음성으로 목소리 스타일을 잡아볼 때 쓰는 가벼운 모델",
-            recommended=True,
             inference_mode="voice_clone",
             source="stock",
             model_family="base",
@@ -533,6 +545,7 @@ def build_model_catalog() -> List[ModelInfo]:
             model_id=model_path_or_repo("Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
             supports_instruction=False,
             notes="목소리 복제와 학습 기준으로 쓰는 고품질 기본 모델",
+            recommended=True,
             inference_mode="voice_clone",
             source="stock",
             model_family="base",
@@ -4809,6 +4822,7 @@ def generate_s2_pro(payload: S2ProGenerateRequest) -> GenerationResponse:
             "s2_pro_mode": payload.mode,
             "s2_pro_reference_id": reference_id,
             "s2_pro_runtime_source": runtime_source,
+            "max_new_tokens": payload.max_new_tokens,
         },
     )
     save_generation_record(record)
@@ -5597,7 +5611,7 @@ def generate_from_preset(preset_id: str, payload: PresetGenerateRequest) -> Gene
 
     preset = get_preset_record(preset_id)
     request = VoiceCloneRequest(
-        model_id=payload.model_id or preset.get("base_model"),
+        model_id=preset.get("base_model"),
         text=payload.text,
         language=payload.language or preset["language"],
         output_name=payload.output_name,

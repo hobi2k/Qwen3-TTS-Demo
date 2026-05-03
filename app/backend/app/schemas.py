@@ -181,6 +181,11 @@ class S2ProRuntimeResponse(BaseModel):
     available_runtimes: List[str] = Field(default_factory=list)
     managed_server: bool = False
     auto_start: bool = True
+    recommended_vram_mb: int = 24576
+    local_gpu_vram_mb: Optional[int] = None
+    local_gpu_vram_ok: bool = True
+    local_gpu_vram_warning: str = ""
+    allow_low_vram_local: bool = False
     features: List[str] = Field(default_factory=list)
 
 
@@ -199,7 +204,7 @@ class S2ProGenerateRequest(BaseModel):
     reference_ids: List[str] = Field(default_factory=list)
     temperature: float = 0.7
     top_p: float = 0.8
-    max_new_tokens: int = 2048
+    max_new_tokens: int = 128
     chunk_length: int = 300
     output_format: str = "wav"
     sample_rate: Optional[int] = 44100
@@ -385,7 +390,6 @@ class CharacterPreset(BaseModel):
 class PresetGenerateRequest(BaseModel):
     """프리셋 기반 음성 생성 요청 스키마다."""
 
-    model_id: Optional[str] = None
     text: str = Field(..., min_length=1)
     language: str = "Auto"
     output_name: Optional[str] = None

@@ -538,6 +538,11 @@ export interface S2ProRuntimeResponse {
   available_runtimes: Array<"local" | "api">;
   managed_server: boolean;
   auto_start: boolean;
+  recommended_vram_mb: number;
+  local_gpu_vram_mb: number | null;
+  local_gpu_vram_ok: boolean;
+  local_gpu_vram_warning: string;
+  allow_low_vram_local: boolean;
   features: string[];
 }
 
@@ -674,7 +679,6 @@ export interface HybridCloneInstructRequest extends GenerationRequestExtras {
 }
 
 export interface GenerateFromPresetRequest extends GenerationRequestExtras {
-  model_id?: string;
   text: string;
   language: string;
 }

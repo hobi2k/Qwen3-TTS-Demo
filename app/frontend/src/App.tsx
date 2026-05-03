@@ -110,6 +110,13 @@ type AceStepMode =
 type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "rvc" | "datasets";
 type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
 type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "effect" | "music" | "rvc" | "utility";
+type ActiveJob = {
+  title: string;
+  detail: string;
+  steps: string[];
+  note?: string;
+  startedAt: number;
+};
 
 type AceStepTabKey = Extract<
   TabKey,
@@ -903,6 +910,46 @@ function TrainingDatasetConnector({
   );
 }
 
+function ActiveJobPanel({ job, elapsedSeconds }: { job: ActiveJob; elapsedSeconds: number }) {
+  return (
+    <section
+      aria-live="polite"
+      className="mx-auto mb-5 flex w-full max-w-[var(--shell-content-max)] flex-col gap-3 rounded-md border border-accent-edge bg-accent-soft/30 px-4 py-3 shadow-sm"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-md border border-accent-edge bg-surface text-accent-ink">
+            <Loader2 className="size-4 animate-spin" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <strong className="text-sm font-semibold text-ink">{job.title}</strong>
+              <Badge variant="secondary" className="border-0 bg-surface text-[10px] text-ink-muted">
+                {elapsedSeconds < 60 ? `${elapsedSeconds}s` : `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">{job.detail}</p>
+          </div>
+        </div>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-surface">
+        <div className="h-full w-2/5 animate-pulse rounded-full bg-accent" />
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {job.steps.map((step, index) => (
+          <div key={`${step}-${index}`} className="flex items-center gap-2 rounded-md border border-line bg-canvas/60 px-3 py-2 text-xs text-ink-muted">
+            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent-soft font-mono text-[10px] font-semibold text-accent-ink">
+              {index + 1}
+            </span>
+            <span className="min-w-0 truncate">{step}</span>
+          </div>
+        ))}
+      </div>
+      {job.note ? <p className="text-[11px] leading-5 text-ink-subtle">{job.note}</p> : null}
+    </section>
+  );
+}
+
 function StudioApp() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
@@ -934,6 +981,8 @@ function StudioApp() {
   const [modelEditName, setModelEditName] = useState("");
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
+  const [jobClock, setJobClock] = useState(Date.now());
   const bootstrapLoadedRef = useRef(false);
   const actionQueueRef = useRef(Promise.resolve());
 
@@ -1078,6 +1127,7 @@ function StudioApp() {
     instruct: "Breathy, emotionally unstable, and barely holding composure. Keep the diction clear.",
   });
   const [lastVoiceBoxCloneRecord, setLastVoiceBoxCloneRecord] = useState<GenerationRecord | null>(null);
+  const [lastPresetRecord, setLastPresetRecord] = useState<GenerationRecord | null>(null);
   const [lastVoiceBoxPresetRecord, setLastVoiceBoxPresetRecord] = useState<GenerationRecord | null>(null);
   const [lastVoiceBoxPresetInstructRecord, setLastVoiceBoxPresetInstructRecord] = useState<GenerationRecord | null>(null);
   const [hybridForm, setHybridForm] = useState({
@@ -1113,7 +1163,7 @@ function StudioApp() {
     instruction: "",
     temperature: "0.7",
     top_p: "0.8",
-    max_tokens: "2048",
+    max_tokens: "128",
   });
   const [s2ProVoiceForm, setS2ProVoiceForm] = useState({
     name: "새-s2pro-목소리",
@@ -1533,16 +1583,27 @@ function StudioApp() {
     setMessage("");
   }, [activeTab]);
 
-  async function runAction(action: () => Promise<void>) {
+  useEffect(() => {
+    if (!activeJob) {
+      return;
+    }
+    setJobClock(Date.now());
+    const timer = window.setInterval(() => setJobClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeJob]);
+
+  async function runAction(action: () => Promise<void>, job?: Omit<ActiveJob, "startedAt">) {
     const run = async () => {
       try {
         setLoading(true);
+        setActiveJob(job ? { ...job, startedAt: Date.now() } : null);
         setMessage("");
         await action();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.");
       } finally {
         setLoading(false);
+        setActiveJob(null);
       }
     };
 
@@ -1735,6 +1796,14 @@ function StudioApp() {
 
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
   const selectedHybridPreset = presets.find((preset) => preset.id === selectedHybridPresetId) ?? null;
+  const selectedPresetBaseModel = selectedHybridPreset
+    ? baseModels.find((model) => model.model_id === selectedHybridPreset.base_model) ?? null
+    : null;
+  const selectedPresetBaseModelLabel = selectedPresetBaseModel
+    ? displayModelName(selectedPresetBaseModel)
+    : selectedHybridPreset?.base_model
+      ? basenameFromPath(selectedHybridPreset.base_model).replace(/\.[^.]+$/, "")
+      : "";
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null;
   const lastCreatedDataset = datasets.find((dataset) => dataset.id === lastCreatedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
@@ -1837,6 +1906,9 @@ function StudioApp() {
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
   const qwenPresetEffectiveModelId = qwenPresetModelId || selectedBaseModelId || preferredStockBaseModel?.model_id || "";
   const selectedQwenPresetAsset = qwenPresetSource === "gallery" ? qwenPresetGalleryAsset : qwenPresetUploadedRef;
+  const activeJobElapsedSeconds = activeJob ? Math.max(0, Math.floor((jobClock - activeJob.startedAt) / 1000)) : 0;
+  const s2ProMaxTokensValue = Number(s2ProForm.max_tokens || "128");
+  const s2ProLongGenerationWarning = Number.isFinite(s2ProMaxTokensValue) && s2ProMaxTokensValue > 256;
   function selectS2ProVoice(voiceId: string) {
     const voice = s2ProVoices.find((item) => item.id === voiceId || item.reference_id === voiceId);
     setSelectedS2VoiceId(voiceId);
@@ -2236,6 +2308,11 @@ function StudioApp() {
       setS2ProForm((prev) => ({ ...prev, runtime_source: voice.runtime_source }));
       await refreshAll();
       setMessage(`${voice.name}을 S2-Pro 목소리로 저장했습니다.`);
+    }, {
+      title: "S2-Pro 목소리 저장 중",
+      detail: `${asset.name} 참조 음성을 Fish Speech reference로 등록하고 있습니다.`,
+      steps: ["참조 음성 확인", "Fish reference 등록", "목소리 목록 새로고침"],
+      note: "S2-Pro는 참조 음성을 인코딩한 뒤 서버에 등록하므로 짧은 샘플도 잠시 걸릴 수 있습니다.",
     });
   }
 
@@ -2260,6 +2337,11 @@ function StudioApp() {
       setS2ProForm((prev) => ({ ...prev, runtime_source: voice.runtime_source }));
       await refreshAll();
       setMessage(`${voice.name}을 S2-Pro 목소리로 저장했습니다.`);
+    }, {
+      title: "S2-Pro 목소리 저장 중",
+      detail: `${s2ProVoiceForm.name || "새 목소리"}를 Fish Speech reference로 등록하고 있습니다.`,
+      steps: ["참조 텍스트 확인", "참조 음성 인코딩", "S2-Pro 목소리 저장"],
+      note: "한국어 이름은 그대로 보존하고, Fish 런타임에는 안전한 reference id로 등록합니다.",
     });
   }
 
@@ -2283,13 +2365,18 @@ function StudioApp() {
         reference_ids: currentS2ProMode === "multi_speaker" && selectedS2Voice ? [selectedS2Voice.id] : undefined,
         temperature: Number(s2ProForm.temperature || "0.7"),
         top_p: Number(s2ProForm.top_p || "0.8"),
-        max_new_tokens: Number(s2ProForm.max_tokens || "2048"),
+        max_new_tokens: Number(s2ProForm.max_tokens || "128"),
         output_format: "wav",
         sample_rate: 44100,
       });
       setLastS2ProRecord(response.record);
       await refreshAll();
       setMessage("S2-Pro 생성이 완료되어 생성 갤러리에 저장했습니다.");
+    }, {
+      title: "S2-Pro 음성 생성 중",
+      detail: selectedS2Voice ? `${selectedS2Voice.name} 목소리로 합성하고 있습니다.` : "S2-Pro 모델이 문장을 semantic token으로 생성하고 있습니다.",
+      steps: ["입력 텍스트 정리", "S2-Pro 추론", "WAV 저장 및 갤러리 갱신"],
+      note: "S2-Pro는 첫 토큰이 느릴 수 있습니다. 긴 문장이나 dialogue는 더 오래 걸립니다.",
     });
   }
 
@@ -2429,6 +2516,11 @@ function StudioApp() {
       setVibeVoiceTrainResult(result);
       await refreshAll();
       setMessage(result.message);
+    }, {
+      title: activeTab === "vibevoice_asr_train" ? "VibeVoice-ASR 학습 중" : "VibeVoice TTS 학습 중",
+      detail: `${vibeVoiceTrainForm.output_name || "vibevoice-adapter"} adapter 학습을 실행하고 있습니다.`,
+      steps: ["데이터셋 검증", "LoRA 학습 실행", "adapter 결과 갱신"],
+      note: "학습 로그와 체크포인트는 서버가 작업을 끝낸 뒤 결과 패널에 표시됩니다.",
     });
   }
 
@@ -2485,6 +2577,11 @@ function StudioApp() {
       setS2ProTrainResult(result);
       await refreshAll();
       setMessage(result.message);
+    }, {
+      title: `S2-Pro ${s2ProTrainForm.training_type === "full" ? "Full" : "LoRA"} 학습 중`,
+      detail: `${s2ProTrainForm.output_name || "s2pro-run"} 작업을 Fish Speech trainer로 실행하고 있습니다.`,
+      steps: ["입력 데이터셋 확인", "text2semantic 학습", s2ProTrainForm.merge_lora ? "LoRA merge 및 결과 저장" : "체크포인트 저장"],
+      note: "S2-Pro 학습은 GPU를 오래 점유합니다. 완료되면 checkpoint/log 경로가 결과 패널에 나타납니다.",
     });
   }
 
@@ -2538,6 +2635,7 @@ function StudioApp() {
     setLastInferenceRecord((record) => (record?.id === recordId ? null : record));
     setLastDesignRecord((record) => (record?.id === recordId ? null : record));
     setLastVoiceBoxCloneRecord((record) => (record?.id === recordId ? null : record));
+    setLastPresetRecord((record) => (record?.id === recordId ? null : record));
     setLastVoiceBoxPresetRecord((record) => (record?.id === recordId ? null : record));
     setLastVoiceBoxPresetInstructRecord((record) => (record?.id === recordId ? null : record));
     setLastHybridRecord((record) => (record?.id === recordId ? null : record));
@@ -2621,6 +2719,11 @@ function StudioApp() {
       setMMAudioTrainResult(result);
       await refreshAll();
       setMessage(result.message);
+    }, {
+      title: "MMAudio 학습 중",
+      detail: `${mmaudioTrainForm.output_name || "mmaudio-run"} full/continued training을 실행하고 있습니다.`,
+      steps: ["데이터셋 로드", "upstream train.py 실행", "weights/checkpoint 저장"],
+      note: "MMAudio 학습은 iteration 수에 따라 오래 걸립니다. 완료 전까지 이 패널이 유지됩니다.",
     });
   }
 
@@ -2914,6 +3017,11 @@ function StudioApp() {
       setAceStepTrainResult(result);
       await loadAceStepRuntime();
       setMessage(result.message);
+    }, {
+      title: `ACE-Step ${aceStepTrainForm.adapter_type.toUpperCase()} 학습 중`,
+      detail: `${aceStepTrainForm.output_name || "ace-step-adapter"} adapter를 upstream trainer로 만들고 있습니다.`,
+      steps: ["학습 입력 확인", "adapter 학습", "생성 LoRA 목록 갱신"],
+      note: "ACE-Step adapter 학습은 오디오 길이와 epoch 수에 따라 오래 걸릴 수 있습니다.",
     });
   }
 
@@ -3200,6 +3308,11 @@ function StudioApp() {
       await refreshAll();
       setActiveTab("applio_convert");
       setMessage("RVC 모델을 만들었습니다. 변환 탭에서 바로 선택할 수 있습니다.");
+    }, {
+      title: "RVC 모델 학습 중",
+      detail: `${rvcTrainForm.model_name || "rvc-model"} 모델과 index를 만들고 있습니다.`,
+      steps: ["음성 전처리", "RVC 학습", "모델/index 등록"],
+      note: "Applio/RVC 학습은 epoch 수와 데이터셋 길이에 따라 오래 걸립니다.",
     });
   }
 
@@ -3524,7 +3637,12 @@ function StudioApp() {
       }
       await refreshAll();
       setMessage(createS2ProWithPreset ? "캐릭터 프리셋과 S2-Pro 목소리를 함께 저장했습니다." : "캐릭터 프리셋을 저장했습니다.");
-    });
+    }, createS2ProWithPreset ? {
+      title: "Qwen 프리셋과 S2-Pro 목소리 저장 중",
+      detail: "Qwen clone prompt를 저장한 뒤 같은 참조 음성을 S2-Pro reference로 등록하고 있습니다.",
+      steps: ["Qwen 프리셋 저장", "S2-Pro reference 등록", "목소리 목록 갱신"],
+      note: "S2-Pro 목소리까지 함께 만들면 참조 음성 인코딩 때문에 일반 프리셋 저장보다 오래 걸립니다.",
+    } : undefined);
   }
 
   async function handleCreateQwenPresetFromSource(event?: FormEvent) {
@@ -3592,6 +3710,15 @@ function StudioApp() {
       setQwenPresetForm((prev) => ({ ...prev, name: "", notes: "" }));
       await refreshAll();
       setMessage(qwenPresetForm.createS2Pro ? "Qwen 프리셋과 S2-Pro 목소리를 함께 저장했습니다." : "Qwen 프리셋을 저장했습니다.");
+    }, qwenPresetForm.createS2Pro ? {
+      title: "Qwen 프리셋과 S2-Pro 목소리 저장 중",
+      detail: "선택한 음성에서 Qwen 스타일을 추출하고 S2-Pro reference까지 등록하고 있습니다.",
+      steps: ["Qwen clone prompt 생성", "프리셋 메타데이터 저장", "S2-Pro 목소리 등록"],
+      note: "갤러리 음성이나 업로드 파일을 분석한 뒤 S2-Pro에 등록하므로 브라우저를 닫지 마세요.",
+    } : {
+      title: "Qwen 프리셋 저장 중",
+      detail: "선택한 참조 음성에서 Qwen clone prompt를 만들고 있습니다.",
+      steps: ["참조 음성 분석", "clone prompt 저장", "프리셋 목록 갱신"],
     });
   }
 
@@ -3646,15 +3773,20 @@ function StudioApp() {
       return;
     }
     await runAction(async () => {
-      await api.generateFromPreset(presetId, {
-        model_id: selectedBaseModelId || undefined,
+      const result = await api.generateFromPreset(presetId, {
         text: presetGenerateText,
-        language: presetForGeneration?.language ?? "",
+        language: "Auto",
         output_name: presetOutputName || undefined,
         ...serializeGenerationControls(presetControls),
       });
+      setLastPresetRecord(result.record);
       await refreshAll();
       setMessage("프리셋으로 음성을 생성했습니다.");
+    }, {
+      title: "프리셋 기반 생성 중",
+      detail: `${presetForGeneration?.name || "선택한 프리셋"}의 저장된 clone prompt로 합성하고 있습니다.`,
+      steps: ["프리셋 clone prompt 로드", "Base clone 생성", "프리뷰 갱신"],
+      note: "이 경로는 프리셋에 저장된 base model과 clone prompt를 그대로 사용합니다.",
     });
   }
 
@@ -3826,6 +3958,11 @@ function StudioApp() {
       });
       await refreshAll();
       setMessage(runForm.simulate_only ? "시뮬레이션 학습 실행 기록을 만들었습니다." : "실제 파인튜닝 실행을 시작했습니다.");
+    }, {
+      title: runForm.simulate_only ? "학습 실행 기록 생성 중" : "Qwen 파인튜닝 시작 중",
+      detail: `${runForm.output_name || "training-run"} 실행을 준비하고 있습니다.`,
+      steps: ["데이터셋 상태 확인", "학습 설정 전달", "실행 기록 갱신"],
+      note: runForm.simulate_only ? "시뮬레이션 모드에서는 실제 GPU 학습을 시작하지 않습니다." : "서버가 학습 작업을 시작하면 실행 기록에 상태가 표시됩니다.",
     });
   }
 
@@ -4267,6 +4404,8 @@ function StudioApp() {
         </aside>
 
         <main className="page-main">
+          {activeJob ? <ActiveJobPanel job={activeJob} elapsedSeconds={activeJobElapsedSeconds} /> : null}
+
           {activeTab === "home" ? (
             <WorkspaceShell>
               <WorkspaceHeader
@@ -5456,6 +5595,30 @@ function StudioApp() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.model", "Model")}</Label>
+                    <Select
+                      value={selectedBaseModelId || undefined}
+                      onValueChange={(value) => {
+                        setSelectedBaseModelId(value);
+                        setQwenPresetModelId(value);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("tts.field.modelPlaceholder", "모델 선택")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {baseModels.map((model) => (
+                          <SelectItem key={model.key} value={model.model_id}>
+                            {displayModelName(model)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] leading-5 text-ink-subtle">
+                      {t("design.preset.modelHelp", "Qwen 프리셋 저장 시 이 Base 모델로 clone prompt를 만듭니다.")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">
                       {t("design.preset.language", "기본 언어")}
                     </Label>
@@ -5478,7 +5641,7 @@ function StudioApp() {
                   <div className="flex flex-col gap-2">
                     <Button
                       type="button"
-                      disabled={!lastDesignRecord || loading}
+                      disabled={!lastDesignRecord || !selectedBaseModelId || loading}
                       onClick={() => void handleSaveDesignAsQwenPreset()}
                     >
                       {t("design.preset.saveQwen", "Qwen 프리셋 저장")}
@@ -5911,6 +6074,18 @@ function StudioApp() {
                 <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("projects.selected.label", "선택한 프리셋")}</span>
                 <strong className="mt-1 block text-sm font-medium text-ink">{selectedHybridPreset.name}</strong>
                 <p className="mt-1 text-xs text-ink-muted">{selectedHybridPreset.reference_text}</p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-line bg-canvas px-3 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("projects.selected.model", "저장 모델")}</span>
+                    <strong className="mt-1 block truncate text-xs font-medium text-ink">{selectedPresetBaseModelLabel || t("projects.selected.modelFallback", "프리셋 저장값")}</strong>
+                  </div>
+                  <div className="rounded-md border border-line bg-canvas px-3 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">clone prompt</span>
+                    <strong className="mt-1 block truncate text-xs font-medium text-ink">
+                      {selectedHybridPreset.clone_prompt_path ? basenameFromPath(selectedHybridPreset.clone_prompt_path) : t("projects.selected.noClonePrompt", "저장된 clone prompt 없음")}
+                    </strong>
+                  </div>
+                </div>
               </article>
             ) : (
               <p className="text-xs text-ink-muted">{t("projects.selected.hint", "먼저 저장된 프리셋을 고르세요.")}</p>
@@ -5927,20 +6102,15 @@ function StudioApp() {
               <TabsContent value="base" className="m-0">
                 <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); void handleGenerateFromPreset(); }}>
                   <h3 className="text-sm font-medium text-ink">{t("projects.base.title", "Base 프리셋 생성")}</h3>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">{t("projects.base.model", "Base 모델")}</Label>
-                    <Select value={selectedBaseModelId || undefined} onValueChange={(value) => setSelectedBaseModelId(value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {baseModels.map((model) => (
-                          <SelectItem key={model.key} value={model.model_id}>
-                            {displayModelName(model)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="rounded-md border border-line bg-canvas/60 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label className="text-xs font-medium text-ink-muted">{t("projects.base.model", "Base 모델")}</Label>
+                      <Badge variant="secondary" className="h-5 rounded text-[10px]">preset</Badge>
+                    </div>
+                    <strong className="mt-1 block truncate text-sm font-medium text-ink">
+                      {selectedPresetBaseModelLabel || t("projects.base.noPresetModel", "프리셋을 선택하면 저장 모델을 사용합니다")}
+                    </strong>
+                    <p className="mt-1 text-xs text-ink-muted">{t("projects.base.modelHelp", "Base 프리셋 생성은 저장된 base model과 clone prompt를 사용합니다.")}</p>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("design.field.script", "대사")}</Label>
@@ -6140,10 +6310,19 @@ function StudioApp() {
             </Tabs>
           </WorkspaceCard>
 
-          {lastHybridRecord || lastVoiceBoxPresetRecord || lastVoiceBoxPresetInstructRecord ? (
+          {lastPresetRecord || lastHybridRecord || lastVoiceBoxPresetRecord || lastVoiceBoxPresetInstructRecord ? (
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("projects.result.title", "생성 결과")} badge={t("tts.result.latest")} />
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                {lastPresetRecord ? (
+                  <AudioCard
+                    title={t("projects.result.base", "Base 프리셋 결과")}
+                    subtitle={lastPresetRecord.mode}
+                    record={lastPresetRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastPresetRecord.id)}
+                    deleting={loading}
+                  />
+                ) : null}
                 {lastHybridRecord ? (
                   <AudioCard
                     title={t("projects.result.hybrid", "Base + CustomVoice 결과")}
@@ -6210,13 +6389,25 @@ function StudioApp() {
                     ? s2ProRuntime.api_key_configured
                       ? "Fish Audio API"
                       : "API key required"
-                    : "Local S2-Pro"}{" · "}{s2ProRuntime.model}
+                    : s2ProRuntime.local_gpu_vram_ok
+                      ? "Local S2-Pro"
+                      : "Local GPU warning"}{" · "}{s2ProRuntime.model}
                 </Badge>
               ) : (
                 <Badge variant="secondary" className="bg-canvas text-ink-muted border-0">{t("s2pro.engine.checking", "엔진 확인 중")}</Badge>
               )
             }
           />
+
+          {s2ProRuntime?.runtime_mode === "local" && s2ProRuntime.local_gpu_vram_warning ? (
+            <div className="rounded-md border border-warn/40 bg-warn/10 px-4 py-3 text-sm leading-relaxed text-ink">
+              <strong className="font-medium text-ink">Local S2-Pro VRAM</strong>
+              <p className="mt-1 text-xs text-ink-muted">
+                {s2ProRuntime.local_gpu_vram_warning}
+                {s2ProRuntime.allow_low_vram_local ? " S2_PRO_ALLOW_LOW_VRAM=1이 설정되어 로컬 실행은 허용됩니다." : ""}
+              </p>
+            </div>
+          ) : null}
 
           <form
             id="s2pro-form"
@@ -6537,6 +6728,11 @@ function StudioApp() {
                         <Input value={s2ProForm.max_tokens} onChange={(event) => setS2ProForm({ ...s2ProForm, max_tokens: event.target.value })} />
                       </div>
                     </div>
+                    {s2ProLongGenerationWarning ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">
+                        이 값은 그대로 전송됩니다. 현재 로컬 S2-Pro는 토큰 생성이 느려서 256을 넘기면 긴 문장/긴 음성 의도일 때만 쓰는 것이 좋습니다.
+                      </p>
+                    ) : null}
                   </div>
                 </details>
                 {selectedS2Voice ? (

@@ -1,4 +1,5 @@
 import torch
+import os
 from loguru import logger
 
 from fish_speech.inference_engine import TTSInferenceEngine
@@ -78,11 +79,12 @@ class ModelManager:
         logger.info("Decoder model loaded.")
 
     def warm_up(self, tts_inference_engine) -> None:
+        warmup_tokens = int(os.getenv("FISH_SPEECH_WARMUP_TOKENS", "32"))
         request = ServeTTSRequest(
             text="Hello world.",
             references=[],
             reference_id=None,
-            max_new_tokens=1024,
+            max_new_tokens=warmup_tokens,
             chunk_length=200,
             top_p=0.7,
             repetition_penalty=1.2,

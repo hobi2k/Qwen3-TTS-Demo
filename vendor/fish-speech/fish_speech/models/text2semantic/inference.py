@@ -31,7 +31,6 @@ if hasattr(torch._inductor.config, "fx_graph_cache"):
     torch._inductor.config.fx_graph_cache = True
 
 
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from fish_speech.models.text2semantic.llama import (
     BaseTransformer,
@@ -207,19 +206,18 @@ def decode_n_tokens(
     im_end_id = model.tokenizer.get_token_id(IM_END_TOKEN)
 
     for i in tqdm(range(num_new_tokens)):
-        with sdpa_kernel(SDPBackend.MATH):
-            next_token = decode_one_token(
-                model=model,
-                x=cur_token,
-                input_pos=input_pos,
-                previous_tokens=previous_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                semantic_logit_bias=semantic_logit_bias,
-                audio_masks=audio_masks,
-                audio_parts=audio_parts,
-            ).clone()
+        next_token = decode_one_token(
+            model=model,
+            x=cur_token,
+            input_pos=input_pos,
+            previous_tokens=previous_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            semantic_logit_bias=semantic_logit_bias,
+            audio_masks=audio_masks,
+            audio_parts=audio_parts,
+        ).clone()
 
         input_pos += 1
         cur_token = next_token.view(1, model.config.num_codebooks + 1, -1)
