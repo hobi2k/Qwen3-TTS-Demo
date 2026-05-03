@@ -2457,10 +2457,24 @@ function StudioApp() {
     });
   }
 
+  function clearGeneratedRecordReferences(recordId: string) {
+    setLastInferenceRecord((record) => (record?.id === recordId ? null : record));
+    setLastDesignRecord((record) => (record?.id === recordId ? null : record));
+    setLastVoiceBoxCloneRecord((record) => (record?.id === recordId ? null : record));
+    setLastVoiceBoxPresetRecord((record) => (record?.id === recordId ? null : record));
+    setLastVoiceBoxPresetInstructRecord((record) => (record?.id === recordId ? null : record));
+    setLastHybridRecord((record) => (record?.id === recordId ? null : record));
+    setLastS2ProRecord((record) => (record?.id === recordId ? null : record));
+    setLastVibeVoiceRecord((record) => (record?.id === recordId ? null : record));
+    setLastAceStepRecord((record) => (record?.id === recordId ? null : record));
+    setLastAudioToolResult((result) => (result?.record?.id === recordId ? null : result));
+  }
+
   async function handleDeleteHistoryRecord(recordId: string) {
     await runAction(async () => {
       setHistory((prev) => prev.filter((record) => record.id !== recordId));
-      setSelectedGalleryIds((prev) => prev.filter((id) => id !== recordId));
+      setSelectedGalleryIds((prev) => prev.filter((id) => id !== recordId && !id.startsWith(`${recordId}::`)));
+      clearGeneratedRecordReferences(recordId);
       await api.deleteHistoryRecord(recordId);
       await refreshAll();
       setMessage("선택한 생성 음성을 삭제했습니다.");
@@ -4923,7 +4937,12 @@ function StudioApp() {
                       <h3 className="text-sm font-medium text-ink">{t("tts.result.title")}</h3>
                     </div>
                   </div>
-                  <AudioCard title={t("tts.result.subtitle")} record={lastInferenceRecord} />
+                  <AudioCard
+                    title={t("tts.result.subtitle")}
+                    record={lastInferenceRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastInferenceRecord.id)}
+                    deleting={loading}
+                  />
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-line bg-sunken/40 px-6 py-10 text-center">
@@ -5251,6 +5270,8 @@ function StudioApp() {
                   <AudioCard
                     title={t("design.result.subtitle", "설명문 기반 결과")}
                     record={lastDesignRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastDesignRecord.id)}
+                    deleting={loading}
                   />
                 </WorkspaceCard>
               ) : (
@@ -5438,7 +5459,12 @@ function StudioApp() {
                     </div>
                   </div>
                   {lastVoiceBoxCloneRecord ? (
-                    <AudioCard title={getRecordDisplayTitle(lastVoiceBoxCloneRecord)} record={lastVoiceBoxCloneRecord} />
+                    <AudioCard
+                      title={getRecordDisplayTitle(lastVoiceBoxCloneRecord)}
+                      record={lastVoiceBoxCloneRecord}
+                      onDelete={() => void handleDeleteHistoryRecord(lastVoiceBoxCloneRecord.id)}
+                      deleting={loading}
+                    />
                   ) : null}
                 </div>
               )}
@@ -5798,9 +5824,33 @@ function StudioApp() {
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("projects.result.title", "생성 결과")} badge={t("tts.result.latest")} />
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                {lastHybridRecord ? <AudioCard title={t("projects.result.hybrid", "Base + CustomVoice 결과")} subtitle={lastHybridRecord.mode} record={lastHybridRecord} /> : null}
-                {lastVoiceBoxPresetRecord ? <AudioCard title={t("projects.result.voicebox", "VoiceBox 프리셋 결과")} subtitle={lastVoiceBoxPresetRecord.mode} record={lastVoiceBoxPresetRecord} /> : null}
-                {lastVoiceBoxPresetInstructRecord ? <AudioCard title={t("projects.result.voiceboxInstruct", "VoiceBox 지시 결과")} subtitle={lastVoiceBoxPresetInstructRecord.mode} record={lastVoiceBoxPresetInstructRecord} /> : null}
+                {lastHybridRecord ? (
+                  <AudioCard
+                    title={t("projects.result.hybrid", "Base + CustomVoice 결과")}
+                    subtitle={lastHybridRecord.mode}
+                    record={lastHybridRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastHybridRecord.id)}
+                    deleting={loading}
+                  />
+                ) : null}
+                {lastVoiceBoxPresetRecord ? (
+                  <AudioCard
+                    title={t("projects.result.voicebox", "VoiceBox 프리셋 결과")}
+                    subtitle={lastVoiceBoxPresetRecord.mode}
+                    record={lastVoiceBoxPresetRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastVoiceBoxPresetRecord.id)}
+                    deleting={loading}
+                  />
+                ) : null}
+                {lastVoiceBoxPresetInstructRecord ? (
+                  <AudioCard
+                    title={t("projects.result.voiceboxInstruct", "VoiceBox 지시 결과")}
+                    subtitle={lastVoiceBoxPresetInstructRecord.mode}
+                    record={lastVoiceBoxPresetInstructRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastVoiceBoxPresetInstructRecord.id)}
+                    deleting={loading}
+                  />
+                ) : null}
               </div>
             </WorkspaceCard>
           ) : null}
@@ -6090,7 +6140,13 @@ function StudioApp() {
                 lastS2ProRecord ? (
                   <WorkspaceCard>
                     <WorkspaceResultHeader title={t("s2pro.result.title", "S2-Pro 생성 결과")} badge={t("tts.result.latest")} />
-                    <AudioCard title={t("s2pro.result.title", "S2-Pro 생성 결과")} subtitle={lastS2ProRecord.mode} record={lastS2ProRecord} />
+                    <AudioCard
+                      title={t("s2pro.result.title", "S2-Pro 생성 결과")}
+                      subtitle={lastS2ProRecord.mode}
+                      record={lastS2ProRecord}
+                      onDelete={() => void handleDeleteHistoryRecord(lastS2ProRecord.id)}
+                      deleting={loading}
+                    />
                   </WorkspaceCard>
                 ) : (
                   <WorkspaceEmptyState
@@ -6289,7 +6345,13 @@ function StudioApp() {
 
               {lastVibeVoiceRecord ? (
                 <WorkspaceCard>
-                  <AudioCard title="VibeVoice TTS result" subtitle={lastVibeVoiceRecord.mode} record={lastVibeVoiceRecord} />
+                  <AudioCard
+                    title="VibeVoice TTS result"
+                    subtitle={lastVibeVoiceRecord.mode}
+                    record={lastVibeVoiceRecord}
+                    onDelete={() => void handleDeleteHistoryRecord(lastVibeVoiceRecord.id)}
+                    deleting={loading}
+                  />
                 </WorkspaceCard>
               ) : null}
             </div>
@@ -7138,7 +7200,12 @@ function StudioApp() {
               {lastAudioToolResult?.kind === "sound_effect" && lastAudioToolResult.record ? (
                 <WorkspaceCard>
                   <WorkspaceResultHeader title={t("effects.result.title", "방금 생성한 사운드 효과")} badge={t("tts.result.latest")} />
-                  <AudioCard title={t("effects.result.subtitle", "사운드 효과")} record={lastAudioToolResult.record} />
+                  <AudioCard
+                    title={t("effects.result.subtitle", "사운드 효과")}
+                    record={lastAudioToolResult.record}
+                    onDelete={() => void handleDeleteHistoryRecord(lastAudioToolResult.record!.id)}
+                    deleting={loading}
+                  />
                 </WorkspaceCard>
               ) : (
                 <WorkspaceEmptyState
@@ -8272,7 +8339,13 @@ function StudioApp() {
             {lastAceStepRecord ? (
               <WorkspaceCard>
                 <WorkspaceResultHeader title={getRecordDisplayTitle(lastAceStepRecord)} badge="ACE-Step" />
-                <AudioCard title={getRecordDisplayTitle(lastAceStepRecord)} subtitle="ACE-Step" record={lastAceStepRecord} />
+                <AudioCard
+                  title={getRecordDisplayTitle(lastAceStepRecord)}
+                  subtitle="ACE-Step"
+                  record={lastAceStepRecord}
+                  onDelete={() => void handleDeleteHistoryRecord(lastAceStepRecord.id)}
+                  deleting={loading}
+                />
               </WorkspaceCard>
             ) : null}
         </WorkspaceShell>
@@ -8454,7 +8527,12 @@ function StudioApp() {
           {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("applio.result.title", "방금 변환한 결과")} badge={t("tts.result.latest")} />
-              <AudioCard title={t("applio.result.subtitle", "Applio 변환 결과")} record={lastAudioToolResult.record} />
+              <AudioCard
+                title={t("applio.result.subtitle", "Applio 변환 결과")}
+                record={lastAudioToolResult.record}
+                onDelete={() => void handleDeleteHistoryRecord(lastAudioToolResult.record!.id)}
+                deleting={loading}
+              />
             </WorkspaceCard>
           ) : null}
         </WorkspaceShell>
@@ -8617,7 +8695,12 @@ function StudioApp() {
           {lastAudioToolResult?.kind === "voice_changer" && lastAudioToolResult.record ? (
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("applio.result.title", "방금 변환한 결과")} badge={t("tts.result.latest")} />
-              <AudioCard title={t("applio.result.subtitle", "Applio 변환 결과")} record={lastAudioToolResult.record} />
+              <AudioCard
+                title={t("applio.result.subtitle", "Applio 변환 결과")}
+                record={lastAudioToolResult.record}
+                onDelete={() => void handleDeleteHistoryRecord(lastAudioToolResult.record!.id)}
+                deleting={loading}
+              />
             </WorkspaceCard>
           ) : null}
         </WorkspaceShell>
@@ -9047,7 +9130,13 @@ function StudioApp() {
           {lastAudioToolResult?.kind === "audio_editor" && lastAudioToolResult.record ? (
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("audio_editor.result.title", "편집 결과")} badge={t("tts.result.latest")} />
-              <AudioCard title={t("audio_editor.result.title", "편집 결과")} subtitle={t("audio_editor.result.subtitle", "생성 갤러리에 저장됨")} record={lastAudioToolResult.record} />
+              <AudioCard
+                title={t("audio_editor.result.title", "편집 결과")}
+                subtitle={t("audio_editor.result.subtitle", "생성 갤러리에 저장됨")}
+                record={lastAudioToolResult.record}
+                onDelete={() => void handleDeleteHistoryRecord(lastAudioToolResult.record!.id)}
+                deleting={loading}
+              />
             </WorkspaceCard>
           ) : null}
         </WorkspaceShell>
@@ -9204,7 +9293,13 @@ function StudioApp() {
           {lastAudioToolResult?.kind === "audio_denoise" && lastAudioToolResult.record ? (
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("audio_denoise.result.title", "정제 결과")} badge={t("tts.result.latest")} />
-              <AudioCard title={t("audio_denoise.result.title", "정제 결과")} subtitle={t("audio_editor.result.subtitle", "생성 갤러리에 저장됨")} record={lastAudioToolResult.record} />
+              <AudioCard
+                title={t("audio_denoise.result.title", "정제 결과")}
+                subtitle={t("audio_editor.result.subtitle", "생성 갤러리에 저장됨")}
+                record={lastAudioToolResult.record}
+                onDelete={() => void handleDeleteHistoryRecord(lastAudioToolResult.record!.id)}
+                deleting={loading}
+              />
             </WorkspaceCard>
           ) : null}
         </WorkspaceShell>

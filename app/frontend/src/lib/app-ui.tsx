@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTranslation } from "./i18n";
+import { Download, FileAudio, Trash2, Volume2 } from "lucide-react";
 
 function defaultBackendBase(): string {
   const protocol = process.env.NEXT_PUBLIC_BACKEND_PROTOCOL || "http";
@@ -2156,33 +2157,82 @@ export function AudioCard({
   title,
   subtitle,
   record,
+  onDelete,
+  deleting = false,
 }: {
   title: string;
   subtitle?: string;
   record: GenerationRecord;
+  onDelete?: () => void;
+  deleting?: boolean;
 }) {
+  const { t } = useTranslation();
   const audioUrl = mediaUrl(record.output_audio_url);
 
   return (
-    <article className="audio-card">
-      <div className="audio-card__header">
-        <div>
-          <h4>{title}</h4>
-          {subtitle ? <p>{subtitle}</p> : null}
+    <article className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="grid size-11 shrink-0 place-items-center rounded-md border border-line bg-canvas text-accent-ink">
+            <FileAudio className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="line-clamp-1 text-base font-semibold text-ink">{title}</h4>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+              {subtitle ? <span>{subtitle}</span> : null}
+              {subtitle ? <span className="text-ink-subtle">/</span> : null}
+              <time>{formatDate(record.created_at)}</time>
+            </div>
+          </div>
         </div>
-        <div className="audio-card__actions">
-          <span>{formatDate(record.created_at)}</span>
-          <a className="secondary-button button-link" href={audioUrl} download={getAudioDownloadName(record)}>
-            다운로드
-          </a>
+
+        <div className="flex shrink-0 flex-wrap gap-2 self-start">
+          <Button asChild variant="outline" size="sm">
+            <a href={audioUrl} download={getAudioDownloadName(record)}>
+              <Download className="size-4" />
+              <span className="ml-2">{t("action.download", "다운로드")}</span>
+            </a>
+          </Button>
+          {onDelete ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-danger hover:bg-danger/10 hover:text-danger"
+              onClick={onDelete}
+              disabled={deleting}
+              type="button"
+            >
+              <Trash2 className="size-4" />
+              <span className="ml-2">{t("action.delete", "삭제")}</span>
+            </Button>
+          ) : null}
         </div>
       </div>
-      <p className="audio-card__text">{record.input_text}</p>
-      <audio controls src={audioUrl} className="audio-card__player" />
-      <div className="audio-card__meta">
-        <span>{getModeLabel(record.mode)}</span>
-        <span>{record.language}</span>
-        {record.speaker ? <span>{record.speaker}</span> : null}
+
+      <div className="rounded-md border border-line bg-canvas/70 px-4 py-3">
+        <p className="text-sm leading-relaxed text-ink">{record.input_text}</p>
+      </div>
+
+      <div className="rounded-md border border-line bg-sunken/40 p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-ink-muted">
+          <Volume2 className="size-4 text-accent-ink" />
+          <span>Preview</span>
+        </div>
+        <audio controls src={audioUrl} className="h-9 w-full" />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <span className="rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[10px] uppercase tracking-allcaps text-ink-muted">
+          {getModeLabel(record.mode)}
+        </span>
+        <span className="rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[10px] uppercase tracking-allcaps text-ink-muted">
+          {record.language}
+        </span>
+        {record.speaker ? (
+          <span className="rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[10px] uppercase tracking-allcaps text-ink-muted">
+            {record.speaker}
+          </span>
+        ) : null}
       </div>
     </article>
   );

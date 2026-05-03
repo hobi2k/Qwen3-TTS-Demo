@@ -216,7 +216,7 @@ export const api = {
   },
 
   deleteHistoryRecord(recordId: string): Promise<GenerationDeleteResponse> {
-    return request<GenerationDeleteResponse>(`/api/history/${recordId}`, {
+    return request<GenerationDeleteResponse>(`/api/history/${encodeURIComponent(recordId)}`, {
       method: "DELETE",
     });
   },
