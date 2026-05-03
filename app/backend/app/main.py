@@ -141,7 +141,6 @@ APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
 FRONTEND_DIR = REPO_ROOT / "app" / "frontend"
-LEGACY_FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 NEXT_FRONTEND_OUT_DIR = FRONTEND_DIR / "out"
 UPSTREAM_QWEN_DIR = REPO_ROOT / "vendor" / "Qwen3-TTS"
 DEFAULT_QWEN_EXTENSIONS_DIR = REPO_ROOT / "qwen_extensions"
@@ -576,18 +575,16 @@ def resolve_qwen_extension_script(relative_path: str) -> str:
     """Resolve a demo-maintained Qwen script path for CLI execution.
 
     Args:
-        relative_path: Path inside either ``qwen_extensions`` or legacy
-            ``vendor/Qwen3-TTS``.
+        relative_path: Path inside ``qwen_extensions``.
 
     Returns:
-        Absolute path to the extension script when present, otherwise the
-        matching legacy path under ``vendor/Qwen3-TTS`` for compatibility.
+        Absolute path to the extension script.
     """
 
     extension_path = qwen_extensions_dir() / relative_path
-    if extension_path.exists():
-        return str(extension_path)
-    return str(UPSTREAM_QWEN_DIR / relative_path)
+    if not extension_path.exists():
+        raise HTTPException(status_code=500, detail=f"Qwen extension script not found: {relative_path}")
+    return str(extension_path)
 
 
 def resolve_finetune_entrypoint(training_mode: str) -> str:
@@ -649,15 +646,9 @@ app.mount("/files", StaticFiles(directory=storage.data_dir), name="files")
 
 
 def frontend_build_dir() -> Path:
-    """Return the active built frontend directory.
+    """Return the built Next.js static export directory."""
 
-    Next.js static export writes to ``out``. A ``dist`` fallback is kept only
-    for older local build artifacts while the project standard is Next.js.
-    """
-
-    if NEXT_FRONTEND_OUT_DIR.exists():
-        return NEXT_FRONTEND_OUT_DIR
-    return LEGACY_FRONTEND_DIST_DIR
+    return NEXT_FRONTEND_OUT_DIR
 
 
 if frontend_build_dir().exists():
@@ -667,21 +658,6 @@ if frontend_build_dir().exists():
     next_dir = frontend_build_dir() / "_next"
     if next_dir.exists():
         app.mount("/_next", StaticFiles(directory=next_dir), name="next-static")
-
-
-@app.on_event("startup")
-def startup_housekeeping() -> None:
-    """서버 시작 시 저장 구조를 최신 규칙으로 정리한다.
-
-    기존 실행에서 남은 flat 파일명이나 루트 직하 JSON 레코드가 있더라도,
-    서버가 뜰 때 한 번 정리해서 프런트와 백엔드가 같은 규칙으로만 동작하게 만든다.
-    이렇게 해두면 이후 화면에서 예전 무작위 파일명이나 낡은 경로 구조가 다시
-    튀어나오는 일을 줄일 수 있다.
-    """
-
-    migrate_existing_storage_layout()
-    for run_dir in sorted([path for path in storage.finetune_runs_dir.iterdir() if path.is_dir()], reverse=True):
-        collapse_run_checkpoints(run_dir)
 
 
 def audio_url_for(relative_path: str) -> str:
@@ -742,12 +718,6 @@ def parse_created_at(value: Optional[str]) -> datetime:
         except Exception:
             pass
     return utc_now_datetime()
-
-
-def is_opaque_generated_filename(filename: str) -> bool:
-    """랜덤 접두사 기반의 읽기 어려운 생성 파일명인지 판별한다."""
-
-    return bool(filename and re.match(r"^(audio|gen|sfx|voicechanger|convert|harmonic|percussive)_[a-f0-9]{8,}", filename, flags=re.IGNORECASE))
 
 
 def readable_record_label(record: JsonDict, fallback: str) -> str:
@@ -1014,10 +984,7 @@ def get_dataset_record(dataset_id: str) -> JsonDict:
     """
 
     record_path = storage.dataset_record_path(dataset_id)
-    if record_path.exists():
-        payload = storage.read_json(record_path)
-    else:
-        payload = storage.get_record(storage.datasets_dir, dataset_id)
+    payload = storage.read_json(record_path) if record_path.exists() else None
     if not payload:
         raise HTTPException(status_code=404, detail="Dataset not found.")
     return payload
@@ -1039,22 +1006,15 @@ def create_clone_prompt_file(
         x_vector_only_mode: x-vector 전용 clone 모드 사용 여부.
     """
 
-    if engine.simulation_mode or not engine.qwen_tts_available:
-        # 시뮬레이션 모드에서도 프런트엔드 흐름이 끊기지 않도록
-        # 실제 prompt 대신 동일 구조의 placeholder pickle을 저장한다.
-        prompt_payload = {
-            "kind": "simulation",
-            "reference_audio_path": reference_audio_path,
-            "reference_text": reference_text,
-            "x_vector_only_mode": x_vector_only_mode,
-        }
-    else:
-        model = engine._get_model("base_clone", model_id)
-        prompt_payload = model.create_voice_clone_prompt(
-            ref_audio=str(REPO_ROOT / reference_audio_path),
-            ref_text=reference_text,
-            x_vector_only_mode=x_vector_only_mode,
-        )
+    if not engine.qwen_tts_available:
+        raise HTTPException(status_code=503, detail="Qwen clone prompt를 만들 실제 Qwen 런타임이 준비되지 않았습니다.")
+
+    model = engine._get_model("base_clone", model_id)
+    prompt_payload = model.create_voice_clone_prompt(
+        ref_audio=str(REPO_ROOT / reference_audio_path),
+        ref_text=reference_text,
+        x_vector_only_mode=x_vector_only_mode,
+    )
 
     with prompt_path.open("wb") as handle:
         pickle.dump(prompt_payload, handle)
@@ -1701,59 +1661,6 @@ def list_clone_prompt_records() -> List[ClonePromptRecord]:
     return prompts
 
 
-def normalize_legacy_dataset_record(record: Dict[str, Any], fallback_name: str) -> Optional[Dict[str, Any]]:
-    """Normalize legacy dataset manifests into the current dataset schema.
-
-    Args:
-        record: Raw JSON payload loaded from disk.
-        fallback_name: Filename stem used when the legacy payload has no explicit id.
-
-    Returns:
-        A dictionary compatible with `FineTuneDataset`, or `None` when the
-        payload cannot be safely represented as a dataset list item.
-    """
-
-    if record.get("id") and record.get("name") and record.get("raw_jsonl_path"):
-        normalized = dict(record)
-        if "ref_audio_path" not in normalized and record.get("ref_audio"):
-            normalized["ref_audio_path"] = record["ref_audio"]
-        dataset_id = normalized.get("id") or fallback_name
-        normalized.setdefault("dataset_root_path", storage.relpath(storage.dataset_dir(dataset_id)) if storage.dataset_dir(dataset_id).exists() else None)
-        normalized.setdefault("audio_dir_path", storage.relpath(storage.dataset_dir(dataset_id) / "audio") if (storage.dataset_dir(dataset_id) / "audio").exists() else None)
-        normalized.setdefault("manifest_path", storage.relpath(storage.dataset_manifest_path(dataset_id)) if storage.dataset_manifest_path(dataset_id).exists() else None)
-        return normalized
-
-    # Older manifests stored only train/eval JSONL paths plus aggregate counts.
-    # We keep them visible in the UI by projecting them into the current card
-    # shape rather than crashing bootstrap on startup.
-    train_jsonl = record.get("train_jsonl")
-    ref_audio = record.get("ref_audio")
-    train_count = record.get("train_count")
-    if not train_jsonl or not ref_audio or train_count is None:
-        return None
-
-    manifest_id = fallback_name.replace("_manifest", "")
-    return {
-        "id": manifest_id,
-        "name": manifest_id,
-        "source_type": "legacy_manifest",
-        "dataset_root_path": None,
-        "audio_dir_path": None,
-        "manifest_path": None,
-        "raw_jsonl_path": storage.relpath(train_jsonl) if os.path.isabs(train_jsonl) else train_jsonl,
-        "prepared_jsonl_path": None,
-        "prepared_with_simulation": None,
-        "prepared_tokenizer_model_path": None,
-        "prepared_device": None,
-        "ref_audio_path": ref_audio,
-        "speaker_name": manifest_id,
-        "sample_count": int(train_count),
-        "created_at": utc_now_from_timestamp((storage.datasets_dir / f"{fallback_name}.json").stat().st_mtime)
-        if (storage.datasets_dir / f"{fallback_name}.json").exists()
-        else utc_now(),
-    }
-
-
 def list_dataset_records() -> List[FineTuneDataset]:
     by_id: Dict[str, FineTuneDataset] = {}
     for path in storage.list_dataset_record_paths():
@@ -1762,28 +1669,16 @@ def list_dataset_records() -> List[FineTuneDataset]:
         except Exception:
             continue
 
-        normalized = normalize_legacy_dataset_record(record, path.stem)
-        if not normalized:
-            continue
-
         try:
-            normalized["training_ready"] = bool(normalized.get("prepared_jsonl_path"))
-            normalized["status_label"] = "학습 가능" if normalized["training_ready"] else "데이터셋 생성 완료"
-            normalized["next_step_label"] = "학습 시작" if normalized["training_ready"] else "학습용 준비 실행"
-            dataset = FineTuneDataset(**normalized)
+            record["training_ready"] = bool(record.get("prepared_jsonl_path"))
+            record["status_label"] = "학습 가능" if record["training_ready"] else "데이터셋 생성 완료"
+            record["next_step_label"] = "학습 시작" if record["training_ready"] else "학습용 준비 실행"
+            dataset = FineTuneDataset(**record)
         except Exception:
             continue
 
         existing = by_id.get(dataset.id)
-        if existing is None:
-            by_id[dataset.id] = dataset
-            continue
-
-        existing_is_legacy = existing.source_type == "legacy_manifest"
-        current_is_legacy = dataset.source_type == "legacy_manifest"
-        if existing_is_legacy and not current_is_legacy:
-            by_id[dataset.id] = dataset
-        elif existing_is_legacy == current_is_legacy and (dataset.created_at or "") > (existing.created_at or ""):
+        if existing is None or (dataset.created_at or "") > (existing.created_at or ""):
             by_id[dataset.id] = dataset
 
     datasets = sorted(by_id.values(), key=lambda item: item.created_at or "", reverse=True)
@@ -1888,38 +1783,6 @@ def list_audio_tool_jobs() -> List[AudioToolJob]:
     return jobs
 
 
-def maybe_move_file(source: Path, destination: Path) -> Path:
-    """파일이 존재하면 목적지로 이동하고 최종 경로를 반환한다.
-
-    Args:
-        source: 현재 파일 경로.
-        destination: 옮길 목표 경로.
-
-    Returns:
-        이동 후 실제 파일 경로.
-    """
-
-    if not source.exists():
-        return destination
-    if source.resolve() == destination.resolve():
-        return destination
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(source), str(destination))
-    return destination
-
-
-def stored_path_exists(value: Any) -> bool:
-    """저장 레코드 안의 상대/절대 경로가 실제 파일로 존재하는지 확인한다."""
-
-    if not value:
-        return False
-    candidate = Path(str(value))
-    if not candidate.is_absolute():
-        candidate = REPO_ROOT / candidate
-    return candidate.exists()
-
-
 def clone_prompt_id_from_path(value: Any) -> Optional[str]:
     """`clone_xxxxx` 형태의 ID를 경로 문자열에서 추출한다."""
 
@@ -1927,269 +1790,6 @@ def clone_prompt_id_from_path(value: Any) -> Optional[str]:
         return None
     match = re.search(r"(clone_[0-9a-fA-F]+)", str(value))
     return match.group(1) if match else None
-
-
-def generation_reference_by_id(record_id: Optional[str]) -> Optional[str]:
-    """생성 record ID로 현재 오디오 경로를 찾는다."""
-
-    if not record_id:
-        return None
-    for record in list_generation_records():
-        if record.id == record_id and stored_path_exists(record.output_audio_path):
-            return record.output_audio_path
-    return None
-
-
-def generation_reference_by_text(reference_text: Optional[str]) -> Optional[str]:
-    """참조 문장과 같은 생성 결과의 현재 오디오 경로를 찾는다."""
-
-    normalized = (reference_text or "").strip()
-    if not normalized:
-        return None
-    for record in list_generation_records():
-        if (record.input_text or "").strip() == normalized and stored_path_exists(record.output_audio_path):
-            return record.output_audio_path
-    return None
-
-
-def clone_prompt_record_by_id(prompt_id: Optional[str]) -> Optional[Dict[str, Any]]:
-    """clone prompt ID로 현재 레코드를 찾는다."""
-
-    if not prompt_id:
-        return None
-    for record in storage.list_json_records(storage.clone_prompts_dir):
-        if record.get("id") == prompt_id:
-            return record
-    return None
-
-
-def repair_generated_reference(record: Dict[str, Any]) -> bool:
-    """프리셋/clone prompt가 가리키는 예전 생성 오디오 경로를 현재 경로로 복구한다."""
-
-    current = record.get("reference_audio_path")
-    if stored_path_exists(current):
-        return False
-
-    replacement = generation_reference_by_id((record.get("meta") or {}).get("generation_id"))
-    if not replacement:
-        replacement = generation_reference_by_text(record.get("reference_text"))
-    if replacement and replacement != current:
-        record["reference_audio_path"] = replacement
-        return True
-    return False
-
-
-def migrate_generation_records() -> None:
-    """기존 flat/random 생성 이력을 읽기 쉬운 구조로 정리한다.
-
-    예전 실행에서 `data/generated` 루트에 바로 떨어진 오디오와 JSON 기록을 읽어,
-    현재 규칙인 `category/date/readable-name` 구조로 옮긴다. 오디오 파일과 레코드
-    JSON을 함께 갱신해서 프런트가 사람에게 읽히는 이름만 보도록 맞춘다.
-    """
-
-    for record_path in sorted(storage.generated_dir.rglob("*.json")):
-        try:
-            record = storage.read_json(record_path)
-        except Exception:
-            continue
-        if not isinstance(record, dict):
-            continue
-        if not record.get("id") or not record.get("output_audio_path"):
-            continue
-
-        created_at = parse_created_at(record.get("created_at"))
-        label = readable_record_label(record, str(record.get("mode") or "generation"))
-        audio_path = Path(record["output_audio_path"])
-        if not audio_path.is_absolute():
-            audio_path = REPO_ROOT / audio_path
-
-        if audio_path.exists() and (audio_path.parent == storage.generated_dir or is_opaque_generated_filename(audio_path.name)):
-            extension = audio_path.suffix.lstrip(".") or "wav"
-            target_audio = storage.named_output_path(
-                root=storage.generated_dir,
-                category=str(record.get("mode") or "generation"),
-                label=label,
-                extension=extension,
-                created_at=created_at,
-            )
-            moved_audio = maybe_move_file(audio_path, target_audio)
-            rel_audio = storage.relpath(moved_audio)
-            record["output_audio_path"] = rel_audio
-            record["output_audio_url"] = audio_url_for(rel_audio)
-
-        target_record = storage.named_record_path(
-            root=storage.generated_dir,
-            category=f"{record.get('mode', 'generation')}-records",
-            label=label,
-            record_id=str(record["id"]),
-            created_at=created_at,
-        )
-        final_record_path = maybe_move_file(record_path, target_record)
-        storage.write_json(final_record_path, record)
-
-
-def migrate_clone_prompt_records() -> None:
-    """clone prompt 자산과 메타데이터를 읽기 쉬운 구조로 정리한다.
-
-    과거의 `clone_xxxxx.pkl` 같은 파일명과 루트 직하 JSON 메타데이터를 현재 구조로
-    이동시켜, 프리셋/하이브리드 화면에서 내부 경로나 무작위 이름이 그대로 노출되지
-    않도록 정리한다.
-    """
-
-    for record_path in sorted(storage.clone_prompts_dir.rglob("*.json")):
-        try:
-            record = storage.read_json(record_path)
-        except Exception:
-            continue
-        if not isinstance(record, dict):
-            continue
-        if not record.get("id") or not record.get("prompt_path"):
-            continue
-
-        created_at = parse_created_at(record.get("created_at"))
-        label = readable_record_label(record, basename_for_asset(record.get("reference_audio_path") or "") or "clone-prompt")
-        prompt_path = Path(record["prompt_path"])
-        if not prompt_path.is_absolute():
-            prompt_path = REPO_ROOT / prompt_path
-
-        if prompt_path.exists() and (prompt_path.parent == storage.clone_prompts_dir or prompt_path.name.startswith("clone_")):
-            target_prompt = storage.named_output_path(
-                root=storage.clone_prompts_dir,
-                category=str(record.get("source_type") or "clone-prompt"),
-                label=label,
-                extension="pkl",
-                created_at=created_at,
-            )
-            moved_prompt = maybe_move_file(prompt_path, target_prompt)
-            record["prompt_path"] = storage.relpath(moved_prompt)
-
-        target_record = storage.named_record_path(
-            root=storage.clone_prompts_dir,
-            category=str(record.get("source_type") or "clone-prompt"),
-            label=label,
-            record_id=str(record["id"]),
-            created_at=created_at,
-        )
-        repair_generated_reference(record)
-        final_record_path = maybe_move_file(record_path, target_record)
-        storage.write_json(final_record_path, record)
-
-
-def migrate_preset_records() -> None:
-    """preset 메타데이터 파일을 이름 기반 폴더 구조로 정리한다.
-
-    프리셋 JSON은 오디오 산출물처럼 직접 재생되는 파일은 아니지만, 화면에서 자주
-    조회되기 때문에 이름과 생성 시각 기준으로 정리해 두어야 관리가 쉬워진다.
-    """
-
-    for record_path in sorted(storage.presets_dir.rglob("*.json")):
-        try:
-            record = storage.read_json(record_path)
-        except Exception:
-            continue
-        if not isinstance(record, dict):
-            continue
-        if not record.get("id"):
-            continue
-
-        created_at = parse_created_at(record.get("created_at"))
-        label = readable_record_label(record, "preset")
-        changed = repair_generated_reference(record)
-        prompt_id = clone_prompt_id_from_path(record.get("clone_prompt_path"))
-        clone_record = clone_prompt_record_by_id(prompt_id)
-        if clone_record:
-            if clone_record.get("prompt_path") and clone_record.get("prompt_path") != record.get("clone_prompt_path"):
-                record["clone_prompt_path"] = clone_record["prompt_path"]
-                changed = True
-            if not stored_path_exists(record.get("reference_audio_path")) and clone_record.get("reference_audio_path"):
-                record["reference_audio_path"] = clone_record["reference_audio_path"]
-                changed = True
-        target_record = storage.named_record_path(
-            root=storage.presets_dir,
-            category=str(record.get("source_type") or "preset"),
-            label=label,
-            record_id=str(record["id"]),
-            created_at=created_at,
-        )
-        final_record_path = maybe_move_file(record_path, target_record)
-        if changed or final_record_path != record_path:
-            storage.write_json(final_record_path, record)
-
-
-def migrate_audio_tool_jobs() -> None:
-    """오디오 도구 메타데이터와 산출물 경로를 읽기 쉬운 구조로 정리한다.
-
-    사운드 효과, Applio 변환, 오디오 분리처럼 새로 늘어난 기능은 산출물 종류가
-    섞이기 쉽다. 이 정리 단계는 각 작업 기록과 산출물 파일을 함께 옮겨서 기능별
-    카테고리와 읽을 수 있는 파일명 규칙을 강제한다.
-    """
-
-    for record_path in sorted(storage.audio_tools_dir.rglob("*.json")):
-        try:
-            record = storage.read_json(record_path)
-        except Exception:
-            continue
-        if not isinstance(record, dict):
-            continue
-        if not record.get("id"):
-            continue
-
-        created_at = parse_created_at(record.get("created_at"))
-        label = readable_record_label(record, str(record.get("kind") or "audio-tool"))
-        artifacts = record.get("artifacts", []) or []
-        updated_artifacts = []
-        for artifact in artifacts:
-            artifact_path = Path(artifact.get("path") or "")
-            if not artifact_path:
-                updated_artifacts.append(artifact)
-                continue
-            if not artifact_path.is_absolute():
-                artifact_path = REPO_ROOT / artifact_path
-
-            if artifact_path.exists() and (artifact_path.parent == storage.generated_dir or is_opaque_generated_filename(artifact_path.name)):
-                extension = artifact_path.suffix.lstrip(".") or "wav"
-                target_path = storage.named_output_path(
-                    root=storage.generated_dir,
-                    category=str(record.get("kind") or "audio-tool"),
-                    label=artifact.get("label") or label,
-                    extension=extension,
-                    created_at=created_at,
-                )
-                artifact_path = maybe_move_file(artifact_path, target_path)
-
-            rel_path = storage.relpath(artifact_path) if artifact_path.exists() else artifact.get("path")
-            updated_artifacts.append(
-                {
-                    **artifact,
-                    "path": rel_path,
-                    "url": audio_url_for(rel_path) if rel_path else artifact.get("url"),
-                    "filename": basename_for_asset(rel_path) if rel_path else artifact.get("filename"),
-                }
-            )
-
-        record["artifacts"] = updated_artifacts
-        target_record = storage.named_record_path(
-            root=storage.audio_tools_dir,
-            category=str(record.get("kind") or "audio-tool"),
-            label=label,
-            record_id=str(record["id"]),
-            created_at=created_at,
-        )
-        final_record_path = maybe_move_file(record_path, target_record)
-        storage.write_json(final_record_path, record)
-
-
-def migrate_existing_storage_layout() -> None:
-    """기존 flat/random 파일 구조를 현재 readable layout으로 한 번 정리한다.
-
-    개별 마이그레이션은 서로 다른 저장 영역을 담당하므로, 서버 시작 시 이 함수를
-    한 번 호출해 전체 저장소를 동일한 규칙으로 맞춘다.
-    """
-
-    migrate_generation_records()
-    migrate_clone_prompt_records()
-    migrate_preset_records()
-    migrate_audio_tool_jobs()
 
 
 def audio_tool_capabilities() -> List[AudioToolCapability]:
@@ -3607,24 +3207,6 @@ def generate_ace_step_music(payload: MusicCompositionRequest) -> GenerationRespo
             "cpu_offload": payload.cpu_offload,
         }
     )
-    base_payload["legacy_params"] = {
-        "scheduler_type": payload.scheduler_type,
-        "cfg_type": payload.cfg_type,
-        "omega_scale": payload.omega_scale,
-        "guidance_interval": payload.guidance_interval,
-        "guidance_interval_decay": payload.guidance_interval_decay,
-        "min_guidance_scale": payload.min_guidance_scale,
-        "use_erg_tag": payload.use_erg_tag,
-        "use_erg_lyric": payload.use_erg_lyric,
-        "use_erg_diffusion": payload.use_erg_diffusion,
-        "oss_steps": payload.oss_steps,
-        "guidance_scale_text": payload.guidance_scale_text,
-        "guidance_scale_lyric": payload.guidance_scale_lyric,
-        "bf16": payload.bf16,
-        "overlapped_decode": payload.overlapped_decode,
-        "device_id": payload.device_id,
-    }
-
     label = requested_output_name(payload) or payload.prompt or payload.caption or "ace-step-track"
     output_path = generated_audio_path("ace-step-music", label, base_payload.get("audio_format", "wav"))
     try:
@@ -5020,7 +4602,7 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
     if not reference_id:
         reference_id = voice_id
 
-    if payload.create_qwen_prompt and (engine.simulation_mode or not engine.qwen_tts_available):
+    if payload.create_qwen_prompt and not engine.qwen_tts_available:
         raise HTTPException(status_code=503, detail="Qwen clone prompt를 만들 실제 Qwen 런타임이 준비되지 않았습니다.")
 
     # Avoid colliding with an existing local Fish reference id while keeping the
@@ -6378,7 +5960,7 @@ def prepare_dataset(dataset_id: str, payload: PrepareDatasetRequest) -> FineTune
     prepared_jsonl_path = dataset_dir / "prepared.jsonl"
     normalize_dataset_jsonl_paths(raw_jsonl_path)
 
-    simulate = payload.simulate_only or engine.simulation_mode
+    simulate = payload.simulate_only
     if not simulate:
         run_prepare_data(
             raw_jsonl_path=raw_jsonl_path,
@@ -6454,7 +6036,7 @@ def create_finetune_run(payload: FineTuneRunCreateRequest) -> FineTuneRun:
     output_model_path = run_dir / payload.output_name
     log_path = run_dir / "train.log"
 
-    simulate = payload.simulate_only or engine.simulation_mode
+    simulate = payload.simulate_only
     command: List[str] = []
     entrypoint = resolve_finetune_entrypoint(payload.training_mode)
 

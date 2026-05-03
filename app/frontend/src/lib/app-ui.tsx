@@ -14,6 +14,17 @@ import {
 } from "@/components/ui/select";
 import { useTranslation } from "./i18n";
 
+function defaultBackendBase(): string {
+  const protocol = process.env.NEXT_PUBLIC_BACKEND_PROTOCOL || "http";
+  const host = process.env.NEXT_PUBLIC_BACKEND_HOST || "127.0.0.1";
+  const port = process.env.NEXT_PUBLIC_BACKEND_PORT || process.env.BACKEND_PORT || "8190";
+  return `${protocol}://${host}:${port}`;
+}
+
+function frontendDevPort(): string {
+  return process.env.NEXT_PUBLIC_FRONTEND_PORT || process.env.FRONTEND_PORT || "5173";
+}
+
 export type TabKey =
   | "home"
   | "voices"
@@ -1909,8 +1920,8 @@ export function mediaUrl(value: string): string {
     return value;
   }
 
-  if (value.startsWith("/files/") && window.location.port && window.location.port !== "8190") {
-    return `http://127.0.0.1:8190${value}`;
+  if (value.startsWith("/files/") && window.location.port && window.location.port === frontendDevPort()) {
+    return `${defaultBackendBase()}${value}`;
   }
 
   return value;

@@ -93,7 +93,7 @@ ACE-Step만 준비하려면:
 사전 요구 사항은 `uv`, `Node.js 18+`, `npm`, `ffmpeg`, `sox`입니다. `ffmpeg`와 `sox`는 스크립트가 경고만 띄우며 자동 설치하지 않습니다.
 
 VoiceBox와 CustomVoice 확장 스크립트는 이제 `qwen_extensions`를 기준으로 실행합니다.
-기존에 `vendor/Qwen3-TTS` 안에 추가해 둔 커스텀 파일은 당장 삭제하지 않고 호환용 복사본으로 남겨 둡니다.
+`vendor/Qwen3-TTS` 안의 커스텀 파일은 별도 배포/동기화 대상이며, 이 데모 백엔드의 런타임 fallback으로 쓰지 않습니다.
 FastAPI 백엔드는 `QWEN_EXTENSIONS` 환경변수를 먼저 보고, 없으면 기본값 `qwen_extensions`를 사용합니다.
 
 - Base speaker SFT:
@@ -114,7 +114,7 @@ FastAPI 백엔드는 `QWEN_EXTENSIONS` 환경변수를 먼저 보고, 없으면 
 
 예전 명령어 유지를 위한 최상위 `voicebox/` 폴더와 `scripts/qwen3_tts_voicebox_*.py` 계열 래퍼는 제거했습니다.
 새 훈련 로직은 `qwen_extensions/finetuning`, 변환 로직은 `qwen_extensions/fusion`, 추론 로직은 `qwen_extensions/inference` 쪽 canonical script에 반영합니다.
-`vendor/Qwen3-TTS` 내부 커스텀 복사본은 현재 단계에서만 유지하는 legacy mirror이며, 백엔드 실행 기준은 아닙니다.
+`vendor/Qwen3-TTS` 내부 커스텀 복사본은 별도 저장소로 올릴 수 있는 mirror이며, 백엔드 실행 기준은 아닙니다.
 
 학습 기능을 검증할 때는 풀 에포크를 기다리지 않고 먼저 실제 학습 스텝까지 내려오는지 확인합니다.
 

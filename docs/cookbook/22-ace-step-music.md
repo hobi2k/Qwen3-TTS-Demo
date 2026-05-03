@@ -38,7 +38,7 @@ ACE-Step-1.5만 준비하려면:
 
 스크립트가 하는 일:
 
-1. `vendor/ACE-Step`에 ACE-Step-1.5 저장소를 clone (`--depth 1`).
+1. 저장소에 포함된 `vendor/ACE-Step` 소스를 확인합니다. 없으면 git URL로 복구하지 않고 설치 오류로 처리합니다.
 2. `.venv-ace-step` 가상환경 생성.
 3. `uv pip install --python .venv-ace-step/bin/python -e vendor/ACE-Step` 로 ACE-Step-1.5 설치.
    ACE-Step-1.5는 `nano-vllm`을 `pyproject.toml`의 `[tool.uv.sources]` 로컬 소스로
@@ -64,7 +64,6 @@ ACE_STEP_REPO_ROOT=vendor/ACE-Step
 ACE_STEP_PYTHON=.venv-ace-step/bin/python
 ACE_STEP_CHECKPOINT_PATH=data/models/ace-step
 ACE_STEP_LORA_DIR=data/models/ace-step/loras
-ACE_STEP_REPO_URL=https://github.com/ace-step/ACE-Step-1.5.git
 ACE_STEP_VENV=.venv-ace-step
 ACE_STEP_DOWNLOAD_PROFILE=main
 ```

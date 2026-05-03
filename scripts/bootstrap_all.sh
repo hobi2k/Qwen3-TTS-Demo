@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="${1:-all}"
+BACKEND_PORT="${BACKEND_PORT:-8190}"
 
 echo "Bootstrapping Qwen3-TTS-Demo"
 echo "Repo root: ${ROOT_DIR}"
@@ -34,7 +35,7 @@ echo "Bootstrap complete."
 echo "Start the integrated backend/frontend server with:"
 echo "  cd ${ROOT_DIR}/app/backend"
 echo "  source ../../.venv/bin/activate"
-echo "  uvicorn app.main:app --host 127.0.0.1 --port 8190"
+echo "  uvicorn app.main:app --host 127.0.0.1 --port ${BACKEND_PORT}"
 echo
 echo "Open:"
-echo "  http://127.0.0.1:8190/"
+echo "  http://127.0.0.1:${BACKEND_PORT}/"

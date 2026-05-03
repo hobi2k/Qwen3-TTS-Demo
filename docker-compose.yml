@@ -10,6 +10,7 @@ x-voice-studio-common: &voice-studio-common
       TORCH_VERSION: ${TORCH_VERSION:-2.11.0}
       TORCHAUDIO_VERSION: ${TORCHAUDIO_VERSION:-2.11.0}
       TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.26.0}
+      BACKEND_PORT: ${BACKEND_PORT:-8190}
   image: qwen3-tts-demo:local
   gpus: all
   shm_size: "16gb"
@@ -37,7 +38,7 @@ x-voice-studio-common: &voice-studio-common
     HF_HUB_ENABLE_HF_TRANSFER: ${HF_HUB_ENABLE_HF_TRANSFER:-1}
     S2_PRO_RUNTIME: ${S2_PRO_RUNTIME:-local}
     S2_PRO_AUTO_START: ${S2_PRO_AUTO_START:-1}
-    FISH_SPEECH_SERVER_URL: http://127.0.0.1:8080
+    FISH_SPEECH_SERVER_URL: ${FISH_SPEECH_SERVER_URL:-http://127.0.0.1:8080}
     FISH_SPEECH_MODEL: ${FISH_SPEECH_MODEL:-s2-pro}
     FISH_SPEECH_VENV: /app/.venv-fish-speech
     FISH_SPEECH_PYTHON: /app/.venv-fish-speech/bin/python
@@ -102,4 +103,3 @@ volumes:
   vibevoice-venv:
   hf-cache:
   uv-cache:
-

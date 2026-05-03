@@ -81,16 +81,26 @@ import type {
   VoiceModelBlendRequest,
 } from "./types";
 
+function defaultApiBase(): string {
+  const protocol = process.env.NEXT_PUBLIC_BACKEND_PROTOCOL || "http";
+  const host = process.env.NEXT_PUBLIC_BACKEND_HOST || "127.0.0.1";
+  const port = process.env.NEXT_PUBLIC_BACKEND_PORT || process.env.BACKEND_PORT || "8190";
+  return `${protocol}://${host}:${port}`;
+}
+
+function devFrontendPort(): string {
+  return process.env.NEXT_PUBLIC_FRONTEND_PORT || process.env.FRONTEND_PORT || "5173";
+}
+
 function apiCandidates(path: string): string[] {
   const configuredBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
-  const defaultBase = "http://127.0.0.1:8190";
+  const defaultBase = defaultApiBase();
 
   if (configuredBase) {
-    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`]));
+    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`, path]));
   }
 
-  const candidates = [`${defaultBase}${path}`];
-  candidates.push(path);
+  const candidates = [path, `${defaultBase}${path}`];
 
   return Array.from(new Set(candidates));
 }
@@ -101,8 +111,8 @@ export function apiUrl(path: string): string {
   if (configuredBase) {
     return `${configuredBase}${normalized}`;
   }
-  if (typeof window !== "undefined" && window.location.port && window.location.port !== "8190") {
-    return `http://127.0.0.1:8190${normalized}`;
+  if (typeof window !== "undefined" && window.location.port && window.location.port === devFrontendPort()) {
+    return `${defaultApiBase()}${normalized}`;
   }
   return normalized;
 }

@@ -552,7 +552,7 @@ class AceStepGenerateBaseRequest(BaseModel):
 
 
 class MusicCompositionRequest(AceStepGenerateBaseRequest):
-    """ACE-Step text2music 요청 (legacy 호환 필드 포함)."""
+    """ACE-Step text2music 요청."""
 
     audio_duration: Optional[float] = Field(None, ge=-1.0, le=600.0)
     infer_step: Optional[int] = Field(None, ge=1, le=200)

@@ -50,6 +50,19 @@ $env:HF_HUB_ENABLE_HF_TRANSFER = if ($env:HF_HUB_ENABLE_HF_TRANSFER) { $env:HF_H
 $PrivateAssetRepoId = $env:PRIVATE_ASSET_REPO_ID
 $PrivateAssetRevision = if ($env:PRIVATE_ASSET_REVISION) { $env:PRIVATE_ASSET_REVISION } else { "main" }
 
+function Assert-VendoredSource {
+    param(
+        [string]$Name,
+        [string]$TargetDir
+    )
+
+    if (-not (Test-Path $TargetDir)) {
+        throw "$Name vendor source is missing: $TargetDir. Restore the vendored repository contents instead of cloning during model download."
+    }
+
+    Write-Host "Using vendored $Name source: $TargetDir"
+}
+
 function Download-PrivateAsset {
     param(
         [string]$RepoPath,
@@ -127,14 +140,7 @@ Write-Host "Downloaded model profile: $Profile"
 Write-Host "Models stored in: $ModelsDir"
 
 if (($Profile -eq "all") -or ($Profile -eq "s2pro")) {
-    $FishSpeechRepoUrl = if ($env:FISH_SPEECH_REPO_URL) { $env:FISH_SPEECH_REPO_URL } else { "https://github.com/fishaudio/fish-speech.git" }
-    if (-not (Test-Path (Join-Path $FishSpeechDir ".git"))) {
-        Write-Host "Cloning Fish Speech -> $FishSpeechDir"
-        git clone $FishSpeechRepoUrl $FishSpeechDir
-    }
-    else {
-        Write-Host "Fish Speech already present at $FishSpeechDir"
-    }
+    Assert-VendoredSource -Name "Fish Speech" -TargetDir $FishSpeechDir
 
     python -c @"
 from pathlib import Path
@@ -158,8 +164,6 @@ if ($Profile -eq "s2pro") {
 }
 
 $MMAudioDir = if ($env:MMAUDIO_REPO_ROOT) { $env:MMAUDIO_REPO_ROOT } else { Join-Path $VendorDir "MMAudio" }
-$ApplioRepoUrl = if ($env:APPLIO_REPO_URL) { $env:APPLIO_REPO_URL } else { "https://github.com/IAHispano/Applio.git" }
-$MMAudioRepoUrl = if ($env:MMAUDIO_REPO_URL) { $env:MMAUDIO_REPO_URL } else { "https://github.com/hkchengrex/MMAudio.git" }
 $DefaultRvcModelUrl = if ($env:APPLIO_DEFAULT_RVC_MODEL_URL) { $env:APPLIO_DEFAULT_RVC_MODEL_URL } else { "https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth" }
 $DefaultRvcIndexUrl = if ($env:APPLIO_DEFAULT_RVC_INDEX_URL) { $env:APPLIO_DEFAULT_RVC_INDEX_URL } else { "https://huggingface.co/SmlCoke/rvc-yui/resolve/main/index/added_IVF1386_Flat_nprobe_1_yui-mix-pro-hq_v2.index" }
 $DefaultRvcModelFilename = if ($env:APPLIO_DEFAULT_RVC_MODEL_FILENAME) { $env:APPLIO_DEFAULT_RVC_MODEL_FILENAME } else { "yui-mix-pro-hq-40k.pth" }
@@ -169,13 +173,7 @@ $ApplioContentvecModelUrl = if ($env:APPLIO_CONTENTVEC_MODEL_URL) { $env:APPLIO_
 $ApplioContentvecConfigUrl = if ($env:APPLIO_CONTENTVEC_CONFIG_URL) { $env:APPLIO_CONTENTVEC_CONFIG_URL } else { "https://huggingface.co/IAHispano/Applio/resolve/main/Resources/embedders/contentvec/config.json" }
 $ApplioRmvpeUrl = if ($env:APPLIO_RMVPE_URL) { $env:APPLIO_RMVPE_URL } else { "https://huggingface.co/IAHispano/Applio/resolve/main/Resources/predictors/rmvpe.pt" }
 
-if (-not (Test-Path (Join-Path $ApplioDir ".git"))) {
-    Write-Host "Cloning Applio -> $ApplioDir"
-    git clone $ApplioRepoUrl $ApplioDir
-}
-else {
-    Write-Host "Applio already present at $ApplioDir"
-}
+Assert-VendoredSource -Name "Applio" -TargetDir $ApplioDir
 
 $ApplioRuntimeAssets = @(
     @{ PrivatePath = "applio/embedders/contentvec/pytorch_model.bin"; TargetPath = (Join-Path $ApplioContentvecDir "pytorch_model.bin"); Url = $ApplioContentvecModelUrl },
@@ -196,13 +194,7 @@ foreach ($Asset in $ApplioRuntimeAssets) {
     }
 }
 
-if (-not (Test-Path (Join-Path $MMAudioDir ".git"))) {
-    Write-Host "Cloning MMAudio -> $MMAudioDir"
-    git clone $MMAudioRepoUrl $MMAudioDir
-}
-else {
-    Write-Host "MMAudio already present at $MMAudioDir"
-}
+Assert-VendoredSource -Name "MMAudio" -TargetDir $MMAudioDir
 
 $RvcModelUrl = $env:APPLIO_RVC_MODEL_URL
 $RvcIndexUrl = $env:APPLIO_RVC_INDEX_URL

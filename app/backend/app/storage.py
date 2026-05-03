@@ -329,13 +329,10 @@ class Storage:
         """데이터셋 레코드 파일 경로를 모두 반환한다.
 
         Returns:
-            새 구조의 `data/datasets/*/dataset.json`과 기존 최상위 `*.json`
-            레거시 레코드를 합친 경로 목록.
+            현재 구조의 `data/datasets/*/dataset.json` 경로 목록.
         """
 
-        nested_paths = sorted(self.datasets_dir.glob("*/dataset.json"), reverse=True)
-        legacy_paths = sorted(self.datasets_dir.glob("*.json"), reverse=True)
-        return nested_paths + legacy_paths
+        return sorted(self.datasets_dir.glob("*/dataset.json"), reverse=True)
 
     def get_record(self, directory: Path, record_id: str) -> Optional[Dict[str, Any]]:
         """레코드가 있으면 읽고 없으면 `None`을 반환한다.

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 import shutil
 import sys
@@ -29,7 +30,8 @@ import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_API_BASE = "http://127.0.0.1:8000"
+DEFAULT_BACKEND_PORT = os.getenv("BACKEND_PORT", "8190")
+DEFAULT_API_BASE = os.getenv("VOICE_STUDIO_API_BASE", f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}")
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "data" / "generated" / "quality-validation"
 DEFAULT_ASR_MODEL = REPO_ROOT / "data" / "models" / "Qwen3-ASR-1.7B"
 DEFAULT_REFERENCE_AUDIO = REPO_ROOT / "data" / "datasets" / "mai_ko_full" / "audio" / "00000.wav"

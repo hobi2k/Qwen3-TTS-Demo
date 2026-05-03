@@ -1,15 +1,11 @@
-"""Qwen3-TTS integration helpers and simulation fallback logic."""
+"""Qwen3-TTS integration helpers."""
 
 import importlib.util
 import gc
-import math
 import os
 import pickle
 import random
-import re
-import struct
 import sys
-import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,7 +20,7 @@ except Exception:  # pragma: no cover
 
 
 class QwenDemoEngine:
-    """실제 Qwen3-TTS 모델과 시뮬레이션 대체 경로를 함께 관리한다.
+    """실제 Qwen3-TTS 모델 런타임을 관리한다.
 
     Args:
         storage: 생성 파일 저장에 사용할 스토리지 객체.
@@ -44,11 +40,7 @@ class QwenDemoEngine:
         self._transcription_models: Dict[str, Any] = {}
         self._models: Dict[str, Any] = {}
         self._bootstrap()
-        configured_simulation = os.getenv("QWEN_DEMO_SIMULATION")
-        if configured_simulation is None:
-            self.simulation_mode = not self._qwen_available
-        else:
-            self.simulation_mode = configured_simulation.lower() not in {"0", "false", "no"}
+        self.simulation_mode = False
 
     @property
     def qwen_tts_available(self) -> bool:
@@ -74,7 +66,7 @@ class QwenDemoEngine:
             # 데모는 모델 라이브러리가 없어도 시뮬레이션 모드로 계속 동작해야 한다.
             self._qwen_available = False
 
-    def _get_model(self, key: str, model_id: str) -> Optional[Any]:
+    def _get_model(self, key: str, model_id: str) -> Any:
         """모델 인스턴스를 캐시에서 재사용하거나 새로 로드한다.
 
         Args:
@@ -82,15 +74,15 @@ class QwenDemoEngine:
             model_id: Hugging Face 또는 로컬 모델 식별자.
 
         Returns:
-            로드된 모델 객체 또는 시뮬레이션 시 `None`.
+            로드된 모델 객체.
         """
 
         cache_key = f"{key}:{model_id}"
         if cache_key in self._models:
             return self._models[cache_key]
 
-        if not self._qwen_available or self.simulation_mode:
-            return None
+        if not self._qwen_available:
+            raise RuntimeError("qwen-tts runtime is not available. Install dependencies and models before generating audio.")
 
         # 환경 변수가 명시되지 않았다면 flash-attn 설치 여부에 따라
         # 안전한 attention 구현을 자동 선택해 실서버가 기본 설정으로도 뜨게 한다.
@@ -143,7 +135,7 @@ class QwenDemoEngine:
         return {
             "cached_tts_models": len(self._models),
             "cached_transcription_models": len(self._transcription_models),
-            "simulation_mode": self.simulation_mode,
+            "simulation_mode": False,
             "qwen_tts_available": self.qwen_tts_available,
             "device": self.resolve_device(),
             "attention_implementation": self.resolve_attention_implementation(),
@@ -265,15 +257,6 @@ class QwenDemoEngine:
 
         return normalize("Qwen/Qwen3-ASR-1.7B")
 
-    def _transcription_fallback_text(self, audio_path: str) -> str:
-        """전사 모델을 쓸 수 없을 때 파일명 기반 안내 텍스트를 만든다."""
-
-        stem = Path(audio_path).stem
-        normalized = re.sub(r"[_\\-]+", " ", stem).strip()
-        if normalized:
-            return f"[auto-transcript placeholder] {normalized}"
-        return "[auto-transcript placeholder]"
-
     def _get_transcription_model(self, model_id: str) -> Any:
         """Qwen3-ASR 모델을 캐시에서 재사용하거나 새로 준비한다.
 
@@ -344,15 +327,6 @@ class QwenDemoEngine:
         if not absolute_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        if self.simulation_mode:
-            return {
-                "text": self._transcription_fallback_text(audio_path),
-                "language": None,
-                "simulation": True,
-                "model_id": self.resolve_transcription_model_id(model_id),
-                "provider": "qwen3-asr",
-            }
-
         resolved_model_id = self.resolve_transcription_model_id(model_id)
         asr_model = self._get_transcription_model(resolved_model_id)
         results = asr_model.transcribe(
@@ -377,43 +351,6 @@ class QwenDemoEngine:
             "provider": "qwen3-asr",
         }
 
-    def _fake_wave(self, text: str, destination: Path, variant: str) -> int:
-        """입력 텍스트를 기반으로 결정적인 테스트용 WAV 파일을 생성한다.
-
-        Args:
-            text: 길이와 시드 계산에 사용할 입력 문장.
-            destination: 생성할 WAV 파일 경로.
-            variant: 모드별 파형 차이를 위한 시드 힌트.
-
-        Returns:
-            생성된 WAV 파일의 샘플링 레이트.
-        """
-
-        sample_rate = 22050
-        seed = sum(ord(char) for char in f"{variant}:{text}")
-        random.seed(seed)
-        duration_seconds = max(1.6, min(8.0, len(text) * 0.045))
-        frame_count = int(sample_rate * duration_seconds)
-        base_frequency = 180 + (seed % 120)
-        amplitude = 0.28
-
-        with wave.open(str(destination), "w") as handle:
-            handle.setnchannels(1)
-            handle.setsampwidth(2)
-            handle.setframerate(sample_rate)
-
-            # 단순 사인파에 페이드인/아웃과 약한 wobble을 섞어
-            # 생성 모드마다 구분 가능한 테스트 음원을 만든다.
-            for index in range(frame_count):
-                time_position = index / sample_rate
-                envelope = min(1.0, index / 2500.0) * min(1.0, (frame_count - index) / 2500.0)
-                wobble = 0.2 * math.sin(2 * math.pi * 2.0 * time_position)
-                sample = amplitude * envelope * math.sin(2 * math.pi * (base_frequency + wobble * 25) * time_position)
-                pcm = max(-32767, min(32767, int(sample * 32767)))
-                handle.writeframes(struct.pack("<h", pcm))
-
-        return sample_rate
-
     def _write_wav(self, wav: Any, sample_rate: int, destination: Path) -> None:
         """모델 출력을 WAV 파일로 저장한다.
 
@@ -427,8 +364,7 @@ class QwenDemoEngine:
             sf.write(str(destination), wav, sample_rate)
             return
 
-        # `soundfile`이 없을 때도 API 계약을 지키기 위해 대체 파일을 남긴다.
-        self._fake_wave("fallback", destination, "fallback")
+        raise RuntimeError("soundfile is required to write generated audio.")
 
     def _wave_metrics(self, wav: Any, sample_rate: int) -> Dict[str, float]:
         """Waveform의 길이와 에너지 지표를 계산한다.
@@ -563,7 +499,7 @@ class QwenDemoEngine:
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
     ) -> Tuple[Path, int, Dict[str, Any]]:
-        """CustomVoice 모델 또는 시뮬레이션으로 음성을 생성한다.
+        """CustomVoice 모델로 음성을 생성한다.
 
         Args:
             text: 합성할 본문 텍스트.
@@ -576,10 +512,6 @@ class QwenDemoEngine:
         """
 
         output_path = self._generated_audio_path("tts-custom", f"{speaker} {text[:48]}", output_name)
-
-        if self.simulation_mode or not self._qwen_available:
-            sample_rate = self._fake_wave(text, output_path, f"custom:{speaker}:{instruct}")
-            return output_path, sample_rate, {"simulation": True}
 
         self._apply_seed(seed)
         model = self._get_model("custom_voice", model_id)
@@ -613,7 +545,7 @@ class QwenDemoEngine:
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
     ) -> Tuple[Path, int, Dict[str, Any]]:
-        """VoiceDesign 모델 또는 시뮬레이션으로 음성을 생성한다.
+        """VoiceDesign 모델로 음성을 생성한다.
 
         Args:
             text: 합성할 본문 텍스트.
@@ -625,10 +557,6 @@ class QwenDemoEngine:
         """
 
         output_path = self._generated_audio_path("voice-design", text[:48] or instruct[:48], output_name)
-
-        if self.simulation_mode or not self._qwen_available:
-            sample_rate = self._fake_wave(text, output_path, f"design:{instruct}")
-            return output_path, sample_rate, {"simulation": True}
 
         self._apply_seed(seed)
         model = self._get_model("voice_design", model_id)
@@ -664,7 +592,7 @@ class QwenDemoEngine:
         non_streaming_mode: Optional[bool] = None,
         **generate_kwargs: Any,
     ) -> Tuple[Path, int, Dict[str, Any]]:
-        """Base 모델 clone 경로 또는 시뮬레이션으로 음성을 생성한다.
+        """Base 모델 clone 경로로 음성을 생성한다.
 
         Args:
             text: 합성할 본문 텍스트.
@@ -679,11 +607,6 @@ class QwenDemoEngine:
         """
 
         output_path = self._generated_audio_path("voice-clone", text[:48], output_name)
-
-        if self.simulation_mode or not self._qwen_available:
-            seed_hint = voice_clone_prompt_path or ref_audio_path or ref_text
-            sample_rate = self._fake_wave(text, output_path, f"clone:{seed_hint}:{x_vector_only_mode}")
-            return output_path, sample_rate, {"simulation": True}
 
         self._apply_seed(seed)
         model = self._get_model("base_clone", model_id)
@@ -758,11 +681,6 @@ class QwenDemoEngine:
         """
 
         output_path = self._generated_audio_path("hybrid-clone-instruct", text[:48], output_name)
-
-        if self.simulation_mode or not self._qwen_available:
-            seed_hint = f"{base_model_id}:{custom_model_id}:{ref_audio_path}:{instruct}"
-            sample_rate = self._fake_wave(text, output_path, f"hybrid:{seed_hint}")
-            return output_path, sample_rate, {"simulation": True}
 
         self._apply_seed(seed)
         base_model = self._get_model("base_clone", base_model_id)

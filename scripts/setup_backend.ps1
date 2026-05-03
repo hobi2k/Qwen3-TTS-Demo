@@ -10,8 +10,6 @@ $VenvDir = Join-Path $RootDir ".venv"
 $VendorDir = Join-Path $RootDir "vendor"
 $UpstreamQwenDir = Join-Path $VendorDir "Qwen3-TTS"
 $QwenExtensionsDir = Join-Path $RootDir "qwen_extensions"
-$MMAudioRepoUrlDefault = "https://github.com/hkchengrex/MMAudio.git"
-$ApplioRepoUrlDefault = "https://github.com/IAHispano/Applio.git"
 $FlashAttnWheelUrl = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
 function Resolve-Python {
@@ -151,25 +149,17 @@ Get-Content $EnvPath | ForEach-Object {
     [System.Environment]::SetEnvironmentVariable($name.Trim(), $value.Trim(), "Process")
 }
 
-function Clone-RepoIfMissing {
+function Assert-VendoredRepo {
     param(
-        [string]$RepoUrl,
+        [string]$Name,
         [string]$TargetDir
     )
 
-    $GitDir = Join-Path $TargetDir ".git"
-    if (Test-Path $GitDir) {
-        Write-Host "Using existing repo: $TargetDir"
-        return
+    if (-not (Test-Path $TargetDir)) {
+        throw "$Name vendor source is missing: $TargetDir. This project expects vendored source to be present in the repository; do not clone it during setup."
     }
 
-    if ((Test-Path $TargetDir) -and (Get-ChildItem -Force $TargetDir | Select-Object -First 1)) {
-        Write-Warning "Skipping clone because target exists and is not empty: $TargetDir"
-        return
-    }
-
-    Write-Host "Cloning $RepoUrl -> $TargetDir"
-    git clone $RepoUrl $TargetDir
+    Write-Host "Using vendored $Name source: $TargetDir"
 }
 
 function Install-OptionalRepoRequirements {
@@ -195,11 +185,9 @@ function Install-OptionalRepoRequirements {
 
 $MMAudioRepoRoot = if ($env:MMAUDIO_REPO_ROOT) { $env:MMAUDIO_REPO_ROOT } else { Join-Path $VendorDir "MMAudio" }
 $ApplioRepoRoot = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Join-Path $VendorDir "Applio" }
-$MMAudioRepoUrl = if ($env:MMAUDIO_REPO_URL) { $env:MMAUDIO_REPO_URL } else { $MMAudioRepoUrlDefault }
-$ApplioRepoUrl = if ($env:APPLIO_REPO_URL) { $env:APPLIO_REPO_URL } else { $ApplioRepoUrlDefault }
 
-Clone-RepoIfMissing -RepoUrl $MMAudioRepoUrl -TargetDir $MMAudioRepoRoot
-Clone-RepoIfMissing -RepoUrl $ApplioRepoUrl -TargetDir $ApplioRepoRoot
+Assert-VendoredRepo -Name "MMAudio" -TargetDir $MMAudioRepoRoot
+Assert-VendoredRepo -Name "Applio" -TargetDir $ApplioRepoRoot
 Install-OptionalRepoRequirements -RepoDir $MMAudioRepoRoot
 Install-OptionalRepoRequirements -RepoDir $ApplioRepoRoot
 

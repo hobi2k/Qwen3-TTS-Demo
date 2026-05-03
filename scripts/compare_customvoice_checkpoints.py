@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,8 @@ import requests
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_API_BASE = "http://127.0.0.1:8000"
+DEFAULT_BACKEND_PORT = os.getenv("BACKEND_PORT", "8190")
+DEFAULT_API_BASE = os.getenv("VOICE_STUDIO_API_BASE", f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}")
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "data" / "generated" / "customvoice-checkpoint-comparisons"
 DEFAULT_TEXT = "오늘은 정말 힘들었어. 언제쯤 끝날까?"
 DEFAULT_LANGUAGE = "Korean"

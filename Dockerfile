@@ -18,6 +18,7 @@ ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 ARG TORCH_VERSION=2.11.0
 ARG TORCHAUDIO_VERSION=2.11.0
 ARG TORCHVISION_VERSION=0.26.0
+ARG BACKEND_PORT=8190
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -29,7 +30,7 @@ ENV PYTHONUNBUFFERED=1 \
     TORCH_HOME=/app/data/cache/torch \
     XDG_CACHE_HOME=/app/data/cache \
     MPLCONFIGDIR=/app/data/cache/matplotlib \
-    BACKEND_PORT=8190
+    BACKEND_PORT=${BACKEND_PORT}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -80,7 +81,7 @@ RUN mkdir -p \
     /app/logs
 
 WORKDIR /app/app/backend
-EXPOSE 8190
+EXPOSE ${BACKEND_PORT}
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD /app/.venv/bin/python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.getenv('BACKEND_PORT', '8190') + '/api/health', timeout=5).read()"
