@@ -240,7 +240,7 @@ export const api = {
   },
 
   deletePreset(presetId: string): Promise<VoiceAssetDeleteResponse> {
-    return request<VoiceAssetDeleteResponse>(`/api/presets/${presetId}`, {
+    return request<VoiceAssetDeleteResponse>(`/api/presets/${encodeURIComponent(presetId)}`, {
       method: "DELETE",
     });
   },

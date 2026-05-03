@@ -1883,9 +1883,7 @@ function StudioApp() {
     );
     return { voice, relatedHistory, relatedPresets };
   });
-  const presetPromptPaths = new Set(presets.map((preset) => preset.clone_prompt_path).filter(Boolean));
-  const rawQwenClonePrompts = clonePrompts.filter((prompt) => !presetPromptPaths.has(prompt.prompt_path));
-  const qwenVoiceAssetCount = presets.length + rawQwenClonePrompts.length;
+  const qwenVoiceAssetCount = presets.length;
   function galleryPresetKey(record: GenerationRecord): string {
     const filterKind = galleryFilterForRecord(record);
     const meta = record.meta || {};
@@ -4389,56 +4387,6 @@ function StudioApp() {
                       </WorkspaceCard>
                       );
                     })}
-                    {rawQwenClonePrompts.map((prompt) => (
-                      <WorkspaceCard key={prompt.id} className="flex flex-wrap items-center gap-4">
-                        <div className="grid size-12 place-items-center rounded-md bg-canvas border border-line shrink-0">
-                          <MiniWaveform dense />
-                        </div>
-                        <div className="flex min-w-0 flex-1 flex-col gap-2">
-                          <div className="flex flex-wrap items-baseline gap-2">
-                            <strong className="text-sm font-medium text-ink">{clonePromptDisplayName(prompt)}</strong>
-                            <span className="text-xs text-ink-muted">{formatDate(prompt.created_at)}</span>
-                          </div>
-                          <p className="text-sm text-ink-muted line-clamp-2">{prompt.reference_text || t("voices.qwen.noText", "참조 텍스트가 저장되지 않았습니다.")}</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">Qwen clone prompt</Badge>
-                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{prompt.source_type}</Badge>
-                            <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{prompt.x_vector_only_mode ? "x-vector" : "full style"}</Badge>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <DownloadAssetButton
-                            href={apiUrl(`/api/clone-prompts/${encodeURIComponent(prompt.id)}/download`)}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setUploadedClonePrompt(prompt);
-                              setActiveTab("projects");
-                            }}
-                            type="button"
-                          >
-                            {t("voices.qwen.savePreset", "프리셋으로 저장")}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              createS2VoiceFromQwenAsset({
-                                name: clonePromptDisplayName(prompt),
-                                reference_audio_path: prompt.reference_audio_path,
-                                reference_text: prompt.reference_text,
-                                language: "Auto",
-                              })
-                            }
-                            type="button"
-                          >
-                            {t("voices.qwen.saveAsS2Pro", "S2-Pro 프리셋으로 저장")}
-                          </Button>
-                        </div>
-                      </WorkspaceCard>
-                    ))}
                   </>
                 ) : (
                   <WorkspaceEmptyState
