@@ -42,8 +42,9 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description="Run low-level VoiceBox clone experiments.")
     parser.add_argument("--model-path", required=True)
-    parser.add_argument("--ref-audio", required=True)
-    parser.add_argument("--ref-text", required=True)
+    parser.add_argument("--ref-audio", default="")
+    parser.add_argument("--ref-text", default="")
+    parser.add_argument("--voice-clone-prompt-path", default="")
     parser.add_argument("--text", required=True)
     parser.add_argument("--language", default="Korean")
     parser.add_argument("--instruct", default="Speak softly, with restrained exhaustion but clear diction.")
@@ -109,6 +110,23 @@ def encode_reference_audio(model, ref_audio: str) -> torch.Tensor:
     wav, sr = normalized[0]
     encoded = model.model.speech_tokenizer.encode(wav, sr=sr)
     return encoded.audio_codes[0]
+
+
+def load_voice_clone_prompt_item(path: str) -> dict[str, Any]:
+    """Load one upstream-style Qwen voice clone prompt item from .pt."""
+
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    if not isinstance(payload, dict) or "items" not in payload:
+        raise RuntimeError("Invalid voice clone prompt: missing items.")
+    items = payload["items"]
+    if not isinstance(items, list) or not items:
+        raise RuntimeError("Invalid voice clone prompt: empty items.")
+    item = items[0]
+    if not isinstance(item, dict):
+        raise RuntimeError("Invalid voice clone prompt item.")
+    if item.get("ref_spk_embedding") is None:
+        raise RuntimeError("Invalid voice clone prompt item: missing ref_spk_embedding.")
+    return item
 
 
 def build_ref_ids(model, ref_text: str) -> torch.Tensor:
@@ -177,6 +195,10 @@ def synthesize_with_manual_prompt(
 ) -> tuple[bool, str]:
     """Run low-level generation with a hand-built voice_clone_prompt."""
 
+    device = model.model.talker.device
+    dtype = next(model.model.talker.parameters()).dtype
+    ref_code = ref_code.detach().to(device=device, dtype=torch.long)
+    ref_spk_embedding = ref_spk_embedding.detach().to(device=device, dtype=dtype)
     input_ids = [build_target_ids(model, text)]
     instruct_ids = [build_instruct_ids(model, instruct)]
     ref_ids = [build_ref_ids(model, ref_text)]
@@ -213,7 +235,9 @@ def synthesize_with_manual_prompt(
 def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
     """Compute cosine similarity between two embeddings."""
 
-    return float(F.cosine_similarity(a.detach().float().view(1, -1), b.detach().float().view(1, -1)).item())
+    left = a.detach().float().view(1, -1)
+    right = b.detach().float().to(device=left.device).view(1, -1)
+    return float(F.cosine_similarity(left, right).item())
 
 
 def run_control_customvoice(model, *, text: str, language: str, instruct: str, speaker: str, output_path: Path) -> StrategyResult:
@@ -244,6 +268,8 @@ def main() -> None:
     """Run selected low-level clone strategies and save a summary."""
 
     args = parse_args()
+    if not args.voice_clone_prompt_path and (not args.ref_audio or not args.ref_text):
+        raise SystemExit("--voice-clone-prompt-path or both --ref-audio/--ref-text are required.")
     output_dir = Path(args.output_dir)
     model = load_model(args.model_path)
     selected = set(args.strategies)
@@ -257,10 +283,20 @@ def main() -> None:
             "pseudo_embed_with_ref_code",
         }
 
-    ref_code = encode_reference_audio(model, args.ref_audio)
+    prompt_item = load_voice_clone_prompt_item(args.voice_clone_prompt_path) if args.voice_clone_prompt_path else None
+    if prompt_item is not None and prompt_item.get("ref_code") is not None:
+        ref_code = prompt_item["ref_code"]
+    else:
+        ref_code = encode_reference_audio(model, args.ref_audio)
     stock_embed = get_stock_speaker_embedding(model, args.speaker)
     pseudo_embed = pseudo_embedding_from_ref_code(model, ref_code)
-    embedded_encoder_embed = true_embedding_from_ref_audio(model, args.ref_audio)
+    if prompt_item is not None:
+        embedded_encoder_embed = prompt_item["ref_spk_embedding"]
+        prompt_ref_text = str(prompt_item.get("ref_text") or "").strip()
+        if prompt_ref_text:
+            args.ref_text = prompt_ref_text
+    else:
+        embedded_encoder_embed = true_embedding_from_ref_audio(model, args.ref_audio)
 
     results: list[StrategyResult] = []
     if "control_stock_customvoice" in selected:
@@ -329,6 +365,8 @@ def main() -> None:
         "model_path": args.model_path,
         "ref_audio": args.ref_audio,
         "ref_text": args.ref_text,
+        "voice_clone_prompt_path": args.voice_clone_prompt_path or None,
+        "voice_clone_prompt_used": prompt_item is not None,
         "text": args.text,
         "language": args.language,
         "speaker": args.speaker,

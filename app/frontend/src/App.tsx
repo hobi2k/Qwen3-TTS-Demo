@@ -1139,6 +1139,7 @@ function StudioApp() {
     instruct: "Breathing lightly, emotionally unstable, and barely holding composure. Keep the diction clear.",
     ref_audio_path: "",
     ref_text: "",
+    voice_clone_prompt_path: "",
     x_vector_only_mode: false,
   });
   const [hybridControls, setHybridControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
@@ -3743,13 +3744,15 @@ function StudioApp() {
       const nextLanguage = selectedHybridPreset.language || prev.language;
       const nextRefAudioPath = selectedHybridPreset.reference_audio_path;
       const nextRefText = selectedHybridPreset.reference_text;
+      const nextClonePromptPath = selectedHybridPreset.clone_prompt_path;
 
       if (
         prev.base_model_id === nextBaseModelId &&
         prev.custom_model_id === nextCustomModelId &&
         prev.language === nextLanguage &&
         prev.ref_audio_path === nextRefAudioPath &&
-        prev.ref_text === nextRefText
+        prev.ref_text === nextRefText &&
+        prev.voice_clone_prompt_path === nextClonePromptPath
       ) {
         return prev;
       }
@@ -3761,6 +3764,7 @@ function StudioApp() {
         language: nextLanguage,
         ref_audio_path: nextRefAudioPath,
         ref_text: nextRefText,
+        voice_clone_prompt_path: nextClonePromptPath,
       };
     });
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
@@ -3775,7 +3779,7 @@ function StudioApp() {
     await runAction(async () => {
       const result = await api.generateFromPreset(presetId, {
         text: presetGenerateText,
-        language: "Auto",
+        language: presetForGeneration?.language || "Auto",
         output_name: presetOutputName || undefined,
         ...serializeGenerationControls(presetControls),
       });
@@ -3809,6 +3813,7 @@ function StudioApp() {
         language: voiceBoxPresetForm.language || selectedHybridPreset.language,
         ref_audio_path: selectedHybridPreset.reference_audio_path,
         ref_text: selectedHybridPreset.reference_text || undefined,
+        voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
         speaker: "mai",
         strategy: "embedded_encoder_only",
         ...serializeGenerationControls(presetControls),
@@ -3838,6 +3843,7 @@ function StudioApp() {
         language: voiceBoxPresetInstructForm.language || selectedHybridPreset.language,
         ref_audio_path: selectedHybridPreset.reference_audio_path,
         ref_text: selectedHybridPreset.reference_text || undefined,
+        voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
         speaker: "mai",
         instruct: voiceBoxPresetInstructForm.instruct,
         strategy: "embedded_encoder_with_ref_code",
@@ -4049,6 +4055,7 @@ function StudioApp() {
         instruct: hybridForm.instruct,
         ref_audio_path: hybridForm.ref_audio_path,
         ref_text: hybridForm.ref_text || undefined,
+        voice_clone_prompt_path: hybridForm.voice_clone_prompt_path || undefined,
         x_vector_only_mode: hybridForm.x_vector_only_mode,
       });
       setLastHybridRecord(result.record);

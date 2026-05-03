@@ -37,6 +37,7 @@ class QwenDemoEngine:
         self._qwen_available = False
         self._torch: Optional[Any] = None
         self._Qwen3TTSModel: Optional[Any] = None
+        self._VoiceClonePromptItem: Optional[Any] = None
         self._transcription_models: Dict[str, Any] = {}
         self._models: Dict[str, Any] = {}
         self._bootstrap()
@@ -57,10 +58,11 @@ class QwenDemoEngine:
 
         try:
             import torch  # type: ignore
-            from qwen_tts import Qwen3TTSModel  # type: ignore
+            from qwen_tts import Qwen3TTSModel, VoiceClonePromptItem  # type: ignore
 
             self._torch = torch
             self._Qwen3TTSModel = Qwen3TTSModel
+            self._VoiceClonePromptItem = VoiceClonePromptItem
             self._qwen_available = True
         except Exception:
             # 데모는 모델 라이브러리가 없어도 시뮬레이션 모드로 계속 동작해야 한다.
@@ -159,6 +161,55 @@ class QwenDemoEngine:
         self._torch.manual_seed(seed)
         if bool(self._torch.cuda.is_available()):
             self._torch.cuda.manual_seed_all(seed)
+
+    def load_voice_clone_prompt(self, prompt_path: Path) -> List[Any]:
+        """Load an upstream-compatible Qwen voice clone prompt file.
+
+        New prompt files follow Qwen's demo format:
+        ``torch.save({"items": [asdict(VoiceClonePromptItem), ...]}, path)``.
+        Older demo-local pickle files are still accepted for migration only.
+        """
+
+        if self._torch is None or self._VoiceClonePromptItem is None:
+            raise RuntimeError("qwen-tts runtime is not available.")
+
+        try:
+            payload = self._torch.load(str(prompt_path), map_location="cpu", weights_only=True)
+        except Exception:
+            with prompt_path.open("rb") as handle:
+                legacy_payload = pickle.load(handle)
+            if isinstance(legacy_payload, list):
+                return legacy_payload
+            raise
+
+        if not isinstance(payload, dict) or "items" not in payload:
+            raise RuntimeError("Invalid Qwen voice clone prompt file: missing items.")
+        items_raw = payload["items"]
+        if not isinstance(items_raw, list) or not items_raw:
+            raise RuntimeError("Invalid Qwen voice clone prompt file: empty items.")
+
+        items = []
+        for item in items_raw:
+            if not isinstance(item, dict):
+                raise RuntimeError("Invalid Qwen voice clone prompt item.")
+            ref_code = item.get("ref_code")
+            if ref_code is not None and not self._torch.is_tensor(ref_code):
+                ref_code = self._torch.tensor(ref_code)
+            ref_spk_embedding = item.get("ref_spk_embedding")
+            if ref_spk_embedding is None:
+                raise RuntimeError("Invalid Qwen voice clone prompt item: missing ref_spk_embedding.")
+            if not self._torch.is_tensor(ref_spk_embedding):
+                ref_spk_embedding = self._torch.tensor(ref_spk_embedding)
+            items.append(
+                self._VoiceClonePromptItem(
+                    ref_code=ref_code,
+                    ref_spk_embedding=ref_spk_embedding,
+                    x_vector_only_mode=bool(item.get("x_vector_only_mode", False)),
+                    icl_mode=bool(item.get("icl_mode", not bool(item.get("x_vector_only_mode", False)))),
+                    ref_text=item.get("ref_text"),
+                )
+            )
+        return items
 
     def _generated_audio_path(self, category: str, label: str, output_name: str = "") -> Path:
         """읽기 쉬운 생성 오디오 경로를 만든다."""
@@ -616,8 +667,7 @@ class QwenDemoEngine:
         # clone prompt가 있으면 가장 재현성이 높은 경로를 우선 사용하고,
         # 없을 때만 참조 음성/텍스트 기반 즉석 프롬프트 생성을 수행한다.
         if voice_clone_prompt_path:
-            with (self.storage.repo_root / voice_clone_prompt_path).open("rb") as handle:
-                prompt_payload = pickle.load(handle)
+            prompt_payload = self.load_voice_clone_prompt(self.storage.repo_root / voice_clone_prompt_path)
             wavs, sample_rate = model.generate_voice_clone(
                 text=text,
                 language=language,
@@ -658,6 +708,7 @@ class QwenDemoEngine:
         custom_model_id: str,
         ref_audio_path: str,
         ref_text: str = "",
+        voice_clone_prompt_path: str = "",
         x_vector_only_mode: bool = False,
         output_name: str = "",
         seed: Optional[int] = None,
@@ -674,6 +725,7 @@ class QwenDemoEngine:
             custom_model_id: instruct 합성에 사용할 CustomVoice 모델 경로.
             ref_audio_path: 참조 음성 파일 경로.
             ref_text: 참조 음성의 원문 텍스트.
+            voice_clone_prompt_path: 저장된 Qwen clone prompt 경로.
             x_vector_only_mode: x-vector 전용 clone 모드 사용 여부.
 
         Returns:
@@ -686,11 +738,14 @@ class QwenDemoEngine:
         base_model = self._get_model("base_clone", base_model_id)
         custom_model = self._get_model("custom_voice", custom_model_id)
 
-        prompt_items = base_model.create_voice_clone_prompt(
-            ref_audio=str(self.storage.repo_root / ref_audio_path),
-            ref_text=ref_text or None,
-            x_vector_only_mode=x_vector_only_mode,
-        )
+        if voice_clone_prompt_path:
+            prompt_items = self.load_voice_clone_prompt(self.storage.repo_root / voice_clone_prompt_path)
+        else:
+            prompt_items = base_model.create_voice_clone_prompt(
+                ref_audio=str(self.storage.repo_root / ref_audio_path),
+                ref_text=ref_text or None,
+                x_vector_only_mode=x_vector_only_mode,
+            )
         voice_clone_prompt = base_model._prompt_items_to_voice_clone_prompt(prompt_items)
         ref_ids = []
         for item in prompt_items:
@@ -748,6 +803,7 @@ class QwenDemoEngine:
             "simulation": False,
             "base_model_id": base_model_id,
             "custom_model_id": custom_model_id,
+            "voice_clone_prompt_path": voice_clone_prompt_path or None,
             "seed": seed,
             "generation_kwargs": generate_kwargs,
             **finalize,

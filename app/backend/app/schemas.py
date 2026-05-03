@@ -136,6 +136,7 @@ class HybridCloneInstructRequest(GenerationRequestBase):
     instruct: str = ""
     ref_audio_path: str = Field(..., min_length=1)
     ref_text: Optional[str] = None
+    voice_clone_prompt_path: Optional[str] = None
     x_vector_only_mode: bool = False
 
 
@@ -153,6 +154,7 @@ class VoiceBoxCloneRequest(GenerationRequestBase):
     model_id: str = Field(..., min_length=1)
     ref_audio_path: str = Field(..., min_length=1)
     ref_text: Optional[str] = None
+    voice_clone_prompt_path: Optional[str] = None
     instruct: str = ""
     speaker: str = "mai"
     strategy: str = ""

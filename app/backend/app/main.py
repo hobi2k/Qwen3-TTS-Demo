@@ -4,12 +4,12 @@ import gc
 import json
 import hashlib
 import os
-import pickle
 import re
 import shutil
 import subprocess
 import sys
 import zipfile
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -1010,10 +1010,10 @@ def create_clone_prompt_file(
     reference_text: str,
     x_vector_only_mode: bool,
 ) -> None:
-    """참조 입력으로부터 clone prompt 파일을 생성한다.
+    """참조 입력으로부터 upstream 호환 clone prompt 파일을 생성한다.
 
     Args:
-        prompt_path: 저장할 pickle 파일 경로.
+        prompt_path: 저장할 torch serialized prompt 파일 경로.
         reference_audio_path: 참조 음성 상대 경로.
         reference_text: 참조 음성 텍스트.
         x_vector_only_mode: x-vector 전용 clone 모드 사용 여부.
@@ -1029,8 +1029,17 @@ def create_clone_prompt_file(
         x_vector_only_mode=x_vector_only_mode,
     )
 
-    with prompt_path.open("wb") as handle:
-        pickle.dump(prompt_payload, handle)
+    torch = engine._torch
+    if torch is None:
+        raise HTTPException(status_code=503, detail="Qwen clone prompt를 저장할 torch 런타임이 준비되지 않았습니다.")
+
+    def to_cpu(value: Any) -> Any:
+        if torch.is_tensor(value):
+            return value.detach().cpu()
+        return value
+
+    payload = {"items": [{key: to_cpu(value) for key, value in asdict(item).items()} for item in prompt_payload]}
+    torch.save(payload, str(prompt_path))
 
 
 def create_clone_prompt_record(
@@ -1062,7 +1071,7 @@ def create_clone_prompt_record(
         root=storage.clone_prompts_dir,
         category=source_type,
         label=prompt_label,
-        extension="pkl",
+        extension="pt",
         created_at=created_moment,
     )
     create_clone_prompt_file(
@@ -5050,6 +5059,7 @@ def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> Gener
             custom_model_id=payload.custom_model_id,
             ref_audio_path=payload.ref_audio_path,
             ref_text=ref_text,
+            voice_clone_prompt_path=payload.voice_clone_prompt_path or "",
             x_vector_only_mode=payload.x_vector_only_mode,
             output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
@@ -5152,6 +5162,8 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
         str(resolve_audio_absolute_path(payload.ref_audio_path)),
         "--ref-text",
         ref_text,
+        "--voice-clone-prompt-path",
+        str(REPO_ROOT / payload.voice_clone_prompt_path) if payload.voice_clone_prompt_path else "",
         "--text",
         payload.text,
         "--language",
@@ -5176,6 +5188,9 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
     if not summary_path.exists():
         raise HTTPException(status_code=500, detail="VoiceBox inference did not write summary.json.")
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["instruct"] = payload.instruct
+    summary["strategy"] = strategy
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     result_item = next((item for item in summary.get("results", []) if item.get("name") == strategy and item.get("ok")), None)
     if not result_item or not result_item.get("output_path"):
         raise HTTPException(status_code=500, detail=f"VoiceBox strategy did not produce audio: {strategy}")
@@ -5197,6 +5212,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
             "display_name": requested_output_name(payload) or None,
             "model_id": payload.model_id,
             "strategy": strategy,
+            "voice_clone_prompt_path": payload.voice_clone_prompt_path or None,
             "summary_path": storage.relpath(summary_path),
         },
     )
@@ -5610,10 +5626,13 @@ def generate_from_preset(preset_id: str, payload: PresetGenerateRequest) -> Gene
     """
 
     preset = get_preset_record(preset_id)
+    requested_language = (payload.language or "").strip()
+    preset_language = str(preset.get("language") or "Auto").strip() or "Auto"
+    generation_language = preset_language if not requested_language or requested_language.lower() == "auto" else requested_language
     request = VoiceCloneRequest(
         model_id=preset.get("base_model"),
         text=payload.text,
-        language=payload.language or preset["language"],
+        language=generation_language,
         output_name=payload.output_name,
         preset_id=preset_id,
         seed=payload.seed,

@@ -512,6 +512,7 @@ export interface VoiceBoxCloneRequest extends GenerationRequestExtras {
   language: string;
   ref_audio_path: string;
   ref_text?: string;
+  voice_clone_prompt_path?: string;
   instruct?: string;
   speaker: string;
   strategy?: string;
@@ -675,6 +676,7 @@ export interface HybridCloneInstructRequest extends GenerationRequestExtras {
   instruct: string;
   ref_audio_path: string;
   ref_text?: string;
+  voice_clone_prompt_path?: string;
   x_vector_only_mode?: boolean;
 }
 
