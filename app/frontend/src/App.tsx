@@ -3973,8 +3973,21 @@ function StudioApp() {
         voice_clone_prompt_path: nextClonePromptPath,
       };
     });
-    setVoiceBoxPresetForm((prev) => ({ ...prev, language: selectedHybridPreset.language || prev.language }));
-    setVoiceBoxPresetInstructForm((prev) => ({ ...prev, language: selectedHybridPreset.language || prev.language }));
+    const nextVoiceBoxLanguage = selectedHybridPreset.language;
+    if (nextVoiceBoxLanguage) {
+      setVoiceBoxPresetForm((prev) => {
+        if (prev.language === nextVoiceBoxLanguage) {
+          return prev;
+        }
+        return { ...prev, language: nextVoiceBoxLanguage };
+      });
+      setVoiceBoxPresetInstructForm((prev) => {
+        if (prev.language === nextVoiceBoxLanguage) {
+          return prev;
+        }
+        return { ...prev, language: nextVoiceBoxLanguage };
+      });
+    }
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
 
   async function handleGenerateFromPreset() {

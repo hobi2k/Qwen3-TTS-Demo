@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface StudioTopBarProps {
   title?: string;
@@ -47,75 +46,67 @@ export function StudioTopBar({ title = "Voice Studio" }: StudioTopBarProps) {
 
       <div className="flex-1" />
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="size-8 p-0 text-ink-muted hover:text-ink"
-                aria-label={t("topbar.accent", "Accent color")}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="size-8 p-0 text-ink-muted hover:text-ink"
+            aria-label={t("topbar.accent", "Accent color")}
+            title={t("topbar.accent", "Accent color")}
+          >
+            <Palette className="size-4" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-64">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-ink-muted">
+                {t("topbar.accent", "Accent color")}
+              </span>
+              <span className="font-mono text-[10px] tabular-nums text-ink-subtle">{accentHue}°</span>
+            </div>
+            <Slider
+              value={[accentHue]}
+              onValueChange={(value) => setAccentHue(value[0] ?? 70)}
+              min={0}
+              max={360}
+              step={1}
+              aria-label={t("topbar.accent", "Accent color")}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className="grid h-6 flex-1 place-items-center rounded-md text-[10px] font-medium uppercase tracking-allcaps"
+                style={{
+                  background: "var(--accent)",
+                  color: "var(--ink-on-accent)",
+                }}
               >
-                <Palette className="size-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-ink-muted">
-                    {t("topbar.accent", "Accent color")}
-                  </span>
-                  <span className="font-mono text-[10px] tabular-nums text-ink-subtle">{accentHue}°</span>
-                </div>
-                <Slider
-                  value={[accentHue]}
-                  onValueChange={(value) => setAccentHue(value[0] ?? 70)}
-                  min={0}
-                  max={360}
-                  step={1}
-                  aria-label={t("topbar.accent", "Accent color")}
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className="grid h-6 flex-1 place-items-center rounded-md text-[10px] font-medium uppercase tracking-allcaps"
-                    style={{
-                      background: "var(--accent)",
-                      color: "var(--ink-on-accent)",
-                    }}
-                  >
-                    Primary
-                  </span>
-                  <span
-                    className="grid h-6 flex-1 place-items-center rounded-md text-[10px] font-medium text-accent-ink"
-                    style={{ background: "var(--accent-soft)" }}
-                  >
-                    Soft
-                  </span>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </TooltipTrigger>
-        <TooltipContent>{t("topbar.accent", "Accent color")}</TooltipContent>
-      </Tooltip>
+                Primary
+              </span>
+              <span
+                className="grid h-6 flex-1 place-items-center rounded-md text-[10px] font-medium text-accent-ink"
+                style={{ background: "var(--accent-soft)" }}
+              >
+                Soft
+              </span>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="size-8 p-0 text-ink-muted hover:text-ink"
-                aria-label={t("topbar.theme")}
-              >
-                <ThemeIcon className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>{t("topbar.theme")}</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="size-8 p-0 text-ink-muted hover:text-ink"
+            aria-label={t("topbar.theme")}
+            title={t("topbar.theme")}
+          >
+            <ThemeIcon className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-allcaps text-ink-subtle">
             {t("topbar.theme")}
@@ -135,24 +126,20 @@ export function StudioTopBar({ title = "Voice Studio" }: StudioTopBarProps) {
       </DropdownMenu>
 
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1.5 px-2 text-ink-muted hover:text-ink"
-                aria-label={t("topbar.language")}
-              >
-                <Globe className="size-4" />
-                <span className="text-xs font-medium">
-                  {activeLocale?.value.toUpperCase() ?? "KO"}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>{t("topbar.language")}</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 px-2 text-ink-muted hover:text-ink"
+            aria-label={t("topbar.language")}
+            title={t("topbar.language")}
+          >
+            <Globe className="size-4" />
+            <span className="text-xs font-medium">
+              {activeLocale?.value.toUpperCase() ?? "KO"}
+            </span>
+          </Button>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-allcaps text-ink-subtle">
             {t("topbar.language")}
