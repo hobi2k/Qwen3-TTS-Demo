@@ -211,6 +211,79 @@ class QwenDemoEngine:
             )
         return items
 
+    def _language_anchor_speaker(self, model: Any, language: str) -> Optional[str]:
+        """Pick an in-distribution CustomVoice speaker token for the target language."""
+
+        supported = set()
+        if callable(getattr(model, "get_supported_speakers", None)):
+            supported = {str(item).lower() for item in (model.get_supported_speakers() or [])}
+        spk_id = getattr(getattr(model.model.config, "talker_config", None), "spk_id", {})
+        if not supported and isinstance(spk_id, dict):
+            supported = {str(item).lower() for item in spk_id.keys()}
+        if not supported:
+            return None
+
+        language_key = (language or "auto").strip().lower()
+        preferred_by_language = {
+            "korean": ["sohee"],
+            "ko": ["sohee"],
+            "japanese": ["ono_anna"],
+            "ja": ["ono_anna"],
+            "english": ["aiden", "ryan"],
+            "en": ["aiden", "ryan"],
+            "chinese": ["vivian", "serena"],
+            "zh": ["vivian", "serena"],
+            "auto": ["sohee", "vivian", "aiden", "serena"],
+        }
+        for candidate in preferred_by_language.get(language_key, preferred_by_language["auto"]):
+            if candidate in supported:
+                return candidate
+        return sorted(supported)[0]
+
+    def _speaker_token_embedding(self, model: Any, speaker: str) -> Optional[Any]:
+        """Return a CustomVoice speaker token embedding in the model's native manifold."""
+
+        if not speaker:
+            return None
+        spk_id = getattr(model.model.config.talker_config, "spk_id", {})
+        token_id = spk_id.get(speaker.lower()) if isinstance(spk_id, dict) else None
+        if token_id is None:
+            return None
+        tensor = self._torch.tensor(token_id, device=model.model.talker.device, dtype=self._torch.long)
+        return model.model.talker.get_input_embeddings()(tensor).detach().view(-1).cpu()
+
+    def _anchor_prompt_for_customvoice_instruct(self, custom_model: Any, prompt_items: List[Any], language: str) -> Tuple[List[Any], Optional[str]]:
+        """Keep ref_code/ref_text, but anchor speaker conditioning to CustomVoice.
+
+        The clone+instruct path is not an upstream public wrapper. Passing a Base
+        speaker-encoder vector directly into CustomVoice can place the speaker
+        condition outside the speaker-token distribution where instruction
+        following was trained. The reference codes still carry the cloned
+        acoustics; the stock speaker token keeps instruction conditioning stable.
+        """
+
+        if getattr(custom_model.model, "tts_model_type", "") != "custom_voice":
+            return prompt_items, None
+        anchor_speaker = self._language_anchor_speaker(custom_model, language)
+        if not anchor_speaker:
+            return prompt_items, None
+        anchor_embedding = self._speaker_token_embedding(custom_model, anchor_speaker)
+        if anchor_embedding is None:
+            return prompt_items, None
+
+        anchored_items = []
+        for item in prompt_items:
+            anchored_items.append(
+                self._VoiceClonePromptItem(
+                    ref_code=item.ref_code,
+                    ref_spk_embedding=anchor_embedding,
+                    x_vector_only_mode=item.x_vector_only_mode,
+                    icl_mode=item.icl_mode,
+                    ref_text=item.ref_text,
+                )
+            )
+        return anchored_items, anchor_speaker
+
     def _generated_audio_path(self, category: str, label: str, output_name: str = "") -> Path:
         """읽기 쉬운 생성 오디오 경로를 만든다."""
 
@@ -746,7 +819,12 @@ class QwenDemoEngine:
                 ref_text=ref_text or None,
                 x_vector_only_mode=x_vector_only_mode,
             )
-        voice_clone_prompt = base_model._prompt_items_to_voice_clone_prompt(prompt_items)
+        prompt_items_for_generation, anchor_speaker = self._anchor_prompt_for_customvoice_instruct(
+            custom_model,
+            prompt_items,
+            language,
+        )
+        voice_clone_prompt = base_model._prompt_items_to_voice_clone_prompt(prompt_items_for_generation)
         ref_ids = []
         for item in prompt_items:
             if item.ref_text:
@@ -804,6 +882,8 @@ class QwenDemoEngine:
             "base_model_id": base_model_id,
             "custom_model_id": custom_model_id,
             "voice_clone_prompt_path": voice_clone_prompt_path or None,
+            "clone_instruct_strategy": "customvoice_speaker_anchor_with_ref_code" if anchor_speaker else "embedded_encoder_with_ref_code",
+            "anchor_speaker": anchor_speaker,
             "seed": seed,
             "generation_kwargs": generate_kwargs,
             **finalize,

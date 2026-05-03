@@ -88,6 +88,12 @@ function defaultApiBase(): string {
   return `${protocol}://${host}:${port}`;
 }
 
+function localBackendFallbackBase(): string {
+  const protocol = process.env.NEXT_PUBLIC_BACKEND_PROTOCOL || "http";
+  const host = process.env.NEXT_PUBLIC_BACKEND_HOST || "127.0.0.1";
+  return `${protocol}://${host}:8190`;
+}
+
 function devFrontendPort(): string {
   return process.env.NEXT_PUBLIC_FRONTEND_PORT || process.env.FRONTEND_PORT || "5173";
 }
@@ -98,15 +104,21 @@ function apiCandidates(path: string): string[] {
 
   if (typeof window !== "undefined") {
     return Array.from(
-      new Set([configuredBase ? `${configuredBase}${path}` : "", `${defaultBase}${path}`].filter(Boolean)),
+      new Set(
+        [
+          configuredBase ? `${configuredBase}${path}` : "",
+          `${defaultBase}${path}`,
+          `${localBackendFallbackBase()}${path}`,
+        ].filter(Boolean),
+      ),
     );
   }
 
   if (configuredBase) {
-    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`]));
+    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`, `${localBackendFallbackBase()}${path}`]));
   }
 
-  return Array.from(new Set([`${defaultBase}${path}`, path]));
+  return Array.from(new Set([`${defaultBase}${path}`, `${localBackendFallbackBase()}${path}`, path]));
 }
 
 export function apiUrl(path: string): string {

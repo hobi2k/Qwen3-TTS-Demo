@@ -142,6 +142,17 @@ BACKEND_DIR = APP_DIR.parent
 REPO_ROOT = BACKEND_DIR.parent.parent
 FRONTEND_DIR = REPO_ROOT / "app" / "frontend"
 NEXT_FRONTEND_OUT_DIR = FRONTEND_DIR / "out"
+API_LIKE_PREFIXES = (
+    "api",
+    "audio-tools",
+    "generate",
+    "music",
+    "presets",
+    "s2-pro",
+    "vibevoice",
+    "voice",
+    "voicebox",
+)
 UPSTREAM_QWEN_DIR = REPO_ROOT / "vendor" / "Qwen3-TTS"
 DEFAULT_QWEN_EXTENSIONS_DIR = REPO_ROOT / "qwen_extensions"
 DEMO_SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -5046,20 +5057,37 @@ def generate_with_selected_model(payload: UniversalInferenceRequest) -> Generati
 def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> GenerationResponse:
     """Base clone prompt와 CustomVoice instruct를 결합한 실험용 추론을 실행한다."""
 
+    preset_id = (payload.preset_id or "").strip()
+    base_model_id = payload.base_model_id
+    ref_audio_path = (payload.ref_audio_path or "").strip()
     ref_text = (payload.ref_text or "").strip()
-    if payload.ref_audio_path and not ref_text and not payload.x_vector_only_mode:
-        ref_text = resolve_reference_text(payload.ref_audio_path, ref_text)
+    voice_clone_prompt_path = (payload.voice_clone_prompt_path or "").strip()
+
+    if preset_id:
+        preset = get_preset_record(preset_id)
+        # 프리셋 기반 하이브리드 생성은 브라우저 상태값보다 저장된
+        # 프리셋 레코드를 기준으로 삼아 백엔드 단독 실행과 일치시킨다.
+        base_model_id = str(preset["base_model"])
+        ref_audio_path = str(preset["reference_audio_path"])
+        ref_text = str(preset["reference_text"])
+        voice_clone_prompt_path = str(preset["clone_prompt_path"])
+
+    if ref_audio_path and not ref_text and not payload.x_vector_only_mode:
+        ref_text = resolve_reference_text(ref_audio_path, ref_text)
+
+    if not voice_clone_prompt_path and not (ref_audio_path and ref_text):
+        raise HTTPException(status_code=400, detail="Preset or clone prompt/reference inputs are required.")
 
     audio_path, _, meta = run_generation_or_http(
         lambda: engine.generate_hybrid_clone_instruct(
             text=payload.text,
             language=payload.language,
             instruct=payload.instruct,
-            base_model_id=payload.base_model_id,
+            base_model_id=base_model_id,
             custom_model_id=payload.custom_model_id,
-            ref_audio_path=payload.ref_audio_path,
+            ref_audio_path=ref_audio_path,
             ref_text=ref_text,
-            voice_clone_prompt_path=payload.voice_clone_prompt_path or "",
+            voice_clone_prompt_path=voice_clone_prompt_path,
             x_vector_only_mode=payload.x_vector_only_mode,
             output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
@@ -5073,7 +5101,8 @@ def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> Gener
         language=payload.language,
         audio_path=audio_path,
         instruction=payload.instruct,
-        source_ref_audio_path=payload.ref_audio_path,
+        preset_id=preset_id,
+        source_ref_audio_path=ref_audio_path,
         source_ref_text=ref_text,
         meta={**meta, "display_name": requested_output_name(payload) or None},
     )
@@ -6335,6 +6364,13 @@ def serve_frontend_root() -> FileResponse:
     return FileResponse(index_path)
 
 
+@app.get("/health", response_model=HealthResponse, include_in_schema=False)
+def health_alias() -> HealthResponse:
+    """Expose the API health payload on the legacy root health path."""
+
+    return health()
+
+
 @app.get("/{frontend_path:path}", include_in_schema=False)
 def serve_frontend_spa(frontend_path: str) -> FileResponse:
     """Serve static frontend files and SPA routes from the backend.
@@ -6348,6 +6384,10 @@ def serve_frontend_spa(frontend_path: str) -> FileResponse:
 
     if not frontend_path:
         return serve_frontend_root()
+
+    first_segment = frontend_path.split("/", 1)[0].strip().lower()
+    if first_segment in API_LIKE_PREFIXES:
+        raise HTTPException(status_code=404, detail=f"API route not found: /{frontend_path}")
 
     build_dir = frontend_build_dir()
     candidate = build_dir / frontend_path

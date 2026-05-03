@@ -134,7 +134,8 @@ class HybridCloneInstructRequest(GenerationRequestBase):
     base_model_id: str = Field(..., min_length=1)
     custom_model_id: str = Field(..., min_length=1)
     instruct: str = ""
-    ref_audio_path: str = Field(..., min_length=1)
+    preset_id: Optional[str] = None
+    ref_audio_path: Optional[str] = None
     ref_text: Optional[str] = None
     voice_clone_prompt_path: Optional[str] = None
     x_vector_only_mode: bool = False

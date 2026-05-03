@@ -1128,7 +1128,6 @@ function StudioApp() {
   const [createS2ProWithPreset, setCreateS2ProWithPreset] = useState(false);
   const [presetGenerateText, setPresetGenerateText] = useState("이 캐릭터는 앞으로도 같은 목소리로 말해야 해.");
   const [presetOutputName, setPresetOutputName] = useState("프리셋-생성");
-  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [selectedHybridPresetId, setSelectedHybridPresetId] = useState("");
   const [presetControls, setPresetControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
 
@@ -1917,7 +1916,6 @@ function StudioApp() {
     });
   }, [health]);
 
-  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
   const selectedHybridPreset = presets.find((preset) => preset.id === selectedHybridPresetId) ?? null;
   const selectedPresetBaseModel = selectedHybridPreset
     ? baseModels.find((model) => model.model_id === selectedHybridPreset.base_model) ?? null
@@ -3900,7 +3898,6 @@ function StudioApp() {
         clone_prompt_path: prompt.prompt_path,
         notes: qwenPresetForm.notes,
       });
-      setSelectedPresetId(preset.id);
       setSelectedHybridPresetId(preset.id);
       if (qwenPresetForm.createS2Pro) {
         const voice = await api.createS2ProVoice({
@@ -3991,9 +3988,9 @@ function StudioApp() {
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
 
   async function handleGenerateFromPreset() {
-    const presetId = selectedPresetId || selectedHybridPresetId;
-    const presetForGeneration = selectedPreset ?? selectedHybridPreset;
-    if (!presetId) {
+    const presetForGeneration = selectedHybridPreset;
+    const presetId = presetForGeneration?.id || selectedHybridPresetId;
+    if (!presetId || !presetForGeneration) {
       setMessage("프리셋을 선택해주세요.");
       return;
     }
@@ -4260,7 +4257,7 @@ function StudioApp() {
 
   async function handleHybridInferenceSubmit(event?: FormEvent) {
     event?.preventDefault();
-    if (!hybridForm.base_model_id || !hybridForm.custom_model_id || !hybridForm.ref_audio_path.trim()) {
+    if (!selectedHybridPreset || !hybridForm.base_model_id || !hybridForm.custom_model_id) {
       setMessage("선택한 프리셋의 기준 정보가 아직 준비되지 않았습니다. 프리셋을 다시 선택해주세요.");
       return;
     }
@@ -4274,9 +4271,10 @@ function StudioApp() {
         text: hybridForm.text,
         language: hybridForm.language,
         instruct: hybridForm.instruct,
-        ref_audio_path: hybridForm.ref_audio_path,
-        ref_text: hybridForm.ref_text || undefined,
-        voice_clone_prompt_path: hybridForm.voice_clone_prompt_path || undefined,
+        preset_id: selectedHybridPreset.id,
+        ref_audio_path: selectedHybridPreset.reference_audio_path,
+        ref_text: selectedHybridPreset.reference_text || undefined,
+        voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
         x_vector_only_mode: hybridForm.x_vector_only_mode,
       });
       setLastHybridRecord(result.record);
@@ -4885,7 +4883,6 @@ function StudioApp() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              setSelectedPresetId(preset.id);
                               setSelectedHybridPresetId(preset.id);
                               setActiveTab("projects");
                             }}
@@ -6302,7 +6299,7 @@ function StudioApp() {
               <Label className="text-xs font-medium text-ink-muted">{t("projects.field.preset", "프리셋")}</Label>
               <Select
                 value={selectedHybridPresetId || undefined}
-                onValueChange={(value) => { setSelectedHybridPresetId(value); setSelectedPresetId(value); }}
+                onValueChange={setSelectedHybridPresetId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />

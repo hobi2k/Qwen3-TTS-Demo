@@ -674,7 +674,8 @@ export interface HybridCloneInstructRequest extends GenerationRequestExtras {
   text: string;
   language: string;
   instruct: string;
-  ref_audio_path: string;
+  preset_id?: string;
+  ref_audio_path?: string;
   ref_text?: string;
   voice_clone_prompt_path?: string;
   x_vector_only_mode?: boolean;
