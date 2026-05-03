@@ -118,6 +118,41 @@ type ActiveJob = {
   startedAt: number;
 };
 
+const DEFAULT_VOICEBOX_STRATEGY = "embedded_encoder_with_ref_code";
+
+const VOICEBOX_STRATEGY_OPTIONS = [
+  {
+    value: "embedded_encoder_with_ref_code",
+    label: "Embedded encoder + ref code",
+    description: "권장. 저장된 clone prompt의 음색 코드와 임베딩을 함께 사용합니다.",
+  },
+  {
+    value: "embedded_encoder_only",
+    label: "Embedded encoder only",
+    description: "임베딩만 사용합니다. 음색 고정력이 약해질 수 있습니다.",
+  },
+  {
+    value: "pseudo_embed_with_ref_code",
+    label: "Pseudo embed + ref code",
+    description: "ref code에서 만든 임베딩과 음색 코드를 함께 사용합니다.",
+  },
+  {
+    value: "pseudo_embed_only",
+    label: "Pseudo embed only",
+    description: "ref code 기반 임베딩만 사용합니다.",
+  },
+  {
+    value: "borrowed_stock_embed_with_ref_code",
+    label: "Stock embed + ref code",
+    description: "기본 화자 임베딩에 clone prompt 음색 코드를 결합합니다.",
+  },
+  {
+    value: "control_stock_customvoice",
+    label: "Stock CustomVoice control",
+    description: "비교용 기본 CustomVoice 경로입니다.",
+  },
+];
+
 type AceStepTabKey = Extract<
   TabKey,
   | "ace_music"
@@ -501,6 +536,46 @@ function isS2ProTab(tab: TabKey): boolean {
 
 function isAceStepTab(tab: TabKey): tab is AceStepTabKey {
   return tab in ACE_STEP_TAB_TO_MODE;
+}
+
+function VoiceBoxStrategySelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs font-medium text-ink-muted">VoiceBox strategy</Label>
+      <Select value={value || DEFAULT_VOICEBOX_STRATEGY} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {VOICEBOX_STRATEGY_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              <span className="flex flex-col gap-0.5 py-0.5">
+                <span className="text-xs font-medium text-ink">{option.label}</span>
+                <span className="text-[11px] text-ink-subtle">{option.description}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function createVoiceBoxGenerationControls(): GenerationControlsForm {
+  return {
+    ...createGenerationControls("clone"),
+    non_streaming_mode: false,
+    top_k: "30",
+    top_p: "0.95",
+    temperature: "0.8",
+    max_new_tokens: "1024",
+  };
 }
 
 function gallerySelectionKey(record: GenerationRecord): string {
@@ -1111,13 +1186,15 @@ function StudioApp() {
     ref_text: "",
     speaker: "mai",
     instruct: "",
-    strategy: "embedded_encoder_only",
+    strategy: DEFAULT_VOICEBOX_STRATEGY,
   });
+  const [voiceBoxCloneControls, setVoiceBoxCloneControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
   const [voiceBoxPresetForm, setVoiceBoxPresetForm] = useState({
     model_id: "",
     output_name: "voicebox-preset",
     text: "이 캐릭터는 앞으로도 같은 목소리로 말해야 해.",
     language: "Korean",
+    strategy: DEFAULT_VOICEBOX_STRATEGY,
   });
   const [voiceBoxPresetInstructForm, setVoiceBoxPresetInstructForm] = useState({
     model_id: "",
@@ -1125,7 +1202,10 @@ function StudioApp() {
     text: "오늘은 정말 힘들었어. 언제쯤 끝날까?",
     language: "Korean",
     instruct: "Breathy, emotionally unstable, and barely holding composure. Keep the diction clear.",
+    strategy: DEFAULT_VOICEBOX_STRATEGY,
   });
+  const [voiceBoxPresetControls, setVoiceBoxPresetControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
+  const [voiceBoxPresetInstructControls, setVoiceBoxPresetInstructControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
   const [lastVoiceBoxCloneRecord, setLastVoiceBoxCloneRecord] = useState<GenerationRecord | null>(null);
   const [lastPresetRecord, setLastPresetRecord] = useState<GenerationRecord | null>(null);
   const [lastVoiceBoxPresetRecord, setLastVoiceBoxPresetRecord] = useState<GenerationRecord | null>(null);
@@ -1165,6 +1245,17 @@ function StudioApp() {
     temperature: "0.7",
     top_p: "0.8",
     max_tokens: "128",
+    chunk_length: "300",
+    output_format: "wav",
+    sample_rate: "44100",
+    speed: "1.0",
+    volume: "0.0",
+    normalize: true,
+    latency: "normal",
+    repetition_penalty: "1.2",
+    min_chunk_length: "50",
+    condition_on_previous_chunks: true,
+    early_stop_threshold: "1.0",
   });
   const [s2ProVoiceForm, setS2ProVoiceForm] = useState({
     name: "새-s2pro-목소리",
@@ -1255,6 +1346,7 @@ function StudioApp() {
     output_name: "vibevoice-tts-lora",
     model_path: "",
     data_dir: "",
+    output_dir: "",
     dataset_config_name: "",
     train_split_name: "train",
     eval_split_name: "validation",
@@ -1336,8 +1428,10 @@ function StudioApp() {
     debug: false,
     save_weights_interval: "1000",
     save_checkpoint_interval: "1000",
+    ema_checkpoint_interval: "5000",
     val_interval: "5000",
     eval_interval: "20000",
+    run_final_sample: false,
   });
   const [aceStepForm, setAceStepForm] = useState({
     output_name: "midnight-city-demo",
@@ -1379,9 +1473,35 @@ function StudioApp() {
   const [aceStepCommonForm, setAceStepCommonForm] = useState({
     config_path: "",
     lm_model_path: "",
+    lm_backend: "",
+    device: "auto",
     lora_path: "",
     lora_scale: "1.0",
     lora_adapter_name: "",
+    offload_dit_to_cpu: false,
+    quantization: "",
+    vae_checkpoint: "",
+    use_adg: false,
+    cfg_interval_start: "0.0",
+    cfg_interval_end: "1.0",
+    shift: "1.0",
+    infer_method: "ode" as "ode" | "sde",
+    sampler_mode: "euler" as "euler" | "heun" | "pingpong",
+    thinking: true,
+    lm_temperature: "0.85",
+    lm_cfg_scale: "2.0",
+    lm_top_k: "0",
+    lm_top_p: "0.9",
+    lm_negative_prompt: "NO USER INPUT",
+    use_cot_metas: true,
+    use_cot_caption: true,
+    use_cot_lyrics: false,
+    use_cot_language: true,
+    use_constrained_decoding: true,
+    enable_normalization: true,
+    normalization_db: "-1.0",
+    fade_in_duration: "0.0",
+    fade_out_duration: "0.0",
   });
   const [aceStepAudioForm, setAceStepAudioForm] = useState({
     src_audio: "",
@@ -1426,7 +1546,9 @@ function StudioApp() {
     tensor_dir: "",
     audio_dir: "",
     dataset_json: "",
+    checkpoint_dir: "",
     model_variant: "turbo",
+    base_model: "",
     device: "auto",
     precision: "auto" as "auto" | "bf16" | "fp16" | "fp32",
     max_duration: "240",
@@ -2367,8 +2489,17 @@ function StudioApp() {
         temperature: Number(s2ProForm.temperature || "0.7"),
         top_p: Number(s2ProForm.top_p || "0.8"),
         max_new_tokens: Number(s2ProForm.max_tokens || "128"),
-        output_format: "wav",
-        sample_rate: 44100,
+        chunk_length: Number(s2ProForm.chunk_length || "300"),
+        output_format: s2ProForm.output_format,
+        sample_rate: s2ProForm.sample_rate.trim() ? Number(s2ProForm.sample_rate) : null,
+        speed: Number(s2ProForm.speed || "1.0"),
+        volume: Number(s2ProForm.volume || "0.0"),
+        normalize: s2ProForm.normalize,
+        latency: s2ProForm.latency,
+        repetition_penalty: Number(s2ProForm.repetition_penalty || "1.2"),
+        min_chunk_length: Number(s2ProForm.min_chunk_length || "50"),
+        condition_on_previous_chunks: s2ProForm.condition_on_previous_chunks,
+        early_stop_threshold: Number(s2ProForm.early_stop_threshold || "1.0"),
       });
       setLastS2ProRecord(response.record);
       await refreshAll();
@@ -2472,7 +2603,7 @@ function StudioApp() {
         output_name: vibeVoiceTrainForm.output_name,
         model_path: vibeVoiceTrainForm.model_path,
         data_dir: vibeVoiceTrainForm.data_dir,
-        output_dir: "",
+        output_dir: vibeVoiceTrainForm.output_dir,
         dataset_config_name: vibeVoiceTrainForm.dataset_config_name,
         train_split_name: vibeVoiceTrainForm.train_split_name,
         eval_split_name: vibeVoiceTrainForm.eval_split_name,
@@ -2714,8 +2845,10 @@ function StudioApp() {
         debug: mmaudioTrainForm.debug,
         save_weights_interval: Number(mmaudioTrainForm.save_weights_interval || "1000"),
         save_checkpoint_interval: Number(mmaudioTrainForm.save_checkpoint_interval || "1000"),
+        ema_checkpoint_interval: Number(mmaudioTrainForm.ema_checkpoint_interval || "5000"),
         val_interval: Number(mmaudioTrainForm.val_interval || "5000"),
         eval_interval: Number(mmaudioTrainForm.eval_interval || "20000"),
+        run_final_sample: mmaudioTrainForm.run_final_sample,
       });
       setMMAudioTrainResult(result);
       await refreshAll();
@@ -2736,7 +2869,6 @@ function StudioApp() {
         prompt: aceStepForm.prompt,
         lyrics: aceStepForm.lyrics,
         vocal_language: aceStepForm.vocal_language || "unknown",
-        use_cot_language: (aceStepForm.vocal_language || "unknown") === "unknown",
         instrumental: aceStepForm.instrumental,
         bpm: aceStepForm.bpm ? Number(aceStepForm.bpm) : null,
         keyscale: aceStepForm.keyscale,
@@ -2762,8 +2894,36 @@ function StudioApp() {
         bf16: aceStepForm.bf16,
         torch_compile: aceStepForm.torch_compile,
         cpu_offload: aceStepForm.cpu_offload,
+        offload_dit_to_cpu: aceStepCommonForm.offload_dit_to_cpu,
         overlapped_decode: aceStepForm.overlapped_decode,
         device_id: Number(aceStepForm.device_id || "0"),
+        config_path: aceStepCommonForm.config_path || undefined,
+        lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+        lm_backend: aceStepCommonForm.lm_backend || undefined,
+        device: aceStepCommonForm.device || "auto",
+        quantization: aceStepCommonForm.quantization || undefined,
+        vae_checkpoint: aceStepCommonForm.vae_checkpoint || undefined,
+        use_adg: aceStepCommonForm.use_adg,
+        cfg_interval_start: Number(aceStepCommonForm.cfg_interval_start || "0"),
+        cfg_interval_end: Number(aceStepCommonForm.cfg_interval_end || "1"),
+        shift: Number(aceStepCommonForm.shift || "1"),
+        infer_method: aceStepCommonForm.infer_method,
+        sampler_mode: aceStepCommonForm.sampler_mode,
+        thinking: aceStepCommonForm.thinking,
+        lm_temperature: Number(aceStepCommonForm.lm_temperature || "0.85"),
+        lm_cfg_scale: Number(aceStepCommonForm.lm_cfg_scale || "2.0"),
+        lm_top_k: Number(aceStepCommonForm.lm_top_k || "0"),
+        lm_top_p: Number(aceStepCommonForm.lm_top_p || "0.9"),
+        lm_negative_prompt: aceStepCommonForm.lm_negative_prompt,
+        use_cot_metas: aceStepCommonForm.use_cot_metas,
+        use_cot_caption: aceStepCommonForm.use_cot_caption,
+        use_cot_lyrics: aceStepCommonForm.use_cot_lyrics,
+        use_cot_language: aceStepCommonForm.use_cot_language,
+        use_constrained_decoding: aceStepCommonForm.use_constrained_decoding,
+        enable_normalization: aceStepCommonForm.enable_normalization,
+        normalization_db: Number(aceStepCommonForm.normalization_db || "-1"),
+        fade_in_duration: Number(aceStepCommonForm.fade_in_duration || "0"),
+        fade_out_duration: Number(aceStepCommonForm.fade_out_duration || "0"),
       });
       setLastAceStepRecord(response.record);
       await refreshAll();
@@ -2788,7 +2948,6 @@ function StudioApp() {
       prompt: aceStepForm.prompt,
       lyrics: aceStepForm.lyrics,
       vocal_language: aceStepForm.vocal_language || "unknown",
-      use_cot_language: (aceStepForm.vocal_language || "unknown") === "unknown",
       instrumental: aceStepForm.instrumental,
       bpm: aceStepForm.bpm ? Number(aceStepForm.bpm) : null,
       keyscale: aceStepForm.keyscale,
@@ -2801,9 +2960,35 @@ function StudioApp() {
       batch_size: Number(aceStepForm.batch_size || "1"),
       audio_format: aceStepForm.audio_format,
       cpu_offload: aceStepForm.cpu_offload,
+      offload_dit_to_cpu: aceStepCommonForm.offload_dit_to_cpu,
       compile_model: aceStepForm.torch_compile,
       config_path: aceStepCommonForm.config_path || undefined,
       lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+      lm_backend: aceStepCommonForm.lm_backend || undefined,
+      device: aceStepCommonForm.device || "auto",
+      quantization: aceStepCommonForm.quantization || undefined,
+      vae_checkpoint: aceStepCommonForm.vae_checkpoint || undefined,
+      use_adg: aceStepCommonForm.use_adg,
+      cfg_interval_start: Number(aceStepCommonForm.cfg_interval_start || "0"),
+      cfg_interval_end: Number(aceStepCommonForm.cfg_interval_end || "1"),
+      shift: Number(aceStepCommonForm.shift || "1"),
+      infer_method: aceStepCommonForm.infer_method,
+      sampler_mode: aceStepCommonForm.sampler_mode,
+      thinking: aceStepCommonForm.thinking,
+      lm_temperature: Number(aceStepCommonForm.lm_temperature || "0.85"),
+      lm_cfg_scale: Number(aceStepCommonForm.lm_cfg_scale || "2.0"),
+      lm_top_k: Number(aceStepCommonForm.lm_top_k || "0"),
+      lm_top_p: Number(aceStepCommonForm.lm_top_p || "0.9"),
+      lm_negative_prompt: aceStepCommonForm.lm_negative_prompt,
+      use_cot_metas: aceStepCommonForm.use_cot_metas,
+      use_cot_caption: aceStepCommonForm.use_cot_caption,
+      use_cot_lyrics: aceStepCommonForm.use_cot_lyrics,
+      use_cot_language: aceStepCommonForm.use_cot_language,
+      use_constrained_decoding: aceStepCommonForm.use_constrained_decoding,
+      enable_normalization: aceStepCommonForm.enable_normalization,
+      normalization_db: Number(aceStepCommonForm.normalization_db || "-1"),
+      fade_in_duration: Number(aceStepCommonForm.fade_in_duration || "0"),
+      fade_out_duration: Number(aceStepCommonForm.fade_out_duration || "0"),
       loras: lorasInput,
     };
   }
@@ -2915,7 +3100,13 @@ function StudioApp() {
         src_audio: aceStepAudioForm.src_audio,
         config_path: aceStepCommonForm.config_path || undefined,
         lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+        lm_backend: aceStepCommonForm.lm_backend || undefined,
+        device: aceStepCommonForm.device || "auto",
         cpu_offload: aceStepForm.cpu_offload,
+        lm_temperature: Number(aceStepCommonForm.lm_temperature || "0.85"),
+        lm_top_k: Number(aceStepCommonForm.lm_top_k || "0"),
+        lm_top_p: Number(aceStepCommonForm.lm_top_p || "0.9"),
+        use_constrained_decoding: aceStepCommonForm.use_constrained_decoding,
       });
       setAceStepUnderstandResult(result);
       setMessage(result.success ? "오디오 메타데이터 추출이 끝났습니다." : `Understand 실패: ${result.error || ""}`);
@@ -2931,6 +3122,12 @@ function StudioApp() {
         vocal_language: aceStepCreateSampleForm.vocal_language === "unknown" ? undefined : aceStepCreateSampleForm.vocal_language,
         config_path: aceStepCommonForm.config_path || undefined,
         lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+        lm_backend: aceStepCommonForm.lm_backend || undefined,
+        device: aceStepCommonForm.device || "auto",
+        cpu_offload: aceStepForm.cpu_offload,
+        lm_temperature: Number(aceStepCommonForm.lm_temperature || "0.85"),
+        lm_top_k: Number(aceStepCommonForm.lm_top_k || "0"),
+        lm_top_p: Number(aceStepCommonForm.lm_top_p || "0.9"),
       });
       setAceStepUnderstandResult(result);
       if (result.success) {
@@ -2957,6 +3154,12 @@ function StudioApp() {
         vocal_language: aceStepForm.vocal_language === "unknown" ? undefined : aceStepForm.vocal_language,
         config_path: aceStepCommonForm.config_path || undefined,
         lm_model_path: aceStepCommonForm.lm_model_path || undefined,
+        lm_backend: aceStepCommonForm.lm_backend || undefined,
+        device: aceStepCommonForm.device || "auto",
+        cpu_offload: aceStepForm.cpu_offload,
+        lm_temperature: Number(aceStepCommonForm.lm_temperature || "0.85"),
+        lm_top_k: Number(aceStepCommonForm.lm_top_k || "0"),
+        lm_top_p: Number(aceStepCommonForm.lm_top_p || "0.9"),
       });
       setAceStepUnderstandResult(result);
       if (result.success) {
@@ -2992,7 +3195,9 @@ function StudioApp() {
         tensor_dir: aceStepTrainForm.tensor_dir,
         audio_dir: aceStepTrainForm.audio_dir,
         dataset_json: aceStepTrainForm.dataset_json,
+        checkpoint_dir: aceStepTrainForm.checkpoint_dir || null,
         model_variant: aceStepTrainForm.model_variant,
+        base_model: aceStepTrainForm.base_model || null,
         device: aceStepTrainForm.device,
         precision: aceStepTrainForm.precision,
         max_duration: Number(aceStepTrainForm.max_duration || "240"),
@@ -3575,6 +3780,7 @@ function StudioApp() {
     await runAction(async () => {
       const result = await api.generateVoiceBoxClone({
         ...voiceBoxCloneForm,
+        ...serializeGenerationControls(voiceBoxCloneControls),
         ref_audio_path: uploadedRef.path,
         ref_text: uploadRefText.trim() || undefined,
         output_name: voiceBoxCloneForm.output_name || undefined,
@@ -3767,6 +3973,8 @@ function StudioApp() {
         voice_clone_prompt_path: nextClonePromptPath,
       };
     });
+    setVoiceBoxPresetForm((prev) => ({ ...prev, language: selectedHybridPreset.language || prev.language }));
+    setVoiceBoxPresetInstructForm((prev) => ({ ...prev, language: selectedHybridPreset.language || prev.language }));
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
 
   async function handleGenerateFromPreset() {
@@ -3815,8 +4023,8 @@ function StudioApp() {
         ref_text: selectedHybridPreset.reference_text || undefined,
         voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
         speaker: "mai",
-        strategy: "embedded_encoder_only",
-        ...serializeGenerationControls(presetControls),
+        strategy: voiceBoxPresetForm.strategy || DEFAULT_VOICEBOX_STRATEGY,
+        ...serializeGenerationControls(voiceBoxPresetControls),
       });
       setLastVoiceBoxPresetRecord(result.record);
       await refreshAll();
@@ -3846,8 +4054,8 @@ function StudioApp() {
         voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
         speaker: "mai",
         instruct: voiceBoxPresetInstructForm.instruct,
-        strategy: "embedded_encoder_with_ref_code",
-        ...serializeGenerationControls(hybridControls),
+        strategy: voiceBoxPresetInstructForm.strategy || DEFAULT_VOICEBOX_STRATEGY,
+        ...serializeGenerationControls(voiceBoxPresetInstructControls),
       });
       setLastVoiceBoxPresetInstructRecord(result.record);
       await refreshAll();
@@ -5932,6 +6140,13 @@ function StudioApp() {
                       className="min-h-[80px] resize-y border-line bg-canvas"
                     />
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language", "언어")}</Label>
+                    <LanguageSelect
+                      value={voiceBoxCloneForm.language}
+                      onChange={(language) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, language })}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">{t("clone.step2.speakerName", "화자명")}</Label>
@@ -5948,6 +6163,19 @@ function StudioApp() {
                       />
                     </div>
                   </div>
+                  <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                      {t("tts.advanced.controls", "Advanced controls")}
+                      <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                      <VoiceBoxStrategySelect
+                        value={voiceBoxCloneForm.strategy}
+                        onChange={(strategy) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, strategy })}
+                      />
+                      <GenerationControlsEditor value={voiceBoxCloneControls} onChange={setVoiceBoxCloneControls} />
+                    </div>
+                  </details>
                   {lastVoiceBoxCloneRecord ? (
                     <AudioCard
                       title={getRecordDisplayTitle(lastVoiceBoxCloneRecord)}
@@ -6252,6 +6480,13 @@ function StudioApp() {
                     <Textarea value={voiceBoxPresetForm.text} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, text: event.target.value })} className="min-h-[80px] resize-y border-line bg-canvas" />
                   </div>
                   <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language", "언어")}</Label>
+                    <LanguageSelect
+                      value={voiceBoxPresetForm.language}
+                      onChange={(language) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, language })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
                     <Input value={voiceBoxPresetForm.output_name} onChange={(event) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, output_name: event.target.value })} />
                   </div>
@@ -6260,8 +6495,12 @@ function StudioApp() {
                       {t("tts.advanced.controls", "Advanced controls")}
                       <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                     </summary>
-                    <div className="border-t border-line px-3 py-3">
-                      <GenerationControlsEditor value={presetControls} onChange={setPresetControls} />
+                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                      <VoiceBoxStrategySelect
+                        value={voiceBoxPresetForm.strategy}
+                        onChange={(strategy) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, strategy })}
+                      />
+                      <GenerationControlsEditor value={voiceBoxPresetControls} onChange={setVoiceBoxPresetControls} />
                     </div>
                   </details>
                   <Button variant="outline" disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
@@ -6297,6 +6536,13 @@ function StudioApp() {
                     <Textarea value={voiceBoxPresetInstructForm.instruct} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, instruct: event.target.value })} className="min-h-[80px] resize-y border-line bg-canvas" />
                   </div>
                   <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language", "언어")}</Label>
+                    <LanguageSelect
+                      value={voiceBoxPresetInstructForm.language}
+                      onChange={(language) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, language })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
                     <Input value={voiceBoxPresetInstructForm.output_name} onChange={(event) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, output_name: event.target.value })} />
                   </div>
@@ -6305,8 +6551,12 @@ function StudioApp() {
                       {t("tts.advanced.controls", "Advanced controls")}
                       <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                     </summary>
-                    <div className="border-t border-line px-3 py-3">
-                      <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
+                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                      <VoiceBoxStrategySelect
+                        value={voiceBoxPresetInstructForm.strategy}
+                        onChange={(strategy) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, strategy })}
+                      />
+                      <GenerationControlsEditor value={voiceBoxPresetInstructControls} onChange={setVoiceBoxPresetInstructControls} />
                     </div>
                   </details>
 	                  <Button variant="outline" disabled={loading || !selectedHybridPreset || !voiceBoxModels.length} type="submit">
@@ -6735,6 +6985,71 @@ function StudioApp() {
                         <Input value={s2ProForm.max_tokens} onChange={(event) => setS2ProForm({ ...s2ProForm, max_tokens: event.target.value })} />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Chunk length</Label>
+                        <Input value={s2ProForm.chunk_length} onChange={(event) => setS2ProForm({ ...s2ProForm, chunk_length: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Min chunk length</Label>
+                        <Input value={s2ProForm.min_chunk_length} onChange={(event) => setS2ProForm({ ...s2ProForm, min_chunk_length: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Repetition penalty</Label>
+                        <Input value={s2ProForm.repetition_penalty} onChange={(event) => setS2ProForm({ ...s2ProForm, repetition_penalty: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Early stop threshold</Label>
+                        <Input value={s2ProForm.early_stop_threshold} onChange={(event) => setS2ProForm({ ...s2ProForm, early_stop_threshold: event.target.value })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Speed</Label>
+                        <Input value={s2ProForm.speed} onChange={(event) => setS2ProForm({ ...s2ProForm, speed: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Volume</Label>
+                        <Input value={s2ProForm.volume} onChange={(event) => setS2ProForm({ ...s2ProForm, volume: event.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Sample rate</Label>
+                        <Input value={s2ProForm.sample_rate} onChange={(event) => setS2ProForm({ ...s2ProForm, sample_rate: event.target.value })} placeholder="비우면 backend default" />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Format</Label>
+                        <Select value={s2ProForm.output_format || undefined} onValueChange={(output_format) => setS2ProForm({ ...s2ProForm, output_format })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="wav">wav</SelectItem>
+                            <SelectItem value="mp3">mp3</SelectItem>
+                            <SelectItem value="flac">flac</SelectItem>
+                            <SelectItem value="ogg">ogg</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Latency</Label>
+                      <Select value={s2ProForm.latency || undefined} onValueChange={(latency) => setS2ProForm({ ...s2ProForm, latency })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">normal</SelectItem>
+                          <SelectItem value="balanced">balanced</SelectItem>
+                          <SelectItem value="low">low</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      <label className="flex items-center justify-between gap-3 rounded-md border border-line bg-canvas px-3 py-2 text-xs text-ink-muted">
+                        <span>Normalize output</span>
+                        <Switch checked={s2ProForm.normalize} onCheckedChange={(normalize) => setS2ProForm({ ...s2ProForm, normalize })} />
+                      </label>
+                      <label className="flex items-center justify-between gap-3 rounded-md border border-line bg-canvas px-3 py-2 text-xs text-ink-muted">
+                        <span>Condition on previous chunks</span>
+                        <Switch checked={s2ProForm.condition_on_previous_chunks} onCheckedChange={(condition_on_previous_chunks) => setS2ProForm({ ...s2ProForm, condition_on_previous_chunks })} />
+                      </label>
+                    </div>
                     {s2ProLongGenerationWarning ? (
                       <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">
                         이 값은 그대로 전송됩니다. 현재 로컬 S2-Pro는 토큰 생성이 느려서 256을 넘기면 긴 문장/긴 음성 의도일 때만 쓰는 것이 좋습니다.
@@ -7054,6 +7369,10 @@ function StudioApp() {
                     <Input value={vibeVoiceAsrForm.batch_size} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, batch_size: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Max duration</Label>
+                    <Input value={vibeVoiceAsrForm.max_duration} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, max_duration: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Max new tokens</Label>
                     <Input value={vibeVoiceAsrForm.max_new_tokens} onChange={(event) => setVibeVoiceAsrForm((prev) => ({ ...prev, max_new_tokens: event.target.value }))} />
                   </div>
@@ -7124,6 +7443,10 @@ function StudioApp() {
                   <Label className="text-xs font-medium text-ink-muted">Mode</Label>
                   <Input value={activeTab === "vibevoice_tts_train" ? "TTS LoRA" : "ASR LoRA"} readOnly />
                 </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium text-ink-muted">Output dir</Label>
+                <Input value={vibeVoiceTrainForm.output_dir} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, output_dir: event.target.value }))} placeholder="비우면 서버 기본 run 폴더" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs font-medium text-ink-muted">Training model</Label>
@@ -7620,6 +7943,10 @@ function StudioApp() {
                       <Input value={s2ProTrainForm.precision} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, precision: event.target.value }))} />
                     </div>
                     <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Accelerator</Label>
+                      <Input value={s2ProTrainForm.accelerator} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, accelerator: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Devices</Label>
                       <Input value={s2ProTrainForm.devices} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, devices: event.target.value }))} />
                     </div>
@@ -7634,6 +7961,14 @@ function StudioApp() {
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Strategy backend</Label>
                       <Input value={s2ProTrainForm.strategy_backend} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, strategy_backend: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Codec checkpoint</Label>
+                      <Input value={s2ProTrainForm.codec_checkpoint_path} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, codec_checkpoint_path: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">VQ workers</Label>
+                      <Input value={s2ProTrainForm.vq_num_workers} onChange={(event) => setS2ProTrainForm((prev) => ({ ...prev, vq_num_workers: event.target.value }))} />
                     </div>
                   </div>
                 </details>
@@ -7927,6 +8262,18 @@ function StudioApp() {
                       <Label className="text-xs font-medium text-ink-muted">Save checkpoint every</Label>
                       <Input value={mmaudioTrainForm.save_checkpoint_interval} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, save_checkpoint_interval: event.target.value }))} />
                     </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">EMA checkpoint every</Label>
+                      <Input value={mmaudioTrainForm.ema_checkpoint_interval} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, ema_checkpoint_interval: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Validation interval</Label>
+                      <Input value={mmaudioTrainForm.val_interval} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, val_interval: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Eval interval</Label>
+                      <Input value={mmaudioTrainForm.eval_interval} onChange={(event) => setMMAudioTrainForm((prev) => ({ ...prev, eval_interval: event.target.value }))} />
+                    </div>
                     <label className="flex items-center gap-2 text-xs text-ink-muted">
                       <Switch checked={mmaudioTrainForm.compile} onCheckedChange={(checked) => setMMAudioTrainForm((prev) => ({ ...prev, compile: checked }))} />
                       Compile
@@ -7934,6 +8281,10 @@ function StudioApp() {
                     <label className="flex items-center gap-2 text-xs text-ink-muted">
                       <Switch checked={mmaudioTrainForm.debug} onCheckedChange={(checked) => setMMAudioTrainForm((prev) => ({ ...prev, debug: checked }))} />
                       Debug
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted">
+                      <Switch checked={mmaudioTrainForm.run_final_sample} onCheckedChange={(checked) => setMMAudioTrainForm((prev) => ({ ...prev, run_final_sample: checked }))} />
+                      Run final sample
                     </label>
                   </div>
                 </details>
@@ -8100,6 +8451,114 @@ function StudioApp() {
                   />
                 </div>
               </div>
+              <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                  ACE common runtime / LM / postprocess options
+                  <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                </summary>
+                <div className="flex flex-col gap-4 border-t border-line px-3 py-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LM backend</Label>
+                      <Input value={aceStepCommonForm.lm_backend} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_backend: event.target.value })} placeholder="auto" />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Device</Label>
+                      <Input value={aceStepCommonForm.device} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, device: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Quantization</Label>
+                      <Input value={aceStepCommonForm.quantization} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, quantization: event.target.value })} placeholder="optional" />
+                    </div>
+                    <div className="flex flex-col gap-1.5 sm:col-span-3">
+                      <Label className="text-xs font-medium text-ink-muted">VAE checkpoint</Label>
+                      <Input value={aceStepCommonForm.vae_checkpoint} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, vae_checkpoint: event.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">CFG start</Label>
+                      <Input value={aceStepCommonForm.cfg_interval_start} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, cfg_interval_start: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">CFG end</Label>
+                      <Input value={aceStepCommonForm.cfg_interval_end} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, cfg_interval_end: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Shift</Label>
+                      <Input value={aceStepCommonForm.shift} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, shift: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Infer method</Label>
+                      <Select value={aceStepCommonForm.infer_method} onValueChange={(infer_method) => setAceStepCommonForm({ ...aceStepCommonForm, infer_method: infer_method as "ode" | "sde" })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ode">ode</SelectItem>
+                          <SelectItem value="sde">sde</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Sampler</Label>
+                      <Select value={aceStepCommonForm.sampler_mode} onValueChange={(sampler_mode) => setAceStepCommonForm({ ...aceStepCommonForm, sampler_mode: sampler_mode as "euler" | "heun" | "pingpong" })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="euler">euler</SelectItem>
+                          <SelectItem value="heun">heun</SelectItem>
+                          <SelectItem value="pingpong">pingpong</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LM temp</Label>
+                      <Input value={aceStepCommonForm.lm_temperature} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_temperature: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LM CFG</Label>
+                      <Input value={aceStepCommonForm.lm_cfg_scale} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_cfg_scale: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LM top K</Label>
+                      <Input value={aceStepCommonForm.lm_top_k} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_top_k: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">LM top P</Label>
+                      <Input value={aceStepCommonForm.lm_top_p} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_top_p: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5 sm:col-span-4">
+                      <Label className="text-xs font-medium text-ink-muted">LM negative prompt</Label>
+                      <Input value={aceStepCommonForm.lm_negative_prompt} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, lm_negative_prompt: event.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Normalize dB</Label>
+                      <Input value={aceStepCommonForm.normalization_db} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, normalization_db: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Fade in</Label>
+                      <Input value={aceStepCommonForm.fade_in_duration} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, fade_in_duration: event.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">Fade out</Label>
+                      <Input value={aceStepCommonForm.fade_out_duration} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, fade_out_duration: event.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.offload_dit_to_cpu} onCheckedChange={(offload_dit_to_cpu) => setAceStepCommonForm({ ...aceStepCommonForm, offload_dit_to_cpu })} /> Offload DiT</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_adg} onCheckedChange={(use_adg) => setAceStepCommonForm({ ...aceStepCommonForm, use_adg })} /> ADG</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.thinking} onCheckedChange={(thinking) => setAceStepCommonForm({ ...aceStepCommonForm, thinking })} /> Thinking</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_metas} onCheckedChange={(use_cot_metas) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_metas })} /> CoT metas</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_caption} onCheckedChange={(use_cot_caption) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_caption })} /> CoT caption</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_lyrics} onCheckedChange={(use_cot_lyrics) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_lyrics })} /> CoT lyrics</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_language} onCheckedChange={(use_cot_language) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_language })} /> CoT language</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_constrained_decoding} onCheckedChange={(use_constrained_decoding) => setAceStepCommonForm({ ...aceStepCommonForm, use_constrained_decoding })} /> Constrained decoding</label>
+                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.enable_normalization} onCheckedChange={(enable_normalization) => setAceStepCommonForm({ ...aceStepCommonForm, enable_normalization })} /> Normalize</label>
+                  </div>
+                </div>
+              </details>
             </WorkspaceCard>
           ) : null}
 
@@ -8762,6 +9221,14 @@ function StudioApp() {
                       <div className="flex flex-col gap-1.5">
                         <Label className="text-xs font-medium text-ink-muted">Device</Label>
                         <Input value={aceStepTrainForm.device} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, device: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Base model</Label>
+                        <Input value={aceStepTrainForm.base_model} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, base_model: event.target.value }))} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">Checkpoint dir</Label>
+                        <Input value={aceStepTrainForm.checkpoint_dir} onChange={(event) => setAceStepTrainForm((prev) => ({ ...prev, checkpoint_dir: event.target.value }))} />
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <Label className="text-xs font-medium text-ink-muted">Precision</Label>

@@ -5174,6 +5174,8 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
         payload.speaker,
         "--output-dir",
         str(output_dir),
+        "--generation-options",
+        json.dumps(generation_options_from_payload(payload), ensure_ascii=False),
         "--strategies",
         strategy,
     ]

@@ -925,8 +925,10 @@ export interface MMAudioTrainingRequest {
   debug: boolean;
   save_weights_interval: number;
   save_checkpoint_interval: number;
+  ema_checkpoint_interval: number;
   val_interval: number;
   eval_interval: number;
+  run_final_sample: boolean;
 }
 
 export interface MMAudioTrainingResponse {
