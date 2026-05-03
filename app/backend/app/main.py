@@ -5224,7 +5224,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
 def generate_voicebox_clone(payload: VoiceBoxCloneRequest) -> GenerationResponse:
     """VoiceBox 하나만 사용해 참조 음성의 음색을 복제한다."""
 
-    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="embedded_encoder_only")
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="embedded_encoder_with_ref_code")
 
 
 @app.post("/api/generate/voicebox-clone-instruct", response_model=GenerationResponse)
