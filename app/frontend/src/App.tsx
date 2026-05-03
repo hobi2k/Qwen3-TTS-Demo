@@ -1012,6 +1012,18 @@ function StudioApp() {
   const [uploadRefText, setUploadRefText] = useState("");
   const [uploadTranscriptMeta, setUploadTranscriptMeta] = useState<string>("");
   const [uploadedClonePrompt, setUploadedClonePrompt] = useState<ClonePromptRecord | null>(null);
+  const [qwenPresetSource, setQwenPresetSource] = useState<"gallery" | "upload">("gallery");
+  const [qwenPresetGalleryAsset, setQwenPresetGalleryAsset] = useState<AudioAsset | null>(null);
+  const [qwenPresetUploadedRef, setQwenPresetUploadedRef] = useState<UploadResponse | null>(null);
+  const [qwenPresetRefText, setQwenPresetRefText] = useState("");
+  const [qwenPresetTranscriptMeta, setQwenPresetTranscriptMeta] = useState("");
+  const [qwenPresetModelId, setQwenPresetModelId] = useState("");
+  const [qwenPresetForm, setQwenPresetForm] = useState({
+    name: "",
+    language: "Korean",
+    notes: "",
+    createS2Pro: false,
+  });
 
   const [datasetSamples, setDatasetSamples] = useState([createEmptyDatasetSample()]);
   const [datasetBulkInput, setDatasetBulkInput] = useState("");
@@ -1823,6 +1835,8 @@ function StudioApp() {
   };
   const visibleAudioDatasets = audioDatasets.filter((dataset) => dataset.target === datasetLibraryTarget);
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
+  const qwenPresetEffectiveModelId = qwenPresetModelId || selectedBaseModelId || preferredStockBaseModel?.model_id || "";
+  const selectedQwenPresetAsset = qwenPresetSource === "gallery" ? qwenPresetGalleryAsset : qwenPresetUploadedRef;
   function selectS2ProVoice(voiceId: string) {
     const voice = s2ProVoices.find((item) => item.id === voiceId || item.reference_id === voiceId);
     setSelectedS2VoiceId(voiceId);
@@ -2061,6 +2075,69 @@ function StudioApp() {
   function openAceStepTab(tab: AceStepTabKey) {
     setAceStepMode(ACE_STEP_TAB_TO_MODE[tab]);
     setActiveTab(tab);
+  }
+
+  function handleSelectQwenPresetGalleryAsset(asset: AudioAsset) {
+    const metadataText = asset.transcript_text?.trim() || assetTextByPath.get(asset.path)?.trim() || "";
+    setQwenPresetSource("gallery");
+    setQwenPresetGalleryAsset(asset);
+    setQwenPresetRefText(metadataText);
+    setQwenPresetForm((prev) => ({
+      ...prev,
+      name: prev.name || basenameFromPath(asset.path).replace(/\.[^.]+$/, ""),
+    }));
+    if (metadataText) {
+      setMessage(`${asset.filename}의 대사를 참조 텍스트로 불러왔습니다.`);
+      return;
+    }
+    void runAction(async () => {
+      const result = await api.transcribeAudio(asset.path, asrModelId);
+      setQwenPresetRefText(result.text);
+      setQwenPresetTranscriptMeta(
+        result.simulation
+          ? "전사 placeholder가 채워졌습니다. 실제 문장으로 수정하세요."
+          : `${asset.filename}을 전사해 참조 텍스트로 채웠습니다.`,
+      );
+    });
+  }
+
+  async function handleUploadQwenPresetReference(file: File) {
+    await runAction(async () => {
+      setQwenPresetRefText("");
+      setQwenPresetTranscriptMeta("자동 전사를 준비하고 있습니다.");
+      const result = await api.uploadAudio(file);
+      setQwenPresetSource("upload");
+      setQwenPresetUploadedRef(result);
+      setQwenPresetForm((prev) => ({
+        ...prev,
+        name: prev.name || basenameFromPath(result.path).replace(/\.[^.]+$/, ""),
+      }));
+      const transcription = await api.transcribeAudio(result.path, asrModelId);
+      setQwenPresetRefText(transcription.text);
+      setQwenPresetTranscriptMeta(
+        transcription.simulation
+          ? `${result.filename}을 불러오고 전사 placeholder를 채웠습니다.`
+          : `${result.filename}을 불러오고 Qwen3-ASR 전사로 참조 텍스트를 채웠습니다.`,
+      );
+      await refreshAll();
+    });
+  }
+
+  async function handleRetranscribeQwenPresetReference() {
+    const audioPath =
+      qwenPresetSource === "gallery"
+        ? qwenPresetGalleryAsset?.path
+        : qwenPresetUploadedRef?.path;
+    if (!audioPath) {
+      setMessage("먼저 생성 갤러리 음성이나 업로드 파일을 선택해주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await api.transcribeAudio(audioPath, asrModelId);
+      setQwenPresetRefText(result.text);
+      setQwenPresetTranscriptMeta(result.simulation ? "전사 placeholder가 채워졌습니다. 실제 문장으로 수정하세요." : "참조 음성을 다시 전사했습니다.");
+    });
   }
 
   function applyS2ProTag(prompt: string) {
@@ -3450,6 +3527,74 @@ function StudioApp() {
     });
   }
 
+  async function handleCreateQwenPresetFromSource(event?: FormEvent) {
+    event?.preventDefault();
+    const modelId = qwenPresetEffectiveModelId;
+    if (!modelId) {
+      setMessage("먼저 Qwen 스타일 분석 모델을 선택해주세요.");
+      return;
+    }
+    if (qwenPresetSource === "gallery" && !qwenPresetGalleryAsset) {
+      setMessage("먼저 생성 갤러리에서 참조 음성을 선택해주세요.");
+      return;
+    }
+    if (qwenPresetSource === "upload" && !qwenPresetUploadedRef) {
+      setMessage("먼저 참조 음성 파일을 업로드해주세요.");
+      return;
+    }
+
+    await runAction(async () => {
+      const prompt =
+        qwenPresetSource === "gallery" && qwenPresetGalleryAsset
+          ? await api.createCloneFromSample({
+              generation_id: qwenPresetGalleryAsset.id,
+              model_id: modelId,
+              reference_text: qwenPresetRefText.trim() || undefined,
+            })
+          : await api.createCloneFromUpload({
+              model_id: modelId,
+              reference_audio_path: qwenPresetUploadedRef!.path,
+              reference_text: qwenPresetRefText.trim() || undefined,
+            });
+      const fallbackName =
+        qwenPresetSource === "gallery"
+          ? qwenPresetGalleryAsset?.filename
+          : qwenPresetUploadedRef?.filename;
+      const presetName =
+        qwenPresetForm.name.trim() ||
+        (fallbackName ? basenameFromPath(fallbackName).replace(/\.[^.]+$/, "") : "") ||
+        `preset-${prompt.id}`;
+
+      const preset = await api.createPreset({
+        name: presetName,
+        source_type: qwenPresetSource === "gallery" ? "generated_gallery" : "uploaded_reference",
+        language: qwenPresetForm.language,
+        base_model: prompt.base_model,
+        reference_text: qwenPresetRefText.trim() || prompt.reference_text,
+        reference_audio_path: prompt.reference_audio_path,
+        clone_prompt_path: prompt.prompt_path,
+        notes: qwenPresetForm.notes,
+      });
+      setSelectedPresetId(preset.id);
+      setSelectedHybridPresetId(preset.id);
+      if (qwenPresetForm.createS2Pro) {
+        const voice = await api.createS2ProVoice({
+          name: presetName,
+          runtime_source: s2ProVoiceForm.runtime_source,
+          reference_audio_path: prompt.reference_audio_path,
+          reference_text: qwenPresetRefText.trim() || prompt.reference_text,
+          language: qwenPresetForm.language,
+          notes: qwenPresetForm.notes || "Qwen 프리셋 저장과 함께 만든 S2-Pro 목소리",
+          create_qwen_prompt: false,
+        });
+        setSelectedS2VoiceId(voice.id);
+      }
+      setQwenPresetForm((prev) => ({ ...prev, name: "", notes: "" }));
+      await refreshAll();
+      setMessage(qwenPresetForm.createS2Pro ? "Qwen 프리셋과 S2-Pro 목소리를 함께 저장했습니다." : "Qwen 프리셋을 저장했습니다.");
+    });
+  }
+
   useEffect(() => {
     if (presets.length > 0 && !selectedHybridPresetId) {
       setSelectedHybridPresetId(presets[0].id);
@@ -3788,6 +3933,7 @@ function StudioApp() {
     "design",
     "tts",
     "clone",
+    "qwen_preset",
     "projects",
     "s2pro_tagged",
     "s2pro_clone",
@@ -3846,6 +3992,7 @@ function StudioApp() {
       if (cloneEngine === "voicebox") return handleVoiceBoxCloneFromUpload();
       return handleCreatePreset("upload");
     }
+    if (activeTab === "qwen_preset") return handleCreateQwenPresetFromSource();
     if (activeTab === "projects") {
       if (selectedHybridPreset && hybridForm.custom_model_id) return handleHybridInferenceSubmit();
       return handleGenerateFromPreset();
@@ -3971,6 +4118,9 @@ function StudioApp() {
             </button>
             <button className={activeTab === "clone" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("clone")} type="button">
               <span>{t("tab.clone")}</span>
+            </button>
+            <button className={activeTab === "qwen_preset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("qwen_preset")} type="button">
+              <span>{t("tab.qwenPreset", "프리셋 저장")}</span>
             </button>
             <button className={activeTab === "projects" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("projects")} type="button">
               <span>{t("tab.projects")}</span>
@@ -5343,6 +5493,176 @@ function StudioApp() {
                     </Button>
                   </div>
                 </div>
+              </WorkspaceCard>
+            </aside>
+          </form>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "qwen_preset" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("qwenPreset.eyebrow", "QWEN PRESET")}
+            eyebrowIcon={Save}
+            title={t("qwenPreset.title", "Qwen 프리셋 저장")}
+            subtitle={t("qwenPreset.subtitle", "생성 갤러리 음성이나 업로드 파일을 재사용 가능한 Qwen 프리셋으로 저장합니다.")}
+            action={{
+              label: t("qwenPreset.action.save", "Qwen 프리셋 저장"),
+              formId: "qwen-preset-form",
+              disabled: loading,
+              loading,
+            }}
+          />
+
+          <form
+            id="qwen-preset-form"
+            onSubmit={handleCreateQwenPresetFromSource}
+            className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]"
+          >
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">1</span>
+                  <h3 className="text-sm font-medium text-ink">{t("qwenPreset.source.title", "참조 음성 선택")}</h3>
+                </div>
+
+                <Tabs value={qwenPresetSource} onValueChange={(value) => setQwenPresetSource(value as typeof qwenPresetSource)}>
+                  <TabsList className="grid w-full grid-cols-2 gap-1 bg-canvas border border-line p-1 h-auto">
+                    <TabsTrigger value="gallery" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">
+                      {t("qwenPreset.source.gallery", "생성 갤러리에서 선택")}
+                    </TabsTrigger>
+                    <TabsTrigger value="upload" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs">
+                      {t("qwenPreset.source.upload", "새 파일 업로드")}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="gallery" className="m-0 mt-3 flex flex-col gap-2">
+                    <strong className="text-sm font-medium text-ink">{t("qwenPreset.gallery.title", "생성한 음성 선택")}</strong>
+                    <span className="text-xs text-ink-muted">{t("qwenPreset.gallery.hint", "목소리 설계, TTS, 프리셋 생성 결과를 바로 Qwen 프리셋으로 저장합니다.")}</span>
+                    <ServerAudioPicker
+                      assets={generatedAudioAssets}
+                      selectedPath={qwenPresetGalleryAsset?.path || ""}
+                      onSelect={handleSelectQwenPresetGalleryAsset}
+                    />
+                  </TabsContent>
+                  <TabsContent value="upload" className="m-0 mt-3 flex flex-col gap-2">
+                    <Label className="text-xs font-medium text-ink-muted">{t("qwenPreset.upload.title", "참조 음성 업로드")}</Label>
+                    <p className="text-xs text-ink-muted">{t("qwenPreset.upload.hint", "WAV, MP3, FLAC 파일을 선택하면 자동 전사를 시도합니다.")}</p>
+                    <AudioUploadField
+                      id="qwen-preset-reference-upload"
+                      buttonLabel={t("file_upload.choose", "파일 선택")}
+                      statusLabel={qwenPresetUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음")}
+                      onFile={handleUploadQwenPresetReference}
+                    />
+                  </TabsContent>
+                </Tabs>
+
+                {selectedQwenPresetAsset ? (
+                  <div className="rounded-md border border-line bg-canvas/60 p-3 flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="line-clamp-1 text-sm font-medium text-ink">{selectedQwenPresetAsset.filename}</strong>
+                      <Badge variant="secondary" className="bg-surface text-ink-muted text-[10px]">
+                        {qwenPresetSource === "gallery" ? "Gallery" : "Upload"}
+                      </Badge>
+                    </div>
+                    <audio
+                      controls
+                      src={qwenPresetSource === "gallery" && qwenPresetGalleryAsset ? mediaUrl(qwenPresetGalleryAsset.url) : qwenPresetUploadedRef?.url}
+                      className="w-full h-8"
+                    />
+                  </div>
+                ) : null}
+              </WorkspaceCard>
+
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">2</span>
+                  <h3 className="text-sm font-medium text-ink">{t("qwenPreset.reference.title", "참조 텍스트 확인")}</h3>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("clone.step1.refText", "참조 텍스트")}</Label>
+                  <Textarea
+                    placeholder={t("clone.step1.refPlaceholder", "비워두면 서버가 자동으로 전사합니다.")}
+                    value={qwenPresetRefText}
+                    onChange={(event) => setQwenPresetRefText(event.target.value)}
+                    className="min-h-[120px] resize-y border-line bg-canvas"
+                  />
+                  {qwenPresetTranscriptMeta ? <p className="text-[11px] text-ink-subtle">{qwenPresetTranscriptMeta}</p> : null}
+                </div>
+                <AsrModelSelect compact />
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" onClick={handleRetranscribeQwenPresetReference} type="button">
+                    {t("clone.step1.retranscribe", "다시 전사")}
+                  </Button>
+                </div>
+              </WorkspaceCard>
+            </div>
+
+            <aside className="self-start">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="grid size-6 place-items-center rounded-full bg-accent-soft font-mono text-[11px] font-semibold text-accent-ink">3</span>
+                  <h3 className="text-sm font-medium text-ink">{t("qwenPreset.settings.title", "프리셋 정보")}</h3>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("tts.field.model", "Model")}</Label>
+                  <Select
+                    value={qwenPresetEffectiveModelId || undefined}
+                    onValueChange={(value) => {
+                      setQwenPresetModelId(value);
+                      setSelectedBaseModelId(value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("tts.field.modelPlaceholder", "모델 선택")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {baseModels.map((model) => (
+                        <SelectItem key={model.key} value={model.model_id}>
+                          {displayModelName(model)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("design.preset.name", "프리셋 이름")}</Label>
+                  <Input
+                    placeholder={t("design.preset.namePlaceholder", "예: 차분한-여성-내레이션")}
+                    value={qwenPresetForm.name}
+                    onChange={(event) => setQwenPresetForm({ ...qwenPresetForm, name: event.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("design.preset.language", "기본 언어")}</Label>
+                  <LanguageSelect
+                    value={qwenPresetForm.language}
+                    onChange={(language) => setQwenPresetForm({ ...qwenPresetForm, language })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("design.preset.notes", "메모")}</Label>
+                  <Textarea
+                    placeholder={t("design.preset.notesPlaceholder", "예: 차분한 내레이션용. 낮은 속도와 또렷한 발음이 잘 맞음.")}
+                    value={qwenPresetForm.notes}
+                    onChange={(event) => setQwenPresetForm({ ...qwenPresetForm, notes: event.target.value })}
+                    className="min-h-[88px] resize-y border-line bg-canvas"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-canvas/60 px-3 py-2.5">
+                  <span className="text-xs font-medium text-ink-muted">
+                    {t("clone.step3.createS2ProToo", "S2-Pro 프리셋도 함께 생성")}
+                  </span>
+                  <Switch
+                    checked={qwenPresetForm.createS2Pro}
+                    onCheckedChange={(createS2Pro) => setQwenPresetForm({ ...qwenPresetForm, createS2Pro })}
+                  />
+                </div>
+                <Button
+                  disabled={loading || !qwenPresetEffectiveModelId || !selectedQwenPresetAsset}
+                  type="submit"
+                >
+                  {t("qwenPreset.action.save", "Qwen 프리셋 저장")}
+                </Button>
               </WorkspaceCard>
             </aside>
           </form>

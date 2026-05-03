@@ -4348,6 +4348,24 @@ def normalize_s2pro_runtime_source(value: str = "auto") -> str:
     return "auto"
 
 
+def fish_reference_id_for(name: str, voice_id: str) -> str:
+    """Return a Fish Speech compatible reference id.
+
+    Fish Speech accepts only ASCII letters, digits, spaces, hyphens, and
+    underscores for persistent reference ids. User-facing S2-Pro names can be
+    Korean or Japanese, so keep those in app metadata and use a stable ASCII id
+    for the Fish runtime.
+    """
+
+    raw = storage.slugify(name, default="", max_length=48)
+    ascii_slug = re.sub(r"[^A-Za-z0-9 _-]+", "-", raw)
+    ascii_slug = re.sub(r"[-\s]+", "-", ascii_slug).strip("-_ ")
+    suffix = voice_id.replace("_", "-")
+    if ascii_slug:
+        return f"{ascii_slug}-{suffix}"[:96].strip("-_ ")
+    return suffix
+
+
 def list_s2pro_voice_records() -> List[S2ProVoiceRecord]:
     """Return saved S2-Pro voices with local Fish reference presence attached."""
 
@@ -4598,12 +4616,7 @@ def create_s2_pro_voice(payload: S2ProVoiceCreateRequest) -> S2ProVoiceRecord:
     created_at = utc_now()
     voice_id = storage.new_id("s2voice")
     created_moment = parse_created_at(created_at)
-    reference_id = storage.slugify(payload.name, default="s2pro-voice", max_length=64)
-    if not reference_id:
-        reference_id = voice_id
-
-    if payload.create_qwen_prompt and not engine.qwen_tts_available:
-        raise HTTPException(status_code=503, detail="Qwen clone prompt를 만들 실제 Qwen 런타임이 준비되지 않았습니다.")
+    reference_id = fish_reference_id_for(payload.name, voice_id)
 
     # Avoid colliding with an existing local Fish reference id while keeping the
     # user-facing model name stable in the app record. Hosted Fish Audio returns
@@ -5195,7 +5208,7 @@ def generate_voicebox_clone_instruct(payload: VoiceBoxCloneRequest) -> Generatio
 
 @app.post("/api/clone-prompts/from-generated-sample", response_model=ClonePromptRecord)
 def clone_prompt_from_generated_sample(payload: ClonePromptCreateFromSampleRequest) -> ClonePromptRecord:
-    """VoiceDesign 생성 이력으로부터 clone prompt를 만든다.
+    """생성 갤러리 이력으로부터 clone prompt를 만든다.
 
     Args:
         payload: 생성 이력 기반 clone prompt 생성 요청.
@@ -5205,16 +5218,16 @@ def clone_prompt_from_generated_sample(payload: ClonePromptCreateFromSampleReque
     """
 
     generation = get_generation_record(payload.generation_id)
-    if generation["mode"] != "voice_design":
-        raise HTTPException(status_code=400, detail="Only voice design samples can be promoted from generated history.")
+    mode = str(generation.get("mode") or "generated")
+    reference_text = str(payload.reference_text or generation.get("input_text") or "").strip()
 
     return create_clone_prompt_record(
-        source_type="generated_voice_design",
+        source_type="generated_voice_design" if mode == "voice_design" else "generated_gallery",
         model_id=payload.model_id or default_model_id("base_clone"),
         reference_audio_path=generation["output_audio_path"],
-        reference_text=generation["input_text"],
+        reference_text=reference_text,
         x_vector_only_mode=payload.x_vector_only_mode,
-        meta={"generation_id": payload.generation_id},
+        meta={"generation_id": payload.generation_id, "generation_mode": mode},
     )
 
 

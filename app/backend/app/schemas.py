@@ -319,6 +319,7 @@ class ClonePromptCreateFromSampleRequest(BaseModel):
 
     generation_id: str
     model_id: Optional[str] = None
+    reference_text: Optional[str] = None
     x_vector_only_mode: bool = False
 
 

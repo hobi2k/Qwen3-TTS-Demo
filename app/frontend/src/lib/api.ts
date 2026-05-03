@@ -96,13 +96,17 @@ function apiCandidates(path: string): string[] {
   const configuredBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
   const defaultBase = defaultApiBase();
 
-  if (configuredBase) {
-    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`, path]));
+  if (typeof window !== "undefined") {
+    return Array.from(
+      new Set([configuredBase ? `${configuredBase}${path}` : "", `${defaultBase}${path}`].filter(Boolean)),
+    );
   }
 
-  const candidates = [path, `${defaultBase}${path}`];
+  if (configuredBase) {
+    return Array.from(new Set([`${configuredBase}${path}`, `${defaultBase}${path}`]));
+  }
 
-  return Array.from(new Set(candidates));
+  return Array.from(new Set([`${defaultBase}${path}`, path]));
 }
 
 export function apiUrl(path: string): string {

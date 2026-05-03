@@ -402,6 +402,7 @@ export interface BootstrapResponse {
 export interface CloneFromSampleRequest {
   generation_id: string;
   model_id?: string;
+  reference_text?: string;
   x_vector_only_mode?: boolean;
 }
 

@@ -22,16 +22,13 @@ function defaultBackendBase(): string {
   return `${protocol}://${host}:${port}`;
 }
 
-function frontendDevPort(): string {
-  return process.env.NEXT_PUBLIC_FRONTEND_PORT || process.env.FRONTEND_PORT || "5173";
-}
-
 export type TabKey =
   | "home"
   | "voices"
   | "gallery"
   | "tts"
   | "clone"
+  | "qwen_preset"
   | "design"
   | "projects"
   | "effects"
@@ -120,6 +117,11 @@ export const PRODUCT_PAGES = {
     label: "목소리 복제",
     title: "새로운 목소리 만들기",
     description: "참조 음성에서 스타일을 추출하고 저장합니다.",
+  },
+  qwen_preset: {
+    label: "Qwen 프리셋 저장",
+    title: "Qwen 프리셋 저장",
+    description: "생성 갤러리 음성이나 업로드 파일을 Qwen 프리셋으로 저장합니다.",
   },
   design: {
     label: "목소리 설계",
@@ -1921,7 +1923,7 @@ export function mediaUrl(value: string): string {
     return value;
   }
 
-  if (value.startsWith("/files/") && window.location.port && window.location.port === frontendDevPort()) {
+  if (value.startsWith("/files/")) {
     return `${defaultBackendBase()}${value}`;
   }
 
