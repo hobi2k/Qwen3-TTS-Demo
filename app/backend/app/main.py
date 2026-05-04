@@ -998,6 +998,15 @@ def get_preset_record(preset_id: str) -> JsonDict:
     return payload
 
 
+def get_clone_prompt_record(prompt_id: str) -> JsonDict:
+    """Clone prompt 레코드를 조회하고 없으면 404를 발생시킨다."""
+
+    payload = storage.get_record(storage.clone_prompts_dir, prompt_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="Clone prompt not found.")
+    return payload
+
+
 def get_dataset_record(dataset_id: str) -> JsonDict:
     """데이터셋 레코드를 조회하고 없으면 404를 발생시킨다.
 
@@ -5182,7 +5191,21 @@ def create_voicebox_fusion(payload: VoiceBoxFusionRequest) -> FineTuneRun:
 def create_voicebox_speaker_morph(payload: VoiceBoxSpeakerMorphRequest) -> FineTuneRun:
     """언어별 anchor speaker를 복사해 새 영구 VoiceBox 화자 row를 만든다."""
 
-    if not payload.ref_audio_path and not payload.voice_clone_prompt_path:
+    ref_audio_path = (payload.ref_audio_path or "").strip()
+    voice_clone_prompt_path = (payload.voice_clone_prompt_path or "").strip()
+    preset_id = (payload.preset_id or "").strip()
+    clone_prompt_id = (payload.clone_prompt_id or "").strip()
+
+    if preset_id:
+        preset = get_preset_record(preset_id)
+        ref_audio_path = str(preset.get("reference_audio_path") or ref_audio_path)
+        voice_clone_prompt_path = str(preset.get("clone_prompt_path") or voice_clone_prompt_path)
+    if clone_prompt_id:
+        clone_prompt = get_clone_prompt_record(clone_prompt_id)
+        ref_audio_path = str(clone_prompt.get("reference_audio_path") or ref_audio_path)
+        voice_clone_prompt_path = str(clone_prompt.get("prompt_path") or voice_clone_prompt_path)
+
+    if not ref_audio_path and not voice_clone_prompt_path:
         raise HTTPException(status_code=400, detail="ref_audio_path or voice_clone_prompt_path is required.")
 
     run_id = storage.new_id("morph")
@@ -5190,16 +5213,17 @@ def create_voicebox_speaker_morph(payload: VoiceBoxSpeakerMorphRequest) -> FineT
     run_label = readable_label(payload.output_name or payload.target_speaker, "voicebox-morph")
     run_dir = storage.finetune_runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    output_model_path = run_dir / "final"
+    model_cli_path = resolve_model_path_for_cli(payload.model_id)
+    update_existing = bool(payload.update_existing)
+    output_model_path = Path(model_cli_path) if update_existing else run_dir / "final"
+    selectable_model_path = payload.model_id if update_existing else storage.relpath(output_model_path)
     log_path = run_dir / "speaker_morph.log"
 
     command = [
         qwen_training_python(),
         resolve_qwen_extension_script("voicebox_morph/create_morphed_speaker.py"),
         "--model-path",
-        resolve_model_path_for_cli(payload.model_id),
-        "--output-model-path",
-        str(output_model_path),
+        model_cli_path,
         "--target-speaker",
         payload.target_speaker,
         "--language",
@@ -5209,14 +5233,19 @@ def create_voicebox_speaker_morph(payload: VoiceBoxSpeakerMorphRequest) -> FineT
         "--timbre-strength",
         str(payload.timbre_strength),
     ]
+    if update_existing:
+        command.append("--update-in-place")
+    else:
+        command.extend(["--output-model-path", str(output_model_path)])
     if payload.preserve_norm:
         command.append("--preserve-norm")
     else:
         command.append("--no-preserve-norm")
-    if payload.voice_clone_prompt_path:
-        command.extend(["--voice-clone-prompt-path", str(REPO_ROOT / payload.voice_clone_prompt_path)])
-    if payload.ref_audio_path:
-        command.extend(["--ref-audio", str(resolve_audio_absolute_path(payload.ref_audio_path))])
+    if voice_clone_prompt_path:
+        prompt_path = Path(voice_clone_prompt_path)
+        command.extend(["--voice-clone-prompt-path", str(prompt_path if prompt_path.is_absolute() else REPO_ROOT / prompt_path)])
+    if ref_audio_path:
+        command.extend(["--ref-audio", str(resolve_audio_absolute_path(ref_audio_path))])
 
     result = run_upstream_command(command)
     log_path.write_text((result.stdout or "") + "\n" + (result.stderr or ""), encoding="utf-8")
@@ -5239,22 +5268,25 @@ def create_voicebox_speaker_morph(payload: VoiceBoxSpeakerMorphRequest) -> FineT
         "finished_at": utc_now(),
         "log_path": storage.relpath(log_path),
         "command": command,
-        "final_checkpoint_path": storage.relpath(output_model_path) if status == "completed" else None,
-        "selectable_model_path": storage.relpath(output_model_path) if status == "completed" else None,
+        "final_checkpoint_path": selectable_model_path if status == "completed" else None,
+        "selectable_model_path": selectable_model_path if status == "completed" else None,
         "is_selectable": status == "completed",
-        "stage_label": "화자 변형 완료" if status == "completed" else "화자 변형 실패",
+        "stage_label": ("기존 모델에 화자 추가 완료" if update_existing else "화자 변형 완료") if status == "completed" else "화자 변형 실패",
         "summary_label": "VoiceBox speaker morph",
         "output_name": run_label,
         "display_name": run_label,
         "model_family": "voicebox",
         "speaker_encoder_included": True,
         "morph": {
+            "update_existing": update_existing,
             "language": payload.language,
             "requested_anchor_speaker": payload.anchor_speaker,
             "anchor_speaker": payload.anchor_speaker,
             "target_speaker": payload.target_speaker,
-            "ref_audio_path": payload.ref_audio_path,
-            "voice_clone_prompt_path": payload.voice_clone_prompt_path,
+            "preset_id": preset_id or None,
+            "clone_prompt_id": clone_prompt_id or None,
+            "ref_audio_path": ref_audio_path,
+            "voice_clone_prompt_path": voice_clone_prompt_path,
             "timbre_strength": payload.timbre_strength,
             "preserve_norm": payload.preserve_norm,
             **morph_meta,

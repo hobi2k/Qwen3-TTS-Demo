@@ -157,6 +157,9 @@ class VoiceBoxSpeakerMorphRequest(BaseModel):
     target_speaker: str = Field(..., min_length=1)
     language: str = "Korean"
     anchor_speaker: str = "auto"
+    update_existing: bool = True
+    preset_id: Optional[str] = None
+    clone_prompt_id: Optional[str] = None
     ref_audio_path: Optional[str] = None
     voice_clone_prompt_path: Optional[str] = None
     timbre_strength: float = 0.72
