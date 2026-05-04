@@ -67,17 +67,18 @@ VoiceBox clone/clone-plus-instruct uses the same naming convention:
 ## VoiceBox Speaker Morph
 
 `voicebox_morph/create_morphed_speaker.py` is the permanent-speaker path. It
-copies a VoiceBox checkpoint, copies a language-selected anchor speaker row, then
+updates a VoiceBox checkpoint in place by default, copies a language-selected anchor speaker row, then
 blends in reference timbre from a clone prompt or reference audio and writes the
 result as a new speaker name. This is not the same as runtime clone-prompt
-generation.
+generation. Use `--output-model-path` without `--update-in-place` only when a
+separate copied checkpoint is desired.
 
 It is also a standalone CLI:
 
 ```bash
 python qwen_extensions/voicebox_morph/create_morphed_speaker.py \
   --model-path data/finetune-runs/mai_ko_voicebox17b_full_extra1/final \
-  --output-model-path data/finetune-runs/kangsora_voicebox_morph/final \
+  --update-in-place \
   --language Korean \
   --anchor-speaker auto \
   --target-speaker kangsora \

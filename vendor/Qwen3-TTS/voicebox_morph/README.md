@@ -1,7 +1,8 @@
 # VoiceBox Speaker Morph
 
-`voicebox_morph` creates a persistent speaker inside a copied VoiceBox
-checkpoint. It is not the same as clone-prompt inference.
+`voicebox_morph` creates a persistent speaker inside a VoiceBox checkpoint. It
+updates the selected checkpoint in place by default; copying to a new checkpoint
+is an explicit option. It is not the same as clone-prompt inference.
 
 - Clone-prompt VoiceBox combines `ref_code` and a speaker embedding at runtime.
 - Speaker morph copies a language-native anchor speaker selected by `--language`
@@ -14,7 +15,7 @@ Typical Korean flow:
 ```bash
 python voicebox_morph/create_morphed_speaker.py \
   --model-path data/finetune-runs/voicebox/final \
-  --output-model-path data/finetune-runs/kangsora_voicebox/final \
+  --update-in-place \
   --language Korean \
   --anchor-speaker auto \
   --target-speaker kangsora \
@@ -29,3 +30,6 @@ The script writes:
 - `model.safetensors` with the new speaker embedding row
 - `speaker_morph.pt` for inspection or reuse
 - `voicebox_morph.json` with cosine diagnostics
+
+To create a separate model copy instead, omit `--update-in-place` and pass
+`--output-model-path data/finetune-runs/kangsora_voicebox/final`.

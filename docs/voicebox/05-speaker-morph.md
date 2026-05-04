@@ -7,8 +7,11 @@ This is different from the existing VoiceBox clone prompt path:
 
 - `speaker_anchor_with_ref_code` is runtime-only. It uses the selected speaker
   embedding and clone-prompt `ref_code` during one generation.
-- `voicebox_morph/create_morphed_speaker.py` copies the checkpoint and writes a
-  new speaker row into `talker.model.codec_embedding.weight`.
+- `voicebox_morph/create_morphed_speaker.py` updates the selected checkpoint in
+  place by default and writes a new speaker row into
+  `talker.model.codec_embedding.weight`.
+- A separate copied checkpoint is still available as an explicit option, but the
+  product default is now "add speaker to existing VoiceBox model".
 
 The anchor is no longer hardcoded. `--anchor-speaker auto` resolves the
 language-native speaker from the checkpoint's actual speaker map: Korean uses
@@ -28,8 +31,8 @@ The backend endpoint is:
 POST /api/voicebox/speaker-morph
 ```
 
-After creation, the resulting checkpoint appears as a selectable VoiceBox model
-with the new speaker name. Preset-based VoiceBox generation can then use
+After creation, the existing VoiceBox model can be selected with the new speaker
+name. Preset-based VoiceBox generation can then use
 `morphed_speaker_with_ref_code` to combine the permanent speaker row with the
 stored clone prompt.
 

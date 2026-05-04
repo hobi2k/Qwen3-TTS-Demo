@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -42,8 +43,13 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
 
     parser = argparse.ArgumentParser(description="Create a persistent morphed VoiceBox speaker checkpoint.")
-    parser.add_argument("--model-path", required=True, help="Local VoiceBox checkpoint directory to copy.")
-    parser.add_argument("--output-model-path", required=True, help="Directory where the new checkpoint is written.")
+    parser.add_argument("--model-path", required=True, help="Local VoiceBox checkpoint directory to update or copy.")
+    parser.add_argument("--output-model-path", default="", help="Directory where a copied checkpoint is written.")
+    parser.add_argument(
+        "--update-in-place",
+        action="store_true",
+        help="Add the speaker row to --model-path directly instead of creating a copied checkpoint.",
+    )
     parser.add_argument("--target-speaker", required=True, help="New speaker name, e.g. kangsora.")
     parser.add_argument("--language", default="Korean", help="Target language used when --anchor-speaker is auto.")
     parser.add_argument(
@@ -213,16 +219,38 @@ def update_config(config: dict[str, Any], *, target_speaker: str, target_id: int
     return next_config
 
 
+def save_checkpoint_files(output_model_path: Path, state_dict: dict[str, torch.Tensor], config: dict[str, Any], metadata: dict[str, Any], morphed: torch.Tensor) -> None:
+    """Write checkpoint files atomically enough for in-place model updates."""
+
+    safetensors_path = output_model_path / "model.safetensors"
+    config_path = output_model_path / "config.json"
+    tmp_safetensors = output_model_path / "model.safetensors.tmp"
+    tmp_config = output_model_path / "config.json.tmp"
+    tmp_safetensors.unlink(missing_ok=True)
+    tmp_config.unlink(missing_ok=True)
+    save_file(state_dict, str(tmp_safetensors))
+    tmp_config.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp_safetensors, safetensors_path)
+    os.replace(tmp_config, config_path)
+    torch.save({"speaker_embedding": morphed.cpu(), "metadata": metadata}, output_model_path / "speaker_morph.pt")
+    (output_model_path / "voicebox_morph.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     """Create the morphed checkpoint."""
 
     args = parse_args()
     model_path = resolve_path(args.model_path)
-    output_model_path = resolve_path(args.output_model_path)
     if not model_path.exists():
         raise SystemExit(f"Model path not found: {model_path}")
     if not args.voice_clone_prompt_path and not args.ref_audio:
         raise SystemExit("--voice-clone-prompt-path or --ref-audio is required.")
+    if args.update_in_place:
+        output_model_path = model_path
+    else:
+        if not args.output_model_path:
+            raise SystemExit("--output-model-path is required unless --update-in-place is set.")
+        output_model_path = resolve_path(args.output_model_path)
 
     config = load_config(model_path)
     state_dict = load_file(str(model_path / "model.safetensors"))
@@ -245,13 +273,9 @@ def main() -> None:
         reference_source = str(ref_audio)
 
     morphed = morph_embedding(anchor, reference, args.timbre_strength, args.preserve_norm)
-    output_model_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_model_path.exists():
-        shutil.rmtree(output_model_path)
-    shutil.copytree(model_path, output_model_path)
-
     metadata = {
         "feature": "voicebox_speaker_morph",
+        "update_mode": "in_place" if args.update_in_place else "copy",
         "language": args.language,
         "requested_anchor_speaker": args.anchor_speaker,
         "anchor_speaker": anchor_speaker,
@@ -267,11 +291,13 @@ def main() -> None:
 
     next_state = {key: value.detach().cpu() for key, value in state_dict.items()}
     next_state[SPEAKER_WEIGHT_KEY][target_id] = morphed.to(next_state[SPEAKER_WEIGHT_KEY].dtype)
-    save_file(next_state, str(output_model_path / "model.safetensors"))
     next_config = update_config(config, target_speaker=args.target_speaker, target_id=target_id, metadata=metadata)
-    (output_model_path / "config.json").write_text(json.dumps(next_config, ensure_ascii=False, indent=2), encoding="utf-8")
-    torch.save({"speaker_embedding": morphed.cpu(), "metadata": metadata}, output_model_path / "speaker_morph.pt")
-    (output_model_path / "voicebox_morph.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not args.update_in_place:
+        output_model_path.parent.mkdir(parents=True, exist_ok=True)
+        if output_model_path.exists():
+            shutil.rmtree(output_model_path)
+        shutil.copytree(model_path, output_model_path)
+    save_checkpoint_files(output_model_path, next_state, next_config, metadata, morphed)
     print(json.dumps({"output_model_path": str(output_model_path), **metadata}, ensure_ascii=False, indent=2))
 
 

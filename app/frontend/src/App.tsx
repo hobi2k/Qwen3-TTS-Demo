@@ -110,6 +110,8 @@ type AceStepMode =
 type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "rvc" | "datasets";
 type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
 type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "effect" | "music" | "rvc" | "utility";
+type VoiceBoxMorphSource = "clone_prompt" | "reference_voice";
+type VoiceBoxMorphReferenceSource = "gallery" | "upload";
 type ActiveJob = {
   title: string;
   detail: string;
@@ -724,6 +726,14 @@ function clonePromptDisplayName(prompt: ClonePromptRecord): string {
   return `${label} · ${formatShortDate(prompt.created_at)}`;
 }
 
+function storageSlugFromName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "morphed_speaker";
+}
+
 function fineTuneRunIdFromModel(model: ModelInfo): string {
   const pathParts = model.model_id.replace(/\\/g, "/").split("/").filter(Boolean);
   const lastPart = pathParts[pathParts.length - 1] || "";
@@ -1261,11 +1271,17 @@ function StudioApp() {
     target_speaker: "kangsora",
     language: "Korean",
     anchor_speaker: "auto",
+    update_existing: true,
     ref_audio_path: "",
     voice_clone_prompt_path: "",
     timbre_strength: 0.72,
     preserve_norm: true,
   });
+  const [voiceBoxMorphSource, setVoiceBoxMorphSource] = useState<VoiceBoxMorphSource>("clone_prompt");
+  const [voiceBoxMorphReferenceSource, setVoiceBoxMorphReferenceSource] = useState<VoiceBoxMorphReferenceSource>("gallery");
+  const [selectedVoiceBoxMorphPresetId, setSelectedVoiceBoxMorphPresetId] = useState("");
+  const [selectedVoiceBoxMorphGalleryAssetId, setSelectedVoiceBoxMorphGalleryAssetId] = useState("");
+  const [voiceBoxMorphUploadedRef, setVoiceBoxMorphUploadedRef] = useState<UploadResponse | null>(null);
   const [voiceBoxPresetControls, setVoiceBoxPresetControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
   const [voiceBoxPresetInstructControls, setVoiceBoxPresetInstructControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
   const [lastVoiceBoxCloneRecord, setLastVoiceBoxCloneRecord] = useState<GenerationRecord | null>(null);
@@ -2001,6 +2017,16 @@ function StudioApp() {
   const lastCreatedDataset = datasets.find((dataset) => dataset.id === lastCreatedDatasetId) ?? null;
   const datasetReadyForTraining = Boolean(selectedDataset?.prepared_jsonl_path);
   const generatedAudioAssets = audioAssets.filter((asset) => asset.source === "generated");
+  const selectedVoiceBoxMorphPreset = presets.find((preset) => preset.id === selectedVoiceBoxMorphPresetId) ?? null;
+  const selectedVoiceBoxMorphGalleryAsset = generatedAudioAssets.find((asset) => asset.id === selectedVoiceBoxMorphGalleryAssetId) ?? null;
+  const voiceBoxMorphRefAudioPath =
+    voiceBoxMorphSource === "reference_voice"
+      ? voiceBoxMorphReferenceSource === "upload"
+        ? voiceBoxMorphUploadedRef?.path || ""
+        : selectedVoiceBoxMorphGalleryAsset?.path || ""
+      : selectedVoiceBoxMorphPreset?.reference_audio_path || "";
+  const voiceBoxMorphClonePromptPath =
+    voiceBoxMorphSource === "clone_prompt" ? selectedVoiceBoxMorphPreset?.clone_prompt_path || "" : "";
   const selectedAudioEditorAsset = audioAssets.find((asset) => asset.path === audioEditorForm.audio_path) ?? null;
   const selectedAudioDenoiseAsset = audioAssets.find((asset) => asset.path === audioDenoiseForm.audio_path) ?? null;
   const audioEditorBars = makeWaveBars(
@@ -2590,6 +2616,16 @@ function StudioApp() {
     }));
     setVibeVoiceAsrForm((prev) => ({ ...prev, audio_path: asset.path }));
     setMessage(`${asset.filename}을 VibeVoice 참조/ASR 음성으로 선택했습니다.`);
+  }
+
+  async function handleUploadVoiceBoxMorphReference(file: File) {
+    await runAction(async () => {
+      const result = await api.uploadAudio(file);
+      setVoiceBoxMorphUploadedRef(result);
+      setVoiceBoxMorphSource("reference_voice");
+      setVoiceBoxMorphReferenceSource("upload");
+      setMessage("Speaker morph 기준 목소리를 업로드했습니다.");
+    });
   }
 
   async function handleUploadVibeVoiceReference(file: File) {
@@ -4005,6 +4041,20 @@ function StudioApp() {
   }, [presets, selectedHybridPresetId]);
 
   useEffect(() => {
+    if (presets.length > 0 && !selectedVoiceBoxMorphPresetId) {
+      setSelectedVoiceBoxMorphPresetId(presets[0].id);
+    }
+    if (generatedAudioAssets.length > 0 && !selectedVoiceBoxMorphGalleryAssetId) {
+      setSelectedVoiceBoxMorphGalleryAssetId(generatedAudioAssets[0].id);
+    }
+  }, [
+    presets,
+    generatedAudioAssets,
+    selectedVoiceBoxMorphPresetId,
+    selectedVoiceBoxMorphGalleryAssetId,
+  ]);
+
+  useEffect(() => {
     if (!selectedHybridPreset) {
       return;
     }
@@ -4076,6 +4126,17 @@ function StudioApp() {
       };
     });
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
+
+  useEffect(() => {
+    if (voiceBoxMorphSource !== "clone_prompt" || !selectedVoiceBoxMorphPreset) {
+      return;
+    }
+    setVoiceBoxMorphForm((prev) => ({
+      ...prev,
+      language: selectedVoiceBoxMorphPreset.language || prev.language,
+      target_speaker: prev.target_speaker || storageSlugFromName(selectedVoiceBoxMorphPreset.name),
+    }));
+  }, [voiceBoxMorphSource, selectedVoiceBoxMorphPreset]);
 
   async function handleGenerateFromPreset() {
     const presetForGeneration = selectedHybridPreset;
@@ -4173,8 +4234,16 @@ function StudioApp() {
       setMessage("새 화자 이름을 입력해주세요.");
       return;
     }
-    if (!voiceBoxMorphForm.ref_audio_path.trim() && !voiceBoxMorphForm.voice_clone_prompt_path.trim()) {
-      setMessage("참조 음성 또는 clone prompt 경로가 필요합니다.");
+    if (voiceBoxMorphSource === "clone_prompt" && !selectedVoiceBoxMorphPreset) {
+      setMessage("나의 목소리들에 저장된 Qwen 프리셋을 선택해주세요.");
+      return;
+    }
+    if (voiceBoxMorphSource === "reference_voice" && !voiceBoxMorphRefAudioPath.trim()) {
+      setMessage("음색을 뽑을 기준 목소리 하나를 선택하거나 업로드해주세요.");
+      return;
+    }
+    if (!voiceBoxMorphRefAudioPath.trim() && !voiceBoxMorphClonePromptPath.trim()) {
+      setMessage("참조 음성 또는 clone prompt가 필요합니다.");
       return;
     }
 
@@ -4185,8 +4254,9 @@ function StudioApp() {
         target_speaker: voiceBoxMorphForm.target_speaker.trim(),
         language: voiceBoxMorphForm.language,
         anchor_speaker: voiceBoxMorphForm.anchor_speaker.trim() || "auto",
-        ref_audio_path: voiceBoxMorphForm.ref_audio_path.trim() || undefined,
-        voice_clone_prompt_path: voiceBoxMorphForm.voice_clone_prompt_path.trim() || undefined,
+        update_existing: voiceBoxMorphForm.update_existing,
+        preset_id: voiceBoxMorphSource === "clone_prompt" ? selectedVoiceBoxMorphPreset?.id : undefined,
+        ref_audio_path: voiceBoxMorphSource === "reference_voice" ? voiceBoxMorphRefAudioPath.trim() || undefined : undefined,
         timbre_strength: Number(voiceBoxMorphForm.timbre_strength),
         preserve_norm: voiceBoxMorphForm.preserve_norm,
       });
@@ -4212,8 +4282,8 @@ function StudioApp() {
       setMessage(`${voiceBoxMorphForm.target_speaker.trim()} VoiceBox 변형 화자를 저장했습니다.`);
     }, {
       title: "VoiceBox 변형 화자 저장 중",
-      detail: `${voiceBoxMorphForm.language} / ${voiceBoxMorphForm.anchor_speaker || "auto"} speaker row를 복사하고 참조 음색 embedding을 섞어 새 checkpoint로 저장합니다.`,
-      steps: ["anchor speaker row 로드", "참조 음색 embedding 추출", "새 speaker row 저장", "모델 목록 갱신"],
+      detail: `${voiceBoxMorphForm.language} / ${voiceBoxMorphForm.anchor_speaker || "auto"} speaker row에 참조 음색 embedding을 섞어 ${voiceBoxMorphForm.update_existing ? "선택한 모델에 추가" : "새 checkpoint로 저장"}합니다.`,
+      steps: ["anchor speaker row 로드", "참조 음색 embedding 추출", "speaker row 저장", "모델 목록 갱신"],
       note: "이 작업은 전체 모델 재학습이 아니라 영구 speaker row 생성입니다.",
     });
   }
@@ -11183,19 +11253,71 @@ function StudioApp() {
                   <Label className="text-xs font-medium text-ink-muted">New speaker</Label>
                   <Input value={voiceBoxMorphForm.target_speaker} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, target_speaker: event.target.value })} />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">모델명</Label>
-                  <Input value={voiceBoxMorphForm.output_name} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, output_name: event.target.value })} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">참조 음성 경로</Label>
-                  <Input value={voiceBoxMorphForm.ref_audio_path} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, ref_audio_path: event.target.value })} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Clone prompt 경로</Label>
-                  <Input value={voiceBoxMorphForm.voice_clone_prompt_path} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, voice_clone_prompt_path: event.target.value })} />
-                </div>
+                <label className="flex items-center gap-2 rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted">
+                  <Switch checked={voiceBoxMorphForm.update_existing} onCheckedChange={(update_existing) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, update_existing })} />
+                  <span className="font-medium text-ink">기존 모델에 화자 추가</span>
+                </label>
+                {!voiceBoxMorphForm.update_existing ? (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">새 모델명</Label>
+                    <Input value={voiceBoxMorphForm.output_name} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, output_name: event.target.value })} />
+                  </div>
+                ) : null}
               </div>
+              <Tabs value={voiceBoxMorphSource} onValueChange={(value) => setVoiceBoxMorphSource(value as VoiceBoxMorphSource)}>
+                <TabsList className="grid w-full grid-cols-2 rounded-md bg-canvas p-1">
+                  <TabsTrigger value="clone_prompt" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Clone prompt</TabsTrigger>
+                  <TabsTrigger value="reference_voice" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">기준 목소리 1개</TabsTrigger>
+                </TabsList>
+                <TabsContent value="clone_prompt" className="m-0 mt-3">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">나의 목소리들에 저장된 Qwen 프리셋</Label>
+                      <Select value={selectedVoiceBoxMorphPresetId || undefined} onValueChange={setSelectedVoiceBoxMorphPresetId}>
+                        <SelectTrigger><SelectValue placeholder="나의 목소리들에서 선택" /></SelectTrigger>
+                        <SelectContent>
+                          {presets.map((preset) => (
+                            <SelectItem key={preset.id} value={preset.id}>{preset.name} · {preset.language}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedVoiceBoxMorphPreset ? (
+                      <article className="rounded-md border border-line bg-canvas/60 p-3">
+                        <strong className="text-sm font-medium text-ink">{selectedVoiceBoxMorphPreset.name}</strong>
+                        <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{selectedVoiceBoxMorphPreset.reference_text || t("voices.qwen.noText", "참조 텍스트가 저장되지 않았습니다.")}</p>
+                        <span className="mt-2 block truncate font-mono text-[10px] text-ink-subtle">{selectedVoiceBoxMorphPreset.clone_prompt_path}</span>
+                      </article>
+                    ) : null}
+                  </div>
+                </TabsContent>
+                <TabsContent value="reference_voice" className="m-0 mt-3">
+                  <Tabs value={voiceBoxMorphReferenceSource} onValueChange={(value) => setVoiceBoxMorphReferenceSource(value as VoiceBoxMorphReferenceSource)}>
+                    <TabsList className="grid w-full grid-cols-2 rounded-md bg-canvas p-1">
+                      <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">생성 갤러리</TabsTrigger>
+                      <TabsTrigger value="upload" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">파일 첨부</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="gallery" className="m-0 mt-3">
+                      <ServerAudioPicker
+                        assets={generatedAudioAssets}
+                        selectedPath={selectedVoiceBoxMorphGalleryAsset?.path || ""}
+                        onSelect={(asset) => {
+                          setSelectedVoiceBoxMorphGalleryAssetId(asset.id);
+                          setVoiceBoxMorphReferenceSource("gallery");
+                        }}
+                      />
+                    </TabsContent>
+                    <TabsContent value="upload" className="m-0 mt-3">
+                      <AudioUploadField
+                        id="voicebox-morph-ref-upload"
+                        buttonLabel={t("file_upload.choose", "파일 선택")}
+                        statusLabel={voiceBoxMorphUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음")}
+                        onFile={handleUploadVoiceBoxMorphReference}
+                      />
+                    </TabsContent>
+                  </Tabs>
+                </TabsContent>
+              </Tabs>
               <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
                   {t("training.advanced", "고급 학습 설정")}

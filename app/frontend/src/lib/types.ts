@@ -517,6 +517,9 @@ export interface VoiceBoxSpeakerMorphRequest {
   target_speaker: string;
   language: string;
   anchor_speaker: string;
+  update_existing: boolean;
+  preset_id?: string;
+  clone_prompt_id?: string;
   ref_audio_path?: string;
   voice_clone_prompt_path?: string;
   timbre_strength: number;
