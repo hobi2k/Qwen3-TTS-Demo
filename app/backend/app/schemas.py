@@ -139,6 +139,7 @@ class HybridCloneInstructRequest(GenerationRequestBase):
     ref_text: Optional[str] = None
     voice_clone_prompt_path: Optional[str] = None
     x_vector_only_mode: bool = False
+    speaker_anchor: str = "auto"
 
 
 class VoiceBoxFusionRequest(BaseModel):
@@ -149,6 +150,20 @@ class VoiceBoxFusionRequest(BaseModel):
     output_name: str = Field(..., min_length=1)
 
 
+class VoiceBoxSpeakerMorphRequest(BaseModel):
+    """VoiceBox checkpoint에 언어별 anchor 기반 영구 변형 화자를 추가하는 요청."""
+
+    model_id: str = Field(..., min_length=1)
+    target_speaker: str = Field(..., min_length=1)
+    language: str = "Korean"
+    anchor_speaker: str = "auto"
+    ref_audio_path: Optional[str] = None
+    voice_clone_prompt_path: Optional[str] = None
+    timbre_strength: float = 0.72
+    preserve_norm: bool = True
+    output_name: str = "voicebox-morphed-speaker"
+
+
 class VoiceBoxCloneRequest(GenerationRequestBase):
     """VoiceBox 단일 모델로 clone 또는 clone+instruct를 실행하는 요청."""
 
@@ -157,7 +172,7 @@ class VoiceBoxCloneRequest(GenerationRequestBase):
     ref_text: Optional[str] = None
     voice_clone_prompt_path: Optional[str] = None
     instruct: str = ""
-    speaker: str = "mai"
+    speaker: str = "auto"
     strategy: str = ""
 
 

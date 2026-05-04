@@ -169,6 +169,12 @@ export interface FineTuneRun {
   speaker_encoder_model_path?: string | null;
   output_model_path: string;
   final_checkpoint_path?: string | null;
+  selectable_model_path?: string | null;
+  is_selectable?: boolean;
+  stage_label?: string;
+  summary_label?: string;
+  model_family?: string | null;
+  speaker_encoder_included?: boolean;
   batch_size: number;
   lr: number;
   num_epochs: number;
@@ -505,6 +511,18 @@ export interface VoiceBoxFusionRequest {
   output_name: string;
 }
 
+export interface VoiceBoxSpeakerMorphRequest {
+  model_id: string;
+  output_name: string;
+  target_speaker: string;
+  language: string;
+  anchor_speaker: string;
+  ref_audio_path?: string;
+  voice_clone_prompt_path?: string;
+  timbre_strength: number;
+  preserve_norm: boolean;
+}
+
 export interface VoiceBoxCloneRequest extends GenerationRequestExtras {
   model_id: string;
   output_name?: string;
@@ -666,6 +684,7 @@ export interface UniversalInferenceRequest extends GenerationRequestExtras {
   ref_text?: string;
   voice_clone_prompt_path?: string;
   x_vector_only_mode?: boolean;
+  speaker_anchor?: string;
 }
 
 export interface HybridCloneInstructRequest extends GenerationRequestExtras {
@@ -679,6 +698,7 @@ export interface HybridCloneInstructRequest extends GenerationRequestExtras {
   ref_text?: string;
   voice_clone_prompt_path?: string;
   x_vector_only_mode?: boolean;
+  speaker_anchor?: string;
 }
 
 export interface GenerateFromPresetRequest extends GenerationRequestExtras {

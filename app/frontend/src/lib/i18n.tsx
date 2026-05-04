@@ -203,6 +203,8 @@ const messages: Catalog = {
     "page.training.description": "준비된 데이터셋으로 학습을 실행합니다.",
     "page.voicebox_fusion.title": "VoiceBox 융합",
     "page.voicebox_fusion.description": "CustomVoice와 speaker encoder를 합쳐 독립 모델을 만듭니다.",
+    "page.voicebox_morph.title": "VoiceBox Speaker Morph",
+    "page.voicebox_morph.description": "언어별 anchor speaker를 복사해 새 영구 화자를 저장합니다.",
     "page.guide.title": "가이드",
     "page.guide.description": "탭별 사용법과 작업 순서를 확인합니다.",
     "common.loading": "처리 중…",
@@ -701,6 +703,10 @@ const messages: Catalog = {
     "voicebox_fusion.available.title": "사용 가능한 모델",
     "voicebox_fusion.empty": "아직 사용할 수 있는 VoiceBox 모델이 없습니다.",
     "voicebox_fusion.useInClone": "복제에서 사용",
+    "voicebox_morph.eyebrow": "VOICEBOX MORPH",
+    "voicebox_morph.title": "VoiceBox Speaker Morph",
+    "voicebox_morph.subtitle": "언어별 anchor speaker row를 복사하고 참조 음색 embedding을 섞어 새 영구 화자로 저장합니다.",
+    "voicebox_morph.action.create": "변형 화자 저장",
 
     // Guide
     "guide.eyebrow": "USER GUIDE",
@@ -896,6 +902,8 @@ const messages: Catalog = {
     "page.training.description": "Run training from prepared datasets.",
     "page.voicebox_fusion.title": "VoiceBox Fusion",
     "page.voicebox_fusion.description": "Combine CustomVoice and speaker encoder into a self-contained model.",
+    "page.voicebox_morph.title": "VoiceBox Speaker Morph",
+    "page.voicebox_morph.description": "Copy an anchor speaker and save a persistent timbre-morphed speaker.",
     "page.guide.title": "Guide",
     "page.guide.description": "Read task flows and feature notes by tab.",
     "common.loading": "Working…",
@@ -1394,6 +1402,10 @@ const messages: Catalog = {
     "voicebox_fusion.available.title": "Available models",
     "voicebox_fusion.empty": "No VoiceBox models available yet.",
     "voicebox_fusion.useInClone": "Use in clone",
+    "voicebox_morph.eyebrow": "VOICEBOX MORPH",
+    "voicebox_morph.title": "VoiceBox Speaker Morph",
+    "voicebox_morph.subtitle": "Copy a language-native anchor speaker row and blend reference timbre into a persistent speaker.",
+    "voicebox_morph.action.create": "Save morphed speaker",
 
     // Guide
     "guide.eyebrow": "USER GUIDE",

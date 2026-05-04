@@ -371,7 +371,8 @@ Linux + CUDA 기준 `flash_attention_2`를 우선 경로로 유지합니다.
 
 - plain CustomVoice mean speaker similarity: `0.9693`
 - VoiceBox mean speaker similarity: `0.9630`
-- VoiceBox clone+instruct `embedded_encoder_only`: target text similarity `1.000`
+- VoiceBox clone+instruct 제품 기본 전략: `speaker_anchor_with_ref_code`
+- VoiceBox clone+instruct 과거 비교군 `embedded_encoder_only`: target text similarity `1.000`
 
 ## 저장 구조 원칙
 

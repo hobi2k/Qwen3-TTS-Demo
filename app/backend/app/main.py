@@ -102,6 +102,7 @@ from .schemas import (
     S2ProVoiceRecord,
     VoiceBoxCloneRequest,
     VoiceBoxFusionRequest,
+    VoiceBoxSpeakerMorphRequest,
     VoiceChangerModelInfo,
     VoiceImageUploadResponse,
     VoiceAssetDeleteResponse,
@@ -1963,6 +1964,7 @@ def write_audio_tool_generation_record(
     meta: Optional[JsonDict] = None,
 ) -> GenerationRecord:
     record_id = storage.new_id("audio")
+    resolved_speaker = str(summary.get("speaker") or payload.speaker)
     record = build_generation_record(
         record_id=record_id,
         mode=mode,
@@ -4878,7 +4880,7 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
         text=payload.text,
         language=payload.language,
         audio_path=audio_path,
-        speaker=payload.speaker,
+        speaker=resolved_speaker,
         instruction=payload.instruct,
         meta={**meta, "display_name": requested_output_name(payload) or None},
     )
@@ -4963,6 +4965,7 @@ def generate_voice_clone(payload: VoiceCloneRequest) -> GenerationResponse:
             ref_text=ref_text,
             voice_clone_prompt_path=voice_clone_prompt_path,
             x_vector_only_mode=payload.x_vector_only_mode,
+            speaker_anchor=payload.speaker_anchor,
             output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
         )
@@ -5175,6 +5178,106 @@ def create_voicebox_fusion(payload: VoiceBoxFusionRequest) -> FineTuneRun:
     return FineTuneRun(**record)
 
 
+@app.post("/api/voicebox/speaker-morph", response_model=FineTuneRun)
+def create_voicebox_speaker_morph(payload: VoiceBoxSpeakerMorphRequest) -> FineTuneRun:
+    """언어별 anchor speaker를 복사해 새 영구 VoiceBox 화자 row를 만든다."""
+
+    if not payload.ref_audio_path and not payload.voice_clone_prompt_path:
+        raise HTTPException(status_code=400, detail="ref_audio_path or voice_clone_prompt_path is required.")
+
+    run_id = storage.new_id("morph")
+    created_at = utc_now()
+    run_label = readable_label(payload.output_name or payload.target_speaker, "voicebox-morph")
+    run_dir = storage.finetune_runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    output_model_path = run_dir / "final"
+    log_path = run_dir / "speaker_morph.log"
+
+    command = [
+        qwen_training_python(),
+        resolve_qwen_extension_script("voicebox_morph/create_morphed_speaker.py"),
+        "--model-path",
+        resolve_model_path_for_cli(payload.model_id),
+        "--output-model-path",
+        str(output_model_path),
+        "--target-speaker",
+        payload.target_speaker,
+        "--language",
+        payload.language,
+        "--anchor-speaker",
+        payload.anchor_speaker,
+        "--timbre-strength",
+        str(payload.timbre_strength),
+    ]
+    if payload.preserve_norm:
+        command.append("--preserve-norm")
+    else:
+        command.append("--no-preserve-norm")
+    if payload.voice_clone_prompt_path:
+        command.extend(["--voice-clone-prompt-path", str(REPO_ROOT / payload.voice_clone_prompt_path)])
+    if payload.ref_audio_path:
+        command.extend(["--ref-audio", str(resolve_audio_absolute_path(payload.ref_audio_path))])
+
+    result = run_upstream_command(command)
+    log_path.write_text((result.stdout or "") + "\n" + (result.stderr or ""), encoding="utf-8")
+    status = "completed" if result.returncode == 0 else "failed"
+    morph_meta_path = output_model_path / "voicebox_morph.json"
+    morph_meta = storage.read_json(morph_meta_path) if morph_meta_path.exists() else {}
+    record = {
+        "id": run_id,
+        "dataset_id": "speaker_morph",
+        "training_mode": "voicebox_speaker_morph",
+        "init_model_path": payload.model_id,
+        "speaker_encoder_model_path": None,
+        "output_model_path": storage.relpath(run_dir),
+        "batch_size": 0,
+        "lr": 0.0,
+        "num_epochs": 0,
+        "speaker_name": payload.target_speaker,
+        "status": status,
+        "created_at": created_at,
+        "finished_at": utc_now(),
+        "log_path": storage.relpath(log_path),
+        "command": command,
+        "final_checkpoint_path": storage.relpath(output_model_path) if status == "completed" else None,
+        "selectable_model_path": storage.relpath(output_model_path) if status == "completed" else None,
+        "is_selectable": status == "completed",
+        "stage_label": "화자 변형 완료" if status == "completed" else "화자 변형 실패",
+        "summary_label": "VoiceBox speaker morph",
+        "output_name": run_label,
+        "display_name": run_label,
+        "model_family": "voicebox",
+        "speaker_encoder_included": True,
+        "morph": {
+            "language": payload.language,
+            "requested_anchor_speaker": payload.anchor_speaker,
+            "anchor_speaker": payload.anchor_speaker,
+            "target_speaker": payload.target_speaker,
+            "ref_audio_path": payload.ref_audio_path,
+            "voice_clone_prompt_path": payload.voice_clone_prompt_path,
+            "timbre_strength": payload.timbre_strength,
+            "preserve_norm": payload.preserve_norm,
+            **morph_meta,
+        },
+    }
+    storage.write_json(
+        storage.named_record_path(
+            root=storage.finetune_runs_dir,
+            category="voicebox_speaker_morph",
+            label=f"{run_label} {payload.target_speaker}",
+            record_id=run_id,
+            created_at=parse_created_at(created_at),
+        ),
+        record,
+    )
+    if status != "completed":
+        raise HTTPException(
+            status_code=500,
+            detail=f"VoiceBox speaker morph failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
+        )
+    return FineTuneRun(**record)
+
+
 def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, fallback_strategy: str) -> GenerationResponse:
     """VoiceBox 단일 모델로 clone 계열 추론을 실행하고 생성 이력으로 등록한다."""
 
@@ -5200,7 +5303,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
         "--instruct",
         payload.instruct,
         "--speaker",
-        payload.speaker,
+        payload.speaker or "auto",
         "--output-dir",
         str(output_dir),
         "--generation-options",
@@ -5243,6 +5346,8 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
             "display_name": requested_output_name(payload) or None,
             "model_id": payload.model_id,
             "strategy": strategy,
+            "requested_speaker": payload.speaker,
+            "resolved_speaker": resolved_speaker,
             "voice_clone_prompt_path": payload.voice_clone_prompt_path or None,
             "summary_path": storage.relpath(summary_path),
         },
@@ -5255,7 +5360,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
 def generate_voicebox_clone(payload: VoiceBoxCloneRequest) -> GenerationResponse:
     """VoiceBox 하나만 사용해 참조 음성의 음색을 복제한다."""
 
-    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="embedded_encoder_with_ref_code")
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="speaker_anchor_with_ref_code")
 
 
 @app.post("/api/generate/voicebox-clone-instruct", response_model=GenerationResponse)
@@ -5263,8 +5368,8 @@ def generate_voicebox_clone_instruct(payload: VoiceBoxCloneRequest) -> Generatio
     """VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용한다."""
 
     if not payload.strategy:
-        payload.strategy = "embedded_encoder_with_ref_code"
-    return generate_voicebox_clone_common(payload, mode="voicebox_clone_instruct", fallback_strategy="embedded_encoder_with_ref_code")
+        payload.strategy = "speaker_anchor_with_ref_code"
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone_instruct", fallback_strategy="speaker_anchor_with_ref_code")
 
 
 @app.post("/api/clone-prompts/from-generated-sample", response_model=ClonePromptRecord)

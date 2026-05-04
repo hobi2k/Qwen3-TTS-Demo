@@ -45,7 +45,8 @@
 
 - 공식 업스트림 high-level API: 아님
 - VoiceBox low-level clone: 생성 성공
-- 현재 안정 후보: `embedded_encoder_only`
+- 현재 제품 기본 후보: `speaker_anchor_with_ref_code`
+- 과거 안정 비교군: `embedded_encoder_only`
 
 현재 검증 결과:
 

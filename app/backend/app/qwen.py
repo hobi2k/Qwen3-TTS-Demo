@@ -6,6 +6,7 @@ import os
 import pickle
 import random
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +40,7 @@ class QwenDemoEngine:
         self._Qwen3TTSModel: Optional[Any] = None
         self._VoiceClonePromptItem: Optional[Any] = None
         self._transcription_models: Dict[str, Any] = {}
+        self._transcription_lock = threading.RLock()
         self._models: Dict[str, Any] = {}
         self._bootstrap()
         self.simulation_mode = False
@@ -111,7 +113,8 @@ class QwenDemoEngine:
         """
 
         self._models.clear()
-        self._transcription_models.clear()
+        with self._transcription_lock:
+            self._transcription_models.clear()
         gc.collect()
         if self._torch is not None and bool(self._torch.cuda.is_available()):
             self._torch.cuda.empty_cache()
@@ -246,13 +249,22 @@ class QwenDemoEngine:
         if not speaker:
             return None
         spk_id = getattr(model.model.config.talker_config, "spk_id", {})
-        token_id = spk_id.get(speaker.lower()) if isinstance(spk_id, dict) else None
+        token_id = None
+        if isinstance(spk_id, dict):
+            lowered = {str(key).lower(): value for key, value in spk_id.items()}
+            token_id = lowered.get(speaker.lower())
         if token_id is None:
             return None
         tensor = self._torch.tensor(token_id, device=model.model.talker.device, dtype=self._torch.long)
         return model.model.talker.get_input_embeddings()(tensor).detach().view(-1).cpu()
 
-    def _anchor_prompt_for_customvoice_instruct(self, custom_model: Any, prompt_items: List[Any], language: str) -> Tuple[List[Any], Optional[str]]:
+    def _anchor_prompt_for_customvoice_instruct(
+        self,
+        custom_model: Any,
+        prompt_items: List[Any],
+        language: str,
+        speaker_anchor: str = "auto",
+    ) -> Tuple[List[Any], Optional[str]]:
         """Keep ref_code/ref_text, but anchor speaker conditioning to CustomVoice.
 
         The clone+instruct path is not an upstream public wrapper. Passing a Base
@@ -264,11 +276,18 @@ class QwenDemoEngine:
 
         if getattr(custom_model.model, "tts_model_type", "") != "custom_voice":
             return prompt_items, None
-        anchor_speaker = self._language_anchor_speaker(custom_model, language)
+        requested_anchor = (speaker_anchor or "auto").strip()
+        if requested_anchor.lower() == "none":
+            return prompt_items, None
+        anchor_speaker = requested_anchor
+        if not anchor_speaker or anchor_speaker.lower() == "auto":
+            anchor_speaker = self._language_anchor_speaker(custom_model, language) or ""
         if not anchor_speaker:
             return prompt_items, None
         anchor_embedding = self._speaker_token_embedding(custom_model, anchor_speaker)
         if anchor_embedding is None:
+            if requested_anchor and requested_anchor.lower() != "auto":
+                raise RuntimeError(f"CustomVoice speaker anchor is not available in this checkpoint: {requested_anchor}")
             return prompt_items, None
 
         anchored_items = []
@@ -388,32 +407,33 @@ class QwenDemoEngine:
             로드된 Qwen3-ASR 모델.
         """
 
-        if model_id in self._transcription_models:
-            return self._transcription_models[model_id]
+        with self._transcription_lock:
+            if model_id in self._transcription_models:
+                return self._transcription_models[model_id]
 
-        try:
-            from qwen_asr import Qwen3ASRModel  # type: ignore
-        except Exception as error:
-            raise RuntimeError("qwen-asr 패키지가 설치되어 있지 않습니다. `uv sync`를 다시 실행하세요.") from error
-
-        if self._torch is None:
             try:
-                import torch  # type: ignore
-
-                self._torch = torch
+                from qwen_asr import Qwen3ASRModel  # type: ignore
             except Exception as error:
-                raise RuntimeError("Qwen3-ASR 전사를 사용하려면 torch가 필요합니다.") from error
+                raise RuntimeError("qwen-asr 패키지가 설치되어 있지 않습니다. `uv sync`를 다시 실행하세요.") from error
 
-        dtype = getattr(self._torch, "bfloat16", None)
-        model = Qwen3ASRModel.from_pretrained(
-            model_id,
-            dtype=dtype,
-            device_map=self.resolve_device(),
-            attn_implementation=self.resolve_attention_implementation(),
-            max_new_tokens=int(os.getenv("QWEN_DEMO_ASR_MAX_NEW_TOKENS", "512")),
-        )
-        self._transcription_models[model_id] = model
-        return model
+            if self._torch is None:
+                try:
+                    import torch  # type: ignore
+
+                    self._torch = torch
+                except Exception as error:
+                    raise RuntimeError("Qwen3-ASR 전사를 사용하려면 torch가 필요합니다.") from error
+
+            dtype = getattr(self._torch, "bfloat16", None)
+            model = Qwen3ASRModel.from_pretrained(
+                model_id,
+                dtype=dtype,
+                device_map=self.resolve_device(),
+                attn_implementation=self.resolve_attention_implementation(),
+                max_new_tokens=int(os.getenv("QWEN_DEMO_ASR_MAX_NEW_TOKENS", "512")),
+            )
+            self._transcription_models[model_id] = model
+            return model
 
     def supported_speakers(self) -> List[Dict[str, str]]:
         """데모 UI에 노출할 기본 화자 목록을 반환한다.
@@ -452,11 +472,12 @@ class QwenDemoEngine:
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
         resolved_model_id = self.resolve_transcription_model_id(model_id)
-        asr_model = self._get_transcription_model(resolved_model_id)
-        results = asr_model.transcribe(
-            audio=str(absolute_path),
-            language=None,
-        )
+        with self._transcription_lock:
+            asr_model = self._get_transcription_model(resolved_model_id)
+            results = asr_model.transcribe(
+                audio=str(absolute_path),
+                language=None,
+            )
         result = results[0] if isinstance(results, list) and results else results
         if isinstance(result, dict):
             text = str(result.get("text", "")).strip()
@@ -711,6 +732,7 @@ class QwenDemoEngine:
         ref_text: str = "",
         voice_clone_prompt_path: str = "",
         x_vector_only_mode: bool = False,
+        speaker_anchor: str = "auto",
         output_name: str = "",
         seed: Optional[int] = None,
         non_streaming_mode: Optional[bool] = None,
@@ -800,6 +822,7 @@ class QwenDemoEngine:
             ref_text: 참조 음성의 원문 텍스트.
             voice_clone_prompt_path: 저장된 Qwen clone prompt 경로.
             x_vector_only_mode: x-vector 전용 clone 모드 사용 여부.
+            speaker_anchor: instruction anchor용 CustomVoice 화자. auto면 언어별 기본값.
 
         Returns:
             생성 오디오 경로, 샘플링 레이트, 실행 메타데이터.
@@ -823,6 +846,7 @@ class QwenDemoEngine:
             custom_model,
             prompt_items,
             language,
+            speaker_anchor,
         )
         voice_clone_prompt = base_model._prompt_items_to_voice_clone_prompt(prompt_items_for_generation)
         ref_ids = []
@@ -883,6 +907,7 @@ class QwenDemoEngine:
             "custom_model_id": custom_model_id,
             "voice_clone_prompt_path": voice_clone_prompt_path or None,
             "clone_instruct_strategy": "customvoice_speaker_anchor_with_ref_code" if anchor_speaker else "embedded_encoder_with_ref_code",
+            "requested_anchor_speaker": speaker_anchor,
             "anchor_speaker": anchor_speaker,
             "seed": seed,
             "generation_kwargs": generate_kwargs,

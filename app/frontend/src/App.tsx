@@ -118,13 +118,23 @@ type ActiveJob = {
   startedAt: number;
 };
 
-const DEFAULT_VOICEBOX_STRATEGY = "embedded_encoder_with_ref_code";
+const DEFAULT_VOICEBOX_STRATEGY = "speaker_anchor_with_ref_code";
 
 const VOICEBOX_STRATEGY_OPTIONS = [
   {
+    value: "speaker_anchor_with_ref_code",
+    label: "Speaker anchor + ref code",
+    description: "권장. 선택 화자 토큰에 clone prompt 음색 코드를 결합해 지시 반응을 안정화합니다.",
+  },
+  {
+    value: "morphed_speaker_with_ref_code",
+    label: "Morphed speaker + ref code",
+    description: "영구 저장한 변형 화자 row에 clone prompt 음색 코드를 결합합니다.",
+  },
+  {
     value: "embedded_encoder_with_ref_code",
     label: "Embedded encoder + ref code",
-    description: "권장. 저장된 clone prompt의 음색 코드와 임베딩을 함께 사용합니다.",
+    description: "저장된 clone prompt의 음색 코드와 임베딩을 함께 사용합니다.",
   },
   {
     value: "embedded_encoder_only",
@@ -143,8 +153,8 @@ const VOICEBOX_STRATEGY_OPTIONS = [
   },
   {
     value: "borrowed_stock_embed_with_ref_code",
-    label: "Stock embed + ref code",
-    description: "기본 화자 임베딩에 clone prompt 음색 코드를 결합합니다.",
+    label: "Legacy stock embed + ref code",
+    description: "이전 이름입니다. Speaker anchor + ref code와 같은 계열의 비교용 경로입니다.",
   },
   {
     value: "control_stock_customvoice",
@@ -561,6 +571,46 @@ function VoiceBoxStrategySelect({
               </span>
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function AnchorSpeakerSelect({
+  label = "Anchor speaker",
+  value,
+  speakers,
+  availableSpeakers,
+  allowNone = false,
+  onChange,
+}: {
+  label?: string;
+  value: string;
+  speakers: SpeakerInfo[];
+  availableSpeakers?: string[];
+  allowNone?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const names = Array.from(new Set([...(availableSpeakers ?? []), ...speakers.map((item) => item.speaker)].filter(Boolean)));
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs font-medium text-ink-muted">{label}</Label>
+      <Select value={value || "auto"} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="auto">Auto by language</SelectItem>
+          {allowNone ? <SelectItem value="none">No anchor</SelectItem> : null}
+          {names.map((speaker) => {
+            const info = speakers.find((item) => item.speaker.toLowerCase() === speaker.toLowerCase());
+            return (
+              <SelectItem key={speaker} value={speaker}>
+                {speaker}{info?.nativeLanguage ? ` · ${info.nativeLanguage}` : ""}
+              </SelectItem>
+            );
+          })}
         </SelectContent>
       </Select>
     </div>
@@ -1183,7 +1233,7 @@ function StudioApp() {
     language: "Korean",
     ref_audio_path: "",
     ref_text: "",
-    speaker: "mai",
+    speaker: "auto",
     instruct: "",
     strategy: DEFAULT_VOICEBOX_STRATEGY,
   });
@@ -1193,6 +1243,7 @@ function StudioApp() {
     output_name: "voicebox-preset",
     text: "이 캐릭터는 앞으로도 같은 목소리로 말해야 해.",
     language: "Korean",
+    speaker: "auto",
     strategy: DEFAULT_VOICEBOX_STRATEGY,
   });
   const [voiceBoxPresetInstructForm, setVoiceBoxPresetInstructForm] = useState({
@@ -1200,8 +1251,20 @@ function StudioApp() {
     output_name: "voicebox-preset-instruct",
     text: "오늘은 정말 힘들었어. 언제쯤 끝날까?",
     language: "Korean",
+    speaker: "auto",
     instruct: "Breathy, emotionally unstable, and barely holding composure. Keep the diction clear.",
     strategy: DEFAULT_VOICEBOX_STRATEGY,
+  });
+  const [voiceBoxMorphForm, setVoiceBoxMorphForm] = useState({
+    model_id: "",
+    output_name: "voicebox-kangsora-morph",
+    target_speaker: "kangsora",
+    language: "Korean",
+    anchor_speaker: "auto",
+    ref_audio_path: "",
+    voice_clone_prompt_path: "",
+    timbre_strength: 0.72,
+    preserve_norm: true,
   });
   const [voiceBoxPresetControls, setVoiceBoxPresetControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
   const [voiceBoxPresetInstructControls, setVoiceBoxPresetInstructControls] = useState<GenerationControlsForm>(createVoiceBoxGenerationControls());
@@ -1220,6 +1283,7 @@ function StudioApp() {
     ref_text: "",
     voice_clone_prompt_path: "",
     x_vector_only_mode: false,
+    speaker_anchor: "auto",
   });
   const [hybridControls, setHybridControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
   const [lastHybridRecord, setLastHybridRecord] = useState<GenerationRecord | null>(null);
@@ -1779,6 +1843,11 @@ function StudioApp() {
   const preferredVoiceBoxModel = voiceBoxModels[0];
   const selectedInferenceModel = ttsModels.find((model) => model.model_id === inferenceForm.model_id) ?? preferredInferenceModel ?? null;
   const selectedInferenceMode = selectedInferenceModel?.inference_mode ?? null;
+  const selectedVoiceBoxCloneModel = voiceBoxModels.find((model) => model.model_id === voiceBoxCloneForm.model_id) ?? preferredVoiceBoxModel ?? null;
+  const selectedVoiceBoxPresetModel = voiceBoxModels.find((model) => model.model_id === voiceBoxPresetForm.model_id) ?? preferredVoiceBoxModel ?? null;
+  const selectedVoiceBoxPresetInstructModel = voiceBoxModels.find((model) => model.model_id === voiceBoxPresetInstructForm.model_id) ?? preferredVoiceBoxModel ?? null;
+  const selectedVoiceBoxMorphModel = voiceBoxModels.find((model) => model.model_id === voiceBoxMorphForm.model_id) ?? preferredVoiceBoxModel ?? null;
+  const selectedHybridCustomModel = customVoiceCapableModels.find((model) => model.model_id === hybridForm.custom_model_id) ?? preferredHybridCustomModel ?? null;
 
   useEffect(() => {
     if (voiceDesignModels.length > 0 && !designForm.model_id) {
@@ -1820,16 +1889,19 @@ function StudioApp() {
     if (voiceBoxModels.length > 0) {
       const preferred = voiceBoxModels[0];
       if (!voiceBoxCloneForm.model_id) {
-        setVoiceBoxCloneForm((prev) => ({ ...prev, model_id: preferred.model_id, speaker: preferred.default_speaker || prev.speaker }));
+        setVoiceBoxCloneForm((prev) => ({ ...prev, model_id: preferred.model_id, speaker: prev.speaker || preferred.default_speaker || "auto" }));
       }
       if (!voiceBoxPresetForm.model_id) {
-        setVoiceBoxPresetForm((prev) => ({ ...prev, model_id: preferred.model_id }));
+        setVoiceBoxPresetForm((prev) => ({ ...prev, model_id: preferred.model_id, speaker: prev.speaker || preferred.default_speaker || "auto" }));
       }
       if (!voiceBoxPresetInstructForm.model_id) {
-        setVoiceBoxPresetInstructForm((prev) => ({ ...prev, model_id: preferred.model_id }));
+        setVoiceBoxPresetInstructForm((prev) => ({ ...prev, model_id: preferred.model_id, speaker: prev.speaker || preferred.default_speaker || "auto" }));
+      }
+      if (!voiceBoxMorphForm.model_id) {
+        setVoiceBoxMorphForm((prev) => ({ ...prev, model_id: preferred.model_id, anchor_speaker: prev.anchor_speaker || "auto" }));
       }
     }
-  }, [customVoiceCapableModels, customVoiceModels, voiceDesignModels, baseModels, ttsModels, tokenizerModels, plainCustomVoiceModels, voiceBoxModels, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, voiceBoxFusionForm.input_checkpoint_path, voiceBoxFusionForm.speaker_encoder_source_path, voiceBoxCloneForm.model_id, voiceBoxPresetForm.model_id, voiceBoxPresetInstructForm.model_id, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel]);
+  }, [customVoiceCapableModels, customVoiceModels, voiceDesignModels, baseModels, ttsModels, tokenizerModels, plainCustomVoiceModels, voiceBoxModels, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, voiceBoxFusionForm.input_checkpoint_path, voiceBoxFusionForm.speaker_encoder_source_path, voiceBoxCloneForm.model_id, voiceBoxPresetForm.model_id, voiceBoxPresetInstructForm.model_id, voiceBoxMorphForm.model_id, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel]);
 
   useEffect(() => {
     if (!selectedInferenceModel) {
@@ -3985,6 +4057,24 @@ function StudioApp() {
         return { ...prev, language: nextVoiceBoxLanguage };
       });
     }
+    setVoiceBoxMorphForm((prev) => {
+      const nextRefAudioPath = selectedHybridPreset.reference_audio_path;
+      const nextClonePromptPath = selectedHybridPreset.clone_prompt_path || "";
+      const nextLanguage = selectedHybridPreset.language || prev.language;
+      if (
+        prev.ref_audio_path === nextRefAudioPath &&
+        prev.voice_clone_prompt_path === nextClonePromptPath &&
+        prev.language === nextLanguage
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        language: nextLanguage,
+        ref_audio_path: nextRefAudioPath,
+        voice_clone_prompt_path: nextClonePromptPath,
+      };
+    });
   }, [selectedHybridPreset, preferredStockBaseModel, customVoiceCapableModels, preferredHybridCustomModel]);
 
   async function handleGenerateFromPreset() {
@@ -4032,7 +4122,7 @@ function StudioApp() {
         ref_audio_path: selectedHybridPreset.reference_audio_path,
         ref_text: selectedHybridPreset.reference_text || undefined,
         voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
-        speaker: "mai",
+        speaker: voiceBoxPresetForm.speaker || "auto",
         strategy: voiceBoxPresetForm.strategy || DEFAULT_VOICEBOX_STRATEGY,
         ...serializeGenerationControls(voiceBoxPresetControls),
       });
@@ -4062,7 +4152,7 @@ function StudioApp() {
         ref_audio_path: selectedHybridPreset.reference_audio_path,
         ref_text: selectedHybridPreset.reference_text || undefined,
         voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
-        speaker: "mai",
+        speaker: voiceBoxPresetInstructForm.speaker || "auto",
         instruct: voiceBoxPresetInstructForm.instruct,
         strategy: voiceBoxPresetInstructForm.strategy || DEFAULT_VOICEBOX_STRATEGY,
         ...serializeGenerationControls(voiceBoxPresetInstructControls),
@@ -4070,6 +4160,61 @@ function StudioApp() {
       setLastVoiceBoxPresetInstructRecord(result.record);
       await refreshAll();
       setMessage("VoiceBox 프리셋 + 말투 지시 생성을 완료했습니다.");
+    });
+  }
+
+  async function handleCreateVoiceBoxSpeakerMorph(event?: FormEvent) {
+    event?.preventDefault();
+    if (!voiceBoxMorphForm.model_id) {
+      setMessage("VoiceBox 모델을 선택해주세요.");
+      return;
+    }
+    if (!voiceBoxMorphForm.target_speaker.trim()) {
+      setMessage("새 화자 이름을 입력해주세요.");
+      return;
+    }
+    if (!voiceBoxMorphForm.ref_audio_path.trim() && !voiceBoxMorphForm.voice_clone_prompt_path.trim()) {
+      setMessage("참조 음성 또는 clone prompt 경로가 필요합니다.");
+      return;
+    }
+
+    await runAction(async () => {
+      const run = await api.createVoiceBoxSpeakerMorph({
+        model_id: voiceBoxMorphForm.model_id,
+        output_name: voiceBoxMorphForm.output_name,
+        target_speaker: voiceBoxMorphForm.target_speaker.trim(),
+        language: voiceBoxMorphForm.language,
+        anchor_speaker: voiceBoxMorphForm.anchor_speaker.trim() || "auto",
+        ref_audio_path: voiceBoxMorphForm.ref_audio_path.trim() || undefined,
+        voice_clone_prompt_path: voiceBoxMorphForm.voice_clone_prompt_path.trim() || undefined,
+        timbre_strength: Number(voiceBoxMorphForm.timbre_strength),
+        preserve_norm: voiceBoxMorphForm.preserve_norm,
+      });
+      await refreshAll();
+      setVoiceBoxCloneForm((prev) => ({
+        ...prev,
+        model_id: run.selectable_model_path || prev.model_id,
+        speaker: voiceBoxMorphForm.target_speaker.trim(),
+        strategy: "morphed_speaker_with_ref_code",
+      }));
+      setVoiceBoxPresetForm((prev) => ({
+        ...prev,
+        model_id: run.selectable_model_path || prev.model_id,
+        speaker: voiceBoxMorphForm.target_speaker.trim(),
+        strategy: "morphed_speaker_with_ref_code",
+      }));
+      setVoiceBoxPresetInstructForm((prev) => ({
+        ...prev,
+        model_id: run.selectable_model_path || prev.model_id,
+        speaker: voiceBoxMorphForm.target_speaker.trim(),
+        strategy: "morphed_speaker_with_ref_code",
+      }));
+      setMessage(`${voiceBoxMorphForm.target_speaker.trim()} VoiceBox 변형 화자를 저장했습니다.`);
+    }, {
+      title: "VoiceBox 변형 화자 저장 중",
+      detail: `${voiceBoxMorphForm.language} / ${voiceBoxMorphForm.anchor_speaker || "auto"} speaker row를 복사하고 참조 음색 embedding을 섞어 새 checkpoint로 저장합니다.`,
+      steps: ["anchor speaker row 로드", "참조 음색 embedding 추출", "새 speaker row 저장", "모델 목록 갱신"],
+      note: "이 작업은 전체 모델 재학습이 아니라 영구 speaker row 생성입니다.",
     });
   }
 
@@ -4276,6 +4421,7 @@ function StudioApp() {
         ref_text: selectedHybridPreset.reference_text || undefined,
         voice_clone_prompt_path: selectedHybridPreset.clone_prompt_path || undefined,
         x_vector_only_mode: hybridForm.x_vector_only_mode,
+        speaker_anchor: hybridForm.speaker_anchor,
       });
       setLastHybridRecord(result.record);
       await refreshAll();
@@ -4331,6 +4477,7 @@ function StudioApp() {
     "dataset",
     "training",
     "voicebox_fusion",
+    "voicebox_morph",
   ]);
   const canRunCurrentTab = renderableTabs.has(activeTab);
   const vibeVoiceAsrReady =
@@ -4389,6 +4536,7 @@ function StudioApp() {
     if (activeTab === "dataset") return handleCreateDataset();
     if (activeTab === "training") return handleCreateRun();
     if (activeTab === "voicebox_fusion") return handleCreateVoiceBoxFusion();
+    if (activeTab === "voicebox_morph") return handleCreateVoiceBoxSpeakerMorph();
   }
 
   function sendS2DatasetToTraining() {
@@ -4496,6 +4644,9 @@ function StudioApp() {
             </button>
             <button className={activeTab === "voicebox_fusion" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voicebox_fusion")} type="button">
               <span>{t("tab.fuse")}</span>
+            </button>
+            <button className={activeTab === "voicebox_morph" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voicebox_morph")} type="button">
+              <span>{t("tab.voiceboxMorph", "VoiceBox Morph")}</span>
             </button>
           </div>
 
@@ -6158,13 +6309,13 @@ function StudioApp() {
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">{t("clone.step2.speakerName", "화자명")}</Label>
-                      <Input
-                        value={voiceBoxCloneForm.speaker}
-                        onChange={(event) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, speaker: event.target.value })}
-                      />
-                    </div>
+                    <AnchorSpeakerSelect
+                      label={t("clone.step2.speakerName", "화자명")}
+                      value={voiceBoxCloneForm.speaker}
+                      speakers={speakers}
+                      availableSpeakers={selectedVoiceBoxCloneModel?.available_speakers}
+                      onChange={(speaker) => setVoiceBoxCloneForm({ ...voiceBoxCloneForm, speaker })}
+                    />
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">{t("design.field.filename", "파일 이름")}</Label>
                       <Input
@@ -6457,7 +6608,15 @@ function StudioApp() {
                       {t("tts.advanced.controls", "Advanced controls")}
                       <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                     </summary>
-                    <div className="border-t border-line px-3 py-3">
+                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+                      <AnchorSpeakerSelect
+                        label="Instruction anchor"
+                        value={hybridForm.speaker_anchor}
+                        speakers={speakers}
+                        availableSpeakers={selectedHybridCustomModel?.available_speakers}
+                        allowNone
+                        onChange={(speaker_anchor) => setHybridForm((prev) => ({ ...prev, speaker_anchor }))}
+                      />
                       <GenerationControlsEditor value={hybridControls} onChange={setHybridControls} />
                     </div>
                   </details>
@@ -6505,10 +6664,17 @@ function StudioApp() {
                       {t("tts.advanced.controls", "Advanced controls")}
                       <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                     </summary>
-                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
-                      <VoiceBoxStrategySelect
-                        value={voiceBoxPresetForm.strategy}
-                        onChange={(strategy) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, strategy })}
+	                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+	                      <AnchorSpeakerSelect
+	                        label={t("clone.step2.speakerName", "화자명")}
+	                        value={voiceBoxPresetForm.speaker}
+	                        speakers={speakers}
+	                        availableSpeakers={selectedVoiceBoxPresetModel?.available_speakers}
+	                        onChange={(speaker) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, speaker })}
+	                      />
+	                      <VoiceBoxStrategySelect
+	                        value={voiceBoxPresetForm.strategy}
+	                        onChange={(strategy) => setVoiceBoxPresetForm({ ...voiceBoxPresetForm, strategy })}
                       />
                       <GenerationControlsEditor value={voiceBoxPresetControls} onChange={setVoiceBoxPresetControls} />
                     </div>
@@ -6561,10 +6727,17 @@ function StudioApp() {
                       {t("tts.advanced.controls", "Advanced controls")}
                       <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                     </summary>
-                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
-                      <VoiceBoxStrategySelect
-                        value={voiceBoxPresetInstructForm.strategy}
-                        onChange={(strategy) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, strategy })}
+	                    <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+	                      <AnchorSpeakerSelect
+	                        label={t("clone.step2.speakerName", "화자명")}
+	                        value={voiceBoxPresetInstructForm.speaker}
+	                        speakers={speakers}
+	                        availableSpeakers={selectedVoiceBoxPresetInstructModel?.available_speakers}
+	                        onChange={(speaker) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, speaker })}
+	                      />
+	                      <VoiceBoxStrategySelect
+	                        value={voiceBoxPresetInstructForm.strategy}
+	                        onChange={(strategy) => setVoiceBoxPresetInstructForm({ ...voiceBoxPresetInstructForm, strategy })}
                       />
                       <GenerationControlsEditor value={voiceBoxPresetInstructControls} onChange={setVoiceBoxPresetInstructControls} />
                     </div>
@@ -10956,6 +11129,102 @@ function StudioApp() {
                   <Button variant="outline" size="sm" onClick={() => { setVoiceBoxCloneForm((prev) => ({ ...prev, model_id: model.model_id, speaker: model.default_speaker || prev.speaker })); setCloneEngine("voicebox"); setActiveTab("clone"); }} type="button">
                     {t("voicebox_fusion.useInClone", "복제에서 사용")}
                   </Button>
+                </article>
+              )) : (
+                <p className="text-xs text-ink-muted">{t("voicebox_fusion.empty", "아직 사용할 수 있는 VoiceBox 모델이 없습니다.")}</p>
+              )}
+            </div>
+          </WorkspaceCard>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "voicebox_morph" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow={t("voicebox_morph.eyebrow", "VOICEBOX MORPH")}
+            eyebrowIcon={GitMerge}
+            title={t("voicebox_morph.title", "VoiceBox Speaker Morph")}
+            subtitle={t("voicebox_morph.subtitle", "언어별 anchor speaker row를 복사하고 참조 음색 embedding을 섞어 새 영구 화자로 저장합니다.")}
+            action={{
+              label: t("voicebox_morph.action.create", "변형 화자 저장"),
+              formId: "voicebox-morph-form",
+              loading,
+            }}
+          />
+
+          <WorkspaceCard>
+            <form id="voicebox-morph-form" className="flex flex-col gap-4" onSubmit={handleCreateVoiceBoxSpeakerMorph}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">VoiceBox 모델</Label>
+                  <Select value={voiceBoxMorphForm.model_id || undefined} onValueChange={(value) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, model_id: value })}>
+                    <SelectTrigger><SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} /></SelectTrigger>
+                    <SelectContent>
+                      {voiceBoxModels.map((model) => (
+                        <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">{t("tts.field.language", "언어")}</Label>
+                  <LanguageSelect
+                    value={voiceBoxMorphForm.language}
+                    onChange={(language) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, language })}
+                  />
+                </div>
+                <AnchorSpeakerSelect
+                  value={voiceBoxMorphForm.anchor_speaker}
+                  speakers={speakers}
+                  availableSpeakers={selectedVoiceBoxMorphModel?.available_speakers}
+                  onChange={(anchor_speaker) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, anchor_speaker })}
+                />
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">New speaker</Label>
+                  <Input value={voiceBoxMorphForm.target_speaker} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, target_speaker: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">모델명</Label>
+                  <Input value={voiceBoxMorphForm.output_name} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, output_name: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">참조 음성 경로</Label>
+                  <Input value={voiceBoxMorphForm.ref_audio_path} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, ref_audio_path: event.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Clone prompt 경로</Label>
+                  <Input value={voiceBoxMorphForm.voice_clone_prompt_path} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, voice_clone_prompt_path: event.target.value })} />
+                </div>
+              </div>
+              <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
+                  {t("training.advanced", "고급 학습 설정")}
+                  <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+                </summary>
+                <div className="grid grid-cols-1 gap-3 border-t border-line px-3 py-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Timbre strength</Label>
+                    <Input type="number" min={0} max={1} step={0.01} value={voiceBoxMorphForm.timbre_strength} onChange={(event) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, timbre_strength: Number(event.target.value) })} />
+                  </div>
+                  <label className="flex items-center gap-2 rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted">
+                    <Switch checked={voiceBoxMorphForm.preserve_norm} onCheckedChange={(preserve_norm) => setVoiceBoxMorphForm({ ...voiceBoxMorphForm, preserve_norm })} />
+                    <span className="font-medium text-ink">Preserve embedding norm</span>
+                  </label>
+                </div>
+              </details>
+              <Button variant="outline" disabled={loading || !voiceBoxModels.length} type="submit">
+                {t("voicebox_morph.action.create", "변형 화자 저장")}
+              </Button>
+            </form>
+          </WorkspaceCard>
+
+          <WorkspaceCard>
+            <WorkspaceResultHeader title={t("voicebox_fusion.available.title", "사용 가능한 모델")} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {voiceBoxModels.length ? voiceBoxModels.map((model) => (
+                <article key={model.key} className="rounded-md border border-line bg-canvas/60 p-3 flex items-center justify-between gap-3">
+                  <strong className="line-clamp-1 text-sm font-medium text-ink">{displayModelName(model)}</strong>
+                  <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.default_speaker || "speaker"}</Badge>
                 </article>
               )) : (
                 <p className="text-xs text-ink-muted">{t("voicebox_fusion.empty", "아직 사용할 수 있는 VoiceBox 모델이 없습니다.")}</p>

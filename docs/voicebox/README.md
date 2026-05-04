@@ -16,6 +16,8 @@
   self-contained 체크포인트를 만드는 과정
 - `VoiceBox -> VoiceBox` 추가 파인튜닝 경로
 - embedded `speaker_encoder`를 실제로 쓰는 clone / clone + instruct 실험 경로
+- `Sohee -> kangsora`처럼 언어 anchor speaker를 복사해 영구 speaker row를
+  저장하는 speaker morph 경로
 
 ## 현재 검증 상태
 
@@ -36,7 +38,11 @@
 - `mai` speaker id `3067`이 유지됩니다.
 - 외부 `Base` 경로 없이 추가 학습이 가능합니다.
 - low-level clone과 clone + instruct 생성이 가능합니다.
-- 현재 안정 후보 전략은 `embedded_encoder_only`입니다.
+- 현재 제품 기본 전략은 `speaker_anchor_with_ref_code`입니다.
+  `embedded_encoder_only`는 과거 안정 비교군으로 유지합니다.
+- 새 영구 화자를 저장한 VoiceBox checkpoint는
+  `morphed_speaker_with_ref_code` 전략으로 clone prompt와 함께 사용할 수
+  있습니다.
 
 문서 순서:
 
@@ -44,4 +50,5 @@
 2. [체크포인트 변환](./01-checkpoint-conversion.md)
 3. [clone 실험](./03-clone-experiment.md)
 4. [clone + instruct 실험](./04-clone-plus-instruct.md)
-5. [현재 실험 결과](../cookbook/18-current-experiment-results.md)
+5. [speaker morph](./05-speaker-morph.md)
+6. [현재 실험 결과](../cookbook/18-current-experiment-results.md)

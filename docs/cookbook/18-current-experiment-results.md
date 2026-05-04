@@ -222,7 +222,8 @@ data/generated/voicebox-clone-tests/20260425-extra1
 
 해석:
 
-- `embedded_encoder_only`는 현재 VoiceBox clone+instruct 기본 후보입니다.
+- `speaker_anchor_with_ref_code`는 현재 VoiceBox clone+instruct 제품 기본 후보입니다.
+- `embedded_encoder_only`는 과거 안정 비교군으로 유지합니다.
 - `embedded_encoder_with_ref_code`는 참조 코드까지 넣으므로 clone 느낌이 강해질 수 있지만,
   공격적인 instruct에서 문장 보존이 흔들릴 수 있습니다.
 
@@ -264,7 +265,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 - `VoiceBox -> VoiceBox` 1 epoch 추가 학습도 완료되었습니다.
 - 추가 학습된 VoiceBox는 `mai` 화자를 유지합니다.
 - 추가 학습된 VoiceBox 하나만으로 low-level clone과 clone+instruct 생성이 가능합니다.
-- 현재 안정 후보는 `embedded_encoder_only`입니다.
+- 현재 제품 기본 후보는 `speaker_anchor_with_ref_code`입니다.
 
 Fine-tuning류 기능의 현재 검증 해석:
 

@@ -112,6 +112,26 @@
 
 즉 지금 구조는 “복잡해서 두 개를 둔 것”이 아니라, 각 모델의 강점을 분리해서 쓰려는 선택입니다.
 
+### 6.1 hybrid에서 speaker anchor를 쓰는 이유
+
+`Base + CustomVoice` hybrid는 업스트림의 공식 high-level API가 아니라, 데모가 저수준 prompt를 조합하는 확장 경로입니다.
+
+여기서 중요한 제약이 있습니다.
+
+- `Base`가 만든 clone prompt의 `ref_code`는 참조 음성의 acoustic/style 흐름을 담습니다.
+- `Base`의 speaker encoder embedding은 그대로 `CustomVoice`의 stock speaker-token 조건 분포에 놓인 값이 아닐 수 있습니다.
+- `CustomVoice`의 `instruct` 준수는 stock speaker token 조건에서 학습된 경로가 가장 안정적입니다.
+
+그래서 현재 구현은 한국어 hybrid 생성에서 `ref_code/ref_text`는 그대로 유지하되, speaker conditioning은 `Sohee` 같은 target language stock speaker token으로 anchor합니다.
+
+현재 canonical 구현:
+
+- 백엔드 런타임: `app/backend/app/qwen.py`
+- 재현 스크립트: `qwen_extensions/inference/hybrid_clone_instruct.py`
+
+`qwen_extensions/inference/hybrid_clone_instruct.py`는 `--speaker-anchor auto`가 기본이며, 한국어에서는 `sohee`를 선택합니다.
+과거 동작을 비교해야 할 때만 `--speaker-anchor none`으로 clone prompt의 speaker embedding을 그대로 사용합니다.
+
 다만 별도 실험 경로로 `VoiceBox`가 추가되었습니다.
 
 `VoiceBox`는 plain `CustomVoice`에 `Base 1.7B`의 `speaker_encoder`를 합친 self-contained 체크포인트입니다.
@@ -123,7 +143,8 @@
 
 을 함께 실험할 수 있습니다.
 
-현재 검증 결과상 `VoiceBox` clone + instruct의 안정 후보는 `embedded_encoder_only`입니다.
+현재 제품 기본 후보는 `speaker_anchor_with_ref_code`입니다.
+이는 선택된 VoiceBox speaker token의 instruction 경로를 유지하면서 clone prompt의 `ref_code`를 결합하는 전략입니다.
 하지만 이 경로는 기존 `Base + CustomVoice` hybrid를 삭제하거나 대체하는 것이 아니라,
 “한 체크포인트로 통합 가능한가”를 보기 위한 별도 실험 경로입니다.
 

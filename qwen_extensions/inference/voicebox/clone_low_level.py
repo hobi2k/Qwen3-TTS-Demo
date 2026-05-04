@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--text", required=True)
     parser.add_argument("--language", default="Korean")
     parser.add_argument("--instruct", default="Speak softly, with restrained exhaustion but clear diction.")
-    parser.add_argument("--speaker", default="mai")
+    parser.add_argument("--speaker", default="auto", help="Stock or morphed speaker name. Use auto to resolve from --language.")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument(
         "--generation-options",
@@ -62,6 +62,8 @@ def parse_args() -> argparse.Namespace:
             "control_stock_customvoice",
             "embedded_encoder_only",
             "embedded_encoder_with_ref_code",
+            "speaker_anchor_with_ref_code",
+            "morphed_speaker_with_ref_code",
             "borrowed_stock_embed_with_ref_code",
             "pseudo_embed_only",
             "pseudo_embed_with_ref_code",
@@ -143,13 +145,46 @@ def save_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def get_stock_speaker_embedding(model, speaker: str) -> torch.Tensor:
+def get_speaker_embedding(model, speaker: str) -> torch.Tensor:
     """Fetch one speaker embedding from the talker embedding table."""
 
-    spk_id = model.model.config.talker_config.spk_id[speaker.lower()]
+    speaker_map = dict(model.model.config.talker_config.spk_id)
+    lowered = {str(key).lower(): value for key, value in speaker_map.items()}
+    spk_id = lowered[speaker.lower()]
     return model.model.talker.get_input_embeddings()(
         torch.tensor(spk_id, device=model.model.talker.device, dtype=torch.long)
     )
+
+
+def language_anchor_speaker(model, language: str, requested: str) -> str:
+    """Resolve a requested speaker against language-native checkpoint speakers."""
+
+    speaker_map = dict(model.model.config.talker_config.spk_id)
+    by_lower = {str(key).lower(): str(key) for key in speaker_map.keys()}
+    value = (requested or "auto").strip()
+    if value and value.lower() != "auto":
+        if value.lower() not in by_lower:
+            raise RuntimeError(f"Speaker '{value}' is not in checkpoint speaker map.")
+        return by_lower[value.lower()]
+
+    language_key = (language or "auto").strip().lower()
+    preferred_by_language = {
+        "korean": ["sohee"],
+        "ko": ["sohee"],
+        "japanese": ["ono_anna"],
+        "ja": ["ono_anna"],
+        "english": ["aiden", "ryan", "dylan", "eric"],
+        "en": ["aiden", "ryan", "dylan", "eric"],
+        "chinese": ["vivian", "serena", "uncle_fu"],
+        "zh": ["vivian", "serena", "uncle_fu"],
+        "auto": ["sohee", "ono_anna", "aiden", "vivian", "serena"],
+    }
+    for candidate in preferred_by_language.get(language_key, preferred_by_language["auto"]):
+        if candidate in by_lower:
+            return by_lower[candidate]
+    if not by_lower:
+        raise RuntimeError("The checkpoint does not expose a speaker map.")
+    return by_lower[sorted(by_lower.keys())[0]]
 
 
 def encode_reference_audio(model, ref_audio: str) -> torch.Tensor:
@@ -332,12 +367,16 @@ def main() -> None:
     generation_options = parse_generation_options(args.generation_options)
     apply_seed(generation_options.get("seed"))
     model = load_model(args.model_path)
+    requested_speaker = args.speaker
+    args.speaker = language_anchor_speaker(model, args.language, requested_speaker)
     selected = set(args.strategies)
     if "all" in selected:
         selected = {
             "control_stock_customvoice",
             "embedded_encoder_only",
             "embedded_encoder_with_ref_code",
+            "speaker_anchor_with_ref_code",
+            "morphed_speaker_with_ref_code",
             "borrowed_stock_embed_with_ref_code",
             "pseudo_embed_only",
             "pseudo_embed_with_ref_code",
@@ -348,7 +387,7 @@ def main() -> None:
         ref_code = prompt_item["ref_code"]
     else:
         ref_code = encode_reference_audio(model, args.ref_audio)
-    stock_embed = get_stock_speaker_embedding(model, args.speaker)
+    speaker_embed = get_speaker_embedding(model, args.speaker)
     pseudo_embed = pseudo_embedding_from_ref_code(model, ref_code)
     if prompt_item is not None:
         embedded_encoder_embed = prompt_item["ref_spk_embedding"]
@@ -396,7 +435,7 @@ def main() -> None:
                 detail=detail,
                 output_path=str(output_dir / output_name) if ok else None,
                 transcript_like_text=args.text,
-                similarity_to_stock_speaker=cosine_similarity(embed, stock_embed),
+                similarity_to_stock_speaker=cosine_similarity(embed, speaker_embed),
             )
         )
 
@@ -410,10 +449,26 @@ def main() -> None:
             True,
             "embedded_encoder_with_ref_code.wav",
         )
+    if "speaker_anchor_with_ref_code" in selected:
+        append_manual(
+            "speaker_anchor_with_ref_code",
+            speaker_embed,
+            False,
+            True,
+            "speaker_anchor_with_ref_code.wav",
+        )
+    if "morphed_speaker_with_ref_code" in selected:
+        append_manual(
+            "morphed_speaker_with_ref_code",
+            speaker_embed,
+            False,
+            True,
+            "morphed_speaker_with_ref_code.wav",
+        )
     if "borrowed_stock_embed_with_ref_code" in selected:
         append_manual(
             "borrowed_stock_embed_with_ref_code",
-            stock_embed,
+            speaker_embed,
             False,
             True,
             "borrowed_stock_embed_with_ref_code.wav",
@@ -431,14 +486,15 @@ def main() -> None:
         "voice_clone_prompt_used": prompt_item is not None,
         "text": args.text,
         "language": args.language,
+        "requested_speaker": requested_speaker,
         "speaker": args.speaker,
         "generation_options": generation_options,
         "capabilities": {
             "tts_model_type": model.model.tts_model_type,
             "speaker_encoder_present": model.model.speaker_encoder is not None,
             "supported_speakers": model.get_supported_speakers(),
-            "pseudo_vs_stock_similarity": cosine_similarity(pseudo_embed, stock_embed),
-            "embedded_vs_stock_similarity": None if embedded_encoder_embed is None else cosine_similarity(embedded_encoder_embed, stock_embed),
+            "pseudo_vs_speaker_similarity": cosine_similarity(pseudo_embed, speaker_embed),
+            "embedded_vs_speaker_similarity": None if embedded_encoder_embed is None else cosine_similarity(embedded_encoder_embed, speaker_embed),
         },
         "results": [asdict(item) for item in results],
     }

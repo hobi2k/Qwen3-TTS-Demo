@@ -71,6 +71,7 @@ import type {
   VibeVoiceTrainingResponse,
   VoiceBoxCloneRequest,
   VoiceBoxFusionRequest,
+  VoiceBoxSpeakerMorphRequest,
   VoiceChangerBatchRequest,
   VoiceAssetDeleteResponse,
   VoiceAssetKind,
@@ -474,6 +475,14 @@ export const api = {
 
   createVoiceBoxFusion(payload: VoiceBoxFusionRequest): Promise<FineTuneRun> {
     return request<FineTuneRun>("/api/voicebox/fusion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createVoiceBoxSpeakerMorph(payload: VoiceBoxSpeakerMorphRequest): Promise<FineTuneRun> {
+    return request<FineTuneRun>("/api/voicebox/speaker-morph", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

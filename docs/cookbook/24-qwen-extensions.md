@@ -39,6 +39,26 @@ Qwen3-TTS-Demo/
 | `qwen_extensions/inference/hybrid_clone_instruct.py` | Base clone prompt와 CustomVoice instruct를 조합하는 기존 hybrid 경로 |
 | `qwen_extensions/inference/voicebox` | VoiceBox 단일 모델 추론, clone, clone+instruct 실험 |
 
+## clone prompt + instruct의 speaker anchor 규칙
+
+`Base clone prompt + CustomVoice instruct`는 업스트림 `Qwen3-TTS`의 공식 high-level wrapper가 아니라 데모 확장 경로입니다.
+
+이 경로에서는 다음 규칙을 유지합니다.
+
+- `ref_code`와 `ref_text`는 clone prompt에서 가져와 참조 음성의 acoustic/style 조건을 유지합니다.
+- speaker conditioning은 `CustomVoice`가 instruction을 학습한 speaker-token 분포 안에 둡니다.
+- 한국어 target에서는 `auto` anchor가 `sohee`를 선택합니다.
+- 비교/회귀 확인이 필요할 때만 `--speaker-anchor none`으로 Base clone prompt의 speaker embedding을 그대로 씁니다.
+
+따라서 이 규칙을 바꾸는 경우 반드시 아래 세 곳을 함께 갱신합니다.
+
+1. 백엔드 Qwen 런타임: `app/backend/app/qwen.py`
+2. 재현 가능한 Qwen extension: `qwen_extensions/inference/hybrid_clone_instruct.py`
+3. VoiceBox low-level 전략: `qwen_extensions/inference/voicebox/clone_low_level.py`
+
+`vendor/Qwen3-TTS`는 upstream 기준선이므로 이 규칙을 반영하기 위해 직접 수정하지 않습니다.
+vendor 안 데모 mirror가 필요할 때는 별도 export 대상으로만 다룹니다.
+
 ## 백엔드 실행 기준
 
 FastAPI는 `app/backend/app/main.py`에서 Qwen 확장 스크립트를 아래 순서로 찾습니다.

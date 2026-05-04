@@ -264,7 +264,7 @@ python qwen_extensions/inference/voicebox/clone.py \
   --language Korean \
   --speaker mai \
   --output-dir data/generated/voicebox-clone-tests/manual-clone \
-  --strategies embedded_encoder_only embedded_encoder_with_ref_code
+  --strategies speaker_anchor_with_ref_code embedded_encoder_only embedded_encoder_with_ref_code
 ```
 
 ```bash
@@ -277,7 +277,7 @@ python qwen_extensions/inference/voicebox/clone_instruct.py \
   --speaker mai \
   --instruct "Soft breathy Korean female voice, exhausted and close to the microphone, but keep the sentence clear." \
   --output-dir data/generated/voicebox-clone-tests/manual-clone-instruct \
-  --strategies embedded_encoder_only embedded_encoder_with_ref_code
+  --strategies speaker_anchor_with_ref_code embedded_encoder_only embedded_encoder_with_ref_code
 ```
 
 ### 자동 선택을 믿지 않고 명시적으로 고정하고 싶다면
@@ -398,10 +398,11 @@ data/generated/quality-validation/20260412-153000/
 
 ### VoiceBox
 
-- `embedded_encoder_only`는 현재 가장 안정적인 clone+instruct 후보입니다.
+- `speaker_anchor_with_ref_code`는 현재 제품 기본 clone+instruct 후보입니다.
+- `embedded_encoder_only`는 과거 안정 비교군으로 유지합니다.
 - `embedded_encoder_with_ref_code`는 참조 codec 흐름까지 넣어 clone 느낌을 더 강하게 줄 수 있지만,
   aggressive instruct에서 문장 보존이 흔들릴 수 있습니다.
-- 따라서 제품화 기본값은 `embedded_encoder_only`를 먼저 검토합니다.
+- 따라서 제품화 기본값은 `speaker_anchor_with_ref_code`를 먼저 검토합니다.
 
 ## 7. 청취 평가 순서
 

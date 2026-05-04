@@ -53,6 +53,7 @@ export type TabKey =
   | "dataset"
   | "training"
   | "voicebox_fusion"
+  | "voicebox_morph"
   | "s2pro_dataset"
   | "s2pro_tagged"
   | "s2pro_clone"
@@ -242,6 +243,11 @@ export const PRODUCT_PAGES = {
     label: "VoiceBox 융합",
     title: "VoiceBox 융합",
     description: "CustomVoice 결과와 Base encoder를 합쳐 독립 모델로 만듭니다.",
+  },
+  voicebox_morph: {
+    label: "VoiceBox Morph",
+    title: "VoiceBox Speaker Morph",
+    description: "언어 anchor speaker를 복사하고 참조 음색을 섞어 영구 화자로 저장합니다.",
   },
   s2pro_dataset: {
     label: "S2-Pro 데이터셋",
@@ -1477,6 +1483,7 @@ export const VOICEBOX_ACTIONS = [
   { label: "데이터셋 만들기", tab: "dataset" },
   { label: "학습 실행", tab: "training" },
   { label: "VoiceBox 융합", tab: "voicebox_fusion" },
+  { label: "VoiceBox Morph", tab: "voicebox_morph" },
   { label: "목소리 복제", tab: "clone" },
   { label: "프리셋 기반 생성", tab: "projects" },
 ] as const satisfies ReadonlyArray<{ label: string; tab: TabKey }>;

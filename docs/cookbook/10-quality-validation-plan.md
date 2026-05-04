@@ -83,7 +83,7 @@ python scripts/validate_speech_quality.py \
 - 외부 `Base` 없이 `VoiceBox -> VoiceBox` 추가 학습이 되는가
 - 일반 instruct 추론이 되는가
 - clone / clone + instruct 저수준 실험이 되는가
-- `embedded_encoder_only`와 `embedded_encoder_with_ref_code` 중 어떤 전략이 더 안정적인가
+- `speaker_anchor_with_ref_code`, `embedded_encoder_only`, `embedded_encoder_with_ref_code` 중 어떤 전략이 더 안정적인가
 
 ## 판정 기준
 
@@ -107,7 +107,7 @@ python scripts/validate_speech_quality.py \
 - `프리셋 기반 생성`
   스타일 저장과 말투 지시를 함께 확인할 수 있는 핵심 검수 대상
 - `VoiceBox`
-  self-contained speaker encoder 실험 경로이며, 현재 clone+instruct 기본 후보는 `embedded_encoder_only`
+  self-contained speaker encoder 실험 경로이며, 현재 clone+instruct 기본 후보는 `speaker_anchor_with_ref_code`
 
 ## 남은 운영 과제
 

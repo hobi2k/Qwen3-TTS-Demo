@@ -35,7 +35,11 @@ data/finetune-runs/mai_ko_voicebox17b_full_extra1/final
 - angry `embedded_encoder_only`: speaker similarity `0.9614`, target text similarity `1.000`
 - angry `embedded_encoder_with_ref_code`: speaker similarity `0.9630`, target text similarity `0.923`
 
-현재 안정 후보:
+현재 제품 기본 후보:
+
+- `speaker_anchor_with_ref_code`
+
+과거 안정 비교군:
 
 - `embedded_encoder_only`
 
