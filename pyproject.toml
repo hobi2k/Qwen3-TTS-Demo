@@ -17,7 +17,7 @@ dependencies = [
   "einx[torch]==0.2.2",
   "colorlog>=6.0.0",
   "diffusers>=0.37.0",
-  "flash-attn @ https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3%2Bcu130torch2.11-cp311-cp311-linux_x86_64.whl",
+  "flash-attn @ https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3%2Bcu130torch2.11-cp311-cp311-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "hf-transfer>=0.1.9",
   "hydra-colorlog>=1.2.0",
   "hydra-core>=1.3.2",
