@@ -14,7 +14,6 @@ import argparse
 import json
 import math
 import os
-import signal
 import socket
 import subprocess
 import sys
@@ -26,10 +25,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from process_utils import popen_process_group, terminate_process_group, venv_python
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / "app" / "backend"
-PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+PYTHON = venv_python(REPO_ROOT)
 SAMPLE_AUDIO = REPO_ROOT / "data" / "e2e" / "live_input.wav"
 SAMPLE_LONG_AUDIO = REPO_ROOT / "data" / "e2e" / "live_input_12s.wav"
 BACKEND_LOG = REPO_ROOT / "data" / "runtime" / "live-e2e-backend.log"
@@ -201,14 +202,13 @@ def start_backend(port: int) -> subprocess.Popen[str]:
     ]
     BACKEND_LOG.parent.mkdir(parents=True, exist_ok=True)
     log_handle = BACKEND_LOG.open("w", encoding="utf-8")
-    return subprocess.Popen(
+    return popen_process_group(
         command,
         cwd=BACKEND_DIR,
         env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,
         text=True,
-        start_new_session=True,
     )
 
 
@@ -713,18 +713,7 @@ def run_checks(include_heavy: bool, port: int | None) -> int:
         print(json.dumps({"base_url": base_url, "health": health, "bootstrap_counts": summarize_bootstrap(bootstrap), "results": [r.__dict__ for r in results]}, ensure_ascii=False, indent=2))
         return 0 if all(result.status in {"PASS", "SKIP"} for result in results) else 1
     finally:
-        try:
-            os.killpg(proc.pid, signal.SIGTERM)
-        except Exception:
-            proc.terminate()
-        try:
-            proc.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except Exception:
-                proc.kill()
-            proc.wait(timeout=10)
+        terminate_process_group(proc, grace_seconds=15.0)
 
 
 def summarize_bootstrap(bootstrap: Any) -> dict[str, int]:

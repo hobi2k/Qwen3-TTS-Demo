@@ -18,7 +18,6 @@ import json
 import math
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -30,10 +29,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from process_utils import popen_process_group, terminate_process_group, venv_python
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / "app" / "backend"
-PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+PYTHON = venv_python(REPO_ROOT)
 SMOKE_ROOT = REPO_ROOT / "data" / "training-smoke" / "external"
 BACKEND_LOG = REPO_ROOT / "data" / "runtime" / "external-training-smoke-backend.log"
 SAMPLE_AUDIO = REPO_ROOT / "data" / "e2e" / "live_input.wav"
@@ -124,7 +125,7 @@ def start_backend(port: int) -> subprocess.Popen[str]:
     env.setdefault("PYTHONUNBUFFERED", "1")
     BACKEND_LOG.parent.mkdir(parents=True, exist_ok=True)
     log_handle = BACKEND_LOG.open("w", encoding="utf-8")
-    return subprocess.Popen(
+    return popen_process_group(
         [
             str(PYTHON),
             "-m",
@@ -140,7 +141,6 @@ def start_backend(port: int) -> subprocess.Popen[str]:
         stdout=log_handle,
         stderr=subprocess.STDOUT,
         text=True,
-        start_new_session=True,
     )
 
 
@@ -163,16 +163,7 @@ def wait_for_backend(proc: subprocess.Popen[str], base_url: str, timeout: float 
 def stop_backend(proc: subprocess.Popen[str]) -> None:
     """Terminate the backend process group."""
 
-    if proc.poll() is not None:
-        return
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-        proc.wait(timeout=20)
-    except Exception:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except Exception:
-            pass
+    terminate_process_group(proc, grace_seconds=20.0)
 
 
 def post_training(base_url: str, engine: str, path: str, payload: dict[str, Any], *, timeout: float) -> SmokeResult:

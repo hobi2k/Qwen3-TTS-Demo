@@ -120,23 +120,23 @@ type ActiveJob = {
   startedAt: number;
 };
 
-const DEFAULT_VOICEBOX_STRATEGY = "speaker_anchor_with_ref_code";
+const DEFAULT_VOICEBOX_STRATEGY = "embedded_encoder_with_ref_code";
 
 const VOICEBOX_STRATEGY_OPTIONS = [
   {
+    value: "embedded_encoder_with_ref_code",
+    label: "Clone prompt embedding + ref code",
+    description: "프리셋 음색 보존 우선. 저장된 clone prompt의 음색 임베딩과 ref code를 함께 사용합니다.",
+  },
+  {
     value: "speaker_anchor_with_ref_code",
     label: "Speaker anchor + ref code",
-    description: "권장. 선택 화자 토큰에 clone prompt 음색 코드를 결합해 지시 반응을 안정화합니다.",
+    description: "화자 토큰의 언어/지시 안정성을 우선합니다. 프리셋 음색과 달라질 수 있습니다.",
   },
   {
     value: "morphed_speaker_with_ref_code",
     label: "Morphed speaker + ref code",
     description: "영구 저장한 변형 화자 row에 clone prompt 음색 코드를 결합합니다.",
-  },
-  {
-    value: "embedded_encoder_with_ref_code",
-    label: "Embedded encoder + ref code",
-    description: "저장된 clone prompt의 음색 코드와 임베딩을 함께 사용합니다.",
   },
   {
     value: "embedded_encoder_only",
@@ -2172,6 +2172,10 @@ function StudioApp() {
     activeStudioModel?.category ||
     (isS2ProTab(activeTab) ? "S2-Pro" : isAceStepTab(activeTab) ? "ACE-Step" : "Voice Studio");
   const latestGalleryItem = history[0] ?? null;
+  const latestPresetWorkflowRecord =
+    [lastPresetRecord, lastHybridRecord, lastVoiceBoxPresetRecord, lastVoiceBoxPresetInstructRecord]
+      .filter((record): record is GenerationRecord => Boolean(record))
+      .sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime())[0] ?? null;
   const s2VoiceProjects = s2ProVoices.map((voice) => {
     const relatedHistory = history.filter((record) => {
       const metaReferenceId = String(record.meta?.reference_id || record.meta?.s2_reference_id || record.meta?.voice_id || "");
@@ -2903,6 +2907,7 @@ function StudioApp() {
     await runAction(async () => {
       const selectedKeys = [...selectedGalleryIds];
       const selectedRecords = history.filter((record) => selectedKeys.includes(gallerySelectionKey(record)));
+      selectedRecords.forEach((record) => clearGeneratedRecordReferences(record.id));
       setHistory((prev) => prev.filter((record) => !selectedKeys.includes(gallerySelectionKey(record))));
       await api.deleteHistoryBatch(Array.from(new Set(selectedRecords.map((record) => record.id))));
       setSelectedGalleryIds([]);
@@ -6820,47 +6825,24 @@ function StudioApp() {
             </Tabs>
           </WorkspaceCard>
 
-          {lastPresetRecord || lastHybridRecord || lastVoiceBoxPresetRecord || lastVoiceBoxPresetInstructRecord ? (
+          {latestPresetWorkflowRecord ? (
             <WorkspaceCard>
               <WorkspaceResultHeader title={t("projects.result.title", "생성 결과")} badge={t("tts.result.latest")} />
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                {lastPresetRecord ? (
-                  <AudioCard
-                    title={t("projects.result.base", "Base 프리셋 결과")}
-                    subtitle={lastPresetRecord.mode}
-                    record={lastPresetRecord}
-                    onDelete={() => void handleDeleteHistoryRecord(lastPresetRecord.id)}
-                    deleting={loading}
-                  />
-                ) : null}
-                {lastHybridRecord ? (
-                  <AudioCard
-                    title={t("projects.result.hybrid", "Base + CustomVoice 결과")}
-                    subtitle={lastHybridRecord.mode}
-                    record={lastHybridRecord}
-                    onDelete={() => void handleDeleteHistoryRecord(lastHybridRecord.id)}
-                    deleting={loading}
-                  />
-                ) : null}
-                {lastVoiceBoxPresetRecord ? (
-                  <AudioCard
-                    title={t("projects.result.voicebox", "VoiceBox 프리셋 결과")}
-                    subtitle={lastVoiceBoxPresetRecord.mode}
-                    record={lastVoiceBoxPresetRecord}
-                    onDelete={() => void handleDeleteHistoryRecord(lastVoiceBoxPresetRecord.id)}
-                    deleting={loading}
-                  />
-                ) : null}
-                {lastVoiceBoxPresetInstructRecord ? (
-                  <AudioCard
-                    title={t("projects.result.voiceboxInstruct", "VoiceBox 지시 결과")}
-                    subtitle={lastVoiceBoxPresetInstructRecord.mode}
-                    record={lastVoiceBoxPresetInstructRecord}
-                    onDelete={() => void handleDeleteHistoryRecord(lastVoiceBoxPresetInstructRecord.id)}
-                    deleting={loading}
-                  />
-                ) : null}
-              </div>
+              <AudioCard
+                title={
+                  latestPresetWorkflowRecord.mode === "hybrid_clone_instruct"
+                    ? t("projects.result.hybrid", "Base + CustomVoice 결과")
+                    : latestPresetWorkflowRecord.mode === "voicebox_clone"
+                      ? t("projects.result.voicebox", "VoiceBox 프리셋 결과")
+                      : latestPresetWorkflowRecord.mode === "voicebox_clone_instruct"
+                        ? t("projects.result.voiceboxInstruct", "VoiceBox 지시 결과")
+                        : t("projects.result.base", "Base 프리셋 결과")
+                }
+                subtitle={latestPresetWorkflowRecord.mode}
+                record={latestPresetWorkflowRecord}
+                onDelete={() => void handleDeleteHistoryRecord(latestPresetWorkflowRecord.id)}
+                deleting={loading}
+              />
             </WorkspaceCard>
           ) : null}
         </WorkspaceShell>

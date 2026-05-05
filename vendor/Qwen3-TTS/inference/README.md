@@ -27,6 +27,7 @@ speaker token to force that anchor.
 
 `inference/voicebox/clone_low_level.py` supports:
 
+- `embedded_encoder_with_ref_code` (default for preset timbre preservation)
 - `speaker_anchor_with_ref_code`
 - `morphed_speaker_with_ref_code`
-- comparison strategies such as `embedded_encoder_with_ref_code`
+- comparison strategies such as `embedded_encoder_only`

@@ -1626,6 +1626,8 @@ def list_generation_records() -> List[GenerationRecord]:
         if not path.is_file() or path.suffix.lower() not in audio_extensions:
             continue
         rel_path = storage.relpath(path)
+        if rel_path.replace("\\", "/").startswith("data/generated/voicebox/"):
+            continue
         if rel_path in seen_audio_paths:
             continue
 
@@ -5316,7 +5318,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
     ref_text = resolve_reference_text(payload.ref_audio_path, payload.ref_text)
     strategy = (payload.strategy or fallback_strategy).strip() or fallback_strategy
     record_id = storage.new_id("gen")
-    output_dir = storage.generated_dir / "voicebox" / record_id
+    output_dir = storage.data_dir / "runtime" / "voicebox" / record_id
     command = [
         sys.executable,
         resolve_qwen_extension_script("inference/voicebox/clone_low_level.py"),
@@ -5393,7 +5395,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
 def generate_voicebox_clone(payload: VoiceBoxCloneRequest) -> GenerationResponse:
     """VoiceBox 하나만 사용해 참조 음성의 음색을 복제한다."""
 
-    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="speaker_anchor_with_ref_code")
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone", fallback_strategy="embedded_encoder_with_ref_code")
 
 
 @app.post("/api/generate/voicebox-clone-instruct", response_model=GenerationResponse)
@@ -5401,8 +5403,8 @@ def generate_voicebox_clone_instruct(payload: VoiceBoxCloneRequest) -> Generatio
     """VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용한다."""
 
     if not payload.strategy:
-        payload.strategy = "speaker_anchor_with_ref_code"
-    return generate_voicebox_clone_common(payload, mode="voicebox_clone_instruct", fallback_strategy="speaker_anchor_with_ref_code")
+        payload.strategy = "embedded_encoder_with_ref_code"
+    return generate_voicebox_clone_common(payload, mode="voicebox_clone_instruct", fallback_strategy="embedded_encoder_with_ref_code")
 
 
 @app.post("/api/clone-prompts/from-generated-sample", response_model=ClonePromptRecord)

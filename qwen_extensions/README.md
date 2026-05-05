@@ -60,9 +60,12 @@ regression comparison against the raw Base speaker embedding behavior.
 The matching backend implementation lives in `app/backend/app/qwen.py`. Keep
 that runtime and this extension script in sync whenever this rule changes.
 
-VoiceBox clone/clone-plus-instruct uses the same naming convention:
-`speaker_anchor_with_ref_code` is the default strategy, and legacy
-`borrowed_stock_embed_with_ref_code` remains only for comparison.
+VoiceBox preset clone/clone-plus-instruct defaults to
+`embedded_encoder_with_ref_code` so saved clone-prompt timbre is preserved.
+`speaker_anchor_with_ref_code` remains available as an explicit comparison or
+language-anchor option, but it can pull the output toward the stock anchor
+speaker. `morphed_speaker_with_ref_code` is the preferred path after a
+permanent VoiceBox speaker morph has been written into the checkpoint.
 
 ## VoiceBox Speaker Morph
 

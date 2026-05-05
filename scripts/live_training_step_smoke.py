@@ -15,16 +15,17 @@ import argparse
 import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from process_utils import popen_process_group, terminate_process_group as terminate_child_group, venv_python
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+PYTHON = venv_python(REPO_ROOT)
 STEP_RE = re.compile(r"Epoch\s+\d+\s+\|\s+Step\s+\d+\s+\|\s+Loss:\s+[-+0-9.eE]+")
 
 
@@ -62,7 +63,7 @@ def smoke_env() -> dict[str, str]:
         str(REPO_ROOT / "vendor" / "Qwen3-TTS" / "finetuning"),
     ]
     current_pythonpath = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = ":".join(pythonpath_parts + ([current_pythonpath] if current_pythonpath else []))
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts + ([current_pythonpath] if current_pythonpath else []))
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("TOKENIZERS_PARALLELISM", "false")
     env.setdefault("HF_HOME", str(REPO_ROOT / "data" / ".cache" / "huggingface"))
@@ -166,23 +167,7 @@ def build_tasks(selected: list[str]) -> list[SmokeTask]:
 def terminate_process_group(process: subprocess.Popen[str], grace_seconds: float = 8.0) -> None:
     """Stop a training process group without leaving child workers running."""
 
-    if process.poll() is not None:
-        return
-    os.killpg(process.pid, signal.SIGINT)
-    deadline = time.monotonic() + grace_seconds
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            return
-        time.sleep(0.25)
-    if process.poll() is None:
-        os.killpg(process.pid, signal.SIGTERM)
-    deadline = time.monotonic() + grace_seconds
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            return
-        time.sleep(0.25)
-    if process.poll() is None:
-        os.killpg(process.pid, signal.SIGKILL)
+    terminate_child_group(process, grace_seconds=grace_seconds, interrupt=True)
 
 
 def cleanup_output(path: Path) -> None:
@@ -200,7 +185,7 @@ def run_task(task: SmokeTask, timeout_seconds: int) -> bool:
     print(f"\n== {task.name} ==", flush=True)
     print("$ " + " ".join(task.command), flush=True)
 
-    process = subprocess.Popen(
+    process = popen_process_group(
         task.command,
         cwd=str(REPO_ROOT),
         env=smoke_env(),
@@ -208,7 +193,6 @@ def run_task(task: SmokeTask, timeout_seconds: int) -> bool:
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
-        start_new_session=True,
     )
 
     matched_line = ""
