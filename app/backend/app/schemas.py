@@ -114,6 +114,7 @@ class VoiceCloneRequest(GenerationRequestBase):
     ref_text: Optional[str] = None
     voice_clone_prompt_path: Optional[str] = None
     x_vector_only_mode: bool = False
+    speaker_anchor: str = "auto"
 
 
 class UniversalInferenceRequest(GenerationRequestBase):

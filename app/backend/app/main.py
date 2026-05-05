@@ -1973,7 +1973,6 @@ def write_audio_tool_generation_record(
     meta: Optional[JsonDict] = None,
 ) -> GenerationRecord:
     record_id = storage.new_id("audio")
-    resolved_speaker = str(summary.get("speaker") or payload.speaker)
     record = build_generation_record(
         record_id=record_id,
         mode=mode,
@@ -4889,7 +4888,7 @@ def generate_custom_voice(payload: CustomVoiceRequest) -> GenerationResponse:
         text=payload.text,
         language=payload.language,
         audio_path=audio_path,
-        speaker=resolved_speaker,
+        speaker=payload.speaker,
         instruction=payload.instruct,
         meta={**meta, "display_name": requested_output_name(payload) or None},
     )
@@ -5101,6 +5100,7 @@ def generate_hybrid_clone_instruct(payload: HybridCloneInstructRequest) -> Gener
             ref_text=ref_text,
             voice_clone_prompt_path=voice_clone_prompt_path,
             x_vector_only_mode=payload.x_vector_only_mode,
+            speaker_anchor=payload.speaker_anchor,
             output_name=requested_output_name(payload),
             **generation_options_from_payload(payload),
         )
@@ -5357,6 +5357,7 @@ def generate_voicebox_clone_common(payload: VoiceBoxCloneRequest, *, mode: str, 
     summary["instruct"] = payload.instruct
     summary["strategy"] = strategy
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    resolved_speaker = str(summary.get("speaker") or payload.speaker or "auto")
     result_item = next((item for item in summary.get("results", []) if item.get("name") == strategy and item.get("ok")), None)
     if not result_item or not result_item.get("output_path"):
         raise HTTPException(status_code=500, detail=f"VoiceBox strategy did not produce audio: {strategy}")

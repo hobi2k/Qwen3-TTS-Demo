@@ -805,6 +805,7 @@ class QwenDemoEngine:
         ref_text: str = "",
         voice_clone_prompt_path: str = "",
         x_vector_only_mode: bool = False,
+        speaker_anchor: str = "auto",
         output_name: str = "",
         seed: Optional[int] = None,
         non_streaming_mode: Optional[bool] = None,
