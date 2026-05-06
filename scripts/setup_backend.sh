@@ -55,6 +55,14 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "On Ubuntu run: sudo apt-get install ffmpeg"
 fi
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists portaudio-2.0; then
+    echo "Note: PortAudio headers were not detected."
+    echo "Fish Speech S2-Pro server runtime will skip pyaudio on macOS unless you install it."
+    echo "On macOS run: brew install portaudio"
+  fi
+fi
+
 if [[ ! -d "${VENV_DIR}" ]]; then
   echo "Creating virtual environment at ${VENV_DIR}"
   uv venv --python "${PYTHON_BIN}" "${VENV_DIR}"

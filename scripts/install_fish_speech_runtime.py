@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -43,6 +45,25 @@ def run(command: list[str]) -> None:
     subprocess.run(command, check=True)
 
 
+def has_portaudio() -> bool:
+    if shutil.which("pkg-config"):
+        probe = subprocess.run(
+            ["pkg-config", "--exists", "portaudio-2.0"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if probe.returncode == 0:
+            return True
+
+    header_candidates = [
+        Path("/opt/homebrew/include/portaudio.h"),
+        Path("/usr/local/include/portaudio.h"),
+        Path("/usr/include/portaudio.h"),
+    ]
+    return any(path.exists() for path in header_candidates)
+
+
 def fish_speech_dependencies(repo_root: Path) -> list[str]:
     """Return Fish Speech dependencies excluding torch-family pins."""
 
@@ -50,7 +71,18 @@ def fish_speech_dependencies(repo_root: Path) -> list[str]:
     with pyproject_path.open("rb") as handle:
         pyproject = tomllib.load(handle)
     dependencies = pyproject.get("project", {}).get("dependencies", [])
-    return [item for item in dependencies if requirement_name(item) not in TORCH_FAMILY]
+    skip_runtime_deps = set()
+    if platform.system() == "Darwin" and not has_portaudio():
+        # `pyaudio` is only needed for the interactive api_client path and
+        # fails on macOS unless PortAudio headers are installed.
+        # Keep it on Linux/Windows so upstream behavior stays intact there.
+        skip_runtime_deps.add("pyaudio")
+    return [
+        item
+        for item in dependencies
+        if requirement_name(item) not in TORCH_FAMILY
+        and requirement_name(item) not in skip_runtime_deps
+    ]
 
 
 def torch_specs(version: str, profile: str) -> tuple[list[str], str | None]:

@@ -110,6 +110,21 @@ catch {
 }
 
 if ($IsMac) {
+    $HasPortAudio = $false
+    try {
+        & pkg-config --exists portaudio-2.0
+        if ($LASTEXITCODE -eq 0) {
+            $HasPortAudio = $true
+        }
+    }
+    catch {
+    }
+    if (-not $HasPortAudio) {
+        Write-Warning "PortAudio headers were not detected."
+        Write-Warning "Fish Speech S2-Pro server runtime will skip pyaudio on macOS unless you install it."
+        Write-Warning "On macOS run: brew install portaudio"
+    }
+
     if (-not $env:QWEN_DEMO_ATTN_IMPL) {
         $env:QWEN_DEMO_ATTN_IMPL = "sdpa"
     }
