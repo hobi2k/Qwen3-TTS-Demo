@@ -6,6 +6,7 @@ BACKEND_DIR="${ROOT_DIR}/app/backend"
 UPSTREAM_DIR="${ROOT_DIR}/vendor/Qwen3-TTS"
 QWEN_EXTENSIONS_DIR="${ROOT_DIR}/qwen_extensions"
 VENV_DIR="${ROOT_DIR}/.venv"
+MMAUDIO_VENV="${ROOT_DIR}/.venv-mmaudio"
 VENDOR_DIR="${ROOT_DIR}/vendor"
 FLASH_ATTN_WHEEL_URL="https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
 
@@ -111,9 +112,29 @@ MMAUDIO_REPO_ROOT="${MMAUDIO_REPO_ROOT:-${VENDOR_DIR}/MMAudio}"
 APPLIO_REPO_ROOT="${APPLIO_REPO_ROOT:-${VENDOR_DIR}/Applio}"
 FISH_SPEECH_REPO_ROOT="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
 
-install_optional_repo_requirements "${MMAUDIO_REPO_ROOT}"
 install_optional_repo_requirements "${APPLIO_REPO_ROOT}"
 echo "Fish Speech sources are vendored in this repo. S2-Pro uses a separate .venv-fish-speech runtime."
+
+if [[ -d "${MMAUDIO_REPO_ROOT}" ]]; then
+  if [[ ! -d "${MMAUDIO_VENV}" ]]; then
+    echo "Creating MMAudio venv -> ${MMAUDIO_VENV}"
+    python -m venv "${MMAUDIO_VENV}"
+  fi
+  "${MMAUDIO_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools hatchling
+  MMAUDIO_TORCH_PROFILE="${MMAUDIO_TORCH_PROFILE:-}"
+  if [[ -z "${MMAUDIO_TORCH_PROFILE}" ]]; then
+    if [[ "${OS_NAME}" == "Darwin" ]]; then
+      MMAUDIO_TORCH_PROFILE="current"
+    elif command -v nvidia-smi >/dev/null 2>&1; then
+      MMAUDIO_TORCH_PROFILE="cu130"
+    else
+      MMAUDIO_TORCH_PROFILE="cpu"
+    fi
+  fi
+  echo "Installing MMAudio runtime into ${MMAUDIO_VENV} (torch profile: ${MMAUDIO_TORCH_PROFILE})"
+  MMAUDIO_TORCH_PROFILE="${MMAUDIO_TORCH_PROFILE}" \
+    "${MMAUDIO_VENV}/bin/python" "${ROOT_DIR}/scripts/install_mmaudio_runtime.py" --repo-root "${MMAUDIO_REPO_ROOT}"
+fi
 
 python - <<'PY'
 import importlib.util

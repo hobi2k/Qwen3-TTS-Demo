@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "app\backend"
 $VenvDir = Join-Path $RootDir ".venv"
+$MMAudioVenv = Join-Path $RootDir ".venv-mmaudio"
 $VendorDir = Join-Path $RootDir "vendor"
 $UpstreamQwenDir = Join-Path $VendorDir "Qwen3-TTS"
 $QwenExtensionsDir = Join-Path $RootDir "qwen_extensions"
@@ -188,8 +189,32 @@ $ApplioRepoRoot = if ($env:APPLIO_REPO_ROOT) { $env:APPLIO_REPO_ROOT } else { Jo
 
 Assert-VendoredRepo -Name "MMAudio" -TargetDir $MMAudioRepoRoot
 Assert-VendoredRepo -Name "Applio" -TargetDir $ApplioRepoRoot
-Install-OptionalRepoRequirements -RepoDir $MMAudioRepoRoot
 Install-OptionalRepoRequirements -RepoDir $ApplioRepoRoot
+
+if (-not (Test-Path $MMAudioVenv)) {
+    Write-Host "Creating MMAudio venv -> $MMAudioVenv"
+    python -m venv $MMAudioVenv
+}
+
+$MMAudioPython = Join-Path $MMAudioVenv "Scripts\python.exe"
+& $MMAudioPython -m pip install --upgrade pip wheel setuptools hatchling | Out-Host
+
+$MMAudioTorchProfile = $env:MMAUDIO_TORCH_PROFILE
+if (-not $MMAudioTorchProfile) {
+    if ($IsMac) {
+        $MMAudioTorchProfile = "current"
+    }
+    elseif ($HasCuda) {
+        $MMAudioTorchProfile = "cu130"
+    }
+    else {
+        $MMAudioTorchProfile = "cpu"
+    }
+}
+
+Write-Host "Installing MMAudio runtime into $MMAudioVenv (torch profile: $MMAudioTorchProfile)"
+$env:MMAUDIO_TORCH_PROFILE = $MMAudioTorchProfile
+& $MMAudioPython (Join-Path $RootDir "scripts\install_mmaudio_runtime.py") --repo-root $MMAudioRepoRoot | Out-Host
 
 python -c "import importlib.util, platform, torch; device='cpu'; device='cuda:0' if torch.cuda.is_available() else ('mps' if getattr(torch.backends,'mps',None) is not None and torch.backends.mps.is_available() else 'cpu'); attn='sdpa'; attn='flash_attention_2' if platform.system() != 'Darwin' and device.startswith('cuda') and importlib.util.find_spec('flash_attn') else attn; print(f'Runtime summary: device={device}, attention={attn}, torch={torch.__version__}')"
 

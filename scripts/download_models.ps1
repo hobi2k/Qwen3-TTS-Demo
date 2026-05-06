@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "core", "s2pro")]
+    [ValidateSet("all", "core", "mmaudio", "s2pro")]
     [string]$Profile = "all"
 )
 
@@ -101,6 +101,7 @@ models_dir = Path(r'''$ModelsDir''')
 profile = r'''$Profile'''
 
 profiles = {
+    'mmaudio': [],
     's2pro': [],
     'core': [
         ('Qwen/Qwen3-TTS-Tokenizer-12Hz', 'Qwen3-TTS-Tokenizer-12Hz'),
@@ -271,27 +272,48 @@ if ($env:MMAUDIO_CONFIG_URL) {
     }
 }
 
+$MMAudioDefaultVariant = if ($env:MMAUDIO_DEFAULT_VARIANT) { $env:MMAUDIO_DEFAULT_VARIANT } else { "large_44k_v2" }
+switch ($MMAudioDefaultVariant) {
+    "small_16k" { $MMAudioDefaultModelFilename = "mmaudio_small_16k.pth" }
+    "small_44k" { $MMAudioDefaultModelFilename = "mmaudio_small_44k.pth" }
+    "medium_44k" { $MMAudioDefaultModelFilename = "mmaudio_medium_44k.pth" }
+    "large_44k" { $MMAudioDefaultModelFilename = "mmaudio_large_44k.pth" }
+    default {
+        $MMAudioDefaultVariant = "large_44k_v2"
+        $MMAudioDefaultModelFilename = "mmaudio_large_44k_v2.pth"
+    }
+}
+$MMAudioDefaultModelUrl = if ($env:MMAUDIO_DEFAULT_MODEL_URL) { $env:MMAUDIO_DEFAULT_MODEL_URL } else { "https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/$MMAudioDefaultModelFilename" }
+$MMAudioVae44kUrl = if ($env:MMAUDIO_VAE_44K_URL) { $env:MMAUDIO_VAE_44K_URL } else { "https://github.com/hkchengrex/MMAudio/releases/download/v0.1/v1-44.pth" }
+$MMAudioSynchformerUrl = if ($env:MMAUDIO_SYNCHFORMER_URL) { $env:MMAUDIO_SYNCHFORMER_URL } else { "https://github.com/hkchengrex/MMAudio/releases/download/v0.1/synchformer_state_dict.pth" }
 $MMAudioEmptyStringUrl = if ($env:MMAUDIO_EMPTY_STRING_URL) { $env:MMAUDIO_EMPTY_STRING_URL } else { "https://github.com/hkchengrex/MMAudio/releases/download/v0.1/empty_string.pth" }
-if (($Profile -eq "all") -and (Test-Path $MMAudioDir) -and $MMAudioEmptyStringUrl) {
+if ((($Profile -eq "all") -or ($Profile -eq "mmaudio")) -and (Test-Path $MMAudioDir)) {
     $ExtWeightsDir = Join-Path $MMAudioDir "ext_weights"
+    $WeightsDir = Join-Path $MMAudioDir "weights"
+    New-Item -ItemType Directory -Force -Path $WeightsDir | Out-Null
     New-Item -ItemType Directory -Force -Path $ExtWeightsDir | Out-Null
-    $TargetEmptyString = Join-Path $ExtWeightsDir "empty_string.pth"
-    if (-not (Test-Path $TargetEmptyString)) {
-        if (Download-PrivateAsset -RepoPath "mmaudio/ext_weights/empty_string.pth" -TargetPath $TargetEmptyString) {
-            Write-Host "Downloaded MMAudio empty-string embedding from private asset repo."
+    $MMAudioAssets = @(
+        @{ PrivatePath = "mmaudio/weights/$MMAudioDefaultModelFilename"; TargetPath = (Join-Path $WeightsDir $MMAudioDefaultModelFilename); Url = $MMAudioDefaultModelUrl },
+        @{ PrivatePath = "mmaudio/ext_weights/v1-44.pth"; TargetPath = (Join-Path $ExtWeightsDir "v1-44.pth"); Url = $MMAudioVae44kUrl },
+        @{ PrivatePath = "mmaudio/ext_weights/synchformer_state_dict.pth"; TargetPath = (Join-Path $ExtWeightsDir "synchformer_state_dict.pth"); Url = $MMAudioSynchformerUrl },
+        @{ PrivatePath = "mmaudio/ext_weights/empty_string.pth"; TargetPath = (Join-Path $ExtWeightsDir "empty_string.pth"); Url = $MMAudioEmptyStringUrl }
+    )
+    foreach ($Asset in $MMAudioAssets) {
+        if (Test-Path $Asset.TargetPath) {
+            Write-Host "MMAudio asset already present: $($Asset.TargetPath)"
+        }
+        elseif (Download-PrivateAsset -RepoPath $Asset.PrivatePath -TargetPath $Asset.TargetPath) {
+            Write-Host "Downloaded MMAudio asset from private asset repo: $($Asset.PrivatePath)"
         }
         else {
-            Write-Host "Downloading MMAudio empty-string embedding -> $TargetEmptyString"
-            Invoke-WebRequest -Uri $MMAudioEmptyStringUrl -OutFile $TargetEmptyString
+            Write-Host "Downloading MMAudio asset -> $($Asset.TargetPath)"
+            Invoke-WebRequest -Uri $Asset.Url -OutFile $Asset.TargetPath
         }
-    }
-    else {
-        Write-Host "MMAudio empty-string embedding already present: $TargetEmptyString"
     }
 }
 
 $MMAudioNsfwModelUrl = if ($env:MMAUDIO_NSFW_MODEL_URL) { $env:MMAUDIO_NSFW_MODEL_URL } else { "https://huggingface.co/phazei/NSFW_MMaudio/resolve/main/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" }
-if (($Profile -eq "all") -and $MMAudioNsfwModelUrl) {
+if ((($Profile -eq "all") -or ($Profile -eq "mmaudio")) -and $MMAudioNsfwModelUrl) {
     $NsfwFilename = if ($env:MMAUDIO_NSFW_MODEL_FILENAME) { $env:MMAUDIO_NSFW_MODEL_FILENAME } else { "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors" }
     $NsfwDir = Join-Path $MMAudioModelsDir "nsfw"
     New-Item -ItemType Directory -Force -Path $NsfwDir | Out-Null

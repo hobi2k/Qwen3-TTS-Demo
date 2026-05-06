@@ -66,6 +66,7 @@ Windows PowerShell:
 - `uv sync`
 - `uv pip install hf_transfer certifi`
 - `vendor/Applio`, `vendor/MMAudio`, `vendor/fish-speech` 준비
+- `.venv-mmaudio` 생성 및 MMAudio 전용 런타임 설치
 - ACE-Step은 기본 setup 단계가 아니라 `download_models.sh ace-step` 또는 `all`에서 별도 준비
 - `app/backend/.env` 생성
 - 시스템 의존성 점검
@@ -114,6 +115,11 @@ Windows PowerShell:
 - 기본 RVC `.pth + .index`
 - NSFW용 MMAudio 모델:
   `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
+- 일반 MMAudio 기본 추론 weight와 필수 부가 weight:
+  - `vendor/MMAudio/weights/mmaudio_large_44k_v2.pth`
+  - `vendor/MMAudio/ext_weights/v1-44.pth`
+  - `vendor/MMAudio/ext_weights/synchformer_state_dict.pth`
+  - `vendor/MMAudio/ext_weights/empty_string.pth`
 - Stem Separator 모델 (`오디오 분리` 탭용):
   `data/stem-separator-models/vocals_mel_band_roformer.ckpt`
 - ACE-Step 작곡 런타임:
@@ -148,6 +154,12 @@ S2-Pro만 준비하려면:
 
 ```bash
 ./scripts/download_models.sh s2pro
+```
+
+MMAudio만 준비하려면:
+
+```bash
+./scripts/download_models.sh mmaudio
 ```
 
 ACE-Step 작곡만 준비하려면:

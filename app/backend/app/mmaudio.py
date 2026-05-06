@@ -16,6 +16,7 @@ class MMAudioError(RuntimeError):
 
 
 NSFW_MMAUDIO_FILENAME = "mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors"
+DEFAULT_MMAUDIO_VARIANT = "large_44k_v2"
 
 
 def resolve_mmaudio_repo_root(repo_root: Path) -> Optional[Path]:
@@ -39,6 +40,7 @@ def resolve_mmaudio_python(repo_root: Path) -> str:
     candidates: List[Path] = [Path(configured).expanduser()] if configured else []
     candidates.extend(
         [
+            repo_root / ".venv-mmaudio" / "bin" / "python",
             repo_root / ".venv" / "bin" / "python",
             Path(sys.executable),
             repo_root / "vendor" / "MMAudio" / ".venv" / "bin" / "python",
@@ -157,6 +159,8 @@ class MMAudioSoundEffectEngine:
         command = [
             self.python_executable,
             str(script),
+            "--variant",
+            os.getenv("MMAUDIO_DEFAULT_VARIANT", DEFAULT_MMAUDIO_VARIANT).strip() or DEFAULT_MMAUDIO_VARIANT,
             "--prompt",
             prompt,
             "--duration",

@@ -84,6 +84,12 @@ S2-Pro만 준비하려면:
 ./scripts/bootstrap_all.sh s2pro
 ```
 
+MMAudio만 준비하려면:
+
+```bash
+./scripts/download_models.sh mmaudio
+```
+
 ACE-Step만 준비하려면:
 
 ```bash
@@ -148,7 +154,7 @@ Qwen3-TTS-Demo/
   qwen_extensions/           # demo-owned Qwen training/fusion/inference scripts
   vendor/
     Applio/                  # vendored (tracked in this repo)
-    MMAudio/                 # vendored (tracked in this repo)
+    MMAudio/                 # vendored (tracked in this repo, default weights cached under weights/ext_weights)
     fish-speech/             # vendored (tracked in this repo)
     ACE-Step/                # vendored (tracked in this repo)
     VibeVoice/               # vendored VibeVoice source, tracked in this repo
@@ -173,6 +179,14 @@ Qwen3-TTS-Demo/
     plan.md
   scripts/
 ```
+
+런타임 메모:
+
+- 메인 백엔드: `.venv`
+- MMAudio 전용 런타임: `.venv-mmaudio`
+- Fish Speech S2-Pro 전용 런타임: `.venv-fish-speech`
+- VibeVoice 전용 런타임: `.venv-vibevoice`
+- ACE-Step 전용 런타임: `.venv-ace-step`
 
 ## 핵심 구조 원칙
 
@@ -437,7 +451,8 @@ BACKEND_PORT=<BACKEND_PORT> npm run dev
 - `ensurepip` 복구
 - `uv sync`
 - `uv pip install hf_transfer certifi`
-- `vendor/Applio`, `vendor/MMAudio` 의 선택적 requirements 설치 (소스 자체는 이 레포에 vendored)
+- `vendor/Applio` optional requirements 설치
+- `.venv-mmaudio` 생성 및 `vendor/MMAudio` editable/runtime 설치
 - `app/backend/.env` 생성
 - `ffmpeg`, `sox` 점검
 
@@ -457,6 +472,8 @@ VibeVoice는 `gradio==5.50.0`, MMAudio는 `gradio<6`을 전제로 하므로 `gra
 - Applio/RVC 데모 모델과 index
 - Applio/RVC runtime asset: `contentvec` embedder, `rmvpe.pt`
 - MMAudio 일반/NSFW 효과음 모델
+  - 기본 `large_44k_v2` weight
+  - `v1-44`, `synchformer_state_dict`, `empty_string` support files
 - Stem separator 모델
 - 전용 `.venv-ace-step`, ACE-Step-1.5 음악 생성 checkpoint (소스는 이 레포에 vendored)
 

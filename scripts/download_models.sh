@@ -92,6 +92,7 @@ use_private_assets = sys.argv[5] == "1"
 
 profiles = {
     "ace-step": [],
+    "mmaudio": [],
     "s2pro": [],
     "vibevoice": [],
     "vibevoice-7b": [],
@@ -116,7 +117,7 @@ profiles = {
 }
 
 if profile not in profiles:
-    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', 's2pro', 'ace-step', 'vibevoice', or 'vibevoice-7b'.")
+    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', 'mmaudio', 's2pro', 'ace-step', 'vibevoice', or 'vibevoice-7b'.")
 
 for repo_id, dirname in profiles[profile]:
     local_dir = models_dir / dirname
@@ -429,24 +430,51 @@ if [[ -n "${MMAUDIO_CONFIG_URL:-}" ]]; then
   fi
 fi
 
+MMAUDIO_DEFAULT_VARIANT="${MMAUDIO_DEFAULT_VARIANT:-large_44k_v2}"
+case "${MMAUDIO_DEFAULT_VARIANT}" in
+  small_16k)
+    MMAUDIO_DEFAULT_MODEL_FILENAME="mmaudio_small_16k.pth"
+    ;;
+  small_44k)
+    MMAUDIO_DEFAULT_MODEL_FILENAME="mmaudio_small_44k.pth"
+    ;;
+  medium_44k)
+    MMAUDIO_DEFAULT_MODEL_FILENAME="mmaudio_medium_44k.pth"
+    ;;
+  large_44k)
+    MMAUDIO_DEFAULT_MODEL_FILENAME="mmaudio_large_44k.pth"
+    ;;
+  large_44k_v2|*)
+    MMAUDIO_DEFAULT_MODEL_FILENAME="mmaudio_large_44k_v2.pth"
+    MMAUDIO_DEFAULT_VARIANT="large_44k_v2"
+    ;;
+esac
+MMAUDIO_DEFAULT_MODEL_URL="${MMAUDIO_DEFAULT_MODEL_URL:-https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/${MMAUDIO_DEFAULT_MODEL_FILENAME}}"
+MMAUDIO_VAE_44K_URL="${MMAUDIO_VAE_44K_URL:-https://github.com/hkchengrex/MMAudio/releases/download/v0.1/v1-44.pth}"
+MMAUDIO_SYNCHFORMER_URL="${MMAUDIO_SYNCHFORMER_URL:-https://github.com/hkchengrex/MMAudio/releases/download/v0.1/synchformer_state_dict.pth}"
 MMAUDIO_EMPTY_STRING_URL="${MMAUDIO_EMPTY_STRING_URL:-https://github.com/hkchengrex/MMAudio/releases/download/v0.1/empty_string.pth}"
-if [[ "${PROFILE}" == "all" && -d "${MMAUDIO_DIR}" && -n "${MMAUDIO_EMPTY_STRING_URL:-}" ]]; then
-  TARGET_EMPTY_STRING="${MMAUDIO_DIR}/ext_weights/empty_string.pth"
-  mkdir -p "$(dirname "${TARGET_EMPTY_STRING}")"
-  if [[ ! -f "${TARGET_EMPTY_STRING}" ]]; then
-    if [[ -n "${PRIVATE_ASSET_REPO_ID}" ]] && download_private_asset "mmaudio/ext_weights/empty_string.pth" "${TARGET_EMPTY_STRING}"; then
-      echo "Downloaded MMAudio empty-string embedding from private asset repo."
+if [[ ( "${PROFILE}" == "all" || "${PROFILE}" == "mmaudio" ) && -d "${MMAUDIO_DIR}" ]]; then
+  mkdir -p "${MMAUDIO_DIR}/weights" "${MMAUDIO_DIR}/ext_weights"
+  for asset in \
+    "mmaudio/weights/${MMAUDIO_DEFAULT_MODEL_FILENAME}:${MMAUDIO_DIR}/weights/${MMAUDIO_DEFAULT_MODEL_FILENAME}:${MMAUDIO_DEFAULT_MODEL_URL}" \
+    "mmaudio/ext_weights/v1-44.pth:${MMAUDIO_DIR}/ext_weights/v1-44.pth:${MMAUDIO_VAE_44K_URL}" \
+    "mmaudio/ext_weights/synchformer_state_dict.pth:${MMAUDIO_DIR}/ext_weights/synchformer_state_dict.pth:${MMAUDIO_SYNCHFORMER_URL}" \
+    "mmaudio/ext_weights/empty_string.pth:${MMAUDIO_DIR}/ext_weights/empty_string.pth:${MMAUDIO_EMPTY_STRING_URL}"
+  do
+    IFS=":" read -r private_path target_path fallback_url <<<"${asset}"
+    if [[ -f "${target_path}" ]]; then
+      echo "MMAudio asset already present: ${target_path}"
+    elif [[ -n "${PRIVATE_ASSET_REPO_ID}" ]] && download_private_asset "${private_path}" "${target_path}"; then
+      echo "Downloaded MMAudio asset from private asset repo: ${private_path}"
     else
-      echo "Downloading MMAudio empty-string embedding -> ${TARGET_EMPTY_STRING}"
-      curl -L "${MMAUDIO_EMPTY_STRING_URL}" -o "${TARGET_EMPTY_STRING}"
+      echo "Downloading MMAudio asset -> ${target_path}"
+      curl -L "${fallback_url}" -o "${target_path}"
     fi
-  else
-    echo "MMAudio empty-string embedding already present: ${TARGET_EMPTY_STRING}"
-  fi
+  done
 fi
 
 MMAUDIO_NSFW_MODEL_URL="${MMAUDIO_NSFW_MODEL_URL:-https://huggingface.co/phazei/NSFW_MMaudio/resolve/main/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors}"
-if [[ "${PROFILE}" == "all" && -n "${MMAUDIO_NSFW_MODEL_URL:-}" ]]; then
+if [[ ( "${PROFILE}" == "all" || "${PROFILE}" == "mmaudio" ) && -n "${MMAUDIO_NSFW_MODEL_URL:-}" ]]; then
   TARGET_NSFW_MODEL="${MMAUDIO_MODELS_DIR}/nsfw/${MMAUDIO_NSFW_MODEL_FILENAME:-mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors}"
   mkdir -p "$(dirname "${TARGET_NSFW_MODEL}")"
   if [[ ! -f "${TARGET_NSFW_MODEL}" ]]; then
