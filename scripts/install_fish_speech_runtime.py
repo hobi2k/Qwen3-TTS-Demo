@@ -14,6 +14,7 @@ keeps torch ownership in the outer demo project:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import subprocess
 import sys
@@ -56,8 +57,12 @@ def torch_specs(version: str, profile: str) -> tuple[list[str], str | None]:
     """Return torch package specs and the matching PyTorch wheel index."""
 
     normalized = profile.strip().lower()
-    if normalized in {"current", "none", "skip"}:
+    if normalized in {"none", "skip"}:
         return [], None
+    if normalized == "current":
+        if importlib.util.find_spec("torch") is not None and importlib.util.find_spec("torchaudio") is not None:
+            return [], None
+        return [f"torch=={version}", f"torchaudio=={version}"], None
     if normalized == "cpu":
         return [f"torch=={version}+cpu", f"torchaudio=={version}+cpu"], "https://download.pytorch.org/whl/cpu"
     if normalized.startswith("cu"):
@@ -70,7 +75,10 @@ def install_requirements(*, repo_root: Path, torch_version: str, torch_profile: 
 
     torch_packages, torch_index_url = torch_specs(torch_version, torch_profile)
     if torch_packages:
-        command = ["uv", "pip", "install", "--index-url", torch_index_url, *torch_packages]
+        command = ["uv", "pip", "install"]
+        if torch_index_url:
+            command.extend(["--index-url", torch_index_url])
+        command.extend(torch_packages)
         run(command)
 
     dependencies = fish_speech_dependencies(repo_root)

@@ -13,7 +13,19 @@ FISH_SPEECH_HALF="${FISH_SPEECH_HALF:-1}"
 FISH_SPEECH_WORKERS="${FISH_SPEECH_WORKERS:-1}"
 FISH_SPEECH_DECODER_CONFIG="${FISH_SPEECH_DECODER_CONFIG:-modded_dac_vq}"
 FISH_SPEECH_TORCH_VERSION="${FISH_SPEECH_TORCH_VERSION:-2.11.0}"
-FISH_SPEECH_TORCH_PROFILE="${FISH_SPEECH_TORCH_PROFILE:-cu130}"
+FISH_SPEECH_TORCH_PROFILE="${FISH_SPEECH_TORCH_PROFILE:-}"
+
+OS_NAME="$(uname -s)"
+ARCH_NAME="$(uname -m)"
+if [[ -z "${FISH_SPEECH_TORCH_PROFILE}" ]]; then
+  if [[ "${OS_NAME}" == "Darwin" ]]; then
+    FISH_SPEECH_TORCH_PROFILE="current"
+  elif command -v nvidia-smi >/dev/null 2>&1; then
+    FISH_SPEECH_TORCH_PROFILE="cu130"
+  else
+    FISH_SPEECH_TORCH_PROFILE="cpu"
+  fi
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required but not installed." >&2
