@@ -1827,9 +1827,7 @@ function StudioApp() {
   const inferenceModels = visibleModels.filter((model) => model.inference_mode);
   const ttsModels = inferenceModels.filter((model) => model.category !== "voice_design");
   const voiceBoxModels = visibleModels.filter((model) => isVoiceBoxModel(model));
-  const plainCustomVoiceModels = visibleModels.filter(
-    (model) => model.source === "finetuned" && model.inference_mode === "custom_voice" && !isVoiceBoxModel(model),
-  );
+  const voiceBoxFusionCustomVoiceModels = customVoiceCapableModels.filter((model) => !isVoiceBoxModel(model));
   const trainingModelOptions =
     runForm.training_mode === "custom_voice"
       ? customVoiceCapableModels.filter((model) => !isVoiceBoxModel(model))
@@ -1895,8 +1893,8 @@ function StudioApp() {
     if (tokenizerModels.length > 0 && !runForm.tokenizer_model_path) {
       setRunForm((prev) => ({ ...prev, tokenizer_model_path: tokenizerModels[0].model_id }));
     }
-    if (plainCustomVoiceModels.length > 0 && !voiceBoxFusionForm.input_checkpoint_path) {
-      setVoiceBoxFusionForm((prev) => ({ ...prev, input_checkpoint_path: plainCustomVoiceModels[0].model_id }));
+    if (voiceBoxFusionCustomVoiceModels.length > 0 && !voiceBoxFusionForm.input_checkpoint_path) {
+      setVoiceBoxFusionForm((prev) => ({ ...prev, input_checkpoint_path: voiceBoxFusionCustomVoiceModels[0].model_id }));
     }
     if (baseModels.length > 0 && !voiceBoxFusionForm.speaker_encoder_source_path) {
       const preferred = preferredStockBaseModel;
@@ -1917,7 +1915,7 @@ function StudioApp() {
         setVoiceBoxMorphForm((prev) => ({ ...prev, model_id: preferred.model_id, anchor_speaker: prev.anchor_speaker || "auto" }));
       }
     }
-  }, [customVoiceCapableModels, customVoiceModels, voiceDesignModels, baseModels, ttsModels, tokenizerModels, plainCustomVoiceModels, voiceBoxModels, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, voiceBoxFusionForm.input_checkpoint_path, voiceBoxFusionForm.speaker_encoder_source_path, voiceBoxCloneForm.model_id, voiceBoxPresetForm.model_id, voiceBoxPresetInstructForm.model_id, voiceBoxMorphForm.model_id, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel]);
+  }, [customVoiceCapableModels, customVoiceModels, voiceDesignModels, baseModels, ttsModels, tokenizerModels, voiceBoxFusionCustomVoiceModels, voiceBoxModels, designForm.model_id, selectedBaseModelId, inferenceForm.model_id, hybridForm.custom_model_id, runForm.init_model_path, runForm.speaker_encoder_model_path, runForm.tokenizer_model_path, voiceBoxFusionForm.input_checkpoint_path, voiceBoxFusionForm.speaker_encoder_source_path, voiceBoxCloneForm.model_id, voiceBoxPresetForm.model_id, voiceBoxPresetInstructForm.model_id, voiceBoxMorphForm.model_id, preferredStockBaseModel, preferredStockCustomVoiceModel, preferredHybridCustomModel, preferredInferenceModel]);
 
   useEffect(() => {
     if (!selectedInferenceModel) {
@@ -11146,7 +11144,7 @@ function StudioApp() {
                     <SelectValue placeholder={t("projects.placeholder.preset", "선택하세요")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {plainCustomVoiceModels.map((model) => (
+                    {voiceBoxFusionCustomVoiceModels.map((model) => (
                       <SelectItem key={model.key} value={model.model_id}>{displayModelName(model)}</SelectItem>
                     ))}
                   </SelectContent>
