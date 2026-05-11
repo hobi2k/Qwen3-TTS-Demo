@@ -48,6 +48,9 @@ x-voice-studio-common: &voice-studio-common
     APPLIO_PYTHON_EXECUTABLE: /app/.venv/bin/python
     APPLIO_MODEL_DIR: /app/data/rvc-models
     MMAUDIO_REPO_ROOT: /app/vendor/MMAudio
+    MMAUDIO_TORCH_VERSION: ${MMAUDIO_TORCH_VERSION:-2.11.0}
+    MMAUDIO_TORCHAUDIO_VERSION: ${MMAUDIO_TORCHAUDIO_VERSION:-2.11.0}
+    MMAUDIO_TORCHVISION_VERSION: ${MMAUDIO_TORCHVISION_VERSION:-0.26.0}
     MMAUDIO_PYTHON_EXECUTABLE: /app/.venv/bin/python
     FISH_SPEECH_REPO_ROOT: /app/vendor/fish-speech
     ACE_STEP_REPO_ROOT: /app/vendor/ACE-Step

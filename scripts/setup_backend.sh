@@ -108,9 +108,35 @@ install_optional_repo_requirements() {
   do
     if [[ -f "${requirements_file}" ]]; then
       echo "Installing optional requirements from ${requirements_file}"
-      if ! uv pip install -r "${requirements_file}"; then
+      local filtered_requirements
+      filtered_requirements="$(mktemp)"
+      python - "${requirements_file}" "${filtered_requirements}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+torch_family = {"torch", "torchaudio", "torchvision"}
+
+def requirement_name(line: str) -> str:
+    token = line.strip().split(";", 1)[0].split("[", 1)[0]
+    token = re.split(r"==|>=|<=|~=|!=|>|<|=", token, maxsplit=1)[0]
+    return token.strip().lower().replace("_", "-")
+
+kept = []
+for raw in source.read_text(encoding="utf-8").splitlines():
+    stripped = raw.strip()
+    if stripped and not stripped.startswith("#") and not stripped.startswith("--"):
+        if requirement_name(stripped) in torch_family:
+            continue
+    kept.append(raw)
+target.write_text("\n".join(kept) + "\n", encoding="utf-8")
+PY
+      if ! uv pip install -r "${filtered_requirements}"; then
         echo "Warning: failed to install ${requirements_file}. Continue and configure manually if needed."
       fi
+      rm -f "${filtered_requirements}"
       return
     fi
   done
