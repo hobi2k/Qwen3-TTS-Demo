@@ -22,11 +22,13 @@
 
 ## 설치 / 셋업
 
-1. **vendor clone** (이미 완료)
+1. **vendored source 확인**
    ```bash
-   git -C vendor clone --depth 1 https://github.com/FunAudioLLM/CosyVoice.git
-   git -C vendor/CosyVoice submodule update --init --recursive
+   test -f vendor/CosyVoice/requirements.txt
+   test -d vendor/CosyVoice/third_party/Matcha-TTS
    ```
+   `vendor/CosyVoice`는 저장소 안에 일반 파일로 포함되어야 한다. `.git` 또는
+   `.gitmodules`를 남겨 submodule처럼 만들면 fresh clone에서 소스가 비어 보일 수 있다.
 
 2. **가상환경 생성**
    ```bash

@@ -363,7 +363,7 @@ COSYVOICE_TORCH_PROFILE="${COSYVOICE_TORCH_PROFILE:-}"
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "cosyvoice" ]]; then
   if [[ ! -f "${COSYVOICE_DIR}/requirements.txt" ]]; then
     echo "CosyVoice vendored source is missing: ${COSYVOICE_DIR}" >&2
-    echo "vendor/CosyVoice must be present (cloned from FunAudioLLM/CosyVoice)." >&2
+    echo "Restore the vendored CosyVoice source under vendor/CosyVoice before running this profile." >&2
     exit 1
   fi
   if [[ ! -d "${COSYVOICE_VENV}" ]]; then

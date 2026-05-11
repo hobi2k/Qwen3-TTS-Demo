@@ -44,7 +44,7 @@
 ### vendor 코드
 ```
 vendor/
-├── CosyVoice/                              # git clone FunAudioLLM/CosyVoice
+├── CosyVoice/                              # vendored FunAudioLLM/CosyVoice source, git metadata removed
 ├── VoxCPM/                                 # git clone OpenBMB/VoxCPM
 └── Supertonic/                             # git clone supertone-inc/supertonic
 ```
@@ -167,7 +167,7 @@ SUPERTONIC_MODEL_DIR           (default: data/models/supertonic3)
 ### Phase 1 — CosyVoice 3 (1순위)
 
 1. **추론 통합**
-   - vendor/CosyVoice clone, install_cosyvoice_runtime.py 작성, `.venv-cosyvoice3` 셋업
+   - vendor/CosyVoice vendored source 확인, install_cosyvoice_runtime.py 작성, `.venv-cosyvoice3` 셋업
    - `app/backend/app/cosyvoice.py`에 `CosyVoice3Engine` 작성 (subprocess JSON 프로토콜)
    - `scripts/run_cosyvoice_generate.py` 작성 (zero_shot/cross_lingual/instruct 분기 처리)
    - `schemas.py`에 Request/Response 추가
