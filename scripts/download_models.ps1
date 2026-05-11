@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "core", "mmaudio", "s2pro", "cosyvoice", "voxcpm", "supertonic")]
+    [ValidateSet("all", "core", "mmaudio", "s2pro", "ace-step", "vibevoice", "vibevoice-7b", "cosyvoice", "voxcpm", "supertonic")]
     [string]$Profile = "all"
 )
 
@@ -18,6 +18,12 @@ $MMAudioModelsDir = Join-Path $RootDir "data\mmaudio"
 $StemSeparatorModelsDir = Join-Path $RootDir "data\stem-separator-models"
 $FishSpeechDir = if ($env:FISH_SPEECH_REPO_ROOT) { $env:FISH_SPEECH_REPO_ROOT } else { Join-Path $VendorDir "fish-speech" }
 $FishSpeechModelDir = if ($env:FISH_SPEECH_MODEL_DIR) { $env:FISH_SPEECH_MODEL_DIR } else { Join-Path $RootDir "data\models\fish-speech\s2-pro" }
+$VibeVoiceDir = if ($env:VIBEVOICE_REPO_ROOT) { $env:VIBEVOICE_REPO_ROOT } else { Join-Path $VendorDir "VibeVoice" }
+$VibeVoiceModelDir = if ($env:VIBEVOICE_MODEL_DIR) { $env:VIBEVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\vibevoice" }
+$VibeVoiceVenv = if ($env:VIBEVOICE_VENV) { $env:VIBEVOICE_VENV } else { Join-Path $RootDir ".venv-vibevoice" }
+$AceStepDir = if ($env:ACE_STEP_REPO_ROOT) { $env:ACE_STEP_REPO_ROOT } else { Join-Path $VendorDir "ACE-Step" }
+$AceStepModelDir = if ($env:ACE_STEP_CHECKPOINT_PATH) { $env:ACE_STEP_CHECKPOINT_PATH } else { Join-Path $RootDir "data\models\ace-step" }
+$AceStepVenv = if ($env:ACE_STEP_VENV) { $env:ACE_STEP_VENV } else { Join-Path $RootDir ".venv-ace-step" }
 $CosyVoiceDir = if ($env:COSYVOICE_REPO_ROOT) { $env:COSYVOICE_REPO_ROOT } else { Join-Path $VendorDir "CosyVoice" }
 $CosyVoiceModelDir = if ($env:COSYVOICE_MODEL_DIR) { $env:COSYVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\cosyvoice3" }
 $CosyVoiceVenv = if ($env:COSYVOICE_VENV) { $env:COSYVOICE_VENV } else { Join-Path $RootDir ".venv-cosyvoice3" }
@@ -39,6 +45,8 @@ New-Item -ItemType Directory -Force -Path $ApplioPredictorDir | Out-Null
 New-Item -ItemType Directory -Force -Path $MMAudioModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $StemSeparatorModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $FishSpeechModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $VibeVoiceModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $AceStepModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $CosyVoiceModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $VoxCPMModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $SupertonicModelDir | Out-Null
@@ -114,6 +122,9 @@ profile = r'''$Profile'''
 profiles = {
     'mmaudio': [],
     's2pro': [],
+    'ace-step': [],
+    'vibevoice': [],
+    'vibevoice-7b': [],
     'cosyvoice': [],
     'voxcpm': [],
     'supertonic': [],
@@ -171,6 +182,126 @@ snapshot_download(
 )
 print('Fish Speech S2-Pro model download completed.')
 "@
+}
+
+# --------------------------------------------------------------------------
+# VibeVoice (Microsoft, MIT) — .venv-vibevoice + HF weight bundles
+# --------------------------------------------------------------------------
+$VibeVoiceInclude7B = if ($env:VIBEVOICE_INCLUDE_7B) { $env:VIBEVOICE_INCLUDE_7B } else { "0" }
+if ($Profile -eq "vibevoice-7b") { $VibeVoiceInclude7B = "1" }
+if (($Profile -eq "all") -or ($Profile -eq "vibevoice") -or ($Profile -eq "vibevoice-7b")) {
+    Assert-VendoredSource -Name "VibeVoice" -TargetDir $VibeVoiceDir
+    if (-not (Test-Path (Join-Path $VibeVoiceDir "pyproject.toml"))) {
+        throw "VibeVoice vendored source is incomplete (missing pyproject.toml): $VibeVoiceDir"
+    }
+    if (-not (Test-Path $VibeVoiceVenv)) {
+        Write-Host "Creating VibeVoice venv -> $VibeVoiceVenv"
+        python -m venv $VibeVoiceVenv
+    }
+    $VibeVoicePython = Join-Path $VibeVoiceVenv "Scripts\python.exe"
+    & $VibeVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
+    $VibeVoiceRequirements = Join-Path $VibeVoiceDir "requirements.txt"
+    if (Test-Path $VibeVoiceRequirements) {
+        & $VibeVoicePython -m pip install -r $VibeVoiceRequirements | Out-Host
+    }
+    & $VibeVoicePython -m pip install -e $VibeVoiceDir | Out-Host
+    & $VibeVoicePython -m pip install librosa soundfile huggingface_hub transformers accelerate peft | Out-Host
+
+    python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+target_root = Path(r'''$VibeVoiceModelDir''')
+include_7b = r'''$VibeVoiceInclude7B''' == '1'
+
+models = [
+    ('microsoft/VibeVoice-ASR', 'VibeVoice-ASR'),
+    ('microsoft/VibeVoice-Realtime-0.5B', 'VibeVoice-Realtime-0.5B'),
+    ('vibevoice/VibeVoice-1.5B', 'VibeVoice-1.5B'),
+]
+if include_7b:
+    models.append(('vibevoice/VibeVoice-7B', 'VibeVoice-7B'))
+
+for repo_id, dirname in models:
+    local_dir = target_root / dirname
+    print(f'Downloading {repo_id} -> {local_dir}')
+    snapshot_download(
+        repo_id=repo_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+        resume_download=True,
+    )
+suffix = ', and community 7B TTS' if include_7b else ''
+print(f'VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS{suffix} model downloads completed.')
+"@
+}
+
+# --------------------------------------------------------------------------
+# ACE-Step-1.5 (Alibaba, Apache 2.0) — .venv-ace-step + checkpoint cache
+# --------------------------------------------------------------------------
+$AceStepDownloadProfile = if ($env:ACE_STEP_DOWNLOAD_PROFILE) { $env:ACE_STEP_DOWNLOAD_PROFILE } else { "main" }
+if (($Profile -eq "all") -or ($Profile -eq "ace-step")) {
+    Assert-VendoredSource -Name "ACE-Step" -TargetDir $AceStepDir
+    if (-not (Test-Path $AceStepVenv)) {
+        Write-Host "Creating ACE-Step venv -> $AceStepVenv"
+        python -m venv $AceStepVenv
+    }
+    $AceStepPython = Join-Path $AceStepVenv "Scripts\python.exe"
+    & $AceStepPython -m pip install --upgrade pip wheel setuptools hatchling | Out-Host
+    Write-Host "Installing ACE-Step-1.5 into $AceStepVenv (this may take a while)"
+    Write-Host "Note: nano-vllm includes CUDA kernels. On Windows native this may fail without MSVC + CUDA toolkit installed; WSL2 is the most reliable path."
+
+    $UseUv = $false
+    try {
+        $null = & uv --version 2>$null
+        if ($LASTEXITCODE -eq 0) { $UseUv = $true }
+    } catch { }
+
+    if ($UseUv) {
+        # ACE-Step 1.5 declares nano-vllm as a local source in pyproject.toml.
+        # uv honors [tool.uv.sources]; plain pip does not.
+        uv pip install --python $AceStepPython -e $AceStepDir | Out-Host
+        if ($env:HF_HUB_ENABLE_HF_TRANSFER -eq "1") {
+            uv pip install --python $AceStepPython hf_transfer | Out-Host
+        }
+    }
+    else {
+        Write-Host "uv not found; using pip fallback with local nano-vllm source."
+        $NanoVllmDir = Join-Path $AceStepDir "acestep\third_parts\nano-vllm"
+        if (Test-Path $NanoVllmDir) {
+            & $AceStepPython -m pip install -e $NanoVllmDir | Out-Host
+        }
+        & $AceStepPython -m pip install --no-deps -e $AceStepDir | Out-Host
+        if ($env:HF_HUB_ENABLE_HF_TRANSFER -eq "1") {
+            & $AceStepPython -m pip install hf_transfer | Out-Host
+        }
+    }
+
+    Write-Host "Downloading ACE-Step-1.5 checkpoints (profile: $AceStepDownloadProfile) -> $AceStepModelDir"
+    $env:ACESTEP_CHECKPOINTS_DIR = $AceStepModelDir
+    switch ($AceStepDownloadProfile) {
+        { @("none", "skip") -contains $_ } {
+            Write-Host ("ACE_STEP_DOWNLOAD_PROFILE={0}: skipping checkpoint download. Models will be fetched on first generation." -f $_)
+        }
+        "all" {
+            & $AceStepPython -m acestep.model_downloader --all --dir $AceStepModelDir
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "ACE-Step --all download failed. Retry: $AceStepPython -m acestep.model_downloader --all --dir $AceStepModelDir"
+            }
+        }
+        "main" {
+            & $AceStepPython -m acestep.model_downloader --dir $AceStepModelDir
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "ACE-Step main download failed. Retry: $AceStepPython -m acestep.model_downloader --dir $AceStepModelDir"
+            }
+        }
+        Default {
+            & $AceStepPython -m acestep.model_downloader --model $AceStepDownloadProfile --dir $AceStepModelDir
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "ACE-Step download for model '$AceStepDownloadProfile' failed."
+            }
+        }
+    }
 }
 
 if ($Profile -eq "s2pro") {
