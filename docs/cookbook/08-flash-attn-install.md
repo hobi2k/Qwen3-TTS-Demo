@@ -1,6 +1,6 @@
 # FlashAttention 2 설치 가이드
 
-이 문서는 `Qwen3-TTS-Demo`를 Linux 또는 WSL2 + NVIDIA CUDA 환경에서 실행할 때,
+이 문서는 `voicestudio`를 Linux 또는 WSL2 + NVIDIA CUDA 환경에서 실행할 때,
 이 프로젝트가 실제로 검증한 `FlashAttention 2` 설치 경로를 설명합니다.
 
 핵심 원칙은 단순합니다.
@@ -42,7 +42,7 @@
 프로젝트 루트에서 아래 순서로 실행합니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 source .venv/bin/activate
 uv pip uninstall -y flash-attn-3
 uv pip install --no-cache-dir "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-2.8.3+cu130torch2.11-cp311-cp311-linux_x86_64.whl"
@@ -59,7 +59,7 @@ uv pip install --no-cache-dir "https://github.com/mjun0812/flash-attention-prebu
 설치 직후 아래 명령을 실행해 import와 GPU 실행을 둘 다 확인합니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 source .venv/bin/activate
 uv pip show flash-attn
 python -c "import importlib.util; print(importlib.util.find_spec('flash_attn') is not None)"
@@ -157,7 +157,7 @@ FlashAttention import만 성공했다고 학습 안정성이 보장되지는 않
 훈련 전에 아래를 확인합니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 source .venv/bin/activate
 nvidia-smi
 python - <<'PY'

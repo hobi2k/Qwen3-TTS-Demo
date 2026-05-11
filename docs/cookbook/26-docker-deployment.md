@@ -35,7 +35,7 @@ cp .env.docker.example .env
 
 ```bash
 HF_TOKEN=...
-PRIVATE_ASSET_REPO_ID=your-name/qwen3-tts-demo-assets
+PRIVATE_ASSET_REPO_ID=your-name/voicestudio-assets
 QWEN_USE_PRIVATE_ASSET_REPO=1
 ```
 

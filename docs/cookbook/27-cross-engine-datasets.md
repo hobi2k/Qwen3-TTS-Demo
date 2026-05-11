@@ -97,6 +97,9 @@ data/datasets/<dataset_id>/
 - Applio/RVC: 데이터셋의 정규화 WAV 묶음을 목표 목소리 학습 입력에 연결합니다.
 - MMAudio: 데이터셋 manifest를 기준으로 configured training 입력에 연결합니다.
 - ACE-Step: dataset JSON, audio 묶음, 또는 prepared tensor를 학습 입력에 연결합니다.
+- CosyVoice 3: 데이터셋의 `manifest.jsonl` (`audio`, `text`, optional `speaker`)을 llm/flow/hifigan SFT 입력에 연결합니다.
+- VoxCPM2: 동일하게 `manifest.jsonl` (`audio`, `text`)을 LoRA 학습 입력에 연결합니다. CosyVoice와 같은 폴더 규약을 그대로 사용합니다.
+- Supertonic 3: ONNX 추론 전용이라 학습 데이터셋 연결이 없습니다. 데이터셋 탭은 안내만 표시합니다.
 
 ### S2-Pro
 
@@ -134,6 +137,27 @@ MMAudio는 upstream config 기반 학습이 중심이지만, 앱에서는 효과
 공통 빌더가 만든 dataset JSON과 audio 묶음을 ACE-Step 학습 입력에 연결합니다.
 
 이미 tensor 전처리를 끝낸 경우 `Prepared tensor` 탭에서 tensor 폴더를 넘깁니다.
+
+### CosyVoice 3 / VoxCPM2
+
+두 엔진 모두 같은 manifest 규약을 사용합니다:
+
+```jsonl
+{"audio": "wavs/utt_001.wav", "text": "안녕하세요"}
+{"audio": "wavs/utt_002.wav", "text": "반갑습니다"}
+```
+
+`data/datasets/<dataset_id>/manifest.jsonl` 한 파일에 정리하면 CosyVoice 학습 탭과
+VoxCPM 학습 탭 양쪽에서 `dataset_id`로 그대로 참조할 수 있습니다. 검증 세트를 따로
+두고 싶을 때만 별도 `dataset_id`를 만들어 `cv_dataset_id`로 넘깁니다.
+
+CosyVoice는 추가로 speaker 컬럼을 인식해 `utt2spk` / `spk2utt`를 자동 생성합니다
+(없으면 `spk_default`로 묶입니다).
+
+### Supertonic 3
+
+ONNX 추론 전용이라 학습 데이터셋이 필요 없습니다. 데이터셋 탭은 "Phase 4 역공학
+완료까지 학습이 불가능하다"는 안내만 표시합니다.
 
 ## API
 

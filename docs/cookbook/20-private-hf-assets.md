@@ -26,7 +26,7 @@
 권장 repo 예:
 
 ```text
-<your-hf-username>/qwen3-tts-demo-assets
+<your-hf-username>/voicestudio-assets
 ```
 
 repo 내부 구조:
@@ -112,7 +112,7 @@ export HF_TOKEN=...
 
 ```bash
 ./.venv/bin/python scripts/prepare_private_hf_assets.py \
-  --repo-id <your-hf-username>/qwen3-tts-demo-assets \
+  --repo-id <your-hf-username>/voicestudio-assets \
   --private \
   --upload
 ```
@@ -121,7 +121,7 @@ Qwen/Qwen3-ASR mirror까지 업로드:
 
 ```bash
 ./.venv/bin/python scripts/prepare_private_hf_assets.py \
-  --repo-id <your-hf-username>/qwen3-tts-demo-assets \
+  --repo-id <your-hf-username>/voicestudio-assets \
   --private \
   --include-public-models \
   --upload
@@ -132,7 +132,7 @@ Qwen/Qwen3-ASR mirror까지 업로드:
 개인 repo를 우선 사용:
 
 ```bash
-export PRIVATE_ASSET_REPO_ID=<your-hf-username>/qwen3-tts-demo-assets
+export PRIVATE_ASSET_REPO_ID=<your-hf-username>/voicestudio-assets
 export PRIVATE_ASSET_REVISION=main
 ./scripts/download_models.sh
 ```
@@ -140,7 +140,7 @@ export PRIVATE_ASSET_REVISION=main
 Qwen/Qwen3-ASR 모델도 개인 mirror에서 받으려면:
 
 ```bash
-export PRIVATE_ASSET_REPO_ID=<your-hf-username>/qwen3-tts-demo-assets
+export PRIVATE_ASSET_REPO_ID=<your-hf-username>/voicestudio-assets
 export PRIVATE_ASSET_REVISION=main
 export QWEN_USE_PRIVATE_ASSET_REPO=1
 ./scripts/download_models.sh

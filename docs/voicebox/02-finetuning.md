@@ -34,7 +34,7 @@ VoiceBox 작업은 위 `qwen_extensions` canonical script를 직접 실행합니
 처음에는 plain `CustomVoice`에 `mai`를 추가합니다. 이 단계는 아직 `VoiceBox`가 아닙니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
@@ -60,7 +60,7 @@ QWEN_DEMO_LOG_EVERY=25 \
 이제 1단계 결과에 `Base 1.7B`의 `speaker_encoder`를 포함시켜 self-contained `VoiceBox`를 만듭니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv/bin/python qwen_extensions/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
@@ -78,7 +78,7 @@ cd ~/pytorch-demo/Qwen3-TTS-Demo
 이제 외부 `Base` 경로 없이 `VoiceBox`만으로 재학습합니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
@@ -145,7 +145,7 @@ QWEN_DEMO_GRAD_ACCUM_STEPS=1
 예시:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv/bin/python qwen_extensions/fusion/upload_voicebox_to_hub.py \
   --checkpoint data/finetune-runs/mai_ko_voicebox17b_full/final \
   --repo-id <your-hf-id>/mai-ko-voicebox-1.7b

@@ -1,4 +1,4 @@
-name: qwen3-tts-demo
+name: voicestudio
 
 x-voice-studio-common: &voice-studio-common
   build:
@@ -11,7 +11,7 @@ x-voice-studio-common: &voice-studio-common
       TORCHAUDIO_VERSION: ${TORCHAUDIO_VERSION:-2.11.0}
       TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.26.0}
       BACKEND_PORT: ${BACKEND_PORT:-8190}
-  image: qwen3-tts-demo:local
+  image: voicestudio:local
   gpus: all
   shm_size: "16gb"
   ipc: host

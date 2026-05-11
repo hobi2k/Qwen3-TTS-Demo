@@ -20,8 +20,8 @@
 ## 1. Clone
 
 ```bash
-git clone <your-repo-url> Qwen3-TTS-Demo
-cd Qwen3-TTS-Demo
+git clone <your-repo-url> voicestudio
+cd voicestudio
 ```
 
 ## 1-1. 한 번에 준비하기
@@ -130,7 +130,7 @@ Windows PowerShell:
 개인 Hugging Face mirror를 먼저 사용하려면:
 
 ```bash
-export PRIVATE_ASSET_REPO_ID=<your-hf-username>/qwen3-tts-demo-assets
+export PRIVATE_ASSET_REPO_ID=<your-hf-username>/voicestudio-assets
 export PRIVATE_ASSET_REVISION=main
 ./scripts/download_models.sh
 ```

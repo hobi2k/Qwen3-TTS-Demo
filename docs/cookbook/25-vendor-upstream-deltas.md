@@ -24,7 +24,7 @@
 기본 확인 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 git diff --stat -- vendor qwen_extensions app/backend/app/vendor_patches
 git diff -- vendor/MMAudio
 ./.venv/bin/python -m compileall app/backend/app qwen_extensions scripts
@@ -108,7 +108,7 @@ upstream MMAudio가 다음 중 하나를 해결했다면 해당 local patch는 �
 재검증 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 ./.venv/bin/python -m compileall vendor/MMAudio/mmaudio app/backend/app
 ./.venv/bin/python scripts/live_external_training_smoke.py --engines mmaudio
 ./.venv/bin/python scripts/live_e2e_verify.py --include-heavy --port 8202
@@ -168,7 +168,7 @@ Fish Speech는 wrapper script와 backend bridge로 통합하되, 로컬 S2-Pro �
 재검증 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv-fish-speech/bin/python -m py_compile \
   vendor/fish-speech/fish_speech/models/text2semantic/inference.py \
   vendor/fish-speech/tools/server/model_manager.py

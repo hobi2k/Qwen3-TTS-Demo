@@ -18,21 +18,21 @@
 
 ## 핵심 파일
 
-- [main.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/main.py)
-- [qwen.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/qwen.py)
-- [voice_changer.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/voice_changer.py)
-- [mmaudio.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/mmaudio.py)
-- [ace_step.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/ace_step.py)
-- [vibevoice.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/vibevoice.py)
-- [schemas.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/schemas.py)
-- [storage.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/storage.py)
-- [qwen_extensions](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/qwen_extensions)
-- [qwen3_tts_upstream_train.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/scripts/qwen3_tts_upstream_train.py)
-- [qwen3_tts_prepare_data.py](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/scripts/qwen3_tts_prepare_data.py)
+- [main.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/main.py)
+- [qwen.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/qwen.py)
+- [voice_changer.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/voice_changer.py)
+- [mmaudio.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/mmaudio.py)
+- [ace_step.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/ace_step.py)
+- [vibevoice.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/vibevoice.py)
+- [schemas.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/schemas.py)
+- [storage.py](/home/hosung/pytorch-demo/voicestudio/app/backend/app/storage.py)
+- [qwen_extensions](/home/hosung/pytorch-demo/voicestudio/qwen_extensions)
+- [qwen3_tts_upstream_train.py](/home/hosung/pytorch-demo/voicestudio/scripts/qwen3_tts_upstream_train.py)
+- [qwen3_tts_prepare_data.py](/home/hosung/pytorch-demo/voicestudio/scripts/qwen3_tts_prepare_data.py)
 
 ## 앱 시작 시점
 
-[`main.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/main.py)에서는 아래를 초기화합니다.
+[`main.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/main.py)에서는 아래를 초기화합니다.
 
 - `.env` 로드
 - 저장 루트 계산
@@ -91,7 +91,7 @@
 
 ## 모델 엔진
 
-[`qwen.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/qwen.py)의 `QwenDemoEngine`은 현재 아래 역할을 합니다.
+[`qwen.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/qwen.py)의 `QwenDemoEngine`은 현재 아래 역할을 합니다.
 
 - `CustomVoice` 생성
 - `VoiceDesign` 생성
@@ -112,7 +112,7 @@
 
 ## Qwen 확장 스크립트 실행
 
-기본 `Qwen3-TTS` 추론은 [`qwen.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/qwen.py)가 직접 래핑합니다. 하지만 CustomVoice 추가 학습, VoiceBox 변환, VoiceBox clone 실험처럼 데모가 새로 만든 Qwen 실행 파일은 [`qwen_extensions`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/qwen_extensions)를 기준으로 실행합니다.
+기본 `Qwen3-TTS` 추론은 [`qwen.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/qwen.py)가 직접 래핑합니다. 하지만 CustomVoice 추가 학습, VoiceBox 변환, VoiceBox clone 실험처럼 데모가 새로 만든 Qwen 실행 파일은 [`qwen_extensions`](/home/hosung/pytorch-demo/voicestudio/qwen_extensions)를 기준으로 실행합니다.
 
 백엔드의 실행 기준:
 
@@ -126,7 +126,7 @@
 
 ### Applio / RVC
 
-[`voice_changer.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/voice_changer.py)의 `ApplioVoiceChanger`가 담당합니다.
+[`voice_changer.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/voice_changer.py)의 `ApplioVoiceChanger`가 담당합니다.
 
 현재 기준:
 
@@ -149,7 +149,7 @@
 
 ### 사운드 효과
 
-[`mmaudio.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/mmaudio.py)의 `MMAudioSoundEffectEngine`이 담당합니다.
+[`mmaudio.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/mmaudio.py)의 `MMAudioSoundEffectEngine`이 담당합니다.
 
 현재 기준:
 
@@ -180,7 +180,7 @@
 
 ### ACE-Step 작곡
 
-[`ace_step.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/ace_step.py)의 `AceStepComposer`가 담당합니다.
+[`ace_step.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/ace_step.py)의 `AceStepComposer`가 담당합니다.
 
 현재 기준:
 
@@ -196,7 +196,7 @@
 
 ## 스키마 계층
 
-[`schemas.py`](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/backend/app/schemas.py)에서는 아래를 중심으로 타입을 정리합니다.
+[`schemas.py`](/home/hosung/pytorch-demo/voicestudio/app/backend/app/schemas.py)에서는 아래를 중심으로 타입을 정리합니다.
 
 - 모델 목록
 - 생성 요청 / 응답

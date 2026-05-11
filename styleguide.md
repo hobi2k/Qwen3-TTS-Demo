@@ -1,4 +1,4 @@
-# Qwen3-TTS-Demo Style Guide
+# voicestudio Style Guide
 
 ## 문서화 원칙
 

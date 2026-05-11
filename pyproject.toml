@@ -1,7 +1,7 @@
 [project]
-name = "qwen3-tts-demo"
+name = "voicestudio"
 version = "0.1.0"
-description = "Local FastAPI demo application for Qwen3-TTS workflows."
+description = "Local FastAPI multi-model voice + music studio (Qwen3-TTS, Fish Speech S2-Pro, CosyVoice 3, VoxCPM2, Supertonic 3, VibeVoice, MMAudio, ACE-Step, Applio)."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [

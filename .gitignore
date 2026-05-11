@@ -203,6 +203,10 @@ app/frontend/tsconfig.tsbuildinfo
 .venv-fish-speech/
 .venv-ace-step/
 .venv-vibevoice/
+.venv-mmaudio/
+.venv-cosyvoice3/
+.venv-voxcpm2/
+.venv-supertonic3/
 app/backend/.venv*/
 .cache/
 models/

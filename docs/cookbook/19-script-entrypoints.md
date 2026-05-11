@@ -187,7 +187,7 @@ Qwen 외 모델군은 공통 데이터셋 생성 API인 `POST /api/audio-dataset
 외부 엔진 전체 훈련 smoke:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 ./.venv/bin/python scripts/live_external_training_smoke.py --engines s2pro vibevoice applio mmaudio ace-step
 ```
 

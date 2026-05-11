@@ -1,5 +1,5 @@
 {
-  "schema": "qwen3-tts-demo-private-assets-v1",
+  "schema": "voicestudio-private-assets-v1",
   "target_repo_id": "${PRIVATE_ASSET_REPO_ID}",
   "target_repo_type": "model",
   "download_env": {

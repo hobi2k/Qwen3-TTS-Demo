@@ -1,6 +1,12 @@
-# Qwen3-TTS-Demo
+# voicestudio
 
-`Qwen3-TTS`, `Fish Speech S2-Pro`, `Applio`, `MMAudio`, `ACE-Step`, `VibeVoice`를 하나의 로컬 작업실로 묶은 음성/음악 데모 애플리케이션입니다.
+`Qwen3-TTS`, `Fish Speech S2-Pro`, `CosyVoice 3`, `VoxCPM2`, `Supertonic 3`, `Applio`, `MMAudio`, `ACE-Step`, `VibeVoice`를 하나의 로컬 작업실로 묶은 음성/음악 스튜디오 애플리케이션입니다. 여기에 **hobi2k 고유 커스텀 개조 모델 `VoiceBox`** 파이프라인이 별도로 들어 있습니다.
+
+> 본 프로젝트는 이전에 `Qwen3-TTS-Demo`로 불렸습니다. 디렉터리/리포지토리 이름은 환경에 따라 `Qwen3-TTS-Demo` 또는 `voicestudio`로 남아 있을 수 있으며, 문서·UI·패키지 식별자는 모두 `voicestudio`를 정식 이름으로 사용합니다.
+
+> 🛠 **VoiceBox는 외부 vendor 모델이 아니라 이 저장소 소유자(hobi2k)의 고유 커스텀 개조 모델입니다.** Qwen3-TTS `Base 1.7B`의 `speaker_encoder`를 fine-tuned `CustomVoice` 체크포인트에 합쳐 self-contained checkpoint를 만들고, 그 위에 `VoiceBox -> VoiceBox` 재학습 / clone / clone + instruct / speaker morph 같은 hobi2k 고유 워크플로우를 얹었습니다. 학습·변환·추론 코드는 `qwen_extensions/`와 `scripts/`에 들어 있으며, upstream Qwen3-TTS에는 없는 별도 trackable 모델군입니다.
+
+> 🧩 **`Base + CustomVoice instruct` hybrid 추론 경로도 hobi2k 고유 파이프라인입니다.** upstream Qwen3-TTS의 공식 high-level wrapper가 아니며, Base 체크포인트의 clone prompt(참조 음성 acoustic/style)와 CustomVoice 체크포인트의 instruct 학습 분포를 한 추론 요청 안에서 결합하는 데모 확장 경로입니다. canonical 구현은 `qwen_extensions/inference/hybrid_clone_instruct.py`와 `app/backend/app/qwen.py`이고, `프리셋 기반 생성` 탭과 `/api/generate/hybrid-clone-instruct` 엔드포인트에서 노출됩니다.
 
 현재 구조는 “기능을 나열하는 데모”가 아니라, 사용자가 실제로 아래 작업을 구분해서 쓸 수 있는 제품형 흐름을 기준으로 정리되어 있습니다.
 
@@ -10,20 +16,22 @@
   참조 음성에서 clone prompt를 만들고 스타일 자산으로 저장합니다.
 - `목소리 설계`
   설명문으로 새 목소리를 만들고 프리셋으로 저장합니다.
-- `프리셋 기반 생성`
-  저장한 프리셋을 기준으로 반복 생성하거나, 프리셋 위에 말투 지시를 덧입혀 생성합니다.
+- `프리셋 기반 생성` *(Base + Instruct hybrid는 hobi2k 커스텀 경로)*
+  저장한 프리셋을 기준으로 반복 생성하거나, 프리셋 위에 말투 지시를 덧입혀 생성합니다. Base clone prompt + CustomVoice instruct를 한 추론 요청 안에서 결합하는 `Base + Instruct` hybrid 경로는 upstream Qwen3-TTS에는 없는 hobi2k 고유 파이프라인이며 canonical 구현은 `qwen_extensions/inference/hybrid_clone_instruct.py`입니다.
 - `나의 목소리들`
   훈련한 모델, Qwen/S2-Pro 프리셋, RVC 모델, Qwen/S2-Pro/VibeVoice/RVC/MMAudio/ACE-Step 데이터셋을 한곳에서 확인하고 삭제하는 운영 라이브러리입니다.
 - `생성 갤러리`
   생성 결과를 음성, Qwen 프리셋 음성, S2-Pro 프리셋 음성, 사운드 이펙트, ACE-Step 음악, RVC 변환, 정제/분리 결과로 구분해 보고, 현재 분류 기준으로 선택 삭제/개별 삭제하는 화면입니다.
 - `Qwen 데이터셋 만들기 / 학습 실행`
-  Qwen 계열 학습용 오디오와 텍스트를 정리해 `data/datasets/<dataset_id>/` 구조로 저장한 뒤 `Base`, `CustomVoice`, `VoiceBox` 학습을 실행합니다.
-- `VoiceBox 융합`
-  CustomVoice 학습 결과와 Base speaker encoder를 합쳐 독립 모델을 만듭니다.
-- `VoiceBox Clone`
-  VoiceBox 하나만 사용해 참조 음성의 음색을 복제합니다.
-- `Clone + Instruct`
+  Qwen 계열 학습용 오디오와 텍스트를 정리해 `data/datasets/<dataset_id>/` 구조로 저장한 뒤 `Base`, `CustomVoice`, `VoiceBox` 학습을 실행합니다. `VoiceBox` 라인은 hobi2k 고유 커스텀 개조 모델 파이프라인입니다.
+- `VoiceBox 융합` *(hobi2k 커스텀)*
+  CustomVoice 학습 결과와 `Base 1.7B`의 `speaker_encoder`를 합쳐 self-contained `VoiceBox` 체크포인트를 만듭니다. upstream Qwen3-TTS에는 없는 단계입니다.
+- `VoiceBox Clone` *(hobi2k 커스텀)*
+  VoiceBox 하나만 사용해 참조 음성의 음색을 복제합니다 (외부 Base 체크포인트 불필요).
+- `Clone + Instruct` *(hobi2k 커스텀)*
   VoiceBox 하나만 사용해 참조 음성 복제와 말투 지시를 함께 적용합니다.
+- `VoiceBox Speaker Morph` *(hobi2k 커스텀)*
+  `Sohee -> kangsora`처럼 언어 anchor speaker row를 복사해 새 영구 화자를 VoiceBox 체크포인트 안에 저장합니다.
 - `사운드 효과 / MMAudio 학습`
   `MMAudio` 기반 효과음 생성 화면과 upstream `train.py` 기반 full/continued training 화면입니다. MMAudio upstream에는 LoRA/adapter 학습 경로가 없어 학습 탭은 기존 weight 이어학습 또는 전체 학습만 다룹니다.
 - `S2-Pro 텍스트 음성 변환 / 목소리 저장 / 대화 생성 / 다국어 TTS / 데이터셋 / LoRA-Full 학습`
@@ -37,6 +45,12 @@
   ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 데이터셋 탭에서 음악 학습 세트를 먼저 준비하고, `LoRA / LoKr 학습` 탭에서는 준비된 데이터셋을 선택해 upstream `train.py`로 ACE-Step 어댑터를 만듭니다.
 - `VibeVoice`
   Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, optional 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR 학습 세트를 먼저 만들고, 학습은 `TTS Fine-tune`과 `ASR Fine-tune` 탭에서 준비된 데이터셋을 선택해 실행합니다. `Model Tools`에서는 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
+- `CosyVoice 3 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
+  FunAudioLLM CosyVoice 3 (Apache 2.0)를 `.venv-cosyvoice3` subprocess로 다룹니다. `zero_shot`, `cross_lingual` (한국어 권장), `instruct2`, `sft`, `vc` 모드를 한 탭에서 전환할 수 있고, zero-shot/cross-lingual 보이스 프리셋을 저장해 재사용할 수 있습니다. 학습 탭은 `llm`/`flow`/`hifigan` 서브모듈을 데이터셋 manifest로 SFT 합니다 (LoRA는 upstream 미지원).
+- `VoxCPM2 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
+  OpenBMB VoxCPM2 (Apache 2.0, 30개 언어, 한국어 SIM 1위)를 `.venv-voxcpm2` subprocess로 다룹니다. `voice_design` (괄호 디스크립터), `voice_cloning`, `ultimate_cloning` 세 가지 추론 모드와 `lm`/`dit`/`proj` LoRA 어댑터 학습을 한 화면에서 실행합니다. 학습 런처는 upstream `scripts/train_voxcpm_finetune.py`를 직접 호출합니다.
+- `Supertonic 3 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
+  Supertone Supertonic 3 (BigScience Open RAIL-M, 31개 언어, ONNX 추론)를 메인 venv 안에서 in-process로 실행합니다. `<laugh>`, `<breath>`, `<sigh>` 3개의 학습된 표현 태그를 인식하며, built-in voice style(M1~F4) 기반으로 동작합니다. **학습은 upstream 미공개로 Phase 4 역공학이 완료될 때까지 `/api/supertonic/train`이 501을 반환**합니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 
@@ -50,11 +64,12 @@
 - examples와 파인튜닝: [docs/cookbook/05-finetuning-and-examples.md](docs/cookbook/05-finetuning-and-examples.md)
 - 프리셋 + instruct 원리: [docs/cookbook/12-preset-plus-instruct.md](docs/cookbook/12-preset-plus-instruct.md)
 - CustomVoice 파인튜닝: [docs/cookbook/13-customvoice-finetuning.md](docs/cookbook/13-customvoice-finetuning.md)
-- VoiceBox 문서 허브: [docs/voicebox/README.md](docs/voicebox/README.md)
+- VoiceBox 문서 허브 *(hobi2k 커스텀 개조 모델)*: [docs/voicebox/README.md](docs/voicebox/README.md)
 - VoiceBox 체크포인트 변환: [docs/voicebox/01-checkpoint-conversion.md](docs/voicebox/01-checkpoint-conversion.md)
 - VoiceBox 파인튜닝: [docs/voicebox/02-finetuning.md](docs/voicebox/02-finetuning.md)
 - VoiceBox clone 실험: [docs/voicebox/03-clone-experiment.md](docs/voicebox/03-clone-experiment.md)
 - VoiceBox clone + instruct 실험: [docs/voicebox/04-clone-plus-instruct.md](docs/voicebox/04-clone-plus-instruct.md)
+- VoiceBox speaker morph: [docs/voicebox/05-speaker-morph.md](docs/voicebox/05-speaker-morph.md)
 - 현재 실험 결과: [docs/cookbook/18-current-experiment-results.md](docs/cookbook/18-current-experiment-results.md)
 - 스크립트 진입점 정리: [docs/cookbook/19-script-entrypoints.md](docs/cookbook/19-script-entrypoints.md)
 - 개인 Hugging Face 자산 mirror: [docs/cookbook/20-private-hf-assets.md](docs/cookbook/20-private-hf-assets.md)
@@ -63,6 +78,10 @@
 - VibeVoice 작업실: [docs/cookbook/23-vibevoice-workspace.md](docs/cookbook/23-vibevoice-workspace.md)
 - Qwen 외 엔진 데이터셋 빌더: [docs/cookbook/27-cross-engine-datasets.md](docs/cookbook/27-cross-engine-datasets.md)
 - Vendor upstream 변경점: [docs/cookbook/25-vendor-upstream-deltas.md](docs/cookbook/25-vendor-upstream-deltas.md)
+- 신규 vendor 통합 계획 (CosyVoice 3 / VoxCPM2 / Supertonic 3): [docs/cookbook/28-new-vendors-integration-plan.md](docs/cookbook/28-new-vendors-integration-plan.md)
+- CosyVoice 3 작업실: [docs/cookbook/29-cosyvoice3-workspace.md](docs/cookbook/29-cosyvoice3-workspace.md)
+- VoxCPM2 작업실: [docs/cookbook/30-voxcpm2-workspace.md](docs/cookbook/30-voxcpm2-workspace.md)
+- Supertonic 3 작업실: [docs/cookbook/31-supertonic3-workspace.md](docs/cookbook/31-supertonic3-workspace.md)
 
 ## Clone 후 전체 준비
 
@@ -133,7 +152,7 @@ FastAPI 백엔드는 `QWEN_EXTENSIONS` 환경변수를 먼저 보고, 없으면 
 2026-05-02 기준으로 Base 1.7B, CustomVoice 1.7B, VoiceBox 1.7B 모두 실제 `Step 0`까지 진입했습니다. 같은 날 S2-Pro, VibeVoice, Applio/RVC, MMAudio, ACE-Step도 실제 training endpoint smoke를 순차 실행해 모두 통과했습니다. 프론트 production build, Python dependency check, backend compile, non-heavy live HTTP E2E, full heavy live E2E도 통과했습니다.
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 ./.venv/bin/python -m pip check
 ./.venv/bin/python -m compileall app/backend/app qwen_extensions scripts
 cd app/frontend && npm run build
@@ -149,15 +168,18 @@ cd ../..
 ## 현재 프로젝트 구조
 
 ```text
-Qwen3-TTS-Demo/
+voicestudio/
   vendor/Qwen3-TTS/                 # upstream reference repo
-  qwen_extensions/           # demo-owned Qwen training/fusion/inference scripts
+  qwen_extensions/           # studio-owned Qwen training/fusion/inference scripts
   vendor/
     Applio/                  # vendored (tracked in this repo)
     MMAudio/                 # vendored (tracked in this repo, default weights cached under weights/ext_weights)
     fish-speech/             # vendored (tracked in this repo)
     ACE-Step/                # vendored (tracked in this repo)
     VibeVoice/               # vendored VibeVoice source, tracked in this repo
+    CosyVoice/               # FunAudioLLM CosyVoice 3 source, Apache 2.0
+    VoxCPM/                  # OpenBMB VoxCPM2 source, Apache 2.0
+    Supertonic/              # Supertone Supertonic 3 source, BigScience Open RAIL-M
   app/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript
@@ -168,12 +190,18 @@ Qwen3-TTS-Demo/
     generated/               # generated audio + metadata
     audio-tools/             # sound effect / changer / separation metadata
     s2-pro-voices/           # saved Fish Speech reference voice records
+    cosyvoice3-voices/       # saved CosyVoice 3 zero-shot/cross-lingual presets
+    voxcpm2-voices/          # saved VoxCPM2 voice_design/cloning presets
+    supertonic3-voices/      # saved Supertonic 3 built-in style presets
     models/ace-step/         # ACE-Step checkpoint/cache, gitignored
     models/vibevoice/        # VibeVoice ASR/0.5B/1.5B weights, gitignored
+    models/cosyvoice3/       # CosyVoice 3 pretrained checkpoints, gitignored
+    models/voxcpm2/          # VoxCPM2 pretrained checkpoints, gitignored
+    models/supertonic3/      # Supertonic 3 ONNX bundle + voice styles, gitignored
     clone-prompts/           # saved clone prompt assets
     presets/                 # saved presets
     datasets/                # canonical dataset folders
-    finetune-runs/           # final fine-tuned model outputs
+    finetune-runs/           # final fine-tuned model outputs (cosyvoice3/, voxcpm2/, ...)
   docs/
     cookbook/
     plan.md
@@ -182,11 +210,13 @@ Qwen3-TTS-Demo/
 
 런타임 메모:
 
-- 메인 백엔드: `.venv`
+- 메인 백엔드: `.venv` (Supertonic 3는 메인 venv 안에서 onnxruntime으로 in-process 실행)
 - MMAudio 전용 런타임: `.venv-mmaudio`
 - Fish Speech S2-Pro 전용 런타임: `.venv-fish-speech`
 - VibeVoice 전용 런타임: `.venv-vibevoice`
 - ACE-Step 전용 런타임: `.venv-ace-step`
+- CosyVoice 3 전용 런타임: `.venv-cosyvoice3`
+- VoxCPM2 전용 런타임: `.venv-voxcpm2`
 
 ## 핵심 구조 원칙
 
@@ -376,8 +406,8 @@ community repo에는 TTS fine-tuning 경로가 포함되어 있어 앱의 기본
 macOS / Linux:
 
 ```bash
-git clone <your-repo-url> Qwen3-TTS-Demo
-cd Qwen3-TTS-Demo
+git clone <your-repo-url> voicestudio
+cd voicestudio
 ./scripts/setup_backend.sh
 ./scripts/download_models.sh
 cd app/frontend
@@ -391,8 +421,8 @@ uvicorn app.main:app --host 127.0.0.1 --port 8190
 Windows PowerShell:
 
 ```powershell
-git clone <your-repo-url> Qwen3-TTS-Demo
-cd Qwen3-TTS-Demo
+git clone <your-repo-url> voicestudio
+cd voicestudio
 .\scripts\setup_backend.ps1
 .\scripts\download_models.ps1
 cd app\frontend

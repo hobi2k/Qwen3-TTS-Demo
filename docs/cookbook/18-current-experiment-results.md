@@ -58,7 +58,7 @@ data/finetune-runs/mai_ko_customvoice17b_full/final
 변환 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv/bin/python qwen_extensions/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
@@ -92,7 +92,7 @@ data/finetune-runs/mai_ko_voicebox17b_full/final
 추가 학습 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \
@@ -140,7 +140,7 @@ scripts/evaluate_customvoice_voicebox_quality.py
 평가 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv/bin/python -u scripts/evaluate_customvoice_voicebox_quality.py \
   --plain-model data/finetune-runs/mai_ko_customvoice17b_full/final \
   --voicebox-model data/finetune-runs/mai_ko_voicebox17b_full/final \
@@ -424,7 +424,7 @@ data/generated/sound-effects/2026-05-01/113406_short-soft-rain-on-a-window-clean
 명령:
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv/bin/python scripts/live_training_step_smoke.py
 ```
 

@@ -1,5 +1,14 @@
 # Preset + Instruct 원리
 
+> 🧩 **`Base + CustomVoice instruct` hybrid 추론 경로는 hobi2k 고유 커스텀
+> 파이프라인입니다.** upstream `Qwen3-TTS`의 공식 high-level wrapper가 아니며,
+> 별도 `Base` 체크포인트의 clone prompt(참조 음성 acoustic/style)와
+> `CustomVoice` 체크포인트의 instruct 학습 분포를 한 추론 요청 안에서 결합하는
+> 데모 확장 경로입니다. canonical 구현은
+> `qwen_extensions/inference/hybrid_clone_instruct.py`이고 백엔드 런타임은
+> `app/backend/app/qwen.py`가 같은 규칙을 반영합니다. speaker anchor 규칙은
+> [24-qwen-extensions.md](./24-qwen-extensions.md#clone-prompt--instruct의-speaker-anchor-규칙)에 정리돼 있습니다.
+
 이 문서는 웹 UI의 `프리셋 기반 생성`이 내부적으로 어떻게 동작하는지 설명합니다.
 
 특히 아래 질문에 답하기 위해 작성했습니다.

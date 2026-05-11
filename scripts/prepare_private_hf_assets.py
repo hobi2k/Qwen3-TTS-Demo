@@ -110,7 +110,7 @@ def write_manifest(entries: list[AssetEntry], manifest_path: Path, repo_id: str 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     total_bytes = sum(item.size_bytes for item in entries if item.exists)
     payload = {
-        "schema": "qwen3-tts-demo-private-assets-v1",
+        "schema": "voicestudio-private-assets-v1",
         "target_repo_id": repo_id or "${PRIVATE_ASSET_REPO_ID}",
         "target_repo_type": "model",
         "download_env": {
@@ -167,7 +167,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-public-models", action="store_true", help="Also include Qwen/Qwen3-ASR model mirrors under data/models.")
     parser.add_argument("--upload", action="store_true", help="Upload files after writing the manifest.")
     parser.add_argument("--private", action="store_true", help="Create the target Hugging Face repo as private when uploading.")
-    parser.add_argument("--message", default="Upload Qwen3-TTS-Demo private assets", help="Hub commit message.")
+    parser.add_argument("--message", default="Upload voicestudio private assets", help="Hub commit message.")
     return parser.parse_args()
 
 

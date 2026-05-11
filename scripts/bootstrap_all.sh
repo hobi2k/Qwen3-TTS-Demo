@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="${1:-all}"
 BACKEND_PORT="${BACKEND_PORT:-8190}"
 
-echo "Bootstrapping Qwen3-TTS-Demo"
+echo "Bootstrapping voicestudio"
 echo "Repo root: ${ROOT_DIR}"
 echo "Model profile: ${PROFILE}"
 echo

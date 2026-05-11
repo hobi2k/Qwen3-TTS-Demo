@@ -476,7 +476,7 @@ def _create_fish_audio_model(*, config: FishSpeechConfig, reference_id: str, aud
     model_url = config.endpoint_url.rsplit("/v1/tts", 1)[0].rstrip("/") + "/model"
     data = [
         ("title", reference_id),
-        ("description", "Created by Qwen3-TTS-Demo S2-Pro voice clone"),
+        ("description", "Created by voicestudio S2-Pro voice clone"),
         ("visibility", "private"),
         ("type", "tts"),
         ("train_mode", "fast"),

@@ -15,10 +15,10 @@ commands:
     the pristine upstream package code, dataset loader, tokenizer, and model
     classes.
 
-The wrapper assumes the repository layout used by ``Qwen3-TTS-Demo``:
+The wrapper assumes the repository layout used by ``voicestudio``:
 
-* project root: ``/home/hosung/pytorch-demo/Qwen3-TTS-Demo``
-* upstream repo: ``Qwen3-TTS-Demo/vendor/Qwen3-TTS``
+* project root: ``/home/hosung/pytorch-demo/voicestudio``
+* upstream repo: ``voicestudio/vendor/Qwen3-TTS``
 * canonical dataset: ``data/datasets/mai_ko_full``
 """
 

@@ -1,6 +1,6 @@
 # Qwen Extensions 구조
 
-이 문서는 `Qwen3-TTS-Demo`에서 원본 Qwen 코드와 데모 전용 확장 코드를 어떻게 분리하는지 설명합니다.
+이 문서는 `voicestudio`에서 원본 Qwen 코드와 데모 전용 확장 코드를 어떻게 분리하는지 설명합니다.
 
 ## 왜 분리하는가
 
@@ -16,7 +16,7 @@
 ## 디렉터리 역할
 
 ```text
-Qwen3-TTS-Demo/
+voicestudio/
   vendor/Qwen3-TTS/
     finetuning/
     inference/
@@ -41,7 +41,14 @@ Qwen3-TTS-Demo/
 
 ## clone prompt + instruct의 speaker anchor 규칙
 
-`Base clone prompt + CustomVoice instruct`는 업스트림 `Qwen3-TTS`의 공식 high-level wrapper가 아니라 데모 확장 경로입니다.
+> 🛠 **`Base clone prompt + CustomVoice instruct` hybrid 경로는 hobi2k (이 저장소
+> 소유자)의 고유 커스텀 추론 파이프라인입니다.** upstream `Qwen3-TTS`의 공식
+> high-level wrapper가 아니며, 두 개의 별도 Qwen 체크포인트(Base + CustomVoice)를
+> 하나의 추론 요청 안에서 조합해 clone prompt의 acoustic/style 조건과 CustomVoice
+> 의 instruct 학습 분포를 동시에 살리는 것이 목적입니다. 코드는
+> `qwen_extensions/inference/hybrid_clone_instruct.py` 한 곳에 canonical로
+> 모여 있고, `app/backend/app/qwen.py`가 백엔드 런타임에서 이 규칙을 반복
+> 합니다. upstream Qwen3-TTS에는 환원되지 않습니다.
 
 이 경로에서는 다음 규칙을 유지합니다.
 
@@ -76,7 +83,7 @@ QWEN_EXTENSIONS=qwen_extensions
 절대 경로도 사용할 수 있습니다.
 
 ```env
-QWEN_EXTENSIONS=/home/hosung/pytorch-demo/Qwen3-TTS-Demo/qwen_extensions
+QWEN_EXTENSIONS=/home/hosung/pytorch-demo/voicestudio/qwen_extensions
 ```
 
 ## 실행 예시

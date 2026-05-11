@@ -27,7 +27,7 @@ Verified against the clean tree:
 
 Path assumptions:
 
-- The repository root is `Qwen3-TTS-Demo/`
+- The repository root is `voicestudio/`
 - The canonical dataset is `data/datasets/mai_ko_full/`
 - Raw JSONL lives at `data/datasets/mai_ko_full/raw.jsonl`
 - Current cleaned prepared JSONL lives at `data/datasets/mai_ko_full/prepared_train_clean_text_2s_to_30s.jsonl`

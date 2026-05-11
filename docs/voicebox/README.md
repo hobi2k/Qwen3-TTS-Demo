@@ -2,6 +2,15 @@
 
 이 폴더는 `VoiceBox` 전용 문서를 모아 둔 기준 위치입니다.
 
+> ⚠️ **VoiceBox는 hobi2k (이 저장소 소유자)의 고유 커스텀 개조 모델입니다.**
+> upstream `Qwen3-TTS`에는 존재하지 않는 파이프라인이며, FunAudioLLM·OpenBMB·
+> Supertone 같은 외부 vendor 모델도 아닙니다. plain `CustomVoice` 체크포인트에
+> `Base 1.7B`의 `speaker_encoder`를 합쳐 self-contained checkpoint를 만들고,
+> 그 위에 `VoiceBox -> VoiceBox` 재학습과 speaker morph (예: `Sohee -> kangsora`)
+> 같은 hobi2k 고유 워크플로우를 얹은 결과물입니다. 학습/변환/추론 코드는 모두
+> 이 저장소의 `qwen_extensions/`와 `scripts/`에 들어 있고, upstream으로 환원되지
+> 않습니다.
+
 `VoiceBox`는 아래 **세 단계**를 명확히 구분합니다.
 
 1. plain `CustomVoice`에 새 화자 추가 후 파인튜닝

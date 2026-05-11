@@ -16,13 +16,13 @@
 
 ## 핵심 파일
 
-- [layout.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/app/layout.tsx)
-- [page.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/app/page.tsx)
-- [App.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/App.tsx)
-- [app-ui.tsx](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/app-ui.tsx)
-- [api.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/api.ts)
-- [types.ts](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/lib/types.ts)
-- [styles.css](/home/hosung/pytorch-demo/Qwen3-TTS-Demo/app/frontend/src/styles.css)
+- [layout.tsx](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/app/layout.tsx)
+- [page.tsx](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/app/page.tsx)
+- [App.tsx](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/App.tsx)
+- [app-ui.tsx](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/lib/app-ui.tsx)
+- [api.ts](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/lib/api.ts)
+- [types.ts](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/lib/types.ts)
+- [styles.css](/home/hosung/pytorch-demo/voicestudio/app/frontend/src/styles.css)
 
 ## 실행 기준
 

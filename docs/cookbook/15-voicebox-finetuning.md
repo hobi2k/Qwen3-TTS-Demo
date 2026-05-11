@@ -30,7 +30,7 @@ data/finetune-runs/mai_ko_voicebox17b_full_extra1/final
 ## 현재 full run 명령
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 QWEN_DEMO_OPTIMIZER=adafactor \
 QWEN_DEMO_LOG_EVERY=25 \

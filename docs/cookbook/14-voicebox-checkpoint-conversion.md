@@ -35,7 +35,7 @@ data/finetune-runs/mai_ko_voicebox17b_full/final
 ## 재현 명령
 
 ```bash
-cd ~/pytorch-demo/Qwen3-TTS-Demo
+cd ~/pytorch-demo/voicestudio
 .venv/bin/python qwen_extensions/fusion/make_voicebox_checkpoint.py \
   --input-checkpoint data/finetune-runs/mai_ko_customvoice17b_full/final \
   --speaker-encoder-source data/models/Qwen3-TTS-12Hz-1.7B-Base \
