@@ -794,6 +794,301 @@ class AceStepUnderstandResponse(BaseModel):
     raw_meta: Dict[str, Any] = Field(default_factory=dict)
 
 
+class CosyVoice3RuntimeResponse(BaseModel):
+    """CosyVoice 3 런타임/모델/프리셋 상태 응답."""
+
+    available: bool
+    notes: str
+    cosyvoice_root: str
+    python_executable: str
+    model_dir: str
+    voice_dir: str
+    model_variants: List[Dict[str, Any]] = Field(default_factory=list)
+    voice_presets: List[Dict[str, Any]] = Field(default_factory=list)
+    supported_tasks: List[str] = Field(default_factory=list)
+    supported_languages: List[str] = Field(default_factory=list)
+
+
+class CosyVoice3GenerateRequest(BaseModel):
+    """CosyVoice 3 통합 추론 요청. task별로 필요한 필드만 채우면 된다.
+
+    Tasks:
+      * ``zero_shot``     – text + prompt_text + prompt_audio_path
+      * ``cross_lingual`` – text + prompt_audio_path (Korean/JP/etc. + tags)
+      * ``instruct2``     – text + instruct_text + prompt_audio_path
+      * ``sft``           – text + speaker (legacy CosyVoice-1 SFT models)
+      * ``vc``            – source_audio_path + prompt_audio_path
+    """
+
+    task: str = Field("zero_shot", pattern="^(zero_shot|cross_lingual|instruct2|sft|vc)$")
+    text: str = ""
+    language: str = ""
+    prompt_text: str = ""
+    prompt_audio_path: Optional[str] = None
+    instruct_text: str = ""
+    speaker: Optional[str] = None
+    source_audio_path: Optional[str] = None
+    zero_shot_spk_id: str = ""
+    model_dir: Optional[str] = None
+    model_name: Optional[str] = None
+    stream: bool = False
+    seed: Optional[int] = None
+    label: Optional[str] = None
+    audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
+
+
+class CosyVoice3VoicePresetCreateRequest(BaseModel):
+    """CosyVoice 3 프리셋 저장 요청."""
+
+    name: str = Field(..., min_length=1)
+    prompt_text: str = ""
+    prompt_audio_path: str = Field(..., min_length=1)
+    language: str = ""
+    task: str = Field("zero_shot", pattern="^(zero_shot|cross_lingual|instruct2)$")
+    notes: str = ""
+
+
+class CosyVoice3VoicePresetResponse(BaseModel):
+    """CosyVoice 3 프리셋 저장/조회 응답."""
+
+    name: str
+    path: str
+    prompt_text: str = ""
+    prompt_audio_path: str = ""
+    language: str = ""
+    task: str = "zero_shot"
+    notes: str = ""
+
+
+class CosyVoice3TrainingRequest(BaseModel):
+    """CosyVoice 3 파인튜닝 요청.
+
+    CosyVoice는 LoRA를 공식 지원하지 않고 ``llm``/``flow``/``hifigan`` 서브
+    모듈을 사전학습 체크포인트에서 이어 학습한다(SFT). ``submodels``로 어떤
+    모듈을 학습할지 선택한다.
+    """
+
+    dataset_id: str = Field(..., min_length=1)
+    cv_dataset_id: Optional[str] = None
+    submodels: List[str] = Field(default_factory=lambda: ["llm"])
+    train_engine: str = Field("torch_ddp", pattern="^(torch_ddp|deepspeed)$")
+    base_model: str = "Fun-CosyVoice3-0.5B"
+    max_epoch: int = Field(5, ge=1, le=200)
+    batch_size: int = Field(2, ge=1, le=64)
+    learning_rate: float = Field(1e-4, gt=0.0)
+    num_workers: int = Field(2, ge=0, le=32)
+    run_name: Optional[str] = None
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class CosyVoice3TrainingResponse(BaseModel):
+    """CosyVoice 3 학습 응답."""
+
+    run_id: str
+    status: str
+    run_dir: str
+    base_model: str
+    submodels: List[str] = Field(default_factory=list)
+    train_engine: str = "torch_ddp"
+    checkpoint_dir: Optional[str] = None
+    log_tail: str = ""
+    stderr_tail: str = ""
+    stages: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class VoxCPM2RuntimeResponse(BaseModel):
+    """VoxCPM2 런타임 / 모델 / 프리셋 상태 응답."""
+
+    available: bool
+    notes: str
+    voxcpm_root: str
+    python_executable: str
+    model_dir: str
+    voice_dir: str
+    model_variants: List[Dict[str, Any]] = Field(default_factory=list)
+    voice_presets: List[Dict[str, Any]] = Field(default_factory=list)
+    supported_tasks: List[str] = Field(default_factory=list)
+    supported_languages: List[str] = Field(default_factory=list)
+
+
+class VoxCPM2GenerateRequest(BaseModel):
+    """VoxCPM2 통합 추론 요청. task별로 필요한 필드만 채운다.
+
+    Tasks:
+      * ``voice_design``     – text가 ``(description)``로 시작 (영어 권장).
+      * ``voice_cloning``    – text + reference_wav_path.
+      * ``ultimate_cloning`` – text + prompt_wav_path + prompt_text
+                              (+ optional reference_wav_path).
+    """
+
+    task: str = Field(
+        "voice_cloning", pattern="^(voice_design|voice_cloning|ultimate_cloning)$"
+    )
+    text: str = ""
+    language: str = ""
+    prompt_text: str = ""
+    prompt_wav_path: Optional[str] = None
+    reference_wav_path: Optional[str] = None
+    voice_description: str = ""
+    model_dir: Optional[str] = None
+    model_name: Optional[str] = None
+    cfg_value: float = Field(2.0, gt=0.0)
+    inference_timesteps: int = Field(10, ge=1, le=200)
+    min_len: int = Field(2, ge=1)
+    max_len: int = Field(4096, ge=1)
+    normalize: bool = False
+    denoise: bool = False
+    enable_denoiser: bool = True
+    optimize: bool = True
+    device: Optional[str] = None
+    seed: Optional[int] = None
+    lora_weights_path: Optional[str] = None
+    label: Optional[str] = None
+    audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
+
+
+class VoxCPM2VoicePresetCreateRequest(BaseModel):
+    """VoxCPM2 프리셋 저장 요청."""
+
+    name: str = Field(..., min_length=1)
+    task: str = Field(
+        "voice_cloning", pattern="^(voice_design|voice_cloning|ultimate_cloning)$"
+    )
+    prompt_text: str = ""
+    prompt_wav_path: str = ""
+    reference_wav_path: str = ""
+    voice_description: str = ""
+    language: str = ""
+    notes: str = ""
+
+
+class VoxCPM2VoicePresetResponse(BaseModel):
+    """VoxCPM2 프리셋 조회 응답."""
+
+    name: str
+    path: str
+    task: str = "voice_cloning"
+    prompt_text: str = ""
+    prompt_wav_path: str = ""
+    reference_wav_path: str = ""
+    voice_description: str = ""
+    language: str = ""
+    notes: str = ""
+
+
+class VoxCPM2LoRAConfig(BaseModel):
+    """VoxCPM2 LoRA 설정 (학습 시 enable 플래그)."""
+
+    enable_lm: bool = True
+    enable_dit: bool = True
+    enable_proj: bool = False
+
+
+class VoxCPM2TrainingRequest(BaseModel):
+    """VoxCPM2 LoRA 파인튜닝 요청.
+
+    ``dataset_id``는 ``data/datasets/<dataset_id>/manifest.jsonl``을 참조한다.
+    """
+
+    dataset_id: str = Field(..., min_length=1)
+    cv_dataset_id: Optional[str] = None
+    base_model: str = "VoxCPM2"
+    lora: VoxCPM2LoRAConfig = Field(default_factory=VoxCPM2LoRAConfig)
+    batch_size: int = Field(1, ge=1, le=64)
+    grad_accum_steps: int = Field(1, ge=1)
+    num_workers: int = Field(2, ge=0, le=32)
+    num_iters: int = Field(10000, ge=1)
+    max_steps: int = Field(10000, ge=1)
+    learning_rate: float = Field(1e-4, gt=0.0)
+    warmup_steps: int = Field(200, ge=0)
+    log_interval: int = Field(50, ge=1)
+    valid_interval: int = Field(500, ge=1)
+    save_interval: int = Field(1000, ge=1)
+    weight_decay: float = Field(1e-2, ge=0.0)
+    max_grad_norm: float = Field(0.0, ge=0.0)
+    sample_rate: int = Field(16000, ge=8000)
+    run_name: Optional[str] = None
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class VoxCPM2TrainingResponse(BaseModel):
+    """VoxCPM2 학습 응답."""
+
+    run_id: str
+    status: str
+    run_dir: str
+    base_model: str
+    checkpoint_dir: Optional[str] = None
+    tensorboard_dir: Optional[str] = None
+    log_tail: str = ""
+    stderr_tail: str = ""
+    stages: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class Supertonic3RuntimeResponse(BaseModel):
+    """Supertonic 3 런타임 / 모델 / 프리셋 상태 응답."""
+
+    available: bool
+    notes: str
+    supertonic_root: str
+    model_dir: str
+    voice_dir: str
+    onnx_dir: str
+    onnx_assets: List[Dict[str, Any]] = Field(default_factory=list)
+    builtin_voice_styles: List[Dict[str, Any]] = Field(default_factory=list)
+    voice_presets: List[Dict[str, Any]] = Field(default_factory=list)
+    supported_languages: List[str] = Field(default_factory=list)
+    supported_expression_tags: List[str] = Field(default_factory=list)
+    training_supported: bool = False
+    training_notes: str = (
+        "Supertonic 3 upstream ships ONNX inference only. Fine-tuning requires "
+        "reverse-engineering the model definition (Phase 4)."
+    )
+
+
+class Supertonic3GenerateRequest(BaseModel):
+    """Supertonic 3 통합 추론 요청.
+
+    지원 표현 태그는 ``<laugh>``, ``<breath>``, ``<sigh>`` 3개뿐이다.
+    대괄호 ``[ ]``는 전처리 단계에서 제거되므로 ``[moaning]`` 같은 태그는
+    적용되지 않는다.
+    """
+
+    text: str = Field(..., min_length=1)
+    language: str = Field("ko", min_length=2, max_length=4)
+    voice_style: str = Field("M4", min_length=1)
+    total_step: int = Field(8, ge=1, le=64)
+    speed: float = Field(1.05, gt=0.0, le=4.0)
+    silence_duration: float = Field(0.3, ge=0.0, le=5.0)
+    use_gpu: bool = False
+    label: Optional[str] = None
+    audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
+
+
+class Supertonic3VoicePresetCreateRequest(BaseModel):
+    """Supertonic 3 프리셋 저장 요청.
+
+    Supertonic 3는 zero-shot 클로닝을 지원하지 않으므로 프리셋은 사실상
+    "built-in voice style + 라벨/메모"의 간단한 묶음이다.
+    """
+
+    name: str = Field(..., min_length=1)
+    voice_style: str = Field(..., min_length=1)
+    language: str = ""
+    notes: str = ""
+
+
+class Supertonic3VoicePresetResponse(BaseModel):
+    """Supertonic 3 프리셋 조회 응답."""
+
+    name: str
+    path: str
+    voice_style: str = ""
+    voice_style_path: str = ""
+    language: str = ""
+    notes: str = ""
+
+
 class VoiceChangerRequest(BaseModel):
     """Applio/RVC 기반 audio-to-audio 단일 변환 요청 스키마다."""
 

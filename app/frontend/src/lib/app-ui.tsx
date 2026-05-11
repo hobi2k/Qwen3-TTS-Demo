@@ -70,6 +70,18 @@ export type TabKey =
   | "ace_dataset"
   | "mmaudio_train"
   | "mmaudio_dataset"
+  | "cosyvoice_tts"
+  | "cosyvoice_voices"
+  | "cosyvoice_dataset"
+  | "cosyvoice_train"
+  | "voxcpm_tts"
+  | "voxcpm_voices"
+  | "voxcpm_dataset"
+  | "voxcpm_train"
+  | "supertonic_tts"
+  | "supertonic_voices"
+  | "supertonic_dataset"
+  | "supertonic_train"
   | "guide";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
@@ -328,6 +340,66 @@ export const PRODUCT_PAGES = {
     label: "MMAudio 학습",
     title: "MMAudio 학습",
     description: "MMAudio upstream train.py로 full/continued training을 실행합니다.",
+  },
+  cosyvoice_tts: {
+    label: "CosyVoice TTS",
+    title: "CosyVoice 3 텍스트 음성 변환",
+    description: "FunAudioLLM CosyVoice 3로 zero-shot / cross-lingual / instruct2 / SFT / voice conversion을 실행합니다. 한국어는 cross_lingual 모드를 권장합니다.",
+  },
+  cosyvoice_voices: {
+    label: "CosyVoice 프리셋",
+    title: "CosyVoice 3 프리셋",
+    description: "CosyVoice zero-shot/cross-lingual 보이스 프리셋(참조 오디오 + 대본)을 저장하고 재사용합니다.",
+  },
+  cosyvoice_dataset: {
+    label: "CosyVoice 데이터셋",
+    title: "CosyVoice 3 데이터셋",
+    description: "CosyVoice 학습용 manifest.jsonl (audio + text)을 data/datasets/<id>/ 폴더로 정리합니다.",
+  },
+  cosyvoice_train: {
+    label: "CosyVoice 학습",
+    title: "CosyVoice 3 파인튜닝",
+    description: "CosyVoice 사전학습 체크포인트에서 llm/flow/hifigan 서브모듈을 SFT로 이어 학습합니다. LoRA는 미지원.",
+  },
+  voxcpm_tts: {
+    label: "VoxCPM TTS",
+    title: "VoxCPM2 텍스트 음성 변환",
+    description: "OpenBMB VoxCPM2로 30개 언어 voice_design / voice_cloning / ultimate_cloning을 실행합니다. 한국어 클로닝 SIM 1위 모델입니다.",
+  },
+  voxcpm_voices: {
+    label: "VoxCPM 프리셋",
+    title: "VoxCPM2 프리셋",
+    description: "voice_design 디스크립터 또는 voice_cloning / ultimate_cloning 참조 오디오 묶음을 프리셋으로 저장합니다.",
+  },
+  voxcpm_dataset: {
+    label: "VoxCPM 데이터셋",
+    title: "VoxCPM2 데이터셋",
+    description: "VoxCPM2 LoRA 학습용 manifest.jsonl (audio + text)을 data/datasets/<id>/ 폴더로 정리합니다.",
+  },
+  voxcpm_train: {
+    label: "VoxCPM 학습",
+    title: "VoxCPM2 LoRA 파인튜닝",
+    description: "VoxCPM2의 lm/dit/proj 어댑터를 LoRA로 fine-tuning합니다. upstream scripts/train_voxcpm_finetune.py를 그대로 활용합니다.",
+  },
+  supertonic_tts: {
+    label: "Supertonic TTS",
+    title: "Supertonic 3 텍스트 음성 변환",
+    description: "Supertone의 Supertonic 3 ONNX 모델(31개 언어)로 한국어 등 TTS를 생성합니다. 표현 태그는 <laugh>, <breath>, <sigh> 3개만 학습되어 있습니다.",
+  },
+  supertonic_voices: {
+    label: "Supertonic 프리셋",
+    title: "Supertonic 3 프리셋",
+    description: "Supertonic이 제공하는 built-in voice style(M1~F4)과 메모를 묶어 프리셋으로 저장합니다. Supertonic 3는 zero-shot 클로닝을 지원하지 않습니다.",
+  },
+  supertonic_dataset: {
+    label: "Supertonic 데이터셋",
+    title: "Supertonic 3 데이터셋",
+    description: "Supertonic 3는 ONNX 추론만 공개되어 있어 별도 학습 데이터셋이 필요 없습니다. 안내만 표시합니다.",
+  },
+  supertonic_train: {
+    label: "Supertonic 학습",
+    title: "Supertonic 3 학습 (Phase 4 보류)",
+    description: "Upstream에 학습 코드가 없어 ONNX 그래프 역공학이 필요합니다. Phase 4 평가가 끝날 때까지 학습 실행은 비활성화됩니다.",
   },
   guide: {
     label: "가이드",

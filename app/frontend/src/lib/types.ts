@@ -1111,3 +1111,229 @@ export interface AudioToolResponse {
   translated_text?: string | null;
   record?: GenerationRecord | null;
 }
+
+export interface CosyVoice3RuntimeResponse {
+  available: boolean;
+  notes: string;
+  cosyvoice_root: string;
+  python_executable: string;
+  model_dir: string;
+  voice_dir: string;
+  model_variants: Array<{ name: string; available: boolean }>;
+  voice_presets: CosyVoice3VoicePreset[];
+  supported_tasks: string[];
+  supported_languages: string[];
+}
+
+export type CosyVoice3Task = "zero_shot" | "cross_lingual" | "instruct2" | "sft" | "vc";
+
+export interface CosyVoice3GenerateRequest {
+  task: CosyVoice3Task;
+  text: string;
+  language?: string;
+  prompt_text?: string;
+  prompt_audio_path?: string;
+  instruct_text?: string;
+  speaker?: string;
+  source_audio_path?: string;
+  zero_shot_spk_id?: string;
+  model_dir?: string;
+  model_name?: string;
+  stream?: boolean;
+  seed?: number;
+  label?: string;
+  audio_format?: "wav" | "flac" | "mp3" | "ogg";
+}
+
+export interface CosyVoice3VoicePreset {
+  name: string;
+  path: string;
+  prompt_text?: string;
+  prompt_audio_path?: string;
+  language?: string;
+  task?: string;
+  notes?: string;
+}
+
+export interface CosyVoice3VoicePresetCreateRequest {
+  name: string;
+  prompt_text?: string;
+  prompt_audio_path: string;
+  language?: string;
+  task?: "zero_shot" | "cross_lingual" | "instruct2";
+  notes?: string;
+}
+
+export interface CosyVoice3TrainingRequest {
+  dataset_id: string;
+  cv_dataset_id?: string;
+  submodels: Array<"llm" | "flow" | "hifigan">;
+  train_engine: "torch_ddp" | "deepspeed";
+  base_model?: string;
+  max_epoch?: number;
+  batch_size?: number;
+  learning_rate?: number;
+  num_workers?: number;
+  run_name?: string;
+  extra_args?: string[];
+}
+
+export interface CosyVoice3TrainingResponse {
+  run_id: string;
+  status: string;
+  run_dir: string;
+  base_model: string;
+  submodels: string[];
+  train_engine: string;
+  checkpoint_dir?: string;
+  log_tail?: string;
+  stderr_tail?: string;
+  stages: Array<Record<string, unknown>>;
+}
+
+export interface VoxCPM2RuntimeResponse {
+  available: boolean;
+  notes: string;
+  voxcpm_root: string;
+  python_executable: string;
+  model_dir: string;
+  voice_dir: string;
+  model_variants: Array<{ name: string; available: boolean }>;
+  voice_presets: VoxCPM2VoicePreset[];
+  supported_tasks: string[];
+  supported_languages: string[];
+}
+
+export type VoxCPM2Task = "voice_design" | "voice_cloning" | "ultimate_cloning";
+
+export interface VoxCPM2GenerateRequest {
+  task: VoxCPM2Task;
+  text: string;
+  language?: string;
+  prompt_text?: string;
+  prompt_wav_path?: string;
+  reference_wav_path?: string;
+  voice_description?: string;
+  model_dir?: string;
+  model_name?: string;
+  cfg_value?: number;
+  inference_timesteps?: number;
+  min_len?: number;
+  max_len?: number;
+  normalize?: boolean;
+  denoise?: boolean;
+  enable_denoiser?: boolean;
+  optimize?: boolean;
+  device?: string;
+  seed?: number;
+  lora_weights_path?: string;
+  label?: string;
+  audio_format?: "wav" | "flac" | "mp3" | "ogg";
+}
+
+export interface VoxCPM2VoicePreset {
+  name: string;
+  path: string;
+  task: VoxCPM2Task;
+  prompt_text?: string;
+  prompt_wav_path?: string;
+  reference_wav_path?: string;
+  voice_description?: string;
+  language?: string;
+  notes?: string;
+}
+
+export interface VoxCPM2VoicePresetCreateRequest {
+  name: string;
+  task: VoxCPM2Task;
+  prompt_text?: string;
+  prompt_wav_path?: string;
+  reference_wav_path?: string;
+  voice_description?: string;
+  language?: string;
+  notes?: string;
+}
+
+export interface VoxCPM2LoRAConfig {
+  enable_lm: boolean;
+  enable_dit: boolean;
+  enable_proj: boolean;
+}
+
+export interface VoxCPM2TrainingRequest {
+  dataset_id: string;
+  cv_dataset_id?: string;
+  base_model?: string;
+  lora: VoxCPM2LoRAConfig;
+  batch_size?: number;
+  grad_accum_steps?: number;
+  num_workers?: number;
+  num_iters?: number;
+  max_steps?: number;
+  learning_rate?: number;
+  warmup_steps?: number;
+  log_interval?: number;
+  valid_interval?: number;
+  save_interval?: number;
+  weight_decay?: number;
+  max_grad_norm?: number;
+  sample_rate?: number;
+  run_name?: string;
+  extra_args?: string[];
+}
+
+export interface VoxCPM2TrainingResponse {
+  run_id: string;
+  status: string;
+  run_dir: string;
+  base_model: string;
+  checkpoint_dir?: string;
+  tensorboard_dir?: string;
+  log_tail?: string;
+  stderr_tail?: string;
+  stages: Array<Record<string, unknown>>;
+}
+
+export interface Supertonic3RuntimeResponse {
+  available: boolean;
+  notes: string;
+  supertonic_root: string;
+  model_dir: string;
+  voice_dir: string;
+  onnx_dir: string;
+  onnx_assets: Array<{ name: string; available: boolean }>;
+  builtin_voice_styles: Array<{ name: string; available: boolean }>;
+  voice_presets: Supertonic3VoicePreset[];
+  supported_languages: string[];
+  supported_expression_tags: string[];
+  training_supported: boolean;
+  training_notes: string;
+}
+
+export interface Supertonic3GenerateRequest {
+  text: string;
+  language: string;
+  voice_style: string;
+  total_step?: number;
+  speed?: number;
+  silence_duration?: number;
+  use_gpu?: boolean;
+  label?: string;
+  audio_format?: "wav" | "flac" | "mp3" | "ogg";
+}
+
+export interface Supertonic3VoicePreset {
+  name: string;
+  path: string;
+  voice_style?: string;
+  voice_style_path?: string;
+  language?: string;
+  notes?: string;
+}
+
+export interface Supertonic3VoicePresetCreateRequest {
+  name: string;
+  voice_style: string;
+  language?: string;
+  notes?: string;
+}

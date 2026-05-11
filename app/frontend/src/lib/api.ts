@@ -60,6 +60,22 @@ import type {
   UniversalInferenceRequest,
   UpdateFineTuneRunRequest,
   UpdatePresetRequest,
+  CosyVoice3GenerateRequest,
+  CosyVoice3RuntimeResponse,
+  CosyVoice3TrainingRequest,
+  CosyVoice3TrainingResponse,
+  CosyVoice3VoicePreset,
+  CosyVoice3VoicePresetCreateRequest,
+  Supertonic3GenerateRequest,
+  Supertonic3RuntimeResponse,
+  Supertonic3VoicePreset,
+  Supertonic3VoicePresetCreateRequest,
+  VoxCPM2GenerateRequest,
+  VoxCPM2RuntimeResponse,
+  VoxCPM2TrainingRequest,
+  VoxCPM2TrainingResponse,
+  VoxCPM2VoicePreset,
+  VoxCPM2VoicePresetCreateRequest,
   VibeVoiceASRRequest,
   VibeVoiceASRResponse,
   VibeVoiceModelAsset,
@@ -575,6 +591,115 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+  },
+
+  cosyVoiceRuntime(): Promise<CosyVoice3RuntimeResponse> {
+    return request<CosyVoice3RuntimeResponse>("/api/cosyvoice/runtime");
+  },
+
+  generateCosyVoice(payload: CosyVoice3GenerateRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/cosyvoice/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listCosyVoicePresets(): Promise<CosyVoice3VoicePreset[]> {
+    return request<CosyVoice3VoicePreset[]>("/api/cosyvoice/voices");
+  },
+
+  saveCosyVoicePreset(payload: CosyVoice3VoicePresetCreateRequest): Promise<CosyVoice3VoicePreset> {
+    return request<CosyVoice3VoicePreset>("/api/cosyvoice/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteCosyVoicePreset(name: string): Promise<{ deleted: boolean; id?: string }> {
+    return request<{ deleted: boolean; id?: string }>(`/api/cosyvoice/voices/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+  },
+
+  trainCosyVoice(payload: CosyVoice3TrainingRequest): Promise<CosyVoice3TrainingResponse> {
+    return request<CosyVoice3TrainingResponse>("/api/cosyvoice/train", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  voxcpmRuntime(): Promise<VoxCPM2RuntimeResponse> {
+    return request<VoxCPM2RuntimeResponse>("/api/voxcpm/runtime");
+  },
+
+  generateVoxCPM(payload: VoxCPM2GenerateRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/voxcpm/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listVoxCPMPresets(): Promise<VoxCPM2VoicePreset[]> {
+    return request<VoxCPM2VoicePreset[]>("/api/voxcpm/voices");
+  },
+
+  saveVoxCPMPreset(payload: VoxCPM2VoicePresetCreateRequest): Promise<VoxCPM2VoicePreset> {
+    return request<VoxCPM2VoicePreset>("/api/voxcpm/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteVoxCPMPreset(name: string): Promise<{ deleted: boolean; id?: string }> {
+    return request<{ deleted: boolean; id?: string }>(`/api/voxcpm/voices/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+  },
+
+  trainVoxCPM(payload: VoxCPM2TrainingRequest): Promise<VoxCPM2TrainingResponse> {
+    return request<VoxCPM2TrainingResponse>("/api/voxcpm/train", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  supertonicRuntime(): Promise<Supertonic3RuntimeResponse> {
+    return request<Supertonic3RuntimeResponse>("/api/supertonic/runtime");
+  },
+
+  generateSupertonic(payload: Supertonic3GenerateRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/supertonic/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listSupertonicPresets(): Promise<Supertonic3VoicePreset[]> {
+    return request<Supertonic3VoicePreset[]>("/api/supertonic/voices");
+  },
+
+  saveSupertonicPreset(
+    payload: Supertonic3VoicePresetCreateRequest,
+  ): Promise<Supertonic3VoicePreset> {
+    return request<Supertonic3VoicePreset>("/api/supertonic/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteSupertonicPreset(name: string): Promise<{ deleted: boolean; id?: string }> {
+    return request<{ deleted: boolean; id?: string }>(
+      `/api/supertonic/voices/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    );
   },
 
   generateSoundEffect(payload: SoundEffectRequest): Promise<AudioToolResponse> {

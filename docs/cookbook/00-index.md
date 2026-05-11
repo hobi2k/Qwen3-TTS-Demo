@@ -35,6 +35,10 @@
 20. [Qwen Extensions 구조](./24-qwen-extensions.md)
 21. [Vendor upstream delta register](./25-vendor-upstream-deltas.md)
 22. [Docker Compose 배포](./26-docker-deployment.md)
+23. [신규 vendor 통합 계획 (CosyVoice 3 / VoxCPM2 / Supertonic 3)](./28-new-vendors-integration-plan.md)
+24. [CosyVoice 3 작업실](./29-cosyvoice3-workspace.md)
+25. [VoxCPM2 작업실](./30-voxcpm2-workspace.md)
+26. [Supertonic 3 작업실](./31-supertonic3-workspace.md)
 
 ## 현재 문서 맵
 

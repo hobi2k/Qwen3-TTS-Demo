@@ -26,7 +26,10 @@ from dotenv import load_dotenv
 from starlette.background import BackgroundTask
 
 from .ace_step import AceStepComposer, AceStepError
+from .cosyvoice import CosyVoice3Engine, CosyVoiceError
 from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
+from .supertonic import Supertonic3Engine, SupertonicError
+from .voxcpm import VoxCPM2Engine, VoxCPMError
 from .fish_speech import (
     FishSpeechError,
     S2ProEngine,
@@ -75,6 +78,12 @@ from .schemas import (
     ClonePromptCreateFromSampleRequest,
     ClonePromptCreateFromUploadRequest,
     ClonePromptRecord,
+    CosyVoice3GenerateRequest,
+    CosyVoice3RuntimeResponse,
+    CosyVoice3TrainingRequest,
+    CosyVoice3TrainingResponse,
+    CosyVoice3VoicePresetCreateRequest,
+    CosyVoice3VoicePresetResponse,
     CustomVoiceRequest,
     FineTuneDataset,
     FineTuneDatasetCreateRequest,
@@ -125,6 +134,16 @@ from .schemas import (
     VoiceModelBlendRequest,
     VoiceCloneRequest,
     VoiceDesignRequest,
+    Supertonic3GenerateRequest,
+    Supertonic3RuntimeResponse,
+    Supertonic3VoicePresetCreateRequest,
+    Supertonic3VoicePresetResponse,
+    VoxCPM2GenerateRequest,
+    VoxCPM2RuntimeResponse,
+    VoxCPM2TrainingRequest,
+    VoxCPM2TrainingResponse,
+    VoxCPM2VoicePresetCreateRequest,
+    VoxCPM2VoicePresetResponse,
 )
 from .storage import Storage, utc_now
 from .stem_separator import DEFAULT_VOCAL_MODEL, StemSeparatorEngine, StemSeparatorError
@@ -180,6 +199,9 @@ mmaudio_engine = MMAudioSoundEffectEngine(REPO_ROOT)
 stem_separator_engine = StemSeparatorEngine(REPO_ROOT)
 ace_step_composer = AceStepComposer(REPO_ROOT)
 vibevoice_engine = VibeVoiceEngine(REPO_ROOT)
+cosyvoice_engine = CosyVoice3Engine(REPO_ROOT)
+voxcpm_engine = VoxCPM2Engine(REPO_ROOT)
+supertonic_engine = Supertonic3Engine(REPO_ROOT)
 
 
 def release_qwen_runtime_before_external_engine() -> None:
@@ -3817,6 +3839,464 @@ def ace_step_format_sample(payload: AceStepFormatSampleRequest) -> AceStepUnders
 
     request_payload = payload.model_dump()
     return _run_lm_only_task("format_sample", payload, request_payload)
+
+
+@app.get("/api/cosyvoice/runtime", response_model=CosyVoice3RuntimeResponse)
+def cosyvoice_runtime() -> CosyVoice3RuntimeResponse:
+    """CosyVoice 3 런타임/모델/프리셋 상태를 반환한다."""
+
+    from .cosyvoice import SUPPORTED_LANGUAGES, SUPPORTED_TASKS
+
+    return CosyVoice3RuntimeResponse(
+        available=cosyvoice_engine.is_available(),
+        notes=cosyvoice_engine.availability_notes(),
+        cosyvoice_root=str(cosyvoice_engine.cosyvoice_root),
+        python_executable=cosyvoice_engine.python_executable,
+        model_dir=str(cosyvoice_engine.model_dir),
+        voice_dir=str(cosyvoice_engine.voice_dir),
+        model_variants=cosyvoice_engine.list_model_variants(),
+        voice_presets=cosyvoice_engine.list_voice_presets(),
+        supported_tasks=sorted(SUPPORTED_TASKS),
+        supported_languages=list(SUPPORTED_LANGUAGES),
+    )
+
+
+@app.post("/api/cosyvoice/generate", response_model=GenerationResponse)
+def cosyvoice_generate(payload: CosyVoice3GenerateRequest) -> GenerationResponse:
+    """CosyVoice 3로 한국어 등 다국어 TTS를 생성한다.
+
+    Supported tasks: ``zero_shot``, ``cross_lingual`` (Korean recommended),
+    ``instruct2``, ``sft``, ``vc``. 한국어 텍스트는 ``cross_lingual`` 모드를
+    사용하는 것이 가장 안정적이다.
+    """
+
+    if not cosyvoice_engine.is_available():
+        raise HTTPException(status_code=400, detail=cosyvoice_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    request_payload: Dict[str, Any] = payload.model_dump()
+    label = payload.label or payload.text or payload.task or "cosyvoice"
+    output_path = generated_audio_path("cosyvoice", label, payload.audio_format)
+
+    try:
+        audio_path, meta = cosyvoice_engine.run(
+            task=payload.task,
+            output_path=output_path,
+            payload=request_payload,
+        )
+    except CosyVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"CosyVoice generation failed: {exc}") from exc
+
+    record = build_generation_record(
+        record_id=storage.new_id("cosyvoice"),
+        mode=f"cosyvoice_{payload.task}",
+        text=payload.text,
+        language=payload.language or "",
+        audio_path=audio_path,
+        instruction=payload.instruct_text,
+        source_ref_audio_path=payload.prompt_audio_path or "",
+        source_ref_text=payload.prompt_text or "",
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.get("/api/cosyvoice/voices", response_model=List[CosyVoice3VoicePresetResponse])
+def cosyvoice_list_voices() -> List[CosyVoice3VoicePresetResponse]:
+    """저장된 CosyVoice 프리셋 목록을 조회한다."""
+
+    presets = cosyvoice_engine.list_voice_presets()
+    return [CosyVoice3VoicePresetResponse(**preset) for preset in presets]
+
+
+@app.post("/api/cosyvoice/voices", response_model=CosyVoice3VoicePresetResponse)
+def cosyvoice_save_voice(
+    payload: CosyVoice3VoicePresetCreateRequest,
+) -> CosyVoice3VoicePresetResponse:
+    """CosyVoice zero-shot/cross-lingual 프리셋을 저장한다."""
+
+    try:
+        record = cosyvoice_engine.save_voice_preset(
+            name=payload.name,
+            prompt_text=payload.prompt_text,
+            prompt_audio_path=payload.prompt_audio_path,
+            language=payload.language,
+            task=payload.task,
+            notes=payload.notes,
+        )
+    except CosyVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return CosyVoice3VoicePresetResponse(**record)
+
+
+@app.delete("/api/cosyvoice/voices/{name}", response_model=VoiceAssetDeleteResponse)
+def cosyvoice_delete_voice(name: str) -> VoiceAssetDeleteResponse:
+    """CosyVoice 프리셋을 삭제한다."""
+
+    deleted = cosyvoice_engine.delete_voice_preset(name)
+    return VoiceAssetDeleteResponse(deleted=deleted, id=name)
+
+
+@app.post("/api/cosyvoice/train", response_model=CosyVoice3TrainingResponse)
+def cosyvoice_train(payload: CosyVoice3TrainingRequest) -> CosyVoice3TrainingResponse:
+    """CosyVoice 3 파인튜닝(llm/flow/hifigan SFT)을 시작한다.
+
+    ``dataset_id``는 ``data/datasets/<dataset_id>/manifest.jsonl``을 가리켜야
+    하며 각 엔트리는 ``{"audio": "...", "text": "..."}`` 형식을 가져야 한다.
+    """
+
+    if not cosyvoice_engine.is_available():
+        raise HTTPException(status_code=400, detail=cosyvoice_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    dataset_root = (REPO_ROOT / "data" / "datasets" / payload.dataset_id).resolve()
+    manifest_path = dataset_root / "manifest.jsonl"
+    if not manifest_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Manifest not found at {manifest_path}. Expected JSONL with audio+text fields.",
+        )
+
+    cv_manifest_path: Optional[Path] = None
+    if payload.cv_dataset_id:
+        cv_root = (REPO_ROOT / "data" / "datasets" / payload.cv_dataset_id).resolve()
+        cv_manifest_path = cv_root / "manifest.jsonl"
+        if not cv_manifest_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Validation manifest not found at {cv_manifest_path}.",
+            )
+
+    invalid_submodels = [s for s in payload.submodels if s not in {"llm", "flow", "hifigan"}]
+    if invalid_submodels:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported submodels: {invalid_submodels}. Choose from llm/flow/hifigan.",
+        )
+
+    run_id = payload.run_name or storage.new_id("cosyvoice-run")
+    try:
+        run_dir, meta = cosyvoice_engine.train(
+            run_id=run_id,
+            manifest_path=manifest_path,
+            cv_manifest_path=cv_manifest_path,
+            submodels=payload.submodels,
+            train_engine=payload.train_engine,
+            base_model=payload.base_model,
+            max_epoch=payload.max_epoch,
+            batch_size=payload.batch_size,
+            learning_rate=payload.learning_rate,
+            num_workers=payload.num_workers,
+            extra_args=payload.extra_args,
+            audio_root=dataset_root,
+        )
+    except CosyVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"CosyVoice training failed: {exc}") from exc
+
+    return CosyVoice3TrainingResponse(
+        run_id=run_id,
+        status=str(meta.get("status", "completed")),
+        run_dir=str(run_dir),
+        base_model=payload.base_model,
+        submodels=list(payload.submodels),
+        train_engine=payload.train_engine,
+        checkpoint_dir=meta.get("checkpoint_dir") or str(run_dir / "exp"),
+        log_tail=str(meta.get("stdout_tail", ""))[-2000:],
+        stderr_tail=str(meta.get("stderr_tail", ""))[-2000:],
+        stages=meta.get("stages", []) or [],
+    )
+
+
+@app.get("/api/voxcpm/runtime", response_model=VoxCPM2RuntimeResponse)
+def voxcpm_runtime() -> VoxCPM2RuntimeResponse:
+    """VoxCPM2 런타임 / 모델 / 프리셋 상태를 반환한다."""
+
+    from .voxcpm import SUPPORTED_LANGUAGES, SUPPORTED_TASKS
+
+    return VoxCPM2RuntimeResponse(
+        available=voxcpm_engine.is_available(),
+        notes=voxcpm_engine.availability_notes(),
+        voxcpm_root=str(voxcpm_engine.voxcpm_root),
+        python_executable=voxcpm_engine.python_executable,
+        model_dir=str(voxcpm_engine.model_dir),
+        voice_dir=str(voxcpm_engine.voice_dir),
+        model_variants=voxcpm_engine.list_model_variants(),
+        voice_presets=voxcpm_engine.list_voice_presets(),
+        supported_tasks=sorted(SUPPORTED_TASKS),
+        supported_languages=list(SUPPORTED_LANGUAGES),
+    )
+
+
+@app.post("/api/voxcpm/generate", response_model=GenerationResponse)
+def voxcpm_generate(payload: VoxCPM2GenerateRequest) -> GenerationResponse:
+    """VoxCPM2로 한국어 등 30개 언어 TTS를 생성한다.
+
+    Supported tasks: ``voice_design`` (괄호 자연어 디스크립터), ``voice_cloning``
+    (reference_wav_path), ``ultimate_cloning`` (prompt_wav_path + prompt_text).
+    한국어 클로닝은 SIM 1위(VoxCPM2 자체 벤치) 모델이다.
+    """
+
+    if not voxcpm_engine.is_available():
+        raise HTTPException(status_code=400, detail=voxcpm_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    request_payload: Dict[str, Any] = payload.model_dump()
+    label = payload.label or payload.text or payload.task or "voxcpm"
+    output_path = generated_audio_path("voxcpm", label, payload.audio_format)
+
+    try:
+        audio_path, meta = voxcpm_engine.run(
+            task=payload.task,
+            output_path=output_path,
+            payload=request_payload,
+        )
+    except VoxCPMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"VoxCPM generation failed: {exc}") from exc
+
+    record = build_generation_record(
+        record_id=storage.new_id("voxcpm"),
+        mode=f"voxcpm_{payload.task}",
+        text=payload.text,
+        language=payload.language or "",
+        audio_path=audio_path,
+        instruction=payload.voice_description,
+        source_ref_audio_path=payload.prompt_wav_path or payload.reference_wav_path or "",
+        source_ref_text=payload.prompt_text or "",
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.get("/api/voxcpm/voices", response_model=List[VoxCPM2VoicePresetResponse])
+def voxcpm_list_voices() -> List[VoxCPM2VoicePresetResponse]:
+    """저장된 VoxCPM2 프리셋 목록을 조회한다."""
+
+    presets = voxcpm_engine.list_voice_presets()
+    return [VoxCPM2VoicePresetResponse(**preset) for preset in presets]
+
+
+@app.post("/api/voxcpm/voices", response_model=VoxCPM2VoicePresetResponse)
+def voxcpm_save_voice(payload: VoxCPM2VoicePresetCreateRequest) -> VoxCPM2VoicePresetResponse:
+    """VoxCPM2 voice_design / voice_cloning / ultimate_cloning 프리셋을 저장한다."""
+
+    try:
+        record = voxcpm_engine.save_voice_preset(
+            name=payload.name,
+            task=payload.task,
+            prompt_text=payload.prompt_text,
+            prompt_wav_path=payload.prompt_wav_path,
+            reference_wav_path=payload.reference_wav_path,
+            voice_description=payload.voice_description,
+            language=payload.language,
+            notes=payload.notes,
+        )
+    except VoxCPMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return VoxCPM2VoicePresetResponse(**record)
+
+
+@app.delete("/api/voxcpm/voices/{name}", response_model=VoiceAssetDeleteResponse)
+def voxcpm_delete_voice(name: str) -> VoiceAssetDeleteResponse:
+    """VoxCPM2 프리셋을 삭제한다."""
+
+    deleted = voxcpm_engine.delete_voice_preset(name)
+    return VoiceAssetDeleteResponse(deleted=deleted, id=name)
+
+
+@app.post("/api/voxcpm/train", response_model=VoxCPM2TrainingResponse)
+def voxcpm_train(payload: VoxCPM2TrainingRequest) -> VoxCPM2TrainingResponse:
+    """VoxCPM2 LoRA 파인튜닝(lm/dit/proj 어댑터 선택)을 시작한다.
+
+    ``dataset_id``는 ``data/datasets/<dataset_id>/manifest.jsonl``을 가리켜야
+    하며 각 엔트리는 ``{"audio": "...", "text": "..."}`` 형식이다.
+    """
+
+    if not voxcpm_engine.is_available():
+        raise HTTPException(status_code=400, detail=voxcpm_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    dataset_root = (REPO_ROOT / "data" / "datasets" / payload.dataset_id).resolve()
+    manifest_path = dataset_root / "manifest.jsonl"
+    if not manifest_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Manifest not found at {manifest_path}. Expected JSONL with audio+text fields.",
+        )
+
+    cv_manifest_path: Optional[Path] = None
+    if payload.cv_dataset_id:
+        cv_root = (REPO_ROOT / "data" / "datasets" / payload.cv_dataset_id).resolve()
+        cv_manifest_path = cv_root / "manifest.jsonl"
+        if not cv_manifest_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Validation manifest not found at {cv_manifest_path}.",
+            )
+
+    run_id = payload.run_name or storage.new_id("voxcpm-run")
+    try:
+        run_dir, meta = voxcpm_engine.train(
+            run_id=run_id,
+            manifest_path=manifest_path,
+            cv_manifest_path=cv_manifest_path,
+            base_model=payload.base_model,
+            lora_config=payload.lora.model_dump(),
+            batch_size=payload.batch_size,
+            grad_accum_steps=payload.grad_accum_steps,
+            num_workers=payload.num_workers,
+            num_iters=payload.num_iters,
+            max_steps=payload.max_steps,
+            learning_rate=payload.learning_rate,
+            warmup_steps=payload.warmup_steps,
+            log_interval=payload.log_interval,
+            valid_interval=payload.valid_interval,
+            save_interval=payload.save_interval,
+            weight_decay=payload.weight_decay,
+            max_grad_norm=payload.max_grad_norm,
+            sample_rate=payload.sample_rate,
+            extra_args=payload.extra_args,
+            audio_root=dataset_root,
+        )
+    except VoxCPMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"VoxCPM training failed: {exc}") from exc
+
+    return VoxCPM2TrainingResponse(
+        run_id=run_id,
+        status=str(meta.get("status", "completed")),
+        run_dir=str(run_dir),
+        base_model=payload.base_model,
+        checkpoint_dir=meta.get("checkpoint_dir") or str(run_dir / "checkpoints"),
+        tensorboard_dir=meta.get("tensorboard_dir") or str(run_dir / "tensorboard"),
+        log_tail=str(meta.get("stdout_tail", ""))[-2000:],
+        stderr_tail=str(meta.get("stderr_tail", ""))[-2000:],
+        stages=meta.get("stages", []) or [],
+    )
+
+
+@app.get("/api/supertonic/runtime", response_model=Supertonic3RuntimeResponse)
+def supertonic_runtime() -> Supertonic3RuntimeResponse:
+    """Supertonic 3 런타임 / ONNX 자산 / 프리셋 상태를 반환한다."""
+
+    from .supertonic import SUPPORTED_EXPRESSION_TAGS, SUPPORTED_LANGUAGES
+
+    return Supertonic3RuntimeResponse(
+        available=supertonic_engine.is_available(),
+        notes=supertonic_engine.availability_notes(),
+        supertonic_root=str(supertonic_engine.supertonic_root),
+        model_dir=str(supertonic_engine.model_dir),
+        voice_dir=str(supertonic_engine.voice_dir),
+        onnx_dir=str(supertonic_engine.onnx_dir),
+        onnx_assets=supertonic_engine.list_onnx_status(),
+        builtin_voice_styles=supertonic_engine.list_builtin_voice_styles(),
+        voice_presets=supertonic_engine.list_voice_presets(),
+        supported_languages=list(SUPPORTED_LANGUAGES),
+        supported_expression_tags=list(SUPPORTED_EXPRESSION_TAGS),
+        training_supported=False,
+    )
+
+
+@app.post("/api/supertonic/generate", response_model=GenerationResponse)
+def supertonic_generate(payload: Supertonic3GenerateRequest) -> GenerationResponse:
+    """Supertonic 3 ONNX 추론으로 한국어 등 31개 언어 TTS를 생성한다.
+
+    표현 태그는 ``<laugh>``, ``<breath>``, ``<sigh>`` 3개만 지원되며 그 외
+    (예: ``[moaning]``)는 학습되지 않아 무시되거나 글자 그대로 발음된다.
+    """
+
+    if not supertonic_engine.is_available():
+        raise HTTPException(status_code=400, detail=supertonic_engine.availability_notes())
+
+    label = payload.label or payload.text or "supertonic"
+    output_path = generated_audio_path("supertonic", label, payload.audio_format)
+    try:
+        audio_path, meta = supertonic_engine.run(
+            text=payload.text,
+            language=payload.language,
+            voice_style=payload.voice_style,
+            output_path=output_path,
+            total_step=payload.total_step,
+            speed=payload.speed,
+            silence_duration=payload.silence_duration,
+            use_gpu=payload.use_gpu,
+        )
+    except SupertonicError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Supertonic generation failed: {exc}") from exc
+
+    record = build_generation_record(
+        record_id=storage.new_id("supertonic"),
+        mode="supertonic_tts",
+        text=payload.text,
+        language=payload.language,
+        audio_path=audio_path,
+        speaker=payload.voice_style,
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.get("/api/supertonic/voices", response_model=List[Supertonic3VoicePresetResponse])
+def supertonic_list_voices() -> List[Supertonic3VoicePresetResponse]:
+    """저장된 Supertonic 3 프리셋 목록을 조회한다."""
+
+    presets = supertonic_engine.list_voice_presets()
+    return [Supertonic3VoicePresetResponse(**preset) for preset in presets]
+
+
+@app.post("/api/supertonic/voices", response_model=Supertonic3VoicePresetResponse)
+def supertonic_save_voice(
+    payload: Supertonic3VoicePresetCreateRequest,
+) -> Supertonic3VoicePresetResponse:
+    """Supertonic 3 built-in voice style + 메모 묶음을 프리셋으로 저장한다."""
+
+    try:
+        record = supertonic_engine.save_voice_preset(
+            name=payload.name,
+            voice_style=payload.voice_style,
+            language=payload.language,
+            notes=payload.notes,
+        )
+    except SupertonicError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Supertonic3VoicePresetResponse(**record)
+
+
+@app.delete("/api/supertonic/voices/{name}", response_model=VoiceAssetDeleteResponse)
+def supertonic_delete_voice(name: str) -> VoiceAssetDeleteResponse:
+    """Supertonic 3 프리셋을 삭제한다."""
+
+    deleted = supertonic_engine.delete_voice_preset(name)
+    return VoiceAssetDeleteResponse(deleted=deleted, id=name)
+
+
+@app.post("/api/supertonic/train")
+def supertonic_train_unsupported() -> Dict[str, Any]:
+    """Supertonic 3는 ONNX 추론만 공개되어 있어 일반적인 학습이 불가능하다.
+
+    upstream에 학습용 PyTorch 모델 정의/loss/optimizer가 공개되어 있지 않다.
+    Phase 4에서 ONNX 그래프 역공학으로 별도 PyTorch 재구현이 완료되면 활성화
+    된다. 현 시점에서는 501 Not Implemented를 명시적으로 반환한다.
+    """
+
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Supertonic 3 fine-tuning is not supported by upstream. "
+            "Phase 4 reverse-engineering is required before enabling this endpoint."
+        ),
+    )
 
 
 @app.post("/api/audio-tools/voice-changer", response_model=AudioToolResponse)
