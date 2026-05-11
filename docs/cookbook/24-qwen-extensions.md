@@ -41,7 +41,7 @@ voicestudio/
 
 ## clone prompt + instruct의 speaker anchor 규칙
 
-> 🛠 **`Base clone prompt + CustomVoice instruct` hybrid 경로는 hobi2k (이 저장소
+> **`Base clone prompt + CustomVoice instruct` hybrid 경로는 hobi2k (이 저장소
 > 소유자)의 고유 커스텀 추론 파이프라인입니다.** upstream `Qwen3-TTS`의 공식
 > high-level wrapper가 아니며, 두 개의 별도 Qwen 체크포인트(Base + CustomVoice)를
 > 하나의 추론 요청 안에서 조합해 clone prompt의 acoustic/style 조건과 CustomVoice

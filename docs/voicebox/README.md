@@ -2,7 +2,7 @@
 
 이 폴더는 `VoiceBox` 전용 문서를 모아 둔 기준 위치입니다.
 
-> ⚠️ **VoiceBox는 hobi2k (이 저장소 소유자)의 고유 커스텀 개조 모델입니다.**
+> **VoiceBox는 hobi2k (이 저장소 소유자)의 고유 커스텀 개조 모델입니다.**
 > upstream `Qwen3-TTS`에는 존재하지 않는 파이프라인이며, FunAudioLLM·OpenBMB·
 > Supertone 같은 외부 vendor 모델도 아닙니다. plain `CustomVoice` 체크포인트에
 > `Base 1.7B`의 `speaker_encoder`를 합쳐 self-contained checkpoint를 만들고,

@@ -1,6 +1,6 @@
 # Preset + Instruct 원리
 
-> 🧩 **`Base + CustomVoice instruct` hybrid 추론 경로는 hobi2k 고유 커스텀
+> **`Base + CustomVoice instruct` hybrid 추론 경로는 hobi2k 고유 커스텀
 > 파이프라인입니다.** upstream `Qwen3-TTS`의 공식 high-level wrapper가 아니며,
 > 별도 `Base` 체크포인트의 clone prompt(참조 음성 acoustic/style)와
 > `CustomVoice` 체크포인트의 instruct 학습 분포를 한 추론 요청 안에서 결합하는

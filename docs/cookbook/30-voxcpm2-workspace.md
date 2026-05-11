@@ -17,7 +17,7 @@
 |---|---|
 | 라이선스 | Apache 2.0 |
 | 권장 가중치 | `VoxCPM2` (HuggingFace `openbmb/VoxCPM2`) |
-| 한국어 지원 | ✅ (30개 언어 중 / SIM 83.3 1위) |
+| 한국어 지원 | (30개 언어 중 / SIM 83.3 1위) |
 | 표현 제어 | 자연어 괄호 디스크립터 `(A young woman, gentle voice)` |
 | 학습 모드 | LoRA (lm / dit / proj 어댑터 선택) |
 
@@ -66,9 +66,9 @@
 
 | task | 필수 필드 | 한국어 효과 |
 |---|---|---|
-| `voice_design` | `text` (앞에 `(description)`) | ⚠️ 영어 디스크립터 권장 |
-| `voice_cloning` | `text`, `reference_wav_path` | **✅ 1순위** (SIM 83.3) |
-| `ultimate_cloning` | `text`, `prompt_wav_path`, `prompt_text` (+ `reference_wav_path`) | ✅ 최고 충실도 |
+| `voice_design` | `text` (앞에 `(description)`) | 영어 디스크립터 권장 |
+| `voice_cloning` | `text`, `reference_wav_path` | **1순위** (SIM 83.3) |
+| `ultimate_cloning` | `text`, `prompt_wav_path`, `prompt_text` (+ `reference_wav_path`) | 최고 충실도 |
 
 예시 (voice_cloning, 한국어):
 ```bash

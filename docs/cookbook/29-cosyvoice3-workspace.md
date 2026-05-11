@@ -1,4 +1,4 @@
-# 27. CosyVoice 3 작업실
+# 29. CosyVoice 3 작업실
 
 > FunAudioLLM CosyVoice 3 (Apache 2.0) 통합. 한국어 등 9개 언어의 zero-shot
 > / cross-lingual / instruct2 / SFT / voice conversion을 지원한다.
@@ -16,7 +16,7 @@
 |---|---|
 | 라이선스 | Apache 2.0 |
 | 권장 가중치 | ``Fun-CosyVoice3-0.5B`` (ModelScope/HF) |
-| 한국어 지원 | ✅ cross-lingual 모드 권장 |
+| 한국어 지원 | cross-lingual 모드 권장 |
 | 표현 태그 | ``[laughter]``, ``[breath]`` 등 fine-grained control |
 | 학습 모드 | SFT (``llm`` / ``flow`` / ``hifigan`` 서브모듈 선택) — LoRA 미지원 |
 
@@ -70,10 +70,10 @@
 | task | 필수 필드 | 한국어 권장 여부 |
 |---|---|---|
 | ``zero_shot`` | ``text``, ``prompt_text``, ``prompt_audio_path`` | △ (영어/중국어 prompt_text가 안정적) |
-| ``cross_lingual`` | ``text``, ``prompt_audio_path`` | **✅ 한국어 1순위** |
+| ``cross_lingual`` | ``text``, ``prompt_audio_path`` | **한국어 1순위** |
 | ``instruct2`` | ``text``, ``instruct_text``, ``prompt_audio_path`` | △ (instruct_text는 영어 권장) |
-| ``sft`` | ``text``, ``speaker`` | ❌ (Chinese/English SFT 모델만) |
-| ``vc`` | ``source_audio_path``, ``prompt_audio_path`` | ✅ (텍스트 없음) |
+| ``sft`` | ``text``, ``speaker`` | (Chinese/English SFT 모델만) |
+| ``vc`` | ``source_audio_path``, ``prompt_audio_path`` | (텍스트 없음) |
 
 응답: ``GenerationResponse`` (다른 vendor와 동일한 record 포맷).
 
@@ -190,7 +190,4 @@ GPU가 보이면 ``torchrun --nproc_per_node=N``로 자동 분산. GPU가 없으
        다운로드 + 한국어 cross_lingual smoke test
 - [ ] **Phase 2** — VoxCPM2 통합 (동일 패턴)
 - [ ] **Phase 3** — Supertonic 3 추론 통합 (메인 venv ONNX)
-- [ ] **Phase 4** — Supertonic 3 역공학 학습 (별도 평가 후 진행)
-- [ ] **Phase 2** — VoxCPM2 통합 (동일 패턴)
-- [ ] **Phase 3** — Supertonic 3 추론 통합
 - [ ] **Phase 4** — Supertonic 3 역공학 학습 (별도 평가 후 진행)

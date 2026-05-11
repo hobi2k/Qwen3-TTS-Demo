@@ -8,9 +8,9 @@
 
 | 모델 | 라이선스 | 공개 weights | 한국어 | 추론 모드 | 학습 모드 |
 |---|---|---|---|---|---|
-| **CosyVoice 3** | Apache 2.0 | ✅ ModelScope/HF | ✅ (9개 언어 중) | zero-shot / cross-lingual / instruct / streaming | LoRA / SFT (examples/libritts) |
-| **VoxCPM2** | Apache 2.0 | ✅ HF `openbmb/VoxCPM2` | ✅ (30개 언어) | voice design / cloning / ultimate cloning / streaming | LoRA / SFT (scripts/train_voxcpm_finetune.py) |
-| **Supertonic 3** | BigScience Open RAIL-M | ✅ HF `Supertone/supertonic-3` | ✅ (31개 언어) | TTS (3개 표현 태그: `<laugh>` `<breath>` `<sigh>`) | **❌ 업스트림 학습 코드 없음 — 역공학 필요** |
+| **CosyVoice 3** | Apache 2.0 | ModelScope/HF | (9개 언어 중) | zero-shot / cross-lingual / instruct / streaming | LoRA / SFT (examples/libritts) |
+| **VoxCPM2** | Apache 2.0 | HF `openbmb/VoxCPM2` | (30개 언어) | voice design / cloning / ultimate cloning / streaming | LoRA / SFT (scripts/train_voxcpm_finetune.py) |
+| **Supertonic 3** | BigScience Open RAIL-M | HF `Supertone/supertonic-3` | (31개 언어) | TTS (3개 표현 태그: `<laugh>` `<breath>` `<sigh>`) | **업스트림 학습 코드 없음 — 역공학 필요** |
 
 ## Supertonic 3 역공학 — 별도 위험 평가
 
@@ -28,7 +28,7 @@
 4. **학습 루프 작성**: 손실 함수는 표준 TTS 학습(latent flow matching + duration loss + 보코더 보조 손실)을 추정해 작성
 5. **검증**: 추론 결과가 원본 ONNX와 일치하는지 확인 후 학습 실험
 
-⚠️ 결과 보장 불가, 추가 작업량은 최소 1~2주 수준, 학습 안정성·품질은 미지수. 추론 통합 완료 후 별도 마일스톤으로 분리한다.
+결과 보장 불가, 추가 작업량은 최소 1~2주 수준, 학습 안정성·품질은 미지수. 추론 통합 완료 후 별도 마일스톤으로 분리한다.
 
 ## 기존 vendor 패턴 매핑
 
@@ -219,7 +219,7 @@ CosyVoice 3와 동일한 5단계, 다음 차이만:
 4. 추론 일치성 검증 (PyTorch 재구현이 원본 ONNX와 비트 단위는 아니더라도 청취상 동일한지)
 5. 학습 smoke test 성공 후 UI training panel 활성화
 
-⚠️ **이 단계는 결과 보장이 불가하며, Phase 1~3 완료 후 별도 평가를 거쳐 진행 여부 재결정 권장.**
+**이 단계는 결과 보장이 불가하며, Phase 1~3 완료 후 별도 평가를 거쳐 진행 여부 재결정 권장.**
 
 ## 일관성 체크리스트 (각 모델 완료 시 만족해야 할 항목)
 

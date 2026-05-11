@@ -16,10 +16,10 @@
 |---|---|
 | 라이선스 | BigScience Open RAIL-M (상업 사용 OK, Attachment A 행위 제한) |
 | 권장 가중치 | `Supertone/supertonic-3` (HuggingFace ~260 MB ONNX 번들) |
-| 한국어 지원 | ✅ (31개 언어 중) |
+| 한국어 지원 | (31개 언어 중) |
 | 표현 태그 | `<laugh>`, `<breath>`, `<sigh>` 3개만 (대괄호 `[ ]`는 전처리에서 제거) |
-| 클로닝 | ❌ zero-shot 클로닝 미지원 (built-in voice style만 사용) |
-| 학습 | ❌ 업스트림 코드 없음 (Phase 4 역공학 보류) |
+| 클로닝 | zero-shot 클로닝 미지원 (built-in voice style만 사용) |
+| 학습 | 업스트림 코드 없음 (Phase 4 역공학 보류) |
 
 ## 설치 / 셋업
 
@@ -111,10 +111,10 @@ Built-in voice style + 라벨/메모 묶음 프리셋 CRUD.
 
 | 시도 | 결과 |
 |---|---|
-| `<laugh>`, `<breath>`, `<sigh>` | ✅ 학습된 마커, 작동 |
-| `[moaning]`, `[laugh]` (대괄호) | ❌ 전처리에서 `[ ]` 제거되어 그냥 단어로 발음 |
-| `<moan>`, `<gasp>` (학습 안 됨) | ❌ 학습 데이터 없음, 무시되거나 글자로 발음 |
-| 자연어 instruct (`흥분된 톤:`) | ❌ instruct 모드 없음 |
+| `<laugh>`, `<breath>`, `<sigh>` | 학습된 마커, 작동 |
+| `[moaning]`, `[laugh]` (대괄호) | 전처리에서 `[ ]` 제거되어 그냥 단어로 발음 |
+| `<moan>`, `<gasp>` (학습 안 됨) | 학습 데이터 없음, 무시되거나 글자로 발음 |
+| 자연어 instruct (`흥분된 톤:`) | instruct 모드 없음 |
 
 도메인 특화 NSFW/강감정 표현이 필요하면 **Fish Speech S2-Pro**(비상업 라이선스
 주의), **VoxCPM2 LoRA 파인튜닝**, 또는 **CosyVoice 3 instruct2** 라인을 사용.
@@ -139,11 +139,11 @@ Built-in voice style + 라벨/메모 묶음 프리셋 CRUD.
 
 ## 라이선스 — Toptoon 도메인 적용 참고
 
-- ✅ **상업 사용 허용** (Apache 스타일 + 사용 제한)
-- ⛔ **(b) 미성년자** — 모든 미성년자 관련 콘텐츠 금지
-- ⚠️ **(g) 동의 없는 사칭** — 실제 인물 음성 모사 금지 (built-in voice라 영향 없음)
-- ⚠️ **(e) AI 생성 미고지** — 약관/메타데이터에 AI 음성 표기 필요
-- ✅ NSFW 자체는 라이선스상 금지되지 않음 (단, 모델 표현력이 부족함)
+- **상업 사용 허용** (Apache 스타일 + 사용 제한)
+- **(b) 미성년자** — 모든 미성년자 관련 콘텐츠 금지
+- **(g) 동의 없는 사칭** — 실제 인물 음성 모사 금지 (built-in voice라 영향 없음)
+- **(e) AI 생성 미고지** — 약관/메타데이터에 AI 음성 표기 필요
+- NSFW 자체는 라이선스상 금지되지 않음 (단, 모델 표현력이 부족함)
 
 상세 분석은 conversation history 참고 (BigScience Open RAIL-M Attachment A).
 

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "core", "mmaudio", "s2pro")]
+    [ValidateSet("all", "core", "mmaudio", "s2pro", "cosyvoice", "voxcpm", "supertonic")]
     [string]$Profile = "all"
 )
 
@@ -18,6 +18,14 @@ $MMAudioModelsDir = Join-Path $RootDir "data\mmaudio"
 $StemSeparatorModelsDir = Join-Path $RootDir "data\stem-separator-models"
 $FishSpeechDir = if ($env:FISH_SPEECH_REPO_ROOT) { $env:FISH_SPEECH_REPO_ROOT } else { Join-Path $VendorDir "fish-speech" }
 $FishSpeechModelDir = if ($env:FISH_SPEECH_MODEL_DIR) { $env:FISH_SPEECH_MODEL_DIR } else { Join-Path $RootDir "data\models\fish-speech\s2-pro" }
+$CosyVoiceDir = if ($env:COSYVOICE_REPO_ROOT) { $env:COSYVOICE_REPO_ROOT } else { Join-Path $VendorDir "CosyVoice" }
+$CosyVoiceModelDir = if ($env:COSYVOICE_MODEL_DIR) { $env:COSYVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\cosyvoice3" }
+$CosyVoiceVenv = if ($env:COSYVOICE_VENV) { $env:COSYVOICE_VENV } else { Join-Path $RootDir ".venv-cosyvoice3" }
+$VoxCPMDir = if ($env:VOXCPM_REPO_ROOT) { $env:VOXCPM_REPO_ROOT } else { Join-Path $VendorDir "VoxCPM" }
+$VoxCPMModelDir = if ($env:VOXCPM_MODEL_DIR) { $env:VOXCPM_MODEL_DIR } else { Join-Path $RootDir "data\models\voxcpm2" }
+$VoxCPMVenv = if ($env:VOXCPM_VENV) { $env:VOXCPM_VENV } else { Join-Path $RootDir ".venv-voxcpm2" }
+$SupertonicDir = if ($env:SUPERTONIC_REPO_ROOT) { $env:SUPERTONIC_REPO_ROOT } else { Join-Path $VendorDir "Supertonic" }
+$SupertonicModelDir = if ($env:SUPERTONIC_MODEL_DIR) { $env:SUPERTONIC_MODEL_DIR } else { Join-Path $RootDir "data\models\supertonic3" }
 
 if (-not (Test-Path $VenvDir)) {
     throw "Virtual environment not found. Run .\scripts\setup_backend.ps1 first."
@@ -31,6 +39,9 @@ New-Item -ItemType Directory -Force -Path $ApplioPredictorDir | Out-Null
 New-Item -ItemType Directory -Force -Path $MMAudioModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $StemSeparatorModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $FishSpeechModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $CosyVoiceModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $VoxCPMModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $SupertonicModelDir | Out-Null
 
 $ActivatePath = Join-Path $VenvDir "Scripts\Activate.ps1"
 . $ActivatePath
@@ -103,6 +114,9 @@ profile = r'''$Profile'''
 profiles = {
     'mmaudio': [],
     's2pro': [],
+    'cosyvoice': [],
+    'voxcpm': [],
+    'supertonic': [],
     'core': [
         ('Qwen/Qwen3-TTS-Tokenizer-12Hz', 'Qwen3-TTS-Tokenizer-12Hz'),
         ('Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice', 'Qwen3-TTS-12Hz-0.6B-CustomVoice'),
@@ -351,5 +365,114 @@ if ($Profile -eq "all") {
         }
     }
 }
+function Detect-TorchProfileForWindows {
+    try {
+        $null = & nvidia-smi 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return "cu121"
+        }
+    } catch { }
+    return "cpu"
+}
+
+# --------------------------------------------------------------------------
+# CosyVoice 3 (FunAudioLLM, Apache 2.0) — .venv-cosyvoice3 + HF weight bundle
+# --------------------------------------------------------------------------
+$CosyVoiceHfModelId = if ($env:COSYVOICE_HF_MODEL_ID) { $env:COSYVOICE_HF_MODEL_ID } else { "FunAudioLLM/CosyVoice2-0.5B" }
+$CosyVoiceLocalDirname = if ($env:COSYVOICE_LOCAL_DIRNAME) { $env:COSYVOICE_LOCAL_DIRNAME } else { "CosyVoice2-0.5B" }
+if (($Profile -eq "all") -or ($Profile -eq "cosyvoice")) {
+    Assert-VendoredSource -Name "CosyVoice" -TargetDir $CosyVoiceDir
+    if (-not (Test-Path $CosyVoiceVenv)) {
+        Write-Host "Creating CosyVoice venv -> $CosyVoiceVenv"
+        python -m venv $CosyVoiceVenv
+    }
+    $CosyVoicePython = Join-Path $CosyVoiceVenv "Scripts\python.exe"
+    & $CosyVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
+
+    $CosyVoiceTorchProfile = if ($env:COSYVOICE_TORCH_PROFILE) { $env:COSYVOICE_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
+    Write-Host "Installing CosyVoice runtime into $CosyVoiceVenv (torch profile: $CosyVoiceTorchProfile)"
+    $env:COSYVOICE_TORCH_PROFILE = $CosyVoiceTorchProfile
+    & $CosyVoicePython (Join-Path $RootDir "scripts\install_cosyvoice_runtime.py") --repo-root $CosyVoiceDir --torch-profile $CosyVoiceTorchProfile | Out-Host
+
+    python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+target = Path(r'''$CosyVoiceModelDir''') / r'''$CosyVoiceLocalDirname'''
+print(f'Downloading $CosyVoiceHfModelId -> {target}')
+snapshot_download(
+    repo_id=r'''$CosyVoiceHfModelId''',
+    local_dir=str(target),
+    local_dir_use_symlinks=False,
+    resume_download=True,
+)
+print('CosyVoice 3 model download completed.')
+print('Note: Fun-CosyVoice3 official weights are on ModelScope (iic/Fun-CosyVoice3-0.5B). Override COSYVOICE_HF_MODEL_ID + COSYVOICE_LOCAL_DIRNAME to switch.')
+"@
+}
+
+# --------------------------------------------------------------------------
+# VoxCPM2 (OpenBMB, Apache 2.0) — .venv-voxcpm2 + HF weight bundle
+# --------------------------------------------------------------------------
+$VoxCPMHfModelId = if ($env:VOXCPM_HF_MODEL_ID) { $env:VOXCPM_HF_MODEL_ID } else { "openbmb/VoxCPM2" }
+$VoxCPMLocalDirname = if ($env:VOXCPM_LOCAL_DIRNAME) { $env:VOXCPM_LOCAL_DIRNAME } else { "VoxCPM2" }
+if (($Profile -eq "all") -or ($Profile -eq "voxcpm")) {
+    Assert-VendoredSource -Name "VoxCPM" -TargetDir $VoxCPMDir
+    if (-not (Test-Path $VoxCPMVenv)) {
+        Write-Host "Creating VoxCPM venv -> $VoxCPMVenv"
+        python -m venv $VoxCPMVenv
+    }
+    $VoxCPMPython = Join-Path $VoxCPMVenv "Scripts\python.exe"
+    & $VoxCPMPython -m pip install --upgrade pip wheel setuptools | Out-Host
+
+    $VoxCPMTorchProfile = if ($env:VOXCPM_TORCH_PROFILE) { $env:VOXCPM_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
+    Write-Host "Installing VoxCPM runtime into $VoxCPMVenv (torch profile: $VoxCPMTorchProfile)"
+    $env:VOXCPM_TORCH_PROFILE = $VoxCPMTorchProfile
+    & $VoxCPMPython (Join-Path $RootDir "scripts\install_voxcpm_runtime.py") --repo-root $VoxCPMDir --torch-profile $VoxCPMTorchProfile | Out-Host
+
+    python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+target = Path(r'''$VoxCPMModelDir''') / r'''$VoxCPMLocalDirname'''
+print(f'Downloading $VoxCPMHfModelId -> {target}')
+snapshot_download(
+    repo_id=r'''$VoxCPMHfModelId''',
+    local_dir=str(target),
+    local_dir_use_symlinks=False,
+    resume_download=True,
+)
+print('VoxCPM2 model download completed.')
+"@
+}
+
+# --------------------------------------------------------------------------
+# Supertonic 3 (Supertone, BigScience Open RAIL-M) — ONNX bundle into main .venv
+# --------------------------------------------------------------------------
+$SupertonicHfModelId = if ($env:SUPERTONIC_HF_MODEL_ID) { $env:SUPERTONIC_HF_MODEL_ID } else { "Supertone/supertonic-3" }
+if (($Profile -eq "all") -or ($Profile -eq "supertonic")) {
+    Assert-VendoredSource -Name "Supertonic" -TargetDir $SupertonicDir
+    Write-Host "Ensuring onnxruntime in main venv for Supertonic 3 in-process inference"
+    python -c "import onnxruntime" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        uv pip install "onnxruntime>=1.23.0" soundfile librosa | Out-Host
+    }
+
+    python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+target = Path(r'''$SupertonicModelDir''')
+print(f'Downloading $SupertonicHfModelId -> {target}')
+snapshot_download(
+    repo_id=r'''$SupertonicHfModelId''',
+    local_dir=str(target),
+    local_dir_use_symlinks=False,
+    resume_download=True,
+)
+print('Supertonic 3 ONNX bundle download completed.')
+"@
+}
+
 Write-Host "Suggested next step:"
 Write-Host "  cd app\backend; ..\..\.venv\Scripts\Activate.ps1; uvicorn app.main:app --reload"

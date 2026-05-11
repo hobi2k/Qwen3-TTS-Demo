@@ -1,12 +1,10 @@
 # voicestudio
 
-`Qwen3-TTS`, `Fish Speech S2-Pro`, `CosyVoice 3`, `VoxCPM2`, `Supertonic 3`, `Applio`, `MMAudio`, `ACE-Step`, `VibeVoice`를 하나의 로컬 작업실로 묶은 음성/음악 스튜디오 애플리케이션입니다. 여기에 **hobi2k 고유 커스텀 개조 모델 `VoiceBox`** 파이프라인이 별도로 들어 있습니다.
+`Qwen3-TTS`, `Fish Speech S2-Pro`, `CosyVoice 3`, `VoxCPM2`, `Supertonic 3`, `Applio`, `MMAudio`, `ACE-Step`, `VibeVoice`를 하나의 로컬 작업실로 묶은 음성/음악 스튜디오 애플리케이션입니다. 여기에 hobi2k(이 저장소 소유자)의 고유 커스텀 자산인 `VoiceBox` 모델군과 `Base + CustomVoice instruct` hybrid 추론 경로가 별도로 들어 있습니다.
 
-> 본 프로젝트는 이전에 `Qwen3-TTS-Demo`로 불렸습니다. 디렉터리/리포지토리 이름은 환경에 따라 `Qwen3-TTS-Demo` 또는 `voicestudio`로 남아 있을 수 있으며, 문서·UI·패키지 식별자는 모두 `voicestudio`를 정식 이름으로 사용합니다.
+> **VoiceBox는 외부 vendor 모델이 아니라 hobi2k의 고유 커스텀 개조 모델입니다.** Qwen3-TTS `Base 1.7B`의 `speaker_encoder`를 fine-tuned `CustomVoice` 체크포인트에 합쳐 self-contained checkpoint를 만들고, 그 위에 `VoiceBox -> VoiceBox` 재학습 / clone / clone + instruct / speaker morph 같은 hobi2k 고유 워크플로우를 얹었습니다. 학습·변환·추론 코드는 `qwen_extensions/`와 `scripts/`에 들어 있으며, upstream Qwen3-TTS에는 없는 별도 trackable 모델군입니다.
 
-> 🛠 **VoiceBox는 외부 vendor 모델이 아니라 이 저장소 소유자(hobi2k)의 고유 커스텀 개조 모델입니다.** Qwen3-TTS `Base 1.7B`의 `speaker_encoder`를 fine-tuned `CustomVoice` 체크포인트에 합쳐 self-contained checkpoint를 만들고, 그 위에 `VoiceBox -> VoiceBox` 재학습 / clone / clone + instruct / speaker morph 같은 hobi2k 고유 워크플로우를 얹었습니다. 학습·변환·추론 코드는 `qwen_extensions/`와 `scripts/`에 들어 있으며, upstream Qwen3-TTS에는 없는 별도 trackable 모델군입니다.
-
-> 🧩 **`Base + CustomVoice instruct` hybrid 추론 경로도 hobi2k 고유 파이프라인입니다.** upstream Qwen3-TTS의 공식 high-level wrapper가 아니며, Base 체크포인트의 clone prompt(참조 음성 acoustic/style)와 CustomVoice 체크포인트의 instruct 학습 분포를 한 추론 요청 안에서 결합하는 데모 확장 경로입니다. canonical 구현은 `qwen_extensions/inference/hybrid_clone_instruct.py`와 `app/backend/app/qwen.py`이고, `프리셋 기반 생성` 탭과 `/api/generate/hybrid-clone-instruct` 엔드포인트에서 노출됩니다.
+> **`Base + CustomVoice instruct` hybrid 추론 경로도 hobi2k 고유 파이프라인입니다.** upstream Qwen3-TTS의 공식 high-level wrapper가 아니며, Base 체크포인트의 clone prompt(참조 음성 acoustic/style)와 CustomVoice 체크포인트의 instruct 학습 분포를 한 추론 요청 안에서 결합하는 데모 확장 경로입니다. canonical 구현은 `qwen_extensions/inference/hybrid_clone_instruct.py`와 `app/backend/app/qwen.py`이고, `프리셋 기반 생성` 탭과 `/api/generate/hybrid-clone-instruct` 엔드포인트에서 노출됩니다.
 
 현재 구조는 “기능을 나열하는 데모”가 아니라, 사용자가 실제로 아래 작업을 구분해서 쓸 수 있는 제품형 흐름을 기준으로 정리되어 있습니다.
 
@@ -85,22 +83,42 @@
 
 ## Clone 후 전체 준비
 
-WSL/Linux 기준으로는 아래 한 명령이 백엔드 환경, 모델/툴 자산 다운로드, 프런트 의존성 설치와 빌드까지 순서대로 실행합니다.
+WSL/Linux/macOS 기준으로는 아래 한 명령이 백엔드 환경, 모델/툴 자산 다운로드, 프런트 의존성 설치와 빌드까지 순서대로 실행합니다.
 
 ```bash
 ./scripts/bootstrap_all.sh
 ```
 
-가볍게 Qwen 핵심 모델만 준비하려면:
+Windows native (PowerShell)에서는:
 
-```bash
-./scripts/bootstrap_all.sh core
+```powershell
+.\scripts\setup_backend.ps1
+.\scripts\download_models.ps1
+cd app\frontend; npm install; npm run build
 ```
 
-S2-Pro만 준비하려면:
+지원되는 profile (sh / ps1 공통):
+
+| profile | 다운로드/셋업 대상 |
+|---|---|
+| `all` (default) | 아래 전부 |
+| `core` | Qwen3-TTS Base/CustomVoice/VoiceDesign + Qwen3-ASR + Applio runtime 자산 |
+| `s2pro` | Fish Speech S2-Pro weights + `.venv-fish-speech` |
+| `mmaudio` | MMAudio weights + `.venv-mmaudio` |
+| `ace-step` (sh) | ACE-Step-1.5 checkpoints + `.venv-ace-step` |
+| `vibevoice` / `vibevoice-7b` (sh) | VibeVoice ASR / Realtime 0.5B / 1.5B (옵션 7B) + `.venv-vibevoice` |
+| `cosyvoice` | CosyVoice 3 weights + `.venv-cosyvoice3` (`COSYVOICE_HF_MODEL_ID`로 미러 변경 가능, 기본 `FunAudioLLM/CosyVoice2-0.5B`) |
+| `voxcpm` | VoxCPM2 weights + `.venv-voxcpm2` (`VOXCPM_HF_MODEL_ID` default `openbmb/VoxCPM2`) |
+| `supertonic` | Supertonic 3 ONNX 번들 (메인 venv에서 in-process, 별도 venv 없음) |
+
+예시:
 
 ```bash
-./scripts/bootstrap_all.sh s2pro
+./scripts/bootstrap_all.sh core         # Qwen 핵심만
+./scripts/bootstrap_all.sh s2pro        # S2-Pro만
+./scripts/bootstrap_all.sh cosyvoice    # CosyVoice 3만
+./scripts/bootstrap_all.sh voxcpm       # VoxCPM2만
+./scripts/bootstrap_all.sh supertonic   # Supertonic 3만 (ONNX 추론, 가장 가벼움)
 ```
 
 MMAudio만 준비하려면:
@@ -169,17 +187,18 @@ cd ../..
 
 ```text
 voicestudio/
-  vendor/Qwen3-TTS/                 # upstream reference repo
-  qwen_extensions/           # studio-owned Qwen training/fusion/inference scripts
-  vendor/
-    Applio/                  # vendored (tracked in this repo)
-    MMAudio/                 # vendored (tracked in this repo, default weights cached under weights/ext_weights)
-    fish-speech/             # vendored (tracked in this repo)
-    ACE-Step/                # vendored (tracked in this repo)
-    VibeVoice/               # vendored VibeVoice source, tracked in this repo
+  vendor/                    # 모든 외부 모델 upstream checkout (구조 동일)
+    Qwen3-TTS/               # Alibaba Qwen3-TTS upstream reference repo
+    fish-speech/             # Fish Audio Fish Speech / S2-Pro source
+    VibeVoice/               # Microsoft VibeVoice source (community fork)
+    Applio/                  # Applio RVC framework
+    MMAudio/                 # MMAudio (default weights cached under weights/ext_weights)
+    ACE-Step/                # Alibaba ACE-Step music composition source
     CosyVoice/               # FunAudioLLM CosyVoice 3 source, Apache 2.0
     VoxCPM/                  # OpenBMB VoxCPM2 source, Apache 2.0
     Supertonic/              # Supertone Supertonic 3 source, BigScience Open RAIL-M
+  qwen_extensions/           # studio-owned Qwen training/fusion/inference scripts
+                             # (VoiceBox와 Base+Instruct hybrid 같은 hobi2k 고유 자산)
   app/
     backend/                 # FastAPI API server
     frontend/                # Next.js + TypeScript

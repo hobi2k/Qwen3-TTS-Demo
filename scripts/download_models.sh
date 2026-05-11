@@ -19,6 +19,12 @@ FISH_SPEECH_DIR="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
 FISH_SPEECH_MODEL_DIR="${FISH_SPEECH_MODEL_DIR:-${ROOT_DIR}/data/models/fish-speech/s2-pro}"
 VIBEVOICE_DIR="${VIBEVOICE_REPO_ROOT:-${VENDOR_DIR}/VibeVoice}"
 VIBEVOICE_MODEL_DIR="${VIBEVOICE_MODEL_DIR:-${ROOT_DIR}/data/models/vibevoice}"
+COSYVOICE_DIR="${COSYVOICE_REPO_ROOT:-${VENDOR_DIR}/CosyVoice}"
+COSYVOICE_MODEL_DIR="${COSYVOICE_MODEL_DIR:-${ROOT_DIR}/data/models/cosyvoice3}"
+VOXCPM_DIR="${VOXCPM_REPO_ROOT:-${VENDOR_DIR}/VoxCPM}"
+VOXCPM_MODEL_DIR="${VOXCPM_MODEL_DIR:-${ROOT_DIR}/data/models/voxcpm2}"
+SUPERTONIC_DIR="${SUPERTONIC_REPO_ROOT:-${VENDOR_DIR}/Supertonic}"
+SUPERTONIC_MODEL_DIR="${SUPERTONIC_MODEL_DIR:-${ROOT_DIR}/data/models/supertonic3}"
 PROFILE="${1:-all}"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
@@ -36,6 +42,10 @@ mkdir -p "${STEM_SEPARATOR_MODELS_DIR}"
 mkdir -p "${ACE_STEP_MODEL_DIR}"
 mkdir -p "${FISH_SPEECH_MODEL_DIR}"
 mkdir -p "${VIBEVOICE_MODEL_DIR}"
+mkdir -p "${COSYVOICE_MODEL_DIR}"
+mkdir -p "${VOXCPM_MODEL_DIR}"
+mkdir -p "${SUPERTONIC_MODEL_DIR}"
+OS_NAME="$(uname -s)"
 source "${VENV_DIR}/bin/activate"
 
 if [[ -f "${BACKEND_DIR}/.env" ]]; then
@@ -96,6 +106,9 @@ profiles = {
     "s2pro": [],
     "vibevoice": [],
     "vibevoice-7b": [],
+    "cosyvoice": [],
+    "voxcpm": [],
+    "supertonic": [],
     "core": [
         ("Qwen/Qwen3-TTS-Tokenizer-12Hz", "Qwen3-TTS-Tokenizer-12Hz"),
         ("Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", "Qwen3-TTS-12Hz-0.6B-CustomVoice"),
@@ -117,7 +130,10 @@ profiles = {
 }
 
 if profile not in profiles:
-    raise SystemExit(f"Unknown profile: {profile}. Use 'core', 'all', 'mmaudio', 's2pro', 'ace-step', 'vibevoice', or 'vibevoice-7b'.")
+    raise SystemExit(
+        f"Unknown profile: {profile}. Use 'core', 'all', 'mmaudio', 's2pro', 'ace-step', "
+        "'vibevoice', 'vibevoice-7b', 'cosyvoice', 'voxcpm', or 'supertonic'."
+    )
 
 for repo_id, dirname in profiles[profile]:
     local_dir = models_dir / dirname
@@ -335,6 +351,209 @@ PY
         ;;
     esac
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# CosyVoice 3 (FunAudioLLM, Apache 2.0) — .venv-cosyvoice3 + HF weight bundle
+# ---------------------------------------------------------------------------
+COSYVOICE_VENV="${COSYVOICE_VENV:-${ROOT_DIR}/.venv-cosyvoice3}"
+COSYVOICE_HF_MODEL_ID="${COSYVOICE_HF_MODEL_ID:-FunAudioLLM/CosyVoice2-0.5B}"
+COSYVOICE_LOCAL_DIRNAME="${COSYVOICE_LOCAL_DIRNAME:-CosyVoice2-0.5B}"
+COSYVOICE_TORCH_PROFILE="${COSYVOICE_TORCH_PROFILE:-}"
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "cosyvoice" ]]; then
+  if [[ ! -f "${COSYVOICE_DIR}/requirements.txt" ]]; then
+    echo "CosyVoice vendored source is missing: ${COSYVOICE_DIR}" >&2
+    echo "vendor/CosyVoice must be present (cloned from FunAudioLLM/CosyVoice)." >&2
+    exit 1
+  fi
+  if [[ ! -d "${COSYVOICE_VENV}" ]]; then
+    echo "Creating CosyVoice venv -> ${COSYVOICE_VENV}"
+    python -m venv "${COSYVOICE_VENV}"
+  fi
+  "${COSYVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+
+  if [[ -z "${COSYVOICE_TORCH_PROFILE}" ]]; then
+    if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
+      COSYVOICE_TORCH_PROFILE="mps"
+    elif command -v nvidia-smi >/dev/null 2>&1; then
+      COSYVOICE_TORCH_PROFILE="cu121"
+    else
+      COSYVOICE_TORCH_PROFILE="cpu"
+    fi
+  fi
+  echo "Installing CosyVoice runtime into ${COSYVOICE_VENV} (torch profile: ${COSYVOICE_TORCH_PROFILE})"
+  COSYVOICE_TORCH_PROFILE="${COSYVOICE_TORCH_PROFILE}" \
+    "${COSYVOICE_VENV}/bin/python" "${ROOT_DIR}/scripts/install_cosyvoice_runtime.py" \
+      --repo-root "${COSYVOICE_DIR}" \
+      --torch-profile "${COSYVOICE_TORCH_PROFILE}"
+
+  python - "${COSYVOICE_MODEL_DIR}" "${COSYVOICE_HF_MODEL_ID}" "${COSYVOICE_LOCAL_DIRNAME}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+
+target_root = Path(sys.argv[1])
+hf_model_id = sys.argv[2]
+local_dirname = sys.argv[3]
+private_repo_id = sys.argv[4]
+private_revision = sys.argv[5]
+use_private_assets = sys.argv[6] == "1"
+
+local_dir = target_root / local_dirname
+if private_repo_id and use_private_assets:
+    prefix = f"cosyvoice3/{local_dirname}/"
+    print(f"Downloading private CosyVoice mirror {private_repo_id}/{prefix} -> {local_dir}")
+    files = [item for item in list_repo_files(private_repo_id, repo_type="model", revision=private_revision) if item.startswith(prefix)]
+    if not files:
+        raise SystemExit(f"Private CosyVoice mirror missing path: {prefix}")
+    for filename in files:
+        rel = filename.removeprefix(prefix)
+        target = local_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        cached = hf_hub_download(repo_id=private_repo_id, filename=filename, revision=private_revision, repo_type="model")
+        shutil.copy2(cached, target)
+else:
+    print(f"Downloading {hf_model_id} -> {local_dir}")
+    snapshot_download(
+        repo_id=hf_model_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+        resume_download=True,
+    )
+print("CosyVoice 3 model download completed.")
+print(
+    "Note: Fun-CosyVoice3 official weights are hosted on ModelScope (iic/Fun-CosyVoice3-0.5B). "
+    "Override COSYVOICE_HF_MODEL_ID + COSYVOICE_LOCAL_DIRNAME to switch."
+)
+PY
+fi
+
+# ---------------------------------------------------------------------------
+# VoxCPM2 (OpenBMB, Apache 2.0) — .venv-voxcpm2 + HF weight bundle
+# ---------------------------------------------------------------------------
+VOXCPM_VENV="${VOXCPM_VENV:-${ROOT_DIR}/.venv-voxcpm2}"
+VOXCPM_HF_MODEL_ID="${VOXCPM_HF_MODEL_ID:-openbmb/VoxCPM2}"
+VOXCPM_LOCAL_DIRNAME="${VOXCPM_LOCAL_DIRNAME:-VoxCPM2}"
+VOXCPM_TORCH_PROFILE="${VOXCPM_TORCH_PROFILE:-}"
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "voxcpm" ]]; then
+  if [[ ! -f "${VOXCPM_DIR}/pyproject.toml" ]]; then
+    echo "VoxCPM vendored source is missing: ${VOXCPM_DIR}" >&2
+    echo "vendor/VoxCPM must be present (cloned from OpenBMB/VoxCPM)." >&2
+    exit 1
+  fi
+  if [[ ! -d "${VOXCPM_VENV}" ]]; then
+    echo "Creating VoxCPM venv -> ${VOXCPM_VENV}"
+    python -m venv "${VOXCPM_VENV}"
+  fi
+  "${VOXCPM_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+
+  if [[ -z "${VOXCPM_TORCH_PROFILE}" ]]; then
+    if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
+      VOXCPM_TORCH_PROFILE="mps"
+    elif command -v nvidia-smi >/dev/null 2>&1; then
+      VOXCPM_TORCH_PROFILE="cu121"
+    else
+      VOXCPM_TORCH_PROFILE="cpu"
+    fi
+  fi
+  echo "Installing VoxCPM runtime into ${VOXCPM_VENV} (torch profile: ${VOXCPM_TORCH_PROFILE})"
+  VOXCPM_TORCH_PROFILE="${VOXCPM_TORCH_PROFILE}" \
+    "${VOXCPM_VENV}/bin/python" "${ROOT_DIR}/scripts/install_voxcpm_runtime.py" \
+      --repo-root "${VOXCPM_DIR}" \
+      --torch-profile "${VOXCPM_TORCH_PROFILE}"
+
+  python - "${VOXCPM_MODEL_DIR}" "${VOXCPM_HF_MODEL_ID}" "${VOXCPM_LOCAL_DIRNAME}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+
+target_root = Path(sys.argv[1])
+hf_model_id = sys.argv[2]
+local_dirname = sys.argv[3]
+private_repo_id = sys.argv[4]
+private_revision = sys.argv[5]
+use_private_assets = sys.argv[6] == "1"
+
+local_dir = target_root / local_dirname
+if private_repo_id and use_private_assets:
+    prefix = f"voxcpm2/{local_dirname}/"
+    print(f"Downloading private VoxCPM mirror {private_repo_id}/{prefix} -> {local_dir}")
+    files = [item for item in list_repo_files(private_repo_id, repo_type="model", revision=private_revision) if item.startswith(prefix)]
+    if not files:
+        raise SystemExit(f"Private VoxCPM mirror missing path: {prefix}")
+    for filename in files:
+        rel = filename.removeprefix(prefix)
+        target = local_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        cached = hf_hub_download(repo_id=private_repo_id, filename=filename, revision=private_revision, repo_type="model")
+        shutil.copy2(cached, target)
+else:
+    print(f"Downloading {hf_model_id} -> {local_dir}")
+    snapshot_download(
+        repo_id=hf_model_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+        resume_download=True,
+    )
+print("VoxCPM2 model download completed.")
+PY
+fi
+
+# ---------------------------------------------------------------------------
+# Supertonic 3 (Supertone, BigScience Open RAIL-M) — ONNX bundle into main .venv
+# ---------------------------------------------------------------------------
+SUPERTONIC_HF_MODEL_ID="${SUPERTONIC_HF_MODEL_ID:-Supertone/supertonic-3}"
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "supertonic" ]]; then
+  if [[ ! -f "${SUPERTONIC_DIR}/py/helper.py" ]]; then
+    echo "Supertonic vendored source is missing: ${SUPERTONIC_DIR}" >&2
+    echo "vendor/Supertonic must be present (cloned from supertone-inc/supertonic)." >&2
+    exit 1
+  fi
+  # Supertonic runs in-process via onnxruntime; ensure it's available in the main venv.
+  echo "Ensuring onnxruntime in main venv for Supertonic 3 in-process inference"
+  if ! python -c "import onnxruntime" >/dev/null 2>&1; then
+    uv pip install "onnxruntime>=1.23.0" soundfile librosa
+  fi
+
+  python - "${SUPERTONIC_MODEL_DIR}" "${SUPERTONIC_HF_MODEL_ID}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+
+target_root = Path(sys.argv[1])
+hf_model_id = sys.argv[2]
+private_repo_id = sys.argv[3]
+private_revision = sys.argv[4]
+use_private_assets = sys.argv[5] == "1"
+
+if private_repo_id and use_private_assets:
+    prefix = "supertonic3/"
+    print(f"Downloading private Supertonic mirror {private_repo_id}/{prefix} -> {target_root}")
+    files = [item for item in list_repo_files(private_repo_id, repo_type="model", revision=private_revision) if item.startswith(prefix)]
+    if not files:
+        raise SystemExit(f"Private Supertonic mirror missing path: {prefix}")
+    for filename in files:
+        rel = filename.removeprefix(prefix)
+        target = target_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        cached = hf_hub_download(repo_id=private_repo_id, filename=filename, revision=private_revision, repo_type="model")
+        shutil.copy2(cached, target)
+else:
+    print(f"Downloading {hf_model_id} -> {target_root}")
+    snapshot_download(
+        repo_id=hf_model_id,
+        local_dir=str(target_root),
+        local_dir_use_symlinks=False,
+        resume_download=True,
+    )
+print("Supertonic 3 ONNX bundle download completed.")
+PY
 fi
 
 APPLIO_DEFAULT_RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth}"
