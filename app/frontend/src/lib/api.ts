@@ -45,6 +45,16 @@ import type {
   MMAudioTrainingRequest,
   MMAudioTrainingResponse,
   MusicCompositionRequest,
+  OmniVoiceBatchRequest,
+  OmniVoiceBatchResponse,
+  OmniVoiceDataPrepRequest,
+  OmniVoiceDataPrepResponse,
+  OmniVoiceGenerateRequest,
+  OmniVoiceRuntimeResponse,
+  OmniVoiceTrainingRequest,
+  OmniVoiceTrainingResponse,
+  OmniVoiceVoicePreset,
+  OmniVoiceVoicePresetCreateRequest,
   PrepareDatasetRequest,
   RvcTrainingRequest,
   RvcTrainingResponse,
@@ -700,6 +710,61 @@ export const api = {
       `/api/supertonic/voices/${encodeURIComponent(name)}`,
       { method: "DELETE" },
     );
+  },
+
+  omnivoiceRuntime(): Promise<OmniVoiceRuntimeResponse> {
+    return request<OmniVoiceRuntimeResponse>("/api/omnivoice/runtime");
+  },
+
+  generateOmniVoice(payload: OmniVoiceGenerateRequest): Promise<GenerationResponse> {
+    return request<GenerationResponse>("/api/omnivoice/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOmniVoicePresets(): Promise<OmniVoiceVoicePreset[]> {
+    return request<OmniVoiceVoicePreset[]>("/api/omnivoice/voices");
+  },
+
+  saveOmniVoicePreset(payload: OmniVoiceVoicePresetCreateRequest): Promise<OmniVoiceVoicePreset> {
+    return request<OmniVoiceVoicePreset>("/api/omnivoice/voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteOmniVoicePreset(name: string): Promise<{ deleted: boolean; id?: string }> {
+    return request<{ deleted: boolean; id?: string }>(
+      `/api/omnivoice/voices/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  runOmniVoiceBatch(payload: OmniVoiceBatchRequest): Promise<OmniVoiceBatchResponse> {
+    return request<OmniVoiceBatchResponse>("/api/omnivoice/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  prepareOmniVoiceData(payload: OmniVoiceDataPrepRequest): Promise<OmniVoiceDataPrepResponse> {
+    return request<OmniVoiceDataPrepResponse>("/api/omnivoice/data-prep", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  trainOmniVoice(payload: OmniVoiceTrainingRequest): Promise<OmniVoiceTrainingResponse> {
+    return request<OmniVoiceTrainingResponse>("/api/omnivoice/train", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
 
   generateSoundEffect(payload: SoundEffectRequest): Promise<AudioToolResponse> {

@@ -39,6 +39,7 @@ WSL/Linux에서는 아래 명령 하나로 백엔드 설정, 모델 다운로드
 ./scripts/bootstrap_all.sh s2pro     # Fish Speech S2-Pro만
 ./scripts/bootstrap_all.sh ace-step  # ACE-Step만
 ./scripts/bootstrap_all.sh vibevoice # VibeVoice ASR/TTS만
+./scripts/bootstrap_all.sh omnivoice # OmniVoice만
 ```
 
 이 스크립트는 `uv`, `npm`이 이미 설치되어 있다고 가정합니다. `ffmpeg`, `sox`는 시스템 패키지라 자동 설치하지 않고 `setup_backend.sh`에서 경고만 표시합니다.
@@ -68,6 +69,7 @@ Windows PowerShell:
 - `vendor/Applio`, `vendor/MMAudio`, `vendor/fish-speech` 준비
 - `.venv-mmaudio` 생성 및 MMAudio 전용 런타임 설치
 - ACE-Step은 기본 setup 단계가 아니라 `download_models.sh ace-step` 또는 `all`에서 별도 준비
+ - OmniVoice는 `download_models.sh omnivoice` 또는 `all`에서 별도 준비
 - `app/backend/.env` 생성
 - 시스템 의존성 점검
 
@@ -113,6 +115,8 @@ Windows PowerShell:
 - Fish Speech S2-Pro:
   `data/models/fish-speech/s2-pro`
 - 기본 RVC `.pth + .index`
+- OmniVoice:
+  `data/models/omnivoice/OmniVoice`
 - NSFW용 MMAudio 모델:
   `data/mmaudio/nsfw/mmaudio_large_44k_nsfw_gold_8.5k_final_fp16.safetensors`
 - 일반 MMAudio 기본 추론 weight와 필수 부가 weight:
@@ -172,6 +176,8 @@ VibeVoice만 준비하려면:
 
 ```bash
 ./scripts/download_models.sh vibevoice
+
+./scripts/download_models.sh omnivoice
 ```
 
 VibeVoice community 7B까지 준비하려면:

@@ -8,7 +8,7 @@ BACKEND_PORT="${BACKEND_PORT:-8190}"
 echo "Bootstrapping voicestudio"
 echo "Repo root: ${ROOT_DIR}"
 echo "Model profile: ${PROFILE}"
-echo "Available profiles: all (default) | core | s2pro | mmaudio | ace-step | vibevoice | vibevoice-7b | cosyvoice | voxcpm | supertonic"
+echo "Available profiles: all (default) | core | s2pro | mmaudio | ace-step | vibevoice | vibevoice-7b | omnivoice | cosyvoice | voxcpm | supertonic"
 echo
 
 if ! command -v uv >/dev/null 2>&1; then

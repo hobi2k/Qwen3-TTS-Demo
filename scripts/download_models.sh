@@ -19,6 +19,8 @@ FISH_SPEECH_DIR="${FISH_SPEECH_REPO_ROOT:-${VENDOR_DIR}/fish-speech}"
 FISH_SPEECH_MODEL_DIR="${FISH_SPEECH_MODEL_DIR:-${ROOT_DIR}/data/models/fish-speech/s2-pro}"
 VIBEVOICE_DIR="${VIBEVOICE_REPO_ROOT:-${VENDOR_DIR}/VibeVoice}"
 VIBEVOICE_MODEL_DIR="${VIBEVOICE_MODEL_DIR:-${ROOT_DIR}/data/models/vibevoice}"
+OMNIVOICE_DIR="${OMNIVOICE_REPO_ROOT:-${VENDOR_DIR}/OmniVoice}"
+OMNIVOICE_MODEL_DIR="${OMNIVOICE_MODEL_DIR:-${ROOT_DIR}/data/models/omnivoice}"
 COSYVOICE_DIR="${COSYVOICE_REPO_ROOT:-${VENDOR_DIR}/CosyVoice}"
 COSYVOICE_MODEL_DIR="${COSYVOICE_MODEL_DIR:-${ROOT_DIR}/data/models/cosyvoice3}"
 VOXCPM_DIR="${VOXCPM_REPO_ROOT:-${VENDOR_DIR}/VoxCPM}"
@@ -42,6 +44,7 @@ mkdir -p "${STEM_SEPARATOR_MODELS_DIR}"
 mkdir -p "${ACE_STEP_MODEL_DIR}"
 mkdir -p "${FISH_SPEECH_MODEL_DIR}"
 mkdir -p "${VIBEVOICE_MODEL_DIR}"
+mkdir -p "${OMNIVOICE_MODEL_DIR}"
 mkdir -p "${COSYVOICE_MODEL_DIR}"
 mkdir -p "${VOXCPM_MODEL_DIR}"
 mkdir -p "${SUPERTONIC_MODEL_DIR}"
@@ -106,6 +109,7 @@ profiles = {
     "s2pro": [],
     "vibevoice": [],
     "vibevoice-7b": [],
+    "omnivoice": [],
     "cosyvoice": [],
     "voxcpm": [],
     "supertonic": [],
@@ -132,7 +136,7 @@ profiles = {
 if profile not in profiles:
     raise SystemExit(
         f"Unknown profile: {profile}. Use 'core', 'all', 'mmaudio', 's2pro', 'ace-step', "
-        "'vibevoice', 'vibevoice-7b', 'cosyvoice', 'voxcpm', or 'supertonic'."
+        "'vibevoice', 'vibevoice-7b', 'omnivoice', 'cosyvoice', 'voxcpm', or 'supertonic'."
     )
 
 for repo_id, dirname in profiles[profile]:
@@ -351,6 +355,81 @@ PY
         ;;
     esac
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# OmniVoice (k2-fsa, Apache 2.0) — .venv-omnivoice + HF weight bundle
+# ---------------------------------------------------------------------------
+OMNIVOICE_VENV="${OMNIVOICE_VENV:-${ROOT_DIR}/.venv-omnivoice}"
+OMNIVOICE_HF_MODEL_ID="${OMNIVOICE_HF_MODEL_ID:-k2-fsa/OmniVoice}"
+OMNIVOICE_LOCAL_DIRNAME="${OMNIVOICE_LOCAL_DIRNAME:-OmniVoice}"
+OMNIVOICE_TORCH_PROFILE="${OMNIVOICE_TORCH_PROFILE:-}"
+if [[ "${PROFILE}" == "all" || "${PROFILE}" == "omnivoice" ]]; then
+  if [[ ! -f "${OMNIVOICE_DIR}/pyproject.toml" || ! -d "${OMNIVOICE_DIR}/omnivoice" ]]; then
+    echo "OmniVoice vendored source is missing or incomplete: ${OMNIVOICE_DIR}" >&2
+    echo "This project expects vendor/OmniVoice to be present in the repository, like the other vendor engines." >&2
+    exit 1
+  fi
+  echo "Using vendored OmniVoice source: ${OMNIVOICE_DIR}"
+
+  if [[ ! -d "${OMNIVOICE_VENV}" ]]; then
+    echo "Creating OmniVoice venv -> ${OMNIVOICE_VENV}"
+    python -m venv "${OMNIVOICE_VENV}"
+  fi
+  "${OMNIVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+
+  if [[ -z "${OMNIVOICE_TORCH_PROFILE}" ]]; then
+    if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
+      OMNIVOICE_TORCH_PROFILE="mps"
+    elif command -v nvidia-smi >/dev/null 2>&1; then
+      OMNIVOICE_TORCH_PROFILE="cu128"
+    else
+      OMNIVOICE_TORCH_PROFILE="cpu"
+    fi
+  fi
+  echo "Installing OmniVoice runtime into ${OMNIVOICE_VENV} (torch profile: ${OMNIVOICE_TORCH_PROFILE})"
+  OMNIVOICE_TORCH_PROFILE="${OMNIVOICE_TORCH_PROFILE}" \
+    "${OMNIVOICE_VENV}/bin/python" "${ROOT_DIR}/scripts/install_omnivoice_runtime.py" \
+      --repo-root "${OMNIVOICE_DIR}" \
+      --torch-profile "${OMNIVOICE_TORCH_PROFILE}"
+
+  python - "${OMNIVOICE_MODEL_DIR}" "${OMNIVOICE_HF_MODEL_ID}" "${OMNIVOICE_LOCAL_DIRNAME}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+
+target_root = Path(sys.argv[1])
+hf_model_id = sys.argv[2]
+local_dirname = sys.argv[3]
+private_repo_id = sys.argv[4]
+private_revision = sys.argv[5]
+use_private_assets = sys.argv[6] == "1"
+
+local_dir = target_root / local_dirname
+if private_repo_id and use_private_assets:
+    prefix = f"omnivoice/{local_dirname}/"
+    print(f"Downloading private OmniVoice mirror {private_repo_id}/{prefix} -> {local_dir}")
+    files = [item for item in list_repo_files(private_repo_id, repo_type="model", revision=private_revision) if item.startswith(prefix)]
+    if not files:
+        raise SystemExit(f"Private OmniVoice mirror missing path: {prefix}")
+    for filename in files:
+        rel = filename.removeprefix(prefix)
+        target = local_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        cached = hf_hub_download(repo_id=private_repo_id, filename=filename, revision=private_revision, repo_type="model")
+        shutil.copy2(cached, target)
+else:
+    print(f"Downloading {hf_model_id} -> {local_dir}")
+    snapshot_download(
+        repo_id=hf_model_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+        resume_download=True,
+    )
+print("OmniVoice model download completed.")
+PY
 fi
 
 # ---------------------------------------------------------------------------

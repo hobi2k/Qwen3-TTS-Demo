@@ -82,6 +82,11 @@ export type TabKey =
   | "supertonic_voices"
   | "supertonic_dataset"
   | "supertonic_train"
+  | "omnivoice_tts"
+  | "omnivoice_voices"
+  | "omnivoice_dataset"
+  | "omnivoice_batch"
+  | "omnivoice_train"
   | "guide";
 export type AudioEffectsView = "explore" | "history";
 export type GenerationModeKey = "custom" | "design" | "clone";
@@ -400,6 +405,31 @@ export const PRODUCT_PAGES = {
     label: "Supertonic 학습",
     title: "Supertonic 3 학습 (Phase 4 보류)",
     description: "Upstream에 학습 코드가 없어 ONNX 그래프 역공학이 필요합니다. Phase 4 평가가 끝날 때까지 학습 실행은 비활성화됩니다.",
+  },
+  omnivoice_tts: {
+    label: "OmniVoice TTS",
+    title: "OmniVoice 텍스트 음성 변환",
+    description: "auto voice, voice design, voice cloning을 한 페이지에서 다룹니다. non-verbal token과 속도/길이/샘플링 파라미터까지 upstream 기능을 그대로 노출합니다.",
+  },
+  omnivoice_voices: {
+    label: "OmniVoice 프리셋",
+    title: "OmniVoice 프리셋",
+    description: "voice design 지시문이나 voice cloning 참조 음성을 프리셋으로 저장하고 다시 불러옵니다.",
+  },
+  omnivoice_dataset: {
+    label: "OmniVoice 데이터셋",
+    title: "OmniVoice 데이터 준비",
+    description: "원본 JSONL을 WebDataset shard와 audio token shard로 변환해 학습 입력을 만듭니다.",
+  },
+  omnivoice_batch: {
+    label: "OmniVoice 배치",
+    title: "OmniVoice 배치 생성",
+    description: "JSONL test list를 붙여 여러 샘플을 한 번에 생성합니다. 항목별로 ref_audio/ref_text/instruct/language_id를 섞을 수 있습니다.",
+  },
+  omnivoice_train: {
+    label: "OmniVoice 학습",
+    title: "OmniVoice 학습",
+    description: "upstream JSON train/data config를 그대로 사용해 accelerate 기반 학습을 실행합니다.",
   },
   guide: {
     label: "가이드",

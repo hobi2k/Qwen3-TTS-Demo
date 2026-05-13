@@ -204,6 +204,7 @@ app/frontend/tsconfig.tsbuildinfo
 .venv-ace-step/
 .venv-vibevoice/
 .venv-mmaudio/
+.venv-omnivoice/
 .venv-cosyvoice3/
 .venv-voxcpm2/
 .venv-supertonic3/

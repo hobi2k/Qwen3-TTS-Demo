@@ -108,6 +108,7 @@ cd app\frontend; npm install; npm run build
 | `mmaudio` | MMAudio weights + `.venv-mmaudio` |
 | `ace-step` | ACE-Step-1.5 checkpoints + `.venv-ace-step` (Windows native는 nano-vllm CUDA 커널 때문에 MSVC + CUDA Toolkit 또는 WSL2 권장) |
 | `vibevoice` / `vibevoice-7b` | VibeVoice ASR / Realtime 0.5B / 1.5B (옵션 7B) + `.venv-vibevoice` |
+| `omnivoice` | OmniVoice weights + `.venv-omnivoice` (`OMNIVOICE_HF_MODEL_ID` default `k2-fsa/OmniVoice`) |
 | `cosyvoice` | CosyVoice 3 weights + `.venv-cosyvoice3` (`COSYVOICE_HF_MODEL_ID`로 미러 변경 가능, 기본 `FunAudioLLM/CosyVoice2-0.5B`) |
 | `voxcpm` | VoxCPM2 weights + `.venv-voxcpm2` (`VOXCPM_HF_MODEL_ID` default `openbmb/VoxCPM2`) |
 | `supertonic` | Supertonic 3 ONNX 번들 (메인 venv에서 in-process, 별도 venv 없음) |
@@ -121,6 +122,7 @@ cd app\frontend; npm install; npm run build
 ./scripts/bootstrap_all.sh voxcpm       # VoxCPM2만
 ./scripts/bootstrap_all.sh supertonic   # Supertonic 3만 (ONNX 추론, 가장 가벼움)
 ./scripts/bootstrap_all.sh vibevoice    # VibeVoice TTS/ASR만
+./scripts/bootstrap_all.sh omnivoice    # OmniVoice만
 ./scripts/bootstrap_all.sh ace-step     # ACE-Step 음악만
 ```
 
@@ -130,6 +132,7 @@ cd app\frontend; npm install; npm run build
 .\scripts\download_models.ps1 core
 .\scripts\download_models.ps1 vibevoice
 .\scripts\download_models.ps1 ace-step
+.\scripts\download_models.ps1 omnivoice
 .\scripts\download_models.ps1 cosyvoice
 .\scripts\download_models.ps1 voxcpm
 .\scripts\download_models.ps1 supertonic

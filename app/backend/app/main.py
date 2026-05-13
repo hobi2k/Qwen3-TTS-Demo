@@ -28,6 +28,7 @@ from starlette.background import BackgroundTask
 from .ace_step import AceStepComposer, AceStepError
 from .cosyvoice import CosyVoice3Engine, CosyVoiceError
 from .mmaudio import MMAudioError, MMAudioSoundEffectEngine
+from .omnivoice import OmniVoiceEngine, OmniVoiceError
 from .supertonic import Supertonic3Engine, SupertonicError
 from .voxcpm import VoxCPM2Engine, VoxCPMError
 from .fish_speech import (
@@ -99,6 +100,16 @@ from .schemas import (
     HybridCloneInstructRequest,
     ModelInfo,
     MusicCompositionRequest,
+    OmniVoiceBatchRequest,
+    OmniVoiceBatchResponse,
+    OmniVoiceDataPrepRequest,
+    OmniVoiceDataPrepResponse,
+    OmniVoiceGenerateRequest,
+    OmniVoiceRuntimeResponse,
+    OmniVoiceTrainingRequest,
+    OmniVoiceTrainingResponse,
+    OmniVoiceVoicePresetCreateRequest,
+    OmniVoiceVoicePresetResponse,
     RvcTrainingRequest,
     RvcTrainingResponse,
     MMAudioTrainingRequest,
@@ -167,6 +178,7 @@ API_LIKE_PREFIXES = (
     "audio-tools",
     "generate",
     "music",
+    "omnivoice",
     "presets",
     "s2-pro",
     "vibevoice",
@@ -202,6 +214,7 @@ vibevoice_engine = VibeVoiceEngine(REPO_ROOT)
 cosyvoice_engine = CosyVoice3Engine(REPO_ROOT)
 voxcpm_engine = VoxCPM2Engine(REPO_ROOT)
 supertonic_engine = Supertonic3Engine(REPO_ROOT)
+omnivoice_engine = OmniVoiceEngine(REPO_ROOT)
 
 
 def release_qwen_runtime_before_external_engine() -> None:
@@ -4296,6 +4309,216 @@ def supertonic_train_unsupported() -> Dict[str, Any]:
             "Supertonic 3 fine-tuning is not supported by upstream. "
             "Phase 4 reverse-engineering is required before enabling this endpoint."
         ),
+    )
+
+
+@app.get("/api/omnivoice/runtime", response_model=OmniVoiceRuntimeResponse)
+def omnivoice_runtime() -> OmniVoiceRuntimeResponse:
+    """OmniVoice 런타임 / 모델 / 프리셋 상태를 반환한다."""
+
+    return OmniVoiceRuntimeResponse(
+        available=omnivoice_engine.is_available(),
+        notes=omnivoice_engine.availability_notes(),
+        omnivoice_root=str(omnivoice_engine.omnivoice_root),
+        python_executable=omnivoice_engine.python_executable,
+        model_dir=str(omnivoice_engine.model_dir),
+        voice_dir=str(omnivoice_engine.voice_dir),
+        model_variants=omnivoice_engine.list_model_variants(),
+        voice_presets=omnivoice_engine.list_voice_presets(),
+        supported_tasks=sorted(["auto_voice", "voice_cloning", "voice_design"]),
+        supported_languages=omnivoice_engine.supported_languages(),
+        supported_language_options=omnivoice_engine.supported_language_options(),
+        voice_design_templates=omnivoice_engine.voice_design_templates(),
+        batch_supported=True,
+        training_supported=True,
+        data_prep_supported=True,
+    )
+
+
+@app.post("/api/omnivoice/generate", response_model=GenerationResponse)
+def omnivoice_generate(payload: OmniVoiceGenerateRequest) -> GenerationResponse:
+    """OmniVoice 단일 추론.
+
+    Upstream가 지원하는 3개 작업을 그대로 노출한다:
+    auto voice / voice design / voice cloning.
+    """
+
+    if not omnivoice_engine.is_available():
+        raise HTTPException(status_code=400, detail=omnivoice_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    request_payload: Dict[str, Any] = payload.model_dump()
+    label = payload.label or payload.text or payload.task or "omnivoice"
+    output_path = generated_audio_path("omnivoice", label, payload.audio_format)
+
+    try:
+        audio_path, meta = omnivoice_engine.run(
+            task=payload.task,
+            output_path=output_path,
+            payload=request_payload,
+        )
+    except OmniVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"OmniVoice generation failed: {exc}") from exc
+
+    record = build_generation_record(
+        record_id=storage.new_id("omnivoice"),
+        mode=f"omnivoice_{payload.task}",
+        text=payload.text,
+        language=payload.language or "",
+        audio_path=audio_path,
+        instruction=payload.instruct,
+        source_ref_audio_path=payload.ref_audio or "",
+        source_ref_text=payload.ref_text or "",
+        meta=meta,
+    )
+    save_generation_record(record)
+    return GenerationResponse(record=GenerationRecord(**record))
+
+
+@app.get("/api/omnivoice/voices", response_model=List[OmniVoiceVoicePresetResponse])
+def omnivoice_list_voices() -> List[OmniVoiceVoicePresetResponse]:
+    """저장된 OmniVoice 프리셋 목록을 조회한다."""
+
+    presets = omnivoice_engine.list_voice_presets()
+    return [OmniVoiceVoicePresetResponse(**preset) for preset in presets]
+
+
+@app.post("/api/omnivoice/voices", response_model=OmniVoiceVoicePresetResponse)
+def omnivoice_save_voice(
+    payload: OmniVoiceVoicePresetCreateRequest,
+) -> OmniVoiceVoicePresetResponse:
+    """OmniVoice auto/design/clone 프리셋을 저장한다."""
+
+    try:
+        record = omnivoice_engine.save_voice_preset(
+            name=payload.name,
+            task=payload.task,
+            language=payload.language,
+            instruct=payload.instruct,
+            ref_audio=payload.ref_audio,
+            ref_text=payload.ref_text,
+            model_name=payload.model_name,
+            notes=payload.notes,
+            defaults=payload.defaults,
+        )
+    except OmniVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return OmniVoiceVoicePresetResponse(**record)
+
+
+@app.delete("/api/omnivoice/voices/{name}", response_model=VoiceAssetDeleteResponse)
+def omnivoice_delete_voice(name: str) -> VoiceAssetDeleteResponse:
+    """OmniVoice 프리셋을 삭제한다."""
+
+    deleted = omnivoice_engine.delete_voice_preset(name)
+    return VoiceAssetDeleteResponse(deleted=deleted, id=name)
+
+
+@app.post("/api/omnivoice/batch", response_model=OmniVoiceBatchResponse)
+def omnivoice_batch(payload: OmniVoiceBatchRequest) -> OmniVoiceBatchResponse:
+    """OmniVoice JSONL 배치 추론을 실행한다."""
+
+    if not omnivoice_engine.is_available():
+        raise HTTPException(status_code=400, detail=omnivoice_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    run_id = payload.run_name or storage.new_id("omnivoice-batch")
+    try:
+        run_dir, meta = omnivoice_engine.run_batch(
+            run_id=run_id,
+            model_name=payload.model_name,
+            samples_jsonl=payload.samples_jsonl,
+            defaults=payload.defaults,
+            timeout=None,
+        )
+    except OmniVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"OmniVoice batch failed: {exc}") from exc
+
+    return OmniVoiceBatchResponse(
+        run_id=run_id,
+        status=str(meta.get("status", "completed")),
+        run_dir=str(run_dir),
+        output_dir=meta.get("output_dir"),
+        generated_files=meta.get("generated_files", []) or [],
+        log_tail=str(meta.get("stdout_tail", ""))[-2000:],
+        stderr_tail=str(meta.get("stderr_tail", ""))[-2000:],
+    )
+
+
+@app.post("/api/omnivoice/data-prep", response_model=OmniVoiceDataPrepResponse)
+def omnivoice_data_prep(payload: OmniVoiceDataPrepRequest) -> OmniVoiceDataPrepResponse:
+    """OmniVoice 데이터 준비 파이프라인을 실행한다."""
+
+    if not omnivoice_engine.is_available():
+        raise HTTPException(status_code=400, detail=omnivoice_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    run_id = payload.run_name or storage.new_id("omnivoice-prepare")
+    try:
+        run_dir, meta = omnivoice_engine.prepare_data(
+            run_id=run_id,
+            mode=payload.mode,
+            payload=payload.model_dump(),
+        )
+    except OmniVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"OmniVoice data preparation failed: {exc}",
+        ) from exc
+
+    return OmniVoiceDataPrepResponse(
+        run_id=run_id,
+        status=str(meta.get("status", "completed")),
+        run_dir=str(run_dir),
+        mode=str(meta.get("mode", payload.mode)),
+        raw_data_lst_path=meta.get("raw_data_lst_path"),
+        token_data_lst_path=meta.get("token_data_lst_path"),
+        raw_output_dir=meta.get("raw_output_dir"),
+        token_output_dir=meta.get("token_output_dir"),
+        log_tail=str(meta.get("stdout_tail", ""))[-2000:],
+        stderr_tail=str(meta.get("stderr_tail", ""))[-2000:],
+    )
+
+
+@app.post("/api/omnivoice/train", response_model=OmniVoiceTrainingResponse)
+def omnivoice_train(payload: OmniVoiceTrainingRequest) -> OmniVoiceTrainingResponse:
+    """OmniVoice upstream JSON config 기반 학습을 시작한다."""
+
+    if not omnivoice_engine.is_available():
+        raise HTTPException(status_code=400, detail=omnivoice_engine.availability_notes())
+    release_resident_runtime_before_external_engine()
+
+    run_id = payload.run_name or storage.new_id("omnivoice-run")
+    try:
+        run_dir, meta = omnivoice_engine.train(
+            run_id=run_id,
+            base_model=payload.base_model,
+            train_config_json=payload.train_config_json,
+            data_config_json=payload.data_config_json,
+            accelerate_args=payload.accelerate_args,
+            extra_args=payload.extra_args,
+        )
+    except OmniVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"OmniVoice training failed: {exc}") from exc
+
+    return OmniVoiceTrainingResponse(
+        run_id=run_id,
+        status=str(meta.get("status", "completed")),
+        run_dir=str(run_dir),
+        base_model=payload.base_model,
+        checkpoint_dir=meta.get("checkpoint_dir"),
+        train_config_path=meta.get("train_config_path"),
+        data_config_path=meta.get("data_config_path"),
+        log_tail=str(meta.get("stdout_tail", ""))[-2000:],
+        stderr_tail=str(meta.get("stderr_tail", ""))[-2000:],
     )
 
 

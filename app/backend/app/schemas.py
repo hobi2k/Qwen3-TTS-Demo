@@ -1089,6 +1089,186 @@ class Supertonic3VoicePresetResponse(BaseModel):
     notes: str = ""
 
 
+class OmniVoiceRuntimeResponse(BaseModel):
+    """OmniVoice 런타임 / 모델 / 프리셋 상태 응답."""
+
+    available: bool
+    notes: str
+    omnivoice_root: str
+    python_executable: str
+    model_dir: str
+    voice_dir: str
+    model_variants: List[Dict[str, Any]] = Field(default_factory=list)
+    voice_presets: List[Dict[str, Any]] = Field(default_factory=list)
+    supported_tasks: List[str] = Field(default_factory=list)
+    supported_languages: List[str] = Field(default_factory=list)
+    supported_language_options: List[Dict[str, str]] = Field(default_factory=list)
+    voice_design_templates: List[Dict[str, Any]] = Field(default_factory=list)
+    batch_supported: bool = True
+    training_supported: bool = True
+    data_prep_supported: bool = True
+
+
+class OmniVoiceGenerateRequest(BaseModel):
+    """OmniVoice 단일 추론 요청."""
+
+    task: str = Field("auto_voice", pattern="^(auto_voice|voice_design|voice_cloning)$")
+    text: str = Field(..., min_length=1)
+    language: str = ""
+    instruct: str = ""
+    ref_audio: Optional[str] = None
+    ref_text: str = ""
+    model_dir: Optional[str] = None
+    model_name: Optional[str] = None
+    device: Optional[str] = None
+    seed: Optional[int] = None
+    num_step: int = Field(32, ge=1, le=256)
+    guidance_scale: float = Field(2.0, ge=0.0, le=20.0)
+    speed: float = Field(1.0, gt=0.0, le=5.0)
+    duration: Optional[float] = Field(None, gt=0.0, le=600.0)
+    t_shift: float = Field(0.1, ge=0.0, le=1.0)
+    denoise: bool = True
+    preprocess_prompt: bool = True
+    postprocess_output: bool = True
+    layer_penalty_factor: float = Field(5.0, ge=0.0, le=20.0)
+    position_temperature: float = Field(5.0, ge=0.0, le=20.0)
+    class_temperature: float = Field(0.0, ge=0.0, le=20.0)
+    audio_chunk_duration: float = Field(15.0, gt=0.0, le=120.0)
+    audio_chunk_threshold: float = Field(30.0, gt=0.0, le=300.0)
+    label: Optional[str] = None
+    audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
+
+
+class OmniVoiceVoicePresetCreateRequest(BaseModel):
+    """OmniVoice 프리셋 저장 요청."""
+
+    name: str = Field(..., min_length=1)
+    task: str = Field("auto_voice", pattern="^(auto_voice|voice_design|voice_cloning)$")
+    language: str = ""
+    instruct: str = ""
+    ref_audio: str = ""
+    ref_text: str = ""
+    model_name: str = ""
+    notes: str = ""
+    defaults: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OmniVoiceVoicePresetResponse(BaseModel):
+    """OmniVoice 프리셋 조회 응답."""
+
+    name: str
+    path: str
+    task: str = "auto_voice"
+    language: str = ""
+    instruct: str = ""
+    ref_audio: str = ""
+    ref_text: str = ""
+    model_name: str = ""
+    notes: str = ""
+    defaults: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OmniVoiceBatchRequest(BaseModel):
+    """OmniVoice 배치 추론 요청."""
+
+    model_name: str = "OmniVoice"
+    samples_jsonl: str = Field(..., min_length=1)
+    defaults: Dict[str, Any] = Field(default_factory=dict)
+    run_name: Optional[str] = None
+    batch_duration: float = Field(1000.0, gt=0.0, le=10000.0)
+    batch_size: int = Field(0, ge=0, le=2048)
+    warmup: int = Field(0, ge=0, le=32)
+    nj_per_gpu: int = Field(1, ge=1, le=32)
+    lang_id: Optional[str] = None
+
+
+class OmniVoiceBatchResponse(BaseModel):
+    """OmniVoice 배치 추론 응답."""
+
+    run_id: str
+    status: str
+    run_dir: str
+    output_dir: Optional[str] = None
+    generated_files: List[Dict[str, Any]] = Field(default_factory=list)
+    log_tail: str = ""
+    stderr_tail: str = ""
+
+
+class OmniVoiceTrainingRequest(BaseModel):
+    """OmniVoice 학습 요청.
+
+    upstream가 JSON config 중심이므로, train/data config 전체를 그대로 전달받는다.
+    """
+
+    base_model: str = "OmniVoice"
+    train_config_json: str = Field(..., min_length=2)
+    data_config_json: str = Field(..., min_length=2)
+    run_name: Optional[str] = None
+    accelerate_args: List[str] = Field(default_factory=lambda: ["--num_processes", "1"])
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class OmniVoiceTrainingResponse(BaseModel):
+    """OmniVoice 학습 응답."""
+
+    run_id: str
+    status: str
+    run_dir: str
+    base_model: str
+    checkpoint_dir: Optional[str] = None
+    train_config_path: Optional[str] = None
+    data_config_path: Optional[str] = None
+    log_tail: str = ""
+    stderr_tail: str = ""
+
+
+class OmniVoiceDataPrepRequest(BaseModel):
+    """OmniVoice 데이터 준비 요청."""
+
+    mode: str = Field(
+        "full_pipeline",
+        pattern="^(jsonl_to_webdataset|extract_audio_tokens|full_pipeline)$",
+    )
+    run_name: Optional[str] = None
+    input_jsonl: str = ""
+    input_manifest: str = ""
+    raw_output_dir: str = ""
+    token_output_dir: str = ""
+    tokenizer_path: str = "eustlb/higgs-audio-v2-tokenizer"
+    workers: int = Field(16, ge=1, le=256)
+    threads: int = Field(4, ge=1, le=64)
+    shard_size: int = Field(1000, ge=1, le=100000)
+    sr: int = Field(24000, ge=8000, le=96000)
+    shuffle: bool = True
+    shuffle_seed: int = Field(42, ge=0, le=999999)
+    min_duration: Optional[float] = Field(None, ge=0.0, le=3600.0)
+    max_duration: Optional[float] = Field(None, ge=0.0, le=3600.0)
+    samples_per_shard: int = Field(1000, ge=1, le=100000)
+    min_num_shards: int = Field(32, ge=1, le=4096)
+    skip_errors: bool = False
+    min_length: float = Field(0.0, ge=0.0, le=3600.0)
+    max_length: float = Field(3600.0, gt=0.0, le=3600.0)
+    num_machines: int = Field(1, ge=1, le=512)
+    machine_index: int = Field(0, ge=0, le=511)
+    nj_per_gpu: int = Field(3, ge=1, le=64)
+    loader_workers: int = Field(24, ge=0, le=256)
+
+
+class OmniVoiceDataPrepResponse(BaseModel):
+    """OmniVoice 데이터 준비 응답."""
+
+    run_id: str
+    status: str
+    run_dir: str
+    mode: str
+    raw_data_lst_path: Optional[str] = None
+    token_data_lst_path: Optional[str] = None
+    raw_output_dir: Optional[str] = None
+    token_output_dir: Optional[str] = None
+    log_tail: str = ""
+    stderr_tail: str = ""
+
+
 class VoiceChangerRequest(BaseModel):
     """Applio/RVC 기반 audio-to-audio 단일 변환 요청 스키마다."""
 

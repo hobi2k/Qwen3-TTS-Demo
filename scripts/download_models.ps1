@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "core", "mmaudio", "s2pro", "ace-step", "vibevoice", "vibevoice-7b", "cosyvoice", "voxcpm", "supertonic")]
+    [ValidateSet("all", "core", "mmaudio", "s2pro", "ace-step", "vibevoice", "vibevoice-7b", "omnivoice", "cosyvoice", "voxcpm", "supertonic")]
     [string]$Profile = "all"
 )
 
@@ -21,6 +21,9 @@ $FishSpeechModelDir = if ($env:FISH_SPEECH_MODEL_DIR) { $env:FISH_SPEECH_MODEL_D
 $VibeVoiceDir = if ($env:VIBEVOICE_REPO_ROOT) { $env:VIBEVOICE_REPO_ROOT } else { Join-Path $VendorDir "VibeVoice" }
 $VibeVoiceModelDir = if ($env:VIBEVOICE_MODEL_DIR) { $env:VIBEVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\vibevoice" }
 $VibeVoiceVenv = if ($env:VIBEVOICE_VENV) { $env:VIBEVOICE_VENV } else { Join-Path $RootDir ".venv-vibevoice" }
+$OmniVoiceDir = if ($env:OMNIVOICE_REPO_ROOT) { $env:OMNIVOICE_REPO_ROOT } else { Join-Path $VendorDir "OmniVoice" }
+$OmniVoiceModelDir = if ($env:OMNIVOICE_MODEL_DIR) { $env:OMNIVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\omnivoice" }
+$OmniVoiceVenv = if ($env:OMNIVOICE_VENV) { $env:OMNIVOICE_VENV } else { Join-Path $RootDir ".venv-omnivoice" }
 $AceStepDir = if ($env:ACE_STEP_REPO_ROOT) { $env:ACE_STEP_REPO_ROOT } else { Join-Path $VendorDir "ACE-Step" }
 $AceStepModelDir = if ($env:ACE_STEP_CHECKPOINT_PATH) { $env:ACE_STEP_CHECKPOINT_PATH } else { Join-Path $RootDir "data\models\ace-step" }
 $AceStepVenv = if ($env:ACE_STEP_VENV) { $env:ACE_STEP_VENV } else { Join-Path $RootDir ".venv-ace-step" }
@@ -46,6 +49,7 @@ New-Item -ItemType Directory -Force -Path $MMAudioModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $StemSeparatorModelsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $FishSpeechModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $VibeVoiceModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $OmniVoiceModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $AceStepModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $CosyVoiceModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $VoxCPMModelDir | Out-Null
@@ -125,6 +129,7 @@ profiles = {
     'ace-step': [],
     'vibevoice': [],
     'vibevoice-7b': [],
+    'omnivoice': [],
     'cosyvoice': [],
     'voxcpm': [],
     'supertonic': [],
@@ -233,6 +238,45 @@ for repo_id, dirname in models:
     )
 suffix = ', and community 7B TTS' if include_7b else ''
 print(f'VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS{suffix} model downloads completed.')
+"@
+}
+
+# --------------------------------------------------------------------------
+# OmniVoice (k2-fsa, Apache 2.0) — .venv-omnivoice + HF weight bundle
+# --------------------------------------------------------------------------
+$OmniVoiceHfModelId = if ($env:OMNIVOICE_HF_MODEL_ID) { $env:OMNIVOICE_HF_MODEL_ID } else { "k2-fsa/OmniVoice" }
+$OmniVoiceLocalDirname = if ($env:OMNIVOICE_LOCAL_DIRNAME) { $env:OMNIVOICE_LOCAL_DIRNAME } else { "OmniVoice" }
+if (($Profile -eq "all") -or ($Profile -eq "omnivoice")) {
+    Assert-VendoredSource -Name "OmniVoice" -TargetDir $OmniVoiceDir
+    if (-not (Test-Path (Join-Path $OmniVoiceDir "pyproject.toml"))) {
+        throw "OmniVoice vendored source is incomplete (missing pyproject.toml): $OmniVoiceDir"
+    }
+    if (-not (Test-Path $OmniVoiceVenv)) {
+        Write-Host "Creating OmniVoice venv -> $OmniVoiceVenv"
+        python -m venv $OmniVoiceVenv
+    }
+    $OmniVoicePython = Join-Path $OmniVoiceVenv "Scripts\python.exe"
+    & $OmniVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
+
+    $OmniVoiceTorchProfile = if ($env:OMNIVOICE_TORCH_PROFILE) { $env:OMNIVOICE_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
+    if ($OmniVoiceTorchProfile -eq "cu121") { $OmniVoiceTorchProfile = "cu128" }
+    Write-Host "Installing OmniVoice runtime into $OmniVoiceVenv (torch profile: $OmniVoiceTorchProfile)"
+    $env:OMNIVOICE_TORCH_PROFILE = $OmniVoiceTorchProfile
+    & $OmniVoicePython (Join-Path $RootDir "scripts\install_omnivoice_runtime.py") --repo-root $OmniVoiceDir --torch-profile $OmniVoiceTorchProfile | Out-Host
+
+    python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+target = Path(r'''$OmniVoiceModelDir''') / r'''$OmniVoiceLocalDirname'''
+print(f'Downloading $OmniVoiceHfModelId -> {target}')
+snapshot_download(
+    repo_id=r'''$OmniVoiceHfModelId''',
+    local_dir=str(target),
+    local_dir_use_symlinks=False,
+    resume_download=True,
+)
+print('OmniVoice model download completed.')
 "@
 }
 

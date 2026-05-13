@@ -1337,3 +1337,159 @@ export interface Supertonic3VoicePresetCreateRequest {
   language?: string;
   notes?: string;
 }
+
+export interface OmniVoiceRuntimeResponse {
+  available: boolean;
+  notes: string;
+  omnivoice_root: string;
+  python_executable: string;
+  model_dir: string;
+  voice_dir: string;
+  model_variants: Array<{ name: string; available: boolean }>;
+  voice_presets: OmniVoiceVoicePreset[];
+  supported_tasks: OmniVoiceTask[];
+  supported_languages: string[];
+  supported_language_options: Array<{ id: string; name: string; display: string }>;
+  voice_design_templates: Array<{ label: string; options: string[] }>;
+  batch_supported: boolean;
+  training_supported: boolean;
+  data_prep_supported: boolean;
+}
+
+export type OmniVoiceTask = "auto_voice" | "voice_design" | "voice_cloning";
+
+export interface OmniVoiceGenerateRequest {
+  task: OmniVoiceTask;
+  text: string;
+  language?: string;
+  instruct?: string;
+  ref_audio?: string;
+  ref_text?: string;
+  model_dir?: string;
+  model_name?: string;
+  device?: string;
+  seed?: number;
+  num_step?: number;
+  guidance_scale?: number;
+  speed?: number;
+  duration?: number;
+  t_shift?: number;
+  denoise?: boolean;
+  preprocess_prompt?: boolean;
+  postprocess_output?: boolean;
+  layer_penalty_factor?: number;
+  position_temperature?: number;
+  class_temperature?: number;
+  audio_chunk_duration?: number;
+  audio_chunk_threshold?: number;
+  label?: string;
+  audio_format?: "wav" | "flac" | "mp3" | "ogg";
+}
+
+export interface OmniVoiceVoicePreset {
+  name: string;
+  path: string;
+  task: OmniVoiceTask;
+  language?: string;
+  instruct?: string;
+  ref_audio?: string;
+  ref_text?: string;
+  model_name?: string;
+  notes?: string;
+  defaults?: Record<string, unknown>;
+}
+
+export interface OmniVoiceVoicePresetCreateRequest {
+  name: string;
+  task: OmniVoiceTask;
+  language?: string;
+  instruct?: string;
+  ref_audio?: string;
+  ref_text?: string;
+  model_name?: string;
+  notes?: string;
+  defaults?: Record<string, unknown>;
+}
+
+export interface OmniVoiceBatchRequest {
+  model_name?: string;
+  samples_jsonl: string;
+  defaults?: Record<string, unknown>;
+  run_name?: string;
+  batch_duration?: number;
+  batch_size?: number;
+  warmup?: number;
+  nj_per_gpu?: number;
+  lang_id?: string;
+}
+
+export interface OmniVoiceBatchResponse {
+  run_id: string;
+  status: string;
+  run_dir: string;
+  output_dir?: string;
+  generated_files: Array<Record<string, unknown>>;
+  log_tail?: string;
+  stderr_tail?: string;
+}
+
+export interface OmniVoiceTrainingRequest {
+  base_model?: string;
+  train_config_json: string;
+  data_config_json: string;
+  run_name?: string;
+  accelerate_args?: string[];
+  extra_args?: string[];
+}
+
+export interface OmniVoiceTrainingResponse {
+  run_id: string;
+  status: string;
+  run_dir: string;
+  base_model: string;
+  checkpoint_dir?: string;
+  train_config_path?: string;
+  data_config_path?: string;
+  log_tail?: string;
+  stderr_tail?: string;
+}
+
+export interface OmniVoiceDataPrepRequest {
+  mode?: "jsonl_to_webdataset" | "extract_audio_tokens" | "full_pipeline";
+  run_name?: string;
+  input_jsonl?: string;
+  input_manifest?: string;
+  raw_output_dir?: string;
+  token_output_dir?: string;
+  tokenizer_path?: string;
+  workers?: number;
+  threads?: number;
+  shard_size?: number;
+  sr?: number;
+  shuffle?: boolean;
+  shuffle_seed?: number;
+  min_duration?: number;
+  max_duration?: number;
+  samples_per_shard?: number;
+  min_num_shards?: number;
+  skip_errors?: boolean;
+  min_length?: number;
+  max_length?: number;
+  num_machines?: number;
+  machine_index?: number;
+  nj_per_gpu?: number;
+  loader_workers?: number;
+}
+
+export interface OmniVoiceDataPrepResponse {
+  run_id: string;
+  status: string;
+  run_dir: string;
+  mode: string;
+  raw_data_lst_path?: string;
+  token_data_lst_path?: string;
+  raw_output_dir?: string;
+  token_output_dir?: string;
+  log_tail?: string;
+  stderr_tail?: string;
+}

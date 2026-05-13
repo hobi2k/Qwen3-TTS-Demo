@@ -72,6 +72,11 @@ import type {
   CosyVoice3RuntimeResponse,
   CosyVoice3TrainingResponse,
   CosyVoice3VoicePreset,
+  OmniVoiceBatchResponse,
+  OmniVoiceDataPrepResponse,
+  OmniVoiceRuntimeResponse,
+  OmniVoiceTrainingResponse,
+  OmniVoiceVoicePreset,
   Supertonic3RuntimeResponse,
   Supertonic3VoicePreset,
   VoxCPM2RuntimeResponse,
@@ -1502,6 +1507,134 @@ function StudioApp() {
     language: "ko",
     notes: "",
   });
+  const [omnivoiceRuntime, setOmniVoiceRuntime] = useState<OmniVoiceRuntimeResponse | null>(null);
+  const [omnivoicePresets, setOmniVoicePresets] = useState<OmniVoiceVoicePreset[]>([]);
+  const [lastOmniVoiceRecord, setLastOmniVoiceRecord] = useState<GenerationRecord | null>(null);
+  const [lastOmniVoiceDataPrepResult, setLastOmniVoiceDataPrepResult] = useState<OmniVoiceDataPrepResponse | null>(null);
+  const [lastOmniVoiceBatchResult, setLastOmniVoiceBatchResult] = useState<OmniVoiceBatchResponse | null>(null);
+  const [lastOmniVoiceTrainResult, setLastOmniVoiceTrainResult] = useState<OmniVoiceTrainingResponse | null>(null);
+  const [omnivoiceTtsForm, setOmniVoiceTtsForm] = useState({
+    task: "auto_voice" as "auto_voice" | "voice_design" | "voice_cloning",
+    text: "안녕하세요. 오늘은 OmniVoice 엔진으로 한국어 테스트를 진행합니다.",
+    language: "ko",
+    instruct: "young Korean woman, calm and articulate, clear speech with a gentle warm ending",
+    ref_audio: "",
+    ref_text: "",
+    model_name: "OmniVoice",
+    device: "",
+    seed: "",
+    num_step: "32",
+    guidance_scale: "2.0",
+    speed: "1.0",
+    duration: "",
+    t_shift: "0.1",
+    denoise: true,
+    preprocess_prompt: true,
+    postprocess_output: true,
+    layer_penalty_factor: "5.0",
+    position_temperature: "5.0",
+    class_temperature: "0.0",
+    audio_chunk_duration: "15.0",
+    audio_chunk_threshold: "30.0",
+    label: "",
+    audio_format: "wav" as "wav" | "flac" | "mp3" | "ogg",
+  });
+  const [omnivoicePresetForm, setOmniVoicePresetForm] = useState({
+    name: "",
+    task: "auto_voice" as "auto_voice" | "voice_design" | "voice_cloning",
+    language: "ko",
+    instruct: "",
+    ref_audio: "",
+    ref_text: "",
+    model_name: "OmniVoice",
+    notes: "",
+  });
+  const [omnivoiceBatchForm, setOmniVoiceBatchForm] = useState({
+    model_name: "OmniVoice",
+    run_name: "",
+    batch_duration: "1000",
+    batch_size: "0",
+    warmup: "0",
+    nj_per_gpu: "1",
+    lang_id: "",
+    samples_jsonl: [
+      JSON.stringify({ id: "kr_design_01", text: "안녕하세요, 오늘은 차분한 톤으로 읽어볼게요.", task: "voice_design", instruct: "young Korean woman, calm and articulate, clear speech", language_id: "ko" }),
+      JSON.stringify({ id: "en_auto_01", text: "Hello, this is an automatic voice sample.", task: "auto_voice", language_id: "en" }),
+    ].join("\n"),
+  });
+  const [omnivoiceDataPrepForm, setOmniVoiceDataPrepForm] = useState({
+    mode: "full_pipeline" as "jsonl_to_webdataset" | "extract_audio_tokens" | "full_pipeline",
+    run_name: "",
+    input_jsonl: "data/datasets/omnivoice/train.jsonl",
+    input_manifest: "",
+    raw_output_dir: "data/datasets/omnivoice/raw-webdataset",
+    token_output_dir: "data/datasets/omnivoice/tokens",
+    tokenizer_path: "eustlb/higgs-audio-v2-tokenizer",
+    workers: "16",
+    threads: "4",
+    shard_size: "1000",
+    sr: "24000",
+    shuffle: true,
+    shuffle_seed: "42",
+    min_duration: "",
+    max_duration: "",
+    samples_per_shard: "1000",
+    min_num_shards: "32",
+    skip_errors: false,
+    min_length: "0",
+    max_length: "3600",
+    num_machines: "1",
+    machine_index: "0",
+    nj_per_gpu: "3",
+    loader_workers: "24",
+  });
+  const [omnivoiceTrainForm, setOmniVoiceTrainForm] = useState({
+    base_model: "OmniVoice",
+    run_name: "",
+    accelerate_args: "--num_processes 1",
+    extra_args: "",
+    train_config_json: JSON.stringify({
+      llm_name_or_path: "Qwen/Qwen3-0.6B",
+      audio_vocab_size: 1025,
+      audio_mask_id: 1024,
+      num_audio_codebook: 8,
+      audio_codebook_weights: [8, 8, 6, 6, 4, 4, 2, 2],
+      drop_cond_ratio: 0.1,
+      prompt_ratio_range: [0.0, 0.3],
+      mask_ratio_range: [0.0, 1.0],
+      language_ratio: 0.8,
+      use_pinyin_ratio: 0.0,
+      instruct_ratio: 0.0,
+      only_instruct_ratio: 0.0,
+      resume_from_checkpoint: null,
+      init_from_checkpoint: "k2-fsa/OmniVoice",
+      learning_rate: 1e-5,
+      weight_decay: 0.01,
+      max_grad_norm: 1.0,
+      steps: 5000,
+      seed: 42,
+      warmup_type: "ratio",
+      warmup_ratio: 0.01,
+      warmup_steps: 0,
+      batch_tokens: 8192,
+      gradient_accumulation_steps: 1,
+      num_workers: 2,
+      mixed_precision: "bf16",
+      allow_tf32: true,
+      logging_steps: 50,
+      eval_steps: 500,
+      save_steps: 500,
+      keep_last_n_checkpoints: -1,
+      attn_implementation: "sdpa",
+      max_sample_tokens: 2000,
+      min_sample_tokens: 50,
+      max_batch_size: 64,
+    }, null, 2),
+    data_config_json: JSON.stringify({
+      train: [{ manifest_path: ["data/finetune/tokens/train/data.lst"] }],
+      dev: [{ manifest_path: ["data/finetune/tokens/dev/data.lst"] }],
+    }, null, 2),
+  });
   const [vibeVoiceAsrResult, setVibeVoiceAsrResult] = useState<VibeVoiceASRResponse | null>(null);
   const [vibeVoiceModelToolResult, setVibeVoiceModelToolResult] = useState<VibeVoiceModelToolResponse | null>(null);
   const [vibeVoiceAsrSource, setVibeVoiceAsrSource] = useState<"audio" | "folder" | "dataset">("audio");
@@ -1912,6 +2045,13 @@ function StudioApp() {
     } catch {
       setSupertonicRuntime(null);
       setSupertonicPresets([]);
+    }
+    try {
+      setOmniVoiceRuntime(await api.omnivoiceRuntime());
+      setOmniVoicePresets(await api.listOmniVoicePresets());
+    } catch {
+      setOmniVoiceRuntime(null);
+      setOmniVoicePresets([]);
     }
   }
 
@@ -3310,6 +3450,272 @@ function StudioApp() {
     }));
     setActiveTab("supertonic_tts");
     setMessage(`프리셋 "${preset.name}"을(를) Supertonic TTS에 불러왔습니다.`);
+  }
+
+  async function handleOmniVoiceGenerate(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      if (!omnivoiceTtsForm.text.trim()) {
+        setMessage("OmniVoice 텍스트를 입력하세요.");
+        return;
+      }
+      if (omnivoiceTtsForm.task === "voice_design" && !omnivoiceTtsForm.instruct.trim()) {
+        setMessage("voice_design에는 영어 스타일 지시문이 필요합니다.");
+        return;
+      }
+      if (omnivoiceTtsForm.task === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()) {
+        setMessage("voice_cloning에는 참조 오디오 경로가 필요합니다.");
+        return;
+      }
+
+      const seedTrim = omnivoiceTtsForm.seed.trim();
+      const response = await api.generateOmniVoice({
+        task: omnivoiceTtsForm.task,
+        text: omnivoiceTtsForm.text,
+        language: omnivoiceTtsForm.language || undefined,
+        instruct: omnivoiceTtsForm.instruct || undefined,
+        ref_audio: omnivoiceTtsForm.ref_audio || undefined,
+        ref_text: omnivoiceTtsForm.ref_text || undefined,
+        model_name: omnivoiceTtsForm.model_name || undefined,
+        device: omnivoiceTtsForm.device || undefined,
+        seed: seedTrim ? Number(seedTrim) : undefined,
+        num_step: Number(omnivoiceTtsForm.num_step || "32"),
+        guidance_scale: Number(omnivoiceTtsForm.guidance_scale || "2.0"),
+        speed: Number(omnivoiceTtsForm.speed || "1.0"),
+        duration: omnivoiceTtsForm.duration.trim() ? Number(omnivoiceTtsForm.duration) : undefined,
+        t_shift: Number(omnivoiceTtsForm.t_shift || "0.1"),
+        denoise: omnivoiceTtsForm.denoise,
+        preprocess_prompt: omnivoiceTtsForm.preprocess_prompt,
+        postprocess_output: omnivoiceTtsForm.postprocess_output,
+        layer_penalty_factor: Number(omnivoiceTtsForm.layer_penalty_factor || "5.0"),
+        position_temperature: Number(omnivoiceTtsForm.position_temperature || "5.0"),
+        class_temperature: Number(omnivoiceTtsForm.class_temperature || "0.0"),
+        audio_chunk_duration: Number(omnivoiceTtsForm.audio_chunk_duration || "15.0"),
+        audio_chunk_threshold: Number(omnivoiceTtsForm.audio_chunk_threshold || "30.0"),
+        label: omnivoiceTtsForm.label || undefined,
+        audio_format: omnivoiceTtsForm.audio_format,
+      });
+      setLastOmniVoiceRecord(response.record);
+      await refreshAll();
+      setMessage("OmniVoice 생성을 완료했습니다.");
+    });
+  }
+
+  async function handleOmniVoiceSavePreset(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      if (!omnivoicePresetForm.name.trim()) {
+        setMessage("프리셋 이름을 입력하세요.");
+        return;
+      }
+      if (omnivoicePresetForm.task === "voice_design" && !omnivoicePresetForm.instruct.trim()) {
+        setMessage("voice_design 프리셋에는 instruct가 필요합니다.");
+        return;
+      }
+      if (omnivoicePresetForm.task === "voice_cloning" && !omnivoicePresetForm.ref_audio.trim()) {
+        setMessage("voice_cloning 프리셋에는 ref_audio가 필요합니다.");
+        return;
+      }
+      await api.saveOmniVoicePreset({
+        name: omnivoicePresetForm.name,
+        task: omnivoicePresetForm.task,
+        language: omnivoicePresetForm.language,
+        instruct: omnivoicePresetForm.instruct,
+        ref_audio: omnivoicePresetForm.ref_audio,
+        ref_text: omnivoicePresetForm.ref_text,
+        model_name: omnivoicePresetForm.model_name,
+        notes: omnivoicePresetForm.notes,
+        defaults: {
+          num_step: Number(omnivoiceTtsForm.num_step || "32"),
+          guidance_scale: Number(omnivoiceTtsForm.guidance_scale || "2.0"),
+          speed: Number(omnivoiceTtsForm.speed || "1.0"),
+          duration: omnivoiceTtsForm.duration.trim() ? Number(omnivoiceTtsForm.duration) : undefined,
+          t_shift: Number(omnivoiceTtsForm.t_shift || "0.1"),
+          denoise: omnivoiceTtsForm.denoise,
+          preprocess_prompt: omnivoiceTtsForm.preprocess_prompt,
+          postprocess_output: omnivoiceTtsForm.postprocess_output,
+          layer_penalty_factor: Number(omnivoiceTtsForm.layer_penalty_factor || "5.0"),
+          position_temperature: Number(omnivoiceTtsForm.position_temperature || "5.0"),
+          class_temperature: Number(omnivoiceTtsForm.class_temperature || "0.0"),
+          audio_chunk_duration: Number(omnivoiceTtsForm.audio_chunk_duration || "15.0"),
+          audio_chunk_threshold: Number(omnivoiceTtsForm.audio_chunk_threshold || "30.0"),
+        },
+      });
+      setOmniVoicePresets(await api.listOmniVoicePresets());
+      setMessage(`OmniVoice 프리셋 "${omnivoicePresetForm.name}" 저장 완료.`);
+    });
+  }
+
+  async function handleOmniVoiceDeletePreset(name: string) {
+    await runAction(async () => {
+      await api.deleteOmniVoicePreset(name);
+      setOmniVoicePresets(await api.listOmniVoicePresets());
+      setMessage(`OmniVoice 프리셋 "${name}"을(를) 삭제했습니다.`);
+    });
+  }
+
+  function handleOmniVoiceApplyPreset(preset: OmniVoiceVoicePreset) {
+    const defaults = (preset.defaults || {}) as Record<string, unknown>;
+    setOmniVoiceTtsForm((prev) => ({
+      ...prev,
+      task: preset.task,
+      language: preset.language || prev.language,
+      instruct: preset.instruct || "",
+      ref_audio: preset.ref_audio || "",
+      ref_text: preset.ref_text || "",
+      model_name: preset.model_name || prev.model_name,
+      num_step: String(defaults.num_step ?? prev.num_step),
+      guidance_scale: String(defaults.guidance_scale ?? prev.guidance_scale),
+      speed: String(defaults.speed ?? prev.speed),
+      duration: defaults.duration == null ? "" : String(defaults.duration),
+      t_shift: String(defaults.t_shift ?? prev.t_shift),
+      denoise: typeof defaults.denoise === "boolean" ? defaults.denoise : prev.denoise,
+      preprocess_prompt:
+        typeof defaults.preprocess_prompt === "boolean"
+          ? defaults.preprocess_prompt
+          : prev.preprocess_prompt,
+      postprocess_output:
+        typeof defaults.postprocess_output === "boolean"
+          ? defaults.postprocess_output
+          : prev.postprocess_output,
+      layer_penalty_factor: String(defaults.layer_penalty_factor ?? prev.layer_penalty_factor),
+      position_temperature: String(defaults.position_temperature ?? prev.position_temperature),
+      class_temperature: String(defaults.class_temperature ?? prev.class_temperature),
+      audio_chunk_duration: String(defaults.audio_chunk_duration ?? prev.audio_chunk_duration),
+      audio_chunk_threshold: String(defaults.audio_chunk_threshold ?? prev.audio_chunk_threshold),
+    }));
+    setActiveTab("omnivoice_tts");
+    setMessage(`프리셋 "${preset.name}"을(를) OmniVoice TTS에 불러왔습니다.`);
+  }
+
+  async function handleOmniVoiceBatch(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      if (!omnivoiceBatchForm.samples_jsonl.trim()) {
+        setMessage("JSONL 샘플 목록을 입력하세요.");
+        return;
+      }
+      const result = await api.runOmniVoiceBatch({
+        model_name: omnivoiceBatchForm.model_name || "OmniVoice",
+        samples_jsonl: omnivoiceBatchForm.samples_jsonl,
+        run_name: omnivoiceBatchForm.run_name || undefined,
+        batch_duration: Number(omnivoiceBatchForm.batch_duration || "1000"),
+        batch_size: Number(omnivoiceBatchForm.batch_size || "0"),
+        warmup: Number(omnivoiceBatchForm.warmup || "0"),
+        nj_per_gpu: Number(omnivoiceBatchForm.nj_per_gpu || "1"),
+        lang_id: omnivoiceBatchForm.lang_id || undefined,
+        defaults: {
+          language: omnivoiceTtsForm.language || undefined,
+          instruct: omnivoiceTtsForm.instruct || undefined,
+          ref_audio: omnivoiceTtsForm.ref_audio || undefined,
+          ref_text: omnivoiceTtsForm.ref_text || undefined,
+          num_step: Number(omnivoiceTtsForm.num_step || "32"),
+          guidance_scale: Number(omnivoiceTtsForm.guidance_scale || "2.0"),
+          speed: Number(omnivoiceTtsForm.speed || "1.0"),
+          duration: omnivoiceTtsForm.duration.trim() ? Number(omnivoiceTtsForm.duration) : undefined,
+          t_shift: Number(omnivoiceTtsForm.t_shift || "0.1"),
+          denoise: omnivoiceTtsForm.denoise,
+          preprocess_prompt: omnivoiceTtsForm.preprocess_prompt,
+          postprocess_output: omnivoiceTtsForm.postprocess_output,
+          layer_penalty_factor: Number(omnivoiceTtsForm.layer_penalty_factor || "5.0"),
+          position_temperature: Number(omnivoiceTtsForm.position_temperature || "5.0"),
+          class_temperature: Number(omnivoiceTtsForm.class_temperature || "0.0"),
+          audio_chunk_duration: Number(omnivoiceTtsForm.audio_chunk_duration || "15.0"),
+          audio_chunk_threshold: Number(omnivoiceTtsForm.audio_chunk_threshold || "30.0"),
+        },
+      });
+      setLastOmniVoiceBatchResult(result);
+      await refreshAll();
+      setMessage(`OmniVoice 배치 ${result.status} (run: ${result.run_id}).`);
+    });
+  }
+
+  async function handleOmniVoiceDataPrep(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      if (
+        omnivoiceDataPrepForm.mode !== "extract_audio_tokens" &&
+        !omnivoiceDataPrepForm.input_jsonl.trim()
+      ) {
+        setMessage("JSONL 입력 경로를 지정하세요.");
+        return;
+      }
+      if (
+        omnivoiceDataPrepForm.mode !== "jsonl_to_webdataset" &&
+        !omnivoiceDataPrepForm.token_output_dir.trim()
+      ) {
+        setMessage("Token output 경로를 지정하세요.");
+        return;
+      }
+      if (
+        omnivoiceDataPrepForm.mode === "jsonl_to_webdataset" ||
+        omnivoiceDataPrepForm.mode === "full_pipeline"
+      ) {
+        if (!omnivoiceDataPrepForm.raw_output_dir.trim()) {
+          setMessage("Raw WebDataset output 경로를 지정하세요.");
+          return;
+        }
+      }
+
+      const result = await api.prepareOmniVoiceData({
+        mode: omnivoiceDataPrepForm.mode,
+        run_name: omnivoiceDataPrepForm.run_name || undefined,
+        input_jsonl: omnivoiceDataPrepForm.input_jsonl || undefined,
+        input_manifest: omnivoiceDataPrepForm.input_manifest || undefined,
+        raw_output_dir: omnivoiceDataPrepForm.raw_output_dir || undefined,
+        token_output_dir: omnivoiceDataPrepForm.token_output_dir || undefined,
+        tokenizer_path: omnivoiceDataPrepForm.tokenizer_path || undefined,
+        workers: Number(omnivoiceDataPrepForm.workers || "16"),
+        threads: Number(omnivoiceDataPrepForm.threads || "4"),
+        shard_size: Number(omnivoiceDataPrepForm.shard_size || "1000"),
+        sr: Number(omnivoiceDataPrepForm.sr || "24000"),
+        shuffle: omnivoiceDataPrepForm.shuffle,
+        shuffle_seed: Number(omnivoiceDataPrepForm.shuffle_seed || "42"),
+        min_duration: omnivoiceDataPrepForm.min_duration.trim()
+          ? Number(omnivoiceDataPrepForm.min_duration)
+          : undefined,
+        max_duration: omnivoiceDataPrepForm.max_duration.trim()
+          ? Number(omnivoiceDataPrepForm.max_duration)
+          : undefined,
+        samples_per_shard: Number(omnivoiceDataPrepForm.samples_per_shard || "1000"),
+        min_num_shards: Number(omnivoiceDataPrepForm.min_num_shards || "32"),
+        skip_errors: omnivoiceDataPrepForm.skip_errors,
+        min_length: Number(omnivoiceDataPrepForm.min_length || "0"),
+        max_length: Number(omnivoiceDataPrepForm.max_length || "3600"),
+        num_machines: Number(omnivoiceDataPrepForm.num_machines || "1"),
+        machine_index: Number(omnivoiceDataPrepForm.machine_index || "0"),
+        nj_per_gpu: Number(omnivoiceDataPrepForm.nj_per_gpu || "3"),
+        loader_workers: Number(omnivoiceDataPrepForm.loader_workers || "24"),
+      });
+      setLastOmniVoiceDataPrepResult(result);
+      setMessage(`OmniVoice 데이터 준비 ${result.status} (run: ${result.run_id}).`);
+    });
+  }
+
+  async function handleOmniVoiceTrain(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      if (!omnivoiceTrainForm.train_config_json.trim() || !omnivoiceTrainForm.data_config_json.trim()) {
+        setMessage("train_config_json과 data_config_json을 모두 입력하세요.");
+        return;
+      }
+      const result = await api.trainOmniVoice({
+        base_model: omnivoiceTrainForm.base_model,
+        train_config_json: omnivoiceTrainForm.train_config_json,
+        data_config_json: omnivoiceTrainForm.data_config_json,
+        run_name: omnivoiceTrainForm.run_name || undefined,
+        accelerate_args: omnivoiceTrainForm.accelerate_args
+          .split(/\s+/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+        extra_args: omnivoiceTrainForm.extra_args
+          .split(/\s+/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+      });
+      setLastOmniVoiceTrainResult(result);
+      setMessage(`OmniVoice 학습 ${result.status} (run: ${result.run_id}).`);
+    });
   }
 
   async function handleVoxCpmTrain(event?: FormEvent) {
@@ -5001,6 +5407,11 @@ function StudioApp() {
     "supertonic_voices",
     "supertonic_dataset",
     "supertonic_train",
+    "omnivoice_tts",
+    "omnivoice_voices",
+    "omnivoice_dataset",
+    "omnivoice_batch",
+    "omnivoice_train",
   ]);
   const canRunCurrentTab = renderableTabs.has(activeTab);
   const vibeVoiceAsrReady =
@@ -5068,6 +5479,11 @@ function StudioApp() {
     if (activeTab === "voxcpm_train") return handleVoxCpmTrain();
     if (activeTab === "supertonic_tts") return handleSupertonicGenerate();
     if (activeTab === "supertonic_voices") return handleSupertonicSavePreset();
+    if (activeTab === "omnivoice_tts") return handleOmniVoiceGenerate();
+    if (activeTab === "omnivoice_voices") return handleOmniVoiceSavePreset();
+    if (activeTab === "omnivoice_dataset") return handleOmniVoiceDataPrep();
+    if (activeTab === "omnivoice_batch") return handleOmniVoiceBatch();
+    if (activeTab === "omnivoice_train") return handleOmniVoiceTrain();
   }
 
   function sendS2DatasetToTraining() {
@@ -5270,6 +5686,25 @@ function StudioApp() {
             </button>
             <button className={activeTab === "supertonic_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("supertonic_train")} type="button">
               <span>{t("tab.supertonic_train", "Supertonic 학습")}</span>
+            </button>
+          </div>
+
+          <div className="studio-nav__group">
+            <div className="studio-nav__label"><span>{t("section.omnivoice", "OmniVoice")}</span></div>
+            <button className={activeTab === "omnivoice_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_tts")} type="button">
+              <span>{t("tab.omnivoice_tts", "OmniVoice TTS")}</span>
+            </button>
+            <button className={activeTab === "omnivoice_voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_voices")} type="button">
+              <span>{t("tab.omnivoice_voices", "OmniVoice 프리셋")}</span>
+            </button>
+            <button className={activeTab === "omnivoice_dataset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_dataset")} type="button">
+              <span>{t("tab.omnivoice_dataset", "OmniVoice 데이터셋")}</span>
+            </button>
+            <button className={activeTab === "omnivoice_batch" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_batch")} type="button">
+              <span>{t("tab.omnivoice_batch", "OmniVoice 배치")}</span>
+            </button>
+            <button className={activeTab === "omnivoice_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_train")} type="button">
+              <span>{t("tab.omnivoice_train", "OmniVoice 학습")}</span>
             </button>
           </div>
 
@@ -9699,6 +10134,529 @@ function StudioApp() {
               <li>추론 일치성 검증 후 본 탭 활성화</li>
             </ul>
           </WorkspaceCard>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "omnivoice_tts" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow="OMNIVOICE"
+            eyebrowIcon={AudioLines}
+            title="OmniVoice 텍스트 음성 변환"
+            subtitle="auto voice, voice design, voice cloning을 한 화면에서 다룹니다. 스타일 설명과 사운드/감정 토큰은 영어 입력을 권장합니다."
+            action={{
+              label: "OmniVoice 생성",
+              formId: "omnivoice-tts-form",
+              disabled:
+                loading ||
+                !omnivoiceTtsForm.text.trim() ||
+                (omnivoiceTtsForm.task === "voice_design" && !omnivoiceTtsForm.instruct.trim()) ||
+                (omnivoiceTtsForm.task === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()),
+              loading,
+            }}
+            meta={
+              <Badge variant="secondary" className={omnivoiceRuntime?.available ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
+                {omnivoiceRuntime?.available ? "Vendor ready" : "Vendor missing"}
+              </Badge>
+            }
+          />
+          <form id="omnivoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceGenerate}>
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Task</Label>
+                    <Select value={omnivoiceTtsForm.task} onValueChange={(task) => setOmniVoiceTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto_voice">auto_voice</SelectItem>
+                        <SelectItem value="voice_design">voice_design</SelectItem>
+                        <SelectItem value="voice_cloning">voice_cloning</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                    <Select value={omnivoiceTtsForm.model_name} onValueChange={(model_name) => setOmniVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(omnivoiceRuntime?.model_variants || []).map((m) => (
+                          <SelectItem key={m.name} value={m.name} disabled={!m.available}>
+                            {m.name}{m.available ? "" : " (missing)"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
+                    <Input list="omnivoice-language-options" value={omnivoiceTtsForm.language} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko / en / ja / zh" />
+                  </div>
+                </div>
+                <datalist id="omnivoice-language-options">
+                  {(omnivoiceRuntime?.supported_language_options || []).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.display}
+                    </option>
+                  ))}
+                </datalist>
+                {omnivoiceRuntime?.supported_language_options?.length ? (
+                  <div className="flex flex-col gap-2 rounded-2xl border border-line/70 bg-canvas px-4 py-3">
+                    <div className="text-xs font-medium text-ink-muted">언어 옵션</div>
+                    <div className="flex flex-wrap gap-2">
+                      {omnivoiceRuntime.supported_language_options.slice(0, 18).map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className="rounded-full border border-line bg-white px-2.5 py-1 text-[11px] text-ink transition hover:border-ink"
+                          onClick={() => setOmniVoiceTtsForm((prev) => ({ ...prev, language: option.id }))}
+                        >
+                          {option.display}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Text</Label>
+                  <Textarea value={omnivoiceTtsForm.text} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))} className="min-h-[150px] resize-y border-line bg-canvas" />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Style / instruct (English)</Label>
+                    <Textarea value={omnivoiceTtsForm.instruct} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, instruct: event.target.value }))} className="min-h-[110px] resize-y border-line bg-canvas" placeholder="young Korean woman, calm and articulate, clear speech with subtle warmth" />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">ref_audio</Label>
+                      <Input value={omnivoiceTtsForm.ref_audio} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, ref_audio: event.target.value }))} placeholder="data/generated/..." />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">ref_text</Label>
+                      <Textarea value={omnivoiceTtsForm.ref_text} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, ref_text: event.target.value }))} className="min-h-[72px] resize-y border-line bg-canvas" placeholder="Optional reference transcript" />
+                    </div>
+                  </div>
+                </div>
+                {omnivoiceRuntime?.voice_design_templates?.length ? (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-line/70 bg-canvas px-4 py-3">
+                    <div className="text-xs font-medium text-ink-muted">Voice design 템플릿</div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {omnivoiceRuntime.voice_design_templates.map((group) => (
+                        <div key={group.label} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-3 py-3">
+                          <div className="text-xs font-medium text-ink">{group.label}</div>
+                          <div className="flex flex-wrap gap-2">
+                            {group.options.map((option) => (
+                              <button
+                                key={`${group.label}-${option}`}
+                                type="button"
+                                className="rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] text-ink transition hover:border-ink"
+                                onClick={() =>
+                                  setOmniVoiceTtsForm((prev) => ({
+                                    ...prev,
+                                    instruct: prev.instruct.trim()
+                                      ? `${prev.instruct.trim()}, ${option}`
+                                      : option,
+                                  }))
+                                }
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">num_step</Label><Input value={omnivoiceTtsForm.num_step} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, num_step: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">guidance_scale</Label><Input value={omnivoiceTtsForm.guidance_scale} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, guidance_scale: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">speed</Label><Input value={omnivoiceTtsForm.speed} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, speed: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">duration</Label><Input value={omnivoiceTtsForm.duration} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, duration: event.target.value }))} placeholder="optional sec" /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">t_shift</Label><Input value={omnivoiceTtsForm.t_shift} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, t_shift: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">layer_penalty_factor</Label><Input value={omnivoiceTtsForm.layer_penalty_factor} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, layer_penalty_factor: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">position_temperature</Label><Input value={omnivoiceTtsForm.position_temperature} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, position_temperature: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">class_temperature</Label><Input value={omnivoiceTtsForm.class_temperature} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, class_temperature: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">chunk_duration</Label><Input value={omnivoiceTtsForm.audio_chunk_duration} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_chunk_duration: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">chunk_threshold</Label><Input value={omnivoiceTtsForm.audio_chunk_threshold} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_chunk_threshold: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Seed</Label><Input value={omnivoiceTtsForm.seed} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, seed: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Format</Label><Select value={omnivoiceTtsForm.audio_format} onValueChange={(audio_format) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_format: audio_format as typeof prev.audio_format }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wav">wav</SelectItem><SelectItem value="flac">flac</SelectItem><SelectItem value="mp3">mp3</SelectItem><SelectItem value="ogg">ogg</SelectItem></SelectContent></Select></div>
+                </div>
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceTtsForm.denoise} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, denoise: event.target.checked }))} /> denoise</label>
+                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceTtsForm.preprocess_prompt} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, preprocess_prompt: event.target.checked }))} /> preprocess_prompt</label>
+                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceTtsForm.postprocess_output} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, postprocess_output: event.target.checked }))} /> postprocess_output</label>
+                </div>
+              </WorkspaceCard>
+
+              {lastOmniVoiceRecord ? (
+                <WorkspaceCard className="flex flex-col gap-2">
+                  <div className="text-xs font-medium text-ink-muted">최근 결과</div>
+                  <div className="text-sm text-ink">{lastOmniVoiceRecord.output_audio_url}</div>
+                  {lastOmniVoiceRecord.output_audio_url ? <audio controls src={lastOmniVoiceRecord.output_audio_url} className="w-full" /> : null}
+                </WorkspaceCard>
+              ) : null}
+            </div>
+
+            <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">런타임</div>
+                <div className="text-xs text-ink-muted">{omnivoiceRuntime?.notes || "런타임 정보를 확인하는 중..."}</div>
+                <div className="pt-2 text-xs text-ink-muted">
+                  supported languages: {(omnivoiceRuntime?.supported_languages || []).slice(0, 18).join(", ")}
+                  {(omnivoiceRuntime?.supported_languages?.length || 0) > 18 ? " ..." : ""}
+                </div>
+                <div className="text-xs text-ink-muted">
+                  language options: {omnivoiceRuntime?.supported_language_options?.length || 0} · template groups: {omnivoiceRuntime?.voice_design_templates?.length || 0}
+                </div>
+              </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">서버 오디오 선택</div>
+                <ServerAudioPicker
+                  assets={audioAssets}
+                  selectedPath={omnivoiceTtsForm.ref_audio}
+                  onSelect={(asset) =>
+                    setOmniVoiceTtsForm((prev) => ({
+                      ...prev,
+                      ref_audio: asset.path,
+                      ref_text: asset.transcript_text?.trim() || prev.ref_text,
+                    }))
+                  }
+                />
+              </WorkspaceCard>
+            </aside>
+          </form>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "omnivoice_voices" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow="OMNIVOICE"
+            eyebrowIcon={AudioLines}
+            title="OmniVoice 프리셋"
+            subtitle="voice design 지시문이나 voice cloning 참조 음성을 저장해 다른 텍스트에 반복 적용합니다."
+            action={{
+              label: "프리셋 저장",
+              formId: "omnivoice-voices-form",
+              disabled: loading || !omnivoicePresetForm.name.trim(),
+              loading,
+            }}
+          />
+          <form id="omnivoice-voices-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceSavePreset}>
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">프리셋 이름</Label><Input value={omnivoicePresetForm.name} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="omnivoice-korean-style" /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Task</Label><Select value={omnivoicePresetForm.task} onValueChange={(task) => setOmniVoicePresetForm((prev) => ({ ...prev, task: task as typeof prev.task }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto_voice">auto_voice</SelectItem><SelectItem value="voice_design">voice_design</SelectItem><SelectItem value="voice_cloning">voice_cloning</SelectItem></SelectContent></Select></div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Language</Label><Input list="omnivoice-preset-language-options" value={omnivoicePresetForm.language} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko" /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Model</Label><Input value={omnivoicePresetForm.model_name} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, model_name: event.target.value }))} placeholder="OmniVoice" /></div>
+                </div>
+                <datalist id="omnivoice-preset-language-options">
+                  {(omnivoiceRuntime?.supported_language_options || []).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.display}
+                    </option>
+                  ))}
+                </datalist>
+                <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">instruct (English)</Label><Textarea value={omnivoicePresetForm.instruct} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, instruct: event.target.value }))} className="min-h-[96px] resize-y border-line bg-canvas" /></div>
+                {omnivoiceRuntime?.voice_design_templates?.length ? (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-line/70 bg-canvas px-4 py-3">
+                    <div className="text-xs font-medium text-ink-muted">Preset용 voice design 템플릿</div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {omnivoiceRuntime.voice_design_templates.map((group) => (
+                        <div key={group.label} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-3 py-3">
+                          <div className="text-xs font-medium text-ink">{group.label}</div>
+                          <div className="flex flex-wrap gap-2">
+                            {group.options.map((option) => (
+                              <button
+                                key={`${group.label}-preset-${option}`}
+                                type="button"
+                                className="rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] text-ink transition hover:border-ink"
+                                onClick={() =>
+                                  setOmniVoicePresetForm((prev) => ({
+                                    ...prev,
+                                    instruct: prev.instruct.trim()
+                                      ? `${prev.instruct.trim()}, ${option}`
+                                      : option,
+                                  }))
+                                }
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">ref_audio</Label><Input value={omnivoicePresetForm.ref_audio} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, ref_audio: event.target.value }))} placeholder="data/generated/..." /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">ref_text</Label><Textarea value={omnivoicePresetForm.ref_text} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, ref_text: event.target.value }))} className="min-h-[72px] resize-y border-line bg-canvas" /></div>
+                </div>
+                <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Notes</Label><Input value={omnivoicePresetForm.notes} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, notes: event.target.value }))} /></div>
+              </WorkspaceCard>
+            </div>
+            <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">저장된 프리셋 ({omnivoicePresets.length})</div>
+                {omnivoicePresets.length === 0 ? (
+                  <div className="text-xs text-ink-muted">아직 저장된 OmniVoice 프리셋이 없습니다.</div>
+                ) : (
+                  omnivoicePresets.map((preset) => (
+                    <div key={preset.name} className="flex items-center justify-between gap-2 text-xs">
+                      <button type="button" className="flex-1 truncate text-left hover:underline" onClick={() => handleOmniVoiceApplyPreset(preset)}>
+                        {preset.name} · {preset.task}
+                      </button>
+                      <button type="button" className="text-rose-500 hover:underline" onClick={() => handleOmniVoiceDeletePreset(preset.name)}>
+                        삭제
+                      </button>
+                    </div>
+                  ))
+                )}
+              </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">서버 오디오 선택</div>
+                <ServerAudioPicker
+                  assets={audioAssets}
+                  selectedPath={omnivoicePresetForm.ref_audio}
+                  onSelect={(asset) =>
+                    setOmniVoicePresetForm((prev) => ({
+                      ...prev,
+                      ref_audio: asset.path,
+                      ref_text: asset.transcript_text?.trim() || prev.ref_text,
+                    }))
+                  }
+                />
+              </WorkspaceCard>
+            </aside>
+          </form>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "omnivoice_dataset" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow="OMNIVOICE"
+            eyebrowIcon={AudioLines}
+            title="OmniVoice 데이터 준비"
+            subtitle="업스트림 스크립트 기준으로 JSONL → WebDataset shard → audio token shard를 준비합니다."
+            action={{
+              label: "데이터 준비 실행",
+              formId: "omnivoice-dataset-form",
+              disabled: loading || !omnivoiceRuntime?.data_prep_supported,
+              loading,
+            }}
+          />
+          <form id="omnivoice-dataset-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceDataPrep}>
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Mode</Label>
+                    <Select value={omnivoiceDataPrepForm.mode} onValueChange={(mode) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, mode: mode as typeof prev.mode }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full_pipeline">full_pipeline</SelectItem>
+                        <SelectItem value="jsonl_to_webdataset">jsonl_to_webdataset</SelectItem>
+                        <SelectItem value="extract_audio_tokens">extract_audio_tokens</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Run name</Label>
+                    <Input value={omnivoiceDataPrepForm.run_name} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, run_name: event.target.value }))} placeholder="optional" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Tokenizer</Label>
+                    <Input value={omnivoiceDataPrepForm.tokenizer_path} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, tokenizer_path: event.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Input JSONL</Label>
+                    <Input value={omnivoiceDataPrepForm.input_jsonl} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, input_jsonl: event.target.value }))} placeholder="data/datasets/omnivoice/train.jsonl" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Input manifest</Label>
+                    <Input value={omnivoiceDataPrepForm.input_manifest} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, input_manifest: event.target.value }))} placeholder="extract_audio_tokens 전용 입력 manifest" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Raw output dir</Label>
+                    <Input value={omnivoiceDataPrepForm.raw_output_dir} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, raw_output_dir: event.target.value }))} placeholder="data/datasets/omnivoice/raw-webdataset" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Token output dir</Label>
+                    <Input value={omnivoiceDataPrepForm.token_output_dir} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, token_output_dir: event.target.value }))} placeholder="data/datasets/omnivoice/tokens" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">workers</Label><Input value={omnivoiceDataPrepForm.workers} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, workers: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">threads</Label><Input value={omnivoiceDataPrepForm.threads} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, threads: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">shard_size</Label><Input value={omnivoiceDataPrepForm.shard_size} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, shard_size: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">sr</Label><Input value={omnivoiceDataPrepForm.sr} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, sr: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">samples_per_shard</Label><Input value={omnivoiceDataPrepForm.samples_per_shard} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, samples_per_shard: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">min_num_shards</Label><Input value={omnivoiceDataPrepForm.min_num_shards} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, min_num_shards: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">num_machines</Label><Input value={omnivoiceDataPrepForm.num_machines} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, num_machines: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">machine_index</Label><Input value={omnivoiceDataPrepForm.machine_index} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, machine_index: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">nj_per_gpu</Label><Input value={omnivoiceDataPrepForm.nj_per_gpu} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, nj_per_gpu: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">loader_workers</Label><Input value={omnivoiceDataPrepForm.loader_workers} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, loader_workers: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">min_duration</Label><Input value={omnivoiceDataPrepForm.min_duration} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, min_duration: event.target.value }))} placeholder="optional" /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">max_duration</Label><Input value={omnivoiceDataPrepForm.max_duration} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, max_duration: event.target.value }))} placeholder="optional" /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">min_length</Label><Input value={omnivoiceDataPrepForm.min_length} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, min_length: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">max_length</Label><Input value={omnivoiceDataPrepForm.max_length} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, max_length: event.target.value }))} /></div>
+                </div>
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceDataPrepForm.shuffle} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, shuffle: event.target.checked }))} /> shuffle</label>
+                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceDataPrepForm.skip_errors} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, skip_errors: event.target.checked }))} /> skip_errors</label>
+                </div>
+              </WorkspaceCard>
+            </div>
+            <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">업스트림 준비 흐름</div>
+                <div className="text-xs text-ink-muted">1. JSONL을 shard WebDataset으로 변환</div>
+                <div className="text-xs text-ink-muted">2. tokenizer로 audio token 추출</div>
+                <div className="text-xs text-ink-muted">3. train 단계에서 data.list 또는 token shard 경로 사용</div>
+              </WorkspaceCard>
+              {lastOmniVoiceDataPrepResult ? (
+                <WorkspaceCard className="flex flex-col gap-2">
+                  <div className="text-xs font-medium text-ink-muted">최근 데이터 준비</div>
+                  <div className="text-sm text-ink">run_id: {lastOmniVoiceDataPrepResult.run_id} · status: {lastOmniVoiceDataPrepResult.status}</div>
+                  <div className="text-xs text-ink-muted">raw manifest: {lastOmniVoiceDataPrepResult.raw_data_lst_path || "-"}</div>
+                  <div className="text-xs text-ink-muted">token manifest: {lastOmniVoiceDataPrepResult.token_data_lst_path || "-"}</div>
+                  <div className="text-xs text-ink-muted">raw output: {lastOmniVoiceDataPrepResult.raw_output_dir || "-"}</div>
+                  <div className="text-xs text-ink-muted">token output: {lastOmniVoiceDataPrepResult.token_output_dir || "-"}</div>
+                </WorkspaceCard>
+              ) : null}
+            </aside>
+          </form>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "omnivoice_batch" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow="OMNIVOICE"
+            eyebrowIcon={AudioLines}
+            title="OmniVoice 배치 생성"
+            subtitle="upstream JSONL test list 형식으로 여러 샘플을 한 번에 생성합니다. 항목마다 task / ref_audio / instruct / language_id를 섞을 수 있습니다."
+            action={{
+              label: "배치 실행",
+              formId: "omnivoice-batch-form",
+              disabled: loading || !omnivoiceBatchForm.samples_jsonl.trim(),
+              loading,
+            }}
+          />
+          <form id="omnivoice-batch-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceBatch}>
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Model</Label><Input value={omnivoiceBatchForm.model_name} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, model_name: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Run name</Label><Input value={omnivoiceBatchForm.run_name} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, run_name: event.target.value }))} placeholder="optional" /></div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">batch_duration</Label><Input value={omnivoiceBatchForm.batch_duration} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, batch_duration: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">batch_size</Label><Input value={omnivoiceBatchForm.batch_size} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, batch_size: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">warmup</Label><Input value={omnivoiceBatchForm.warmup} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, warmup: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">nj_per_gpu</Label><Input value={omnivoiceBatchForm.nj_per_gpu} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, nj_per_gpu: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">lang_id default</Label><Input list="omnivoice-batch-language-options" value={omnivoiceBatchForm.lang_id} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, lang_id: event.target.value }))} placeholder="optional" /></div>
+                </div>
+                <datalist id="omnivoice-batch-language-options">
+                  {(omnivoiceRuntime?.supported_language_options || []).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.display}
+                    </option>
+                  ))}
+                </datalist>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">JSONL samples</Label>
+                  <Textarea value={omnivoiceBatchForm.samples_jsonl} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, samples_jsonl: event.target.value }))} className="min-h-[280px] resize-y border-line bg-canvas font-mono text-xs" />
+                </div>
+              </WorkspaceCard>
+            </div>
+            <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">작성 팁</div>
+                <div className="text-xs text-ink-muted">필수 필드: <code>id</code>, <code>text</code>. 선택 필드: <code>task</code>, <code>ref_audio</code>, <code>ref_text</code>, <code>instruct</code>, <code>language_id</code>, <code>duration</code>, <code>speed</code>.</div>
+                <div className="text-xs text-ink-muted">upstream batch CLI는 run-level 기본값과 sample-level override를 함께 사용합니다. 템플릿 값은 좌측 상단 TTS/프리셋 폼과 맞춰 씁니다.</div>
+              </WorkspaceCard>
+              {lastOmniVoiceBatchResult ? (
+                <WorkspaceCard className="flex flex-col gap-2">
+                  <div className="text-xs font-medium text-ink-muted">최근 배치 결과</div>
+                  <div className="text-sm text-ink">run_id: {lastOmniVoiceBatchResult.run_id} · status: {lastOmniVoiceBatchResult.status}</div>
+                  <div className="text-xs text-ink-muted">output_dir: {lastOmniVoiceBatchResult.output_dir}</div>
+                  {lastOmniVoiceBatchResult.generated_files?.length ? (
+                    <div className="flex flex-col gap-1 pt-2">
+                      {lastOmniVoiceBatchResult.generated_files.slice(0, 8).map((file, index) => (
+                        <div key={`${String(file.id || index)}`} className="text-xs text-ink-muted break-all">
+                          {String(file.id || `sample_${index + 1}`)} · {String(file.path || "")}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </WorkspaceCard>
+              ) : null}
+            </aside>
+          </form>
+        </WorkspaceShell>
+      ) : null}
+
+      {activeTab === "omnivoice_train" ? (
+        <WorkspaceShell>
+          <WorkspaceHeader
+            eyebrow="OMNIVOICE"
+            eyebrowIcon={AudioLines}
+            title="OmniVoice 학습"
+            subtitle="upstream JSON train/data config를 그대로 사용합니다. macOS/Windows에서는 기본적으로 sdpa 경로를 쓰도록 보정됩니다."
+            action={{
+              label: "학습 실행",
+              formId: "omnivoice-train-form",
+              disabled: loading || !omnivoiceTrainForm.train_config_json.trim() || !omnivoiceTrainForm.data_config_json.trim(),
+              loading,
+            }}
+          />
+          <form id="omnivoice-train-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceTrain}>
+            <div className="flex flex-col gap-5">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Base model</Label><Input value={omnivoiceTrainForm.base_model} onChange={(event) => setOmniVoiceTrainForm((prev) => ({ ...prev, base_model: event.target.value }))} /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Run name</Label><Input value={omnivoiceTrainForm.run_name} onChange={(event) => setOmniVoiceTrainForm((prev) => ({ ...prev, run_name: event.target.value }))} placeholder="optional" /></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">accelerate args</Label><Input value={omnivoiceTrainForm.accelerate_args} onChange={(event) => setOmniVoiceTrainForm((prev) => ({ ...prev, accelerate_args: event.target.value }))} /></div>
+                </div>
+                <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">extra args</Label><Input value={omnivoiceTrainForm.extra_args} onChange={(event) => setOmniVoiceTrainForm((prev) => ({ ...prev, extra_args: event.target.value }))} placeholder="optional CLI args" /></div>
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">train_config.json</Label>
+                    <Textarea value={omnivoiceTrainForm.train_config_json} onChange={(event) => setOmniVoiceTrainForm((prev) => ({ ...prev, train_config_json: event.target.value }))} className="min-h-[360px] resize-y border-line bg-canvas font-mono text-xs" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">data_config.json</Label>
+                    <Textarea value={omnivoiceTrainForm.data_config_json} onChange={(event) => setOmniVoiceTrainForm((prev) => ({ ...prev, data_config_json: event.target.value }))} className="min-h-[360px] resize-y border-line bg-canvas font-mono text-xs" />
+                  </div>
+                </div>
+              </WorkspaceCard>
+            </div>
+            <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-ink-muted">upstream 메모</div>
+                <div className="text-xs text-ink-muted">학습은 <code>accelerate launch -m omnivoice.cli.train</code>를 감싸는 방식입니다. config 안의 <code>init_from_checkpoint</code>가 비어 있으면 현재 base model 경로를 자동으로 넣습니다.</div>
+              </WorkspaceCard>
+              {lastOmniVoiceTrainResult ? (
+                <WorkspaceCard className="flex flex-col gap-2">
+                  <div className="text-xs font-medium text-ink-muted">최근 학습 결과</div>
+                  <div className="text-sm text-ink">run_id: {lastOmniVoiceTrainResult.run_id} · status: {lastOmniVoiceTrainResult.status}</div>
+                  <div className="text-xs text-ink-muted">checkpoint_dir: {lastOmniVoiceTrainResult.checkpoint_dir}</div>
+                  {lastOmniVoiceTrainResult.log_tail ? (
+                    <pre className="rounded border border-line bg-canvas p-3 text-xs overflow-x-auto max-h-48">{lastOmniVoiceTrainResult.log_tail}</pre>
+                  ) : null}
+                </WorkspaceCard>
+              ) : null}
+            </aside>
+          </form>
         </WorkspaceShell>
       ) : null}
 
