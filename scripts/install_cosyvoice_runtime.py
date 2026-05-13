@@ -42,6 +42,17 @@ def run(command: List[str]) -> None:
     subprocess.run(command, check=True)
 
 
+def normalize_index_url(raw: str) -> str:
+    return raw.split(" #", 1)[0].strip()
+
+
+def should_use_extra_index(url: str) -> bool:
+    normalized = normalize_index_url(url)
+    if "aiinfra.pkgs.visualstudio.com" in normalized and sys.platform != "linux":
+        return False
+    return True
+
+
 def parse_requirements(requirements_path: Path) -> tuple[List[str], List[str]]:
     """Return (extra_index_urls, requirement_lines) without torch-family pins."""
 
@@ -52,8 +63,9 @@ def parse_requirements(requirements_path: Path) -> tuple[List[str], List[str]]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("--extra-index-url"):
-            url = line.split(maxsplit=1)[1].strip()
-            extra_index_urls.append(url)
+            url = normalize_index_url(line.split(maxsplit=1)[1].strip())
+            if should_use_extra_index(url):
+                extra_index_urls.append(url)
             continue
         if line.startswith("--"):
             continue
