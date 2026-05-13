@@ -17,19 +17,27 @@ Required local assets (downloaded from ``Supertone/supertonic-3`` on HF):
 * ``data/models/supertonic3/voice_styles/<NAME>.json`` (M1, M4, F1, …)
 
 Inference contract: ``Engine.run(text, language, voice_style_name, ...)``.
-**Fine-tuning is intentionally not exposed here** — upstream only publishes
-ONNX inference. The Phase 4 reverse-engineering attempt lives outside this
-module.
+
+Upstream publishes ONNX inference assets, not a trainable PyTorch stack. The
+``create_cloned_voice_style`` helper therefore implements the practical path
+available from those assets: it creates a new style JSON by blending and lightly
+adapting published style vectors from reference-audio features. This is not a
+full model fine-tune, but it gives the UI a reusable cloned Supertonic voice
+asset instead of a label-only preset.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 
 class SupertonicError(RuntimeError):
@@ -86,6 +94,7 @@ class Supertonic3Engine:
         self.supertonic_root = resolve_supertonic_root(repo_root)
         self.model_dir = resolve_supertonic_model_dir(repo_root)
         self.voice_dir = resolve_supertonic_voice_dir(repo_root)
+        self.custom_voice_style_dir = self.voice_dir / "voice_styles"
         self.helper_module_path = self.supertonic_root / "py" / "helper.py"
         self.onnx_dir = self.model_dir / "onnx"
         self.builtin_voice_style_dir = self.model_dir / "voice_styles"
@@ -145,6 +154,16 @@ class Supertonic3Engine:
                 results.append({"name": path.stem, "available": True})
                 seen.add(path.stem)
         return results
+
+    def list_custom_voice_styles(self) -> List[Dict[str, Any]]:
+        """Voice style JSON files created by the reverse-engineered cloner."""
+
+        if not self.custom_voice_style_dir.exists():
+            return []
+        items: List[Dict[str, Any]] = []
+        for path in sorted(self.custom_voice_style_dir.glob("*.json")):
+            items.append({"name": path.stem, "available": True, "path": str(path)})
+        return items
 
     def list_voice_presets(self) -> List[Dict[str, Any]]:
         """User-saved Supertonic voice presets (label-only; the underlying
@@ -218,6 +237,10 @@ class Supertonic3Engine:
         if builtin.exists():
             return builtin.resolve()
 
+        custom = self.custom_voice_style_dir / f"{voice_style}.json"
+        if custom.exists():
+            return custom.resolve()
+
         preset = self.voice_dir / f"{voice_style}.json"
         if preset.exists():
             try:
@@ -241,6 +264,138 @@ class Supertonic3Engine:
             f"Tried built-in {self.builtin_voice_style_dir}/{voice_style}.json "
             f"and preset {preset}."
         )
+
+    def _available_source_style_paths(self) -> Dict[str, Path]:
+        paths: Dict[str, Path] = {}
+        for item in self.list_builtin_voice_styles():
+            if item.get("available"):
+                name = str(item["name"])
+                try:
+                    paths[name] = self._resolve_voice_style_path(name)
+                except SupertonicError:
+                    continue
+        for item in self.list_custom_voice_styles():
+            if item.get("available"):
+                name = str(item["name"])
+                try:
+                    paths[name] = self._resolve_voice_style_path(name)
+                except SupertonicError:
+                    continue
+        return paths
+
+    @staticmethod
+    def _slugify(value: str, default: str = "supertonic-clone") -> str:
+        slug = re.sub(r"[^A-Za-z0-9가-힣_-]+", "-", value.strip()).strip("-_")
+        return slug[:80] or default
+
+    @staticmethod
+    def _load_style_json(path: Path) -> Dict[str, Any]:
+        style = json.loads(path.read_text(encoding="utf-8"))
+        if "style_ttl" not in style or "style_dp" not in style:
+            raise SupertonicError(f"Invalid Supertonic style JSON: {path}")
+        return style
+
+    @staticmethod
+    def _style_array(style: Dict[str, Any], key: str) -> np.ndarray:
+        block = style.get(key) or {}
+        dims = block.get("dims")
+        data = block.get("data")
+        if not dims or data is None:
+            raise SupertonicError(f"Style JSON is missing {key}.dims/data")
+        return np.asarray(data, dtype=np.float32).reshape(dims)
+
+    @staticmethod
+    def _style_template(style: Dict[str, Any], ttl: np.ndarray, dp: np.ndarray) -> Dict[str, Any]:
+        next_style = json.loads(json.dumps(style))
+        next_style["style_ttl"]["data"] = ttl.astype(np.float32).reshape(-1).tolist()
+        next_style["style_dp"]["data"] = dp.astype(np.float32).reshape(-1).tolist()
+        return next_style
+
+    @staticmethod
+    def _reference_feature_bias(features: Dict[str, Any]) -> float:
+        pitch = float(features.get("pitch_median_hz") or 150.0)
+        energy = float(features.get("rms_mean") or 0.04)
+        centroid = float(features.get("spectral_centroid_mean") or 1800.0)
+        pitch_bias = (pitch - 150.0) / 500.0
+        energy_bias = (energy - 0.04) * 1.4
+        centroid_bias = (centroid - 1800.0) / 12000.0
+        return float(np.clip(pitch_bias + energy_bias + centroid_bias, -0.2, 0.2))
+
+    def create_cloned_voice_style(
+        self,
+        *,
+        name: str,
+        base_voice_styles: List[str],
+        reference_audio_paths: List[str],
+        reference_features: Dict[str, Any],
+        language: str = "ko",
+        notes: str = "",
+        adaptation_strength: float = 0.08,
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Create a reusable custom Supertonic style JSON.
+
+        The output is a real style vector file that ``run`` can resolve by
+        name. It is intentionally conservative: selected source styles are
+        averaged, then nudged by deterministic low-amplitude noise derived from
+        the reference feature summary.
+        """
+
+        style_sources = self._available_source_style_paths()
+        if not style_sources:
+            raise SupertonicError(
+                f"No Supertonic source voice styles found in {self.builtin_voice_style_dir}."
+            )
+
+        selected_names = [item for item in base_voice_styles if item in style_sources]
+        if not selected_names:
+            pitch = float(reference_features.get("pitch_median_hz") or 0.0)
+            preferred_prefix = "F" if pitch >= 165.0 else "M"
+            selected_names = [
+                name for name in DEFAULT_VOICE_STYLES if name.startswith(preferred_prefix) and name in style_sources
+            ] or list(style_sources.keys())[:2]
+
+        styles = [self._load_style_json(style_sources[name]) for name in selected_names]
+        ttl_arrays = [self._style_array(style, "style_ttl") for style in styles]
+        dp_arrays = [self._style_array(style, "style_dp") for style in styles]
+        ttl = np.mean(np.stack(ttl_arrays, axis=0), axis=0)
+        dp = np.mean(np.stack(dp_arrays, axis=0), axis=0)
+
+        strength = float(np.clip(adaptation_strength, 0.0, 0.35))
+        if strength > 0:
+            seed_value = seed if seed is not None else abs(hash(json.dumps(reference_features, sort_keys=True))) % (2**32)
+            rng = np.random.default_rng(seed_value)
+            bias = self._reference_feature_bias(reference_features)
+            ttl_std = float(np.std(ttl) or 1.0)
+            dp_std = float(np.std(dp) or 1.0)
+            ttl = ttl + rng.normal(0.0, ttl_std * strength, size=ttl.shape).astype(np.float32)
+            dp = dp + rng.normal(0.0, dp_std * strength, size=dp.shape).astype(np.float32)
+            ttl = ttl + np.float32(bias * ttl_std * 0.08)
+            dp = dp + np.float32(bias * dp_std * 0.08)
+
+        slug = self._slugify(name)
+        self.custom_voice_style_dir.mkdir(parents=True, exist_ok=True)
+        self.voice_dir.mkdir(parents=True, exist_ok=True)
+        style_path = self.custom_voice_style_dir / f"{slug}.json"
+        preset_path = self.voice_dir / f"{slug}.json"
+        cloned_style = self._style_template(styles[0], ttl, dp)
+        style_path.write_text(json.dumps(cloned_style, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        record = {
+            "name": slug,
+            "voice_style": slug,
+            "voice_style_path": str(style_path),
+            "language": language,
+            "notes": notes,
+            "kind": "reverse_engineered_style_clone",
+            "base_voice_styles": selected_names,
+            "reference_audio_paths": reference_audio_paths,
+            "reference_features": reference_features,
+            "adaptation_strength": strength,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        preset_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"path": str(preset_path), **record}
 
     # ------------------------------------------------------------------ #
     # Inference

@@ -28,6 +28,7 @@ VOXCPM_MODEL_DIR="${VOXCPM_MODEL_DIR:-${ROOT_DIR}/data/models/voxcpm2}"
 SUPERTONIC_DIR="${SUPERTONIC_REPO_ROOT:-${VENDOR_DIR}/Supertonic}"
 SUPERTONIC_MODEL_DIR="${SUPERTONIC_MODEL_DIR:-${ROOT_DIR}/data/models/supertonic3}"
 PROFILE="${1:-all}"
+INSTALL_VENDOR_RUNTIMES="${INSTALL_VENDOR_RUNTIMES:-0}"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
   echo "Virtual environment not found. Run ./scripts/setup_backend.sh first." >&2
@@ -61,6 +62,16 @@ export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
 PRIVATE_ASSET_REPO_ID="${PRIVATE_ASSET_REPO_ID:-}"
 PRIVATE_ASSET_REVISION="${PRIVATE_ASSET_REVISION:-main}"
 QWEN_USE_PRIVATE_ASSET_REPO="${QWEN_USE_PRIVATE_ASSET_REPO:-0}"
+
+require_nonempty_dir() {
+  local label="$1"
+  local target_dir="$2"
+  if [[ ! -d "${target_dir}" ]] || ! find "${target_dir}" -type f -not -path '*/.cache/*' | head -n 1 >/dev/null; then
+    echo "Error: ${label} download produced no usable files: ${target_dir}" >&2
+    echo "Remove the empty directory and rerun this script, or check the model id / network / credentials." >&2
+    exit 1
+  fi
+}
 
 download_private_asset() {
   local repo_path="$1"
@@ -179,18 +190,22 @@ if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "v
   fi
   echo "Using vendored VibeVoice source: ${VIBEVOICE_DIR}"
 
-  if [[ ! -d "${VIBEVOICE_VENV}" ]]; then
-    echo "Creating VibeVoice venv -> ${VIBEVOICE_VENV}"
-    python -m venv "${VIBEVOICE_VENV}"
+  if [[ "${INSTALL_VENDOR_RUNTIMES}" == "1" ]]; then
+    if [[ ! -d "${VIBEVOICE_VENV}" ]]; then
+      echo "Creating VibeVoice venv -> ${VIBEVOICE_VENV}"
+      python -m venv "${VIBEVOICE_VENV}"
+    fi
+    "${VIBEVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+    if [[ -f "${VIBEVOICE_DIR}/requirements.txt" ]]; then
+      "${VIBEVOICE_VENV}/bin/python" -m pip install -r "${VIBEVOICE_DIR}/requirements.txt"
+    fi
+    if [[ -f "${VIBEVOICE_DIR}/pyproject.toml" || -f "${VIBEVOICE_DIR}/setup.py" ]]; then
+      "${VIBEVOICE_VENV}/bin/python" -m pip install -e "${VIBEVOICE_DIR}"
+    fi
+    "${VIBEVOICE_VENV}/bin/python" -m pip install librosa soundfile huggingface_hub transformers accelerate peft
+  else
+    echo "Skipping VibeVoice runtime install during model download."
   fi
-  "${VIBEVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
-  if [[ -f "${VIBEVOICE_DIR}/requirements.txt" ]]; then
-    "${VIBEVOICE_VENV}/bin/python" -m pip install -r "${VIBEVOICE_DIR}/requirements.txt"
-  fi
-  if [[ -f "${VIBEVOICE_DIR}/pyproject.toml" || -f "${VIBEVOICE_DIR}/setup.py" ]]; then
-    "${VIBEVOICE_VENV}/bin/python" -m pip install -e "${VIBEVOICE_DIR}"
-  fi
-  "${VIBEVOICE_VENV}/bin/python" -m pip install librosa soundfile huggingface_hub transformers accelerate peft
 
   VIBEVOICE_INCLUDE_7B="${VIBEVOICE_INCLUDE_7B:-0}"
   if [[ "${PROFILE}" == "vibevoice-7b" ]]; then
@@ -242,6 +257,12 @@ for repo_id, dirname in models:
 suffix = ", and community 7B TTS" if include_7b else ""
 print(f"VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS{suffix} model downloads completed.")
 PY
+  require_nonempty_dir "VibeVoice ASR" "${VIBEVOICE_MODEL_DIR}/VibeVoice-ASR"
+  require_nonempty_dir "VibeVoice Realtime 0.5B" "${VIBEVOICE_MODEL_DIR}/VibeVoice-Realtime-0.5B"
+  require_nonempty_dir "VibeVoice 1.5B" "${VIBEVOICE_MODEL_DIR}/VibeVoice-1.5B"
+  if [[ "${VIBEVOICE_INCLUDE_7B}" == "1" ]]; then
+    require_nonempty_dir "VibeVoice 7B" "${VIBEVOICE_MODEL_DIR}/VibeVoice-7B"
+  fi
 fi
 
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "s2pro" ]]; then
@@ -372,26 +393,30 @@ if [[ "${PROFILE}" == "all" || "${PROFILE}" == "omnivoice" ]]; then
   fi
   echo "Using vendored OmniVoice source: ${OMNIVOICE_DIR}"
 
-  if [[ ! -d "${OMNIVOICE_VENV}" ]]; then
-    echo "Creating OmniVoice venv -> ${OMNIVOICE_VENV}"
-    python -m venv "${OMNIVOICE_VENV}"
-  fi
-  "${OMNIVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
-
-  if [[ -z "${OMNIVOICE_TORCH_PROFILE}" ]]; then
-    if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
-      OMNIVOICE_TORCH_PROFILE="mps"
-    elif command -v nvidia-smi >/dev/null 2>&1; then
-      OMNIVOICE_TORCH_PROFILE="cu128"
-    else
-      OMNIVOICE_TORCH_PROFILE="cpu"
+  if [[ "${INSTALL_VENDOR_RUNTIMES}" == "1" ]]; then
+    if [[ ! -d "${OMNIVOICE_VENV}" ]]; then
+      echo "Creating OmniVoice venv -> ${OMNIVOICE_VENV}"
+      python -m venv "${OMNIVOICE_VENV}"
     fi
+    "${OMNIVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+
+    if [[ -z "${OMNIVOICE_TORCH_PROFILE}" ]]; then
+      if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
+        OMNIVOICE_TORCH_PROFILE="mps"
+      elif command -v nvidia-smi >/dev/null 2>&1; then
+        OMNIVOICE_TORCH_PROFILE="cu128"
+      else
+        OMNIVOICE_TORCH_PROFILE="cpu"
+      fi
+    fi
+    echo "Installing OmniVoice runtime into ${OMNIVOICE_VENV} (torch profile: ${OMNIVOICE_TORCH_PROFILE})"
+    OMNIVOICE_TORCH_PROFILE="${OMNIVOICE_TORCH_PROFILE}" \
+      "${OMNIVOICE_VENV}/bin/python" "${ROOT_DIR}/scripts/install_omnivoice_runtime.py" \
+        --repo-root "${OMNIVOICE_DIR}" \
+        --torch-profile "${OMNIVOICE_TORCH_PROFILE}"
+  else
+    echo "Skipping OmniVoice runtime install during model download."
   fi
-  echo "Installing OmniVoice runtime into ${OMNIVOICE_VENV} (torch profile: ${OMNIVOICE_TORCH_PROFILE})"
-  OMNIVOICE_TORCH_PROFILE="${OMNIVOICE_TORCH_PROFILE}" \
-    "${OMNIVOICE_VENV}/bin/python" "${ROOT_DIR}/scripts/install_omnivoice_runtime.py" \
-      --repo-root "${OMNIVOICE_DIR}" \
-      --torch-profile "${OMNIVOICE_TORCH_PROFILE}"
 
   python - "${OMNIVOICE_MODEL_DIR}" "${OMNIVOICE_HF_MODEL_ID}" "${OMNIVOICE_LOCAL_DIRNAME}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
 import shutil
@@ -430,6 +455,7 @@ else:
     )
 print("OmniVoice model download completed.")
 PY
+  require_nonempty_dir "OmniVoice" "${OMNIVOICE_MODEL_DIR}/${OMNIVOICE_LOCAL_DIRNAME}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -445,26 +471,30 @@ if [[ "${PROFILE}" == "all" || "${PROFILE}" == "cosyvoice" ]]; then
     echo "Restore the vendored CosyVoice source under vendor/CosyVoice before running this profile." >&2
     exit 1
   fi
-  if [[ ! -d "${COSYVOICE_VENV}" ]]; then
-    echo "Creating CosyVoice venv -> ${COSYVOICE_VENV}"
-    python -m venv "${COSYVOICE_VENV}"
-  fi
-  "${COSYVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
-
-  if [[ -z "${COSYVOICE_TORCH_PROFILE}" ]]; then
-    if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
-      COSYVOICE_TORCH_PROFILE="mps"
-    elif command -v nvidia-smi >/dev/null 2>&1; then
-      COSYVOICE_TORCH_PROFILE="cu121"
-    else
-      COSYVOICE_TORCH_PROFILE="cpu"
+  if [[ "${INSTALL_VENDOR_RUNTIMES}" == "1" ]]; then
+    if [[ ! -d "${COSYVOICE_VENV}" ]]; then
+      echo "Creating CosyVoice venv -> ${COSYVOICE_VENV}"
+      python -m venv "${COSYVOICE_VENV}"
     fi
+    "${COSYVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+
+    if [[ -z "${COSYVOICE_TORCH_PROFILE}" ]]; then
+      if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
+        COSYVOICE_TORCH_PROFILE="mps"
+      elif command -v nvidia-smi >/dev/null 2>&1; then
+        COSYVOICE_TORCH_PROFILE="cu121"
+      else
+        COSYVOICE_TORCH_PROFILE="cpu"
+      fi
+    fi
+    echo "Installing CosyVoice runtime into ${COSYVOICE_VENV} (torch profile: ${COSYVOICE_TORCH_PROFILE})"
+    COSYVOICE_TORCH_PROFILE="${COSYVOICE_TORCH_PROFILE}" \
+      "${COSYVOICE_VENV}/bin/python" "${ROOT_DIR}/scripts/install_cosyvoice_runtime.py" \
+        --repo-root "${COSYVOICE_DIR}" \
+        --torch-profile "${COSYVOICE_TORCH_PROFILE}"
+  else
+    echo "Skipping CosyVoice runtime install during model download."
   fi
-  echo "Installing CosyVoice runtime into ${COSYVOICE_VENV} (torch profile: ${COSYVOICE_TORCH_PROFILE})"
-  COSYVOICE_TORCH_PROFILE="${COSYVOICE_TORCH_PROFILE}" \
-    "${COSYVOICE_VENV}/bin/python" "${ROOT_DIR}/scripts/install_cosyvoice_runtime.py" \
-      --repo-root "${COSYVOICE_DIR}" \
-      --torch-profile "${COSYVOICE_TORCH_PROFILE}"
 
   python - "${COSYVOICE_MODEL_DIR}" "${COSYVOICE_HF_MODEL_ID}" "${COSYVOICE_LOCAL_DIRNAME}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
 import shutil
@@ -507,6 +537,7 @@ print(
     "Override COSYVOICE_HF_MODEL_ID + COSYVOICE_LOCAL_DIRNAME to switch."
 )
 PY
+  require_nonempty_dir "CosyVoice" "${COSYVOICE_MODEL_DIR}/${COSYVOICE_LOCAL_DIRNAME}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -522,26 +553,30 @@ if [[ "${PROFILE}" == "all" || "${PROFILE}" == "voxcpm" ]]; then
     echo "vendor/VoxCPM must be present (cloned from OpenBMB/VoxCPM)." >&2
     exit 1
   fi
-  if [[ ! -d "${VOXCPM_VENV}" ]]; then
-    echo "Creating VoxCPM venv -> ${VOXCPM_VENV}"
-    python -m venv "${VOXCPM_VENV}"
-  fi
-  "${VOXCPM_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
-
-  if [[ -z "${VOXCPM_TORCH_PROFILE}" ]]; then
-    if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
-      VOXCPM_TORCH_PROFILE="mps"
-    elif command -v nvidia-smi >/dev/null 2>&1; then
-      VOXCPM_TORCH_PROFILE="cu121"
-    else
-      VOXCPM_TORCH_PROFILE="cpu"
+  if [[ "${INSTALL_VENDOR_RUNTIMES}" == "1" ]]; then
+    if [[ ! -d "${VOXCPM_VENV}" ]]; then
+      echo "Creating VoxCPM venv -> ${VOXCPM_VENV}"
+      python -m venv "${VOXCPM_VENV}"
     fi
+    "${VOXCPM_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
+
+    if [[ -z "${VOXCPM_TORCH_PROFILE}" ]]; then
+      if [[ "${OS_NAME:-$(uname -s)}" == "Darwin" ]]; then
+        VOXCPM_TORCH_PROFILE="mps"
+      elif command -v nvidia-smi >/dev/null 2>&1; then
+        VOXCPM_TORCH_PROFILE="cu121"
+      else
+        VOXCPM_TORCH_PROFILE="cpu"
+      fi
+    fi
+    echo "Installing VoxCPM runtime into ${VOXCPM_VENV} (torch profile: ${VOXCPM_TORCH_PROFILE})"
+    VOXCPM_TORCH_PROFILE="${VOXCPM_TORCH_PROFILE}" \
+      "${VOXCPM_VENV}/bin/python" "${ROOT_DIR}/scripts/install_voxcpm_runtime.py" \
+        --repo-root "${VOXCPM_DIR}" \
+        --torch-profile "${VOXCPM_TORCH_PROFILE}"
+  else
+    echo "Skipping VoxCPM runtime install during model download."
   fi
-  echo "Installing VoxCPM runtime into ${VOXCPM_VENV} (torch profile: ${VOXCPM_TORCH_PROFILE})"
-  VOXCPM_TORCH_PROFILE="${VOXCPM_TORCH_PROFILE}" \
-    "${VOXCPM_VENV}/bin/python" "${ROOT_DIR}/scripts/install_voxcpm_runtime.py" \
-      --repo-root "${VOXCPM_DIR}" \
-      --torch-profile "${VOXCPM_TORCH_PROFILE}"
 
   python - "${VOXCPM_MODEL_DIR}" "${VOXCPM_HF_MODEL_ID}" "${VOXCPM_LOCAL_DIRNAME}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" <<'PY'
 import shutil
@@ -580,6 +615,7 @@ else:
     )
 print("VoxCPM2 model download completed.")
 PY
+  require_nonempty_dir "VoxCPM2" "${VOXCPM_MODEL_DIR}/${VOXCPM_LOCAL_DIRNAME}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -633,6 +669,7 @@ else:
     )
 print("Supertonic 3 ONNX bundle download completed.")
 PY
+  require_nonempty_dir "Supertonic 3" "${SUPERTONIC_MODEL_DIR}"
 fi
 
 APPLIO_DEFAULT_RVC_MODEL_URL="${APPLIO_DEFAULT_RVC_MODEL_URL:-https://huggingface.co/SmlCoke/rvc-yui/resolve/main/weights/yui-mix-pro-hq-40k.pth}"

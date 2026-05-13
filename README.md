@@ -48,7 +48,7 @@
 - `VoxCPM2 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
   OpenBMB VoxCPM2 (Apache 2.0, 30개 언어, 한국어 SIM 1위)를 `.venv-voxcpm2` subprocess로 다룹니다. `voice_design` (괄호 디스크립터), `voice_cloning`, `ultimate_cloning` 세 가지 추론 모드와 `lm`/`dit`/`proj` LoRA 어댑터 학습을 한 화면에서 실행합니다. 학습 런처는 upstream `scripts/train_voxcpm_finetune.py`를 직접 호출합니다.
 - `Supertonic 3 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
-  Supertone Supertonic 3 (BigScience Open RAIL-M, 31개 언어, ONNX 추론)를 메인 venv 안에서 in-process로 실행합니다. `<laugh>`, `<breath>`, `<sigh>` 3개의 학습된 표현 태그를 인식하며, built-in voice style(M1~F4) 기반으로 동작합니다. **학습은 upstream 미공개로 Phase 4 역공학이 완료될 때까지 `/api/supertonic/train`이 501을 반환**합니다.
+  Supertone Supertonic 3 (BigScience Open RAIL-M, 31개 언어, ONNX 추론)를 메인 venv 안에서 in-process로 실행합니다. `<laugh>`, `<breath>`, `<sigh>` 3개의 학습된 표현 태그를 인식하며, built-in voice style(M1~F4)과 역공학 기반 커스텀 style JSON을 모두 사용할 수 있습니다. 학습 탭은 full fine-tune이 아니라 참조 오디오 특징을 바탕으로 새 style vector를 생성하는 클로닝/실험 학습 경로입니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 

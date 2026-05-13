@@ -441,7 +441,7 @@ class AudioDatasetBuildRequest(BaseModel):
     """모델별 학습 탭에 넘길 raw/prepared 오디오 데이터셋 생성 요청."""
 
     name: str = Field(..., min_length=1)
-    target: str = Field(..., pattern="^(s2_pro|vibevoice|rvc|mmaudio|ace_step)$")
+    target: str = Field(..., pattern="^(s2_pro|vibevoice|rvc|mmaudio|ace_step|cosyvoice|voxcpm|supertonic|omnivoice)$")
     source_type: str = Field("gallery", pattern="^(gallery|folder)$")
     samples: List[DatasetSampleInput] = Field(default_factory=list)
     sample_folder_path: Optional[str] = None
@@ -1036,13 +1036,14 @@ class Supertonic3RuntimeResponse(BaseModel):
     onnx_dir: str
     onnx_assets: List[Dict[str, Any]] = Field(default_factory=list)
     builtin_voice_styles: List[Dict[str, Any]] = Field(default_factory=list)
+    custom_voice_styles: List[Dict[str, Any]] = Field(default_factory=list)
     voice_presets: List[Dict[str, Any]] = Field(default_factory=list)
     supported_languages: List[str] = Field(default_factory=list)
     supported_expression_tags: List[str] = Field(default_factory=list)
-    training_supported: bool = False
+    training_supported: bool = True
     training_notes: str = (
-        "Supertonic 3 upstream ships ONNX inference only. Fine-tuning requires "
-        "reverse-engineering the model definition (Phase 4)."
+        "Supertonic 3 upstream ships ONNX inference only. This app supports "
+        "experimental style-vector cloning/training by creating custom voice style JSON files."
     )
 
 
@@ -1087,6 +1088,45 @@ class Supertonic3VoicePresetResponse(BaseModel):
     voice_style_path: str = ""
     language: str = ""
     notes: str = ""
+    kind: str = "preset"
+    base_voice_styles: List[str] = Field(default_factory=list)
+    reference_audio_paths: List[str] = Field(default_factory=list)
+    reference_features: Dict[str, Any] = Field(default_factory=dict)
+
+
+class Supertonic3TrainingRequest(BaseModel):
+    """Supertonic 3 역공학 기반 스타일 클로닝/실험 학습 요청."""
+
+    output_name: str = Field("supertonic-clone", min_length=1, max_length=120)
+    dataset_id: str = ""
+    reference_audio_path: str = ""
+    base_voice_styles: List[str] = Field(default_factory=lambda: ["M4", "F4"])
+    language: str = Field("ko", min_length=2, max_length=4)
+    sample_text: str = "안녕하세요. 이 목소리는 새로 저장한 Supertonic 스타일입니다."
+    adaptation_strength: float = Field(0.08, ge=0.0, le=0.35)
+    seed: Optional[int] = None
+    run_final_sample: bool = True
+    total_step: int = Field(8, ge=1, le=64)
+    speed: float = Field(1.05, gt=0.0, le=4.0)
+    silence_duration: float = Field(0.3, ge=0.0, le=5.0)
+    audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
+
+
+class Supertonic3TrainingResponse(BaseModel):
+    """Supertonic 3 스타일 클로닝/실험 학습 결과."""
+
+    run_id: str
+    status: str
+    run_dir: str
+    voice_style_name: str
+    voice_style_path: str
+    preset_path: str
+    selected_sources: List[str] = Field(default_factory=list)
+    reference_audio_paths: List[str] = Field(default_factory=list)
+    reference_features: Dict[str, Any] = Field(default_factory=dict)
+    generated_audio_path: Optional[str] = None
+    generated_audio_url: Optional[str] = None
+    log_tail: str = ""
 
 
 class OmniVoiceRuntimeResponse(BaseModel):

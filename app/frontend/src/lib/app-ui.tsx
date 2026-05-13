@@ -394,17 +394,17 @@ export const PRODUCT_PAGES = {
   supertonic_voices: {
     label: "Supertonic 프리셋",
     title: "Supertonic 3 프리셋",
-    description: "Supertonic이 제공하는 built-in voice style(M1~F4)과 메모를 묶어 프리셋으로 저장합니다. Supertonic 3는 zero-shot 클로닝을 지원하지 않습니다.",
+    description: "built-in voice style(M1~F4), 저장 프리셋, 역공학 클로닝으로 만든 커스텀 style JSON을 관리합니다.",
   },
   supertonic_dataset: {
     label: "Supertonic 데이터셋",
     title: "Supertonic 3 데이터셋",
-    description: "Supertonic 3는 ONNX 추론만 공개되어 있어 별도 학습 데이터셋이 필요 없습니다. 안내만 표시합니다.",
+    description: "참조 음성 묶음을 정리해 Supertonic 스타일 클로닝/실험 학습 입력으로 사용합니다.",
   },
   supertonic_train: {
-    label: "Supertonic 학습",
-    title: "Supertonic 3 학습 (Phase 4 보류)",
-    description: "Upstream에 학습 코드가 없어 ONNX 그래프 역공학이 필요합니다. Phase 4 평가가 끝날 때까지 학습 실행은 비활성화됩니다.",
+    label: "Supertonic 클로닝",
+    title: "Supertonic 3 클로닝 / 실험 학습",
+    description: "공개 ONNX style vector를 섞고 참조 오디오 특징으로 미세 조정한 새 voice style JSON을 생성합니다.",
   },
   omnivoice_tts: {
     label: "OmniVoice TTS",

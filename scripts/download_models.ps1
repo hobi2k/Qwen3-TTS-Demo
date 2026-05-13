@@ -35,6 +35,7 @@ $VoxCPMModelDir = if ($env:VOXCPM_MODEL_DIR) { $env:VOXCPM_MODEL_DIR } else { Jo
 $VoxCPMVenv = if ($env:VOXCPM_VENV) { $env:VOXCPM_VENV } else { Join-Path $RootDir ".venv-voxcpm2" }
 $SupertonicDir = if ($env:SUPERTONIC_REPO_ROOT) { $env:SUPERTONIC_REPO_ROOT } else { Join-Path $VendorDir "Supertonic" }
 $SupertonicModelDir = if ($env:SUPERTONIC_MODEL_DIR) { $env:SUPERTONIC_MODEL_DIR } else { Join-Path $RootDir "data\models\supertonic3" }
+$InstallVendorRuntimes = if ($env:INSTALL_VENDOR_RUNTIMES) { $env:INSTALL_VENDOR_RUNTIMES } else { "0" }
 
 if (-not (Test-Path $VenvDir)) {
     throw "Virtual environment not found. Run .\scripts\setup_backend.ps1 first."
@@ -84,6 +85,22 @@ function Assert-VendoredSource {
     }
 
     Write-Host "Using vendored $Name source: $TargetDir"
+}
+
+function Assert-NonEmptyModelDir {
+    param(
+        [string]$Name,
+        [string]$TargetDir
+    )
+    if (-not (Test-Path $TargetDir)) {
+        throw "$Name download produced no usable files: $TargetDir"
+    }
+    $file = Get-ChildItem -Path $TargetDir -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '\\.cache\\' } |
+        Select-Object -First 1
+    if (-not $file) {
+        throw "$Name download produced no usable files: $TargetDir"
+    }
 }
 
 function Download-PrivateAsset {
@@ -199,18 +216,23 @@ if (($Profile -eq "all") -or ($Profile -eq "vibevoice") -or ($Profile -eq "vibev
     if (-not (Test-Path (Join-Path $VibeVoiceDir "pyproject.toml"))) {
         throw "VibeVoice vendored source is incomplete (missing pyproject.toml): $VibeVoiceDir"
     }
-    if (-not (Test-Path $VibeVoiceVenv)) {
-        Write-Host "Creating VibeVoice venv -> $VibeVoiceVenv"
-        python -m venv $VibeVoiceVenv
+    if ($InstallVendorRuntimes -eq "1") {
+        if (-not (Test-Path $VibeVoiceVenv)) {
+            Write-Host "Creating VibeVoice venv -> $VibeVoiceVenv"
+            python -m venv $VibeVoiceVenv
+        }
+        $VibeVoicePython = Join-Path $VibeVoiceVenv "Scripts\python.exe"
+        & $VibeVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
+        $VibeVoiceRequirements = Join-Path $VibeVoiceDir "requirements.txt"
+        if (Test-Path $VibeVoiceRequirements) {
+            & $VibeVoicePython -m pip install -r $VibeVoiceRequirements | Out-Host
+        }
+        & $VibeVoicePython -m pip install -e $VibeVoiceDir | Out-Host
+        & $VibeVoicePython -m pip install librosa soundfile huggingface_hub transformers accelerate peft | Out-Host
     }
-    $VibeVoicePython = Join-Path $VibeVoiceVenv "Scripts\python.exe"
-    & $VibeVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
-    $VibeVoiceRequirements = Join-Path $VibeVoiceDir "requirements.txt"
-    if (Test-Path $VibeVoiceRequirements) {
-        & $VibeVoicePython -m pip install -r $VibeVoiceRequirements | Out-Host
+    else {
+        Write-Host "Skipping VibeVoice runtime install during model download."
     }
-    & $VibeVoicePython -m pip install -e $VibeVoiceDir | Out-Host
-    & $VibeVoicePython -m pip install librosa soundfile huggingface_hub transformers accelerate peft | Out-Host
 
     python -c @"
 from pathlib import Path
@@ -239,6 +261,12 @@ for repo_id, dirname in models:
 suffix = ', and community 7B TTS' if include_7b else ''
 print(f'VibeVoice ASR, Realtime 0.5B TTS, 1.5B TTS{suffix} model downloads completed.')
 "@
+    Assert-NonEmptyModelDir -Name "VibeVoice ASR" -TargetDir (Join-Path $VibeVoiceModelDir "VibeVoice-ASR")
+    Assert-NonEmptyModelDir -Name "VibeVoice Realtime 0.5B" -TargetDir (Join-Path $VibeVoiceModelDir "VibeVoice-Realtime-0.5B")
+    Assert-NonEmptyModelDir -Name "VibeVoice 1.5B" -TargetDir (Join-Path $VibeVoiceModelDir "VibeVoice-1.5B")
+    if ($VibeVoiceInclude7B -eq "1") {
+        Assert-NonEmptyModelDir -Name "VibeVoice 7B" -TargetDir (Join-Path $VibeVoiceModelDir "VibeVoice-7B")
+    }
 }
 
 # --------------------------------------------------------------------------
@@ -251,18 +279,23 @@ if (($Profile -eq "all") -or ($Profile -eq "omnivoice")) {
     if (-not (Test-Path (Join-Path $OmniVoiceDir "pyproject.toml"))) {
         throw "OmniVoice vendored source is incomplete (missing pyproject.toml): $OmniVoiceDir"
     }
-    if (-not (Test-Path $OmniVoiceVenv)) {
-        Write-Host "Creating OmniVoice venv -> $OmniVoiceVenv"
-        python -m venv $OmniVoiceVenv
-    }
-    $OmniVoicePython = Join-Path $OmniVoiceVenv "Scripts\python.exe"
-    & $OmniVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
+    if ($InstallVendorRuntimes -eq "1") {
+        if (-not (Test-Path $OmniVoiceVenv)) {
+            Write-Host "Creating OmniVoice venv -> $OmniVoiceVenv"
+            python -m venv $OmniVoiceVenv
+        }
+        $OmniVoicePython = Join-Path $OmniVoiceVenv "Scripts\python.exe"
+        & $OmniVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
 
-    $OmniVoiceTorchProfile = if ($env:OMNIVOICE_TORCH_PROFILE) { $env:OMNIVOICE_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
-    if ($OmniVoiceTorchProfile -eq "cu121") { $OmniVoiceTorchProfile = "cu128" }
-    Write-Host "Installing OmniVoice runtime into $OmniVoiceVenv (torch profile: $OmniVoiceTorchProfile)"
-    $env:OMNIVOICE_TORCH_PROFILE = $OmniVoiceTorchProfile
-    & $OmniVoicePython (Join-Path $RootDir "scripts\install_omnivoice_runtime.py") --repo-root $OmniVoiceDir --torch-profile $OmniVoiceTorchProfile | Out-Host
+        $OmniVoiceTorchProfile = if ($env:OMNIVOICE_TORCH_PROFILE) { $env:OMNIVOICE_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
+        if ($OmniVoiceTorchProfile -eq "cu121") { $OmniVoiceTorchProfile = "cu128" }
+        Write-Host "Installing OmniVoice runtime into $OmniVoiceVenv (torch profile: $OmniVoiceTorchProfile)"
+        $env:OMNIVOICE_TORCH_PROFILE = $OmniVoiceTorchProfile
+        & $OmniVoicePython (Join-Path $RootDir "scripts\install_omnivoice_runtime.py") --repo-root $OmniVoiceDir --torch-profile $OmniVoiceTorchProfile | Out-Host
+    }
+    else {
+        Write-Host "Skipping OmniVoice runtime install during model download."
+    }
 
     python -c @"
 from pathlib import Path
@@ -278,6 +311,7 @@ snapshot_download(
 )
 print('OmniVoice model download completed.')
 "@
+    Assert-NonEmptyModelDir -Name "OmniVoice" -TargetDir (Join-Path $OmniVoiceModelDir $OmniVoiceLocalDirname)
 }
 
 # --------------------------------------------------------------------------
@@ -557,17 +591,22 @@ $CosyVoiceHfModelId = if ($env:COSYVOICE_HF_MODEL_ID) { $env:COSYVOICE_HF_MODEL_
 $CosyVoiceLocalDirname = if ($env:COSYVOICE_LOCAL_DIRNAME) { $env:COSYVOICE_LOCAL_DIRNAME } else { "CosyVoice2-0.5B" }
 if (($Profile -eq "all") -or ($Profile -eq "cosyvoice")) {
     Assert-VendoredSource -Name "CosyVoice" -TargetDir $CosyVoiceDir
-    if (-not (Test-Path $CosyVoiceVenv)) {
-        Write-Host "Creating CosyVoice venv -> $CosyVoiceVenv"
-        python -m venv $CosyVoiceVenv
-    }
-    $CosyVoicePython = Join-Path $CosyVoiceVenv "Scripts\python.exe"
-    & $CosyVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
+    if ($InstallVendorRuntimes -eq "1") {
+        if (-not (Test-Path $CosyVoiceVenv)) {
+            Write-Host "Creating CosyVoice venv -> $CosyVoiceVenv"
+            python -m venv $CosyVoiceVenv
+        }
+        $CosyVoicePython = Join-Path $CosyVoiceVenv "Scripts\python.exe"
+        & $CosyVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
 
-    $CosyVoiceTorchProfile = if ($env:COSYVOICE_TORCH_PROFILE) { $env:COSYVOICE_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
-    Write-Host "Installing CosyVoice runtime into $CosyVoiceVenv (torch profile: $CosyVoiceTorchProfile)"
-    $env:COSYVOICE_TORCH_PROFILE = $CosyVoiceTorchProfile
-    & $CosyVoicePython (Join-Path $RootDir "scripts\install_cosyvoice_runtime.py") --repo-root $CosyVoiceDir --torch-profile $CosyVoiceTorchProfile | Out-Host
+        $CosyVoiceTorchProfile = if ($env:COSYVOICE_TORCH_PROFILE) { $env:COSYVOICE_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
+        Write-Host "Installing CosyVoice runtime into $CosyVoiceVenv (torch profile: $CosyVoiceTorchProfile)"
+        $env:COSYVOICE_TORCH_PROFILE = $CosyVoiceTorchProfile
+        & $CosyVoicePython (Join-Path $RootDir "scripts\install_cosyvoice_runtime.py") --repo-root $CosyVoiceDir --torch-profile $CosyVoiceTorchProfile | Out-Host
+    }
+    else {
+        Write-Host "Skipping CosyVoice runtime install during model download."
+    }
 
     python -c @"
 from pathlib import Path
@@ -584,6 +623,7 @@ snapshot_download(
 print('CosyVoice 3 model download completed.')
 print('Note: Fun-CosyVoice3 official weights are on ModelScope (iic/Fun-CosyVoice3-0.5B). Override COSYVOICE_HF_MODEL_ID + COSYVOICE_LOCAL_DIRNAME to switch.')
 "@
+    Assert-NonEmptyModelDir -Name "CosyVoice" -TargetDir (Join-Path $CosyVoiceModelDir $CosyVoiceLocalDirname)
 }
 
 # --------------------------------------------------------------------------
@@ -593,17 +633,22 @@ $VoxCPMHfModelId = if ($env:VOXCPM_HF_MODEL_ID) { $env:VOXCPM_HF_MODEL_ID } else
 $VoxCPMLocalDirname = if ($env:VOXCPM_LOCAL_DIRNAME) { $env:VOXCPM_LOCAL_DIRNAME } else { "VoxCPM2" }
 if (($Profile -eq "all") -or ($Profile -eq "voxcpm")) {
     Assert-VendoredSource -Name "VoxCPM" -TargetDir $VoxCPMDir
-    if (-not (Test-Path $VoxCPMVenv)) {
-        Write-Host "Creating VoxCPM venv -> $VoxCPMVenv"
-        python -m venv $VoxCPMVenv
-    }
-    $VoxCPMPython = Join-Path $VoxCPMVenv "Scripts\python.exe"
-    & $VoxCPMPython -m pip install --upgrade pip wheel setuptools | Out-Host
+    if ($InstallVendorRuntimes -eq "1") {
+        if (-not (Test-Path $VoxCPMVenv)) {
+            Write-Host "Creating VoxCPM venv -> $VoxCPMVenv"
+            python -m venv $VoxCPMVenv
+        }
+        $VoxCPMPython = Join-Path $VoxCPMVenv "Scripts\python.exe"
+        & $VoxCPMPython -m pip install --upgrade pip wheel setuptools | Out-Host
 
-    $VoxCPMTorchProfile = if ($env:VOXCPM_TORCH_PROFILE) { $env:VOXCPM_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
-    Write-Host "Installing VoxCPM runtime into $VoxCPMVenv (torch profile: $VoxCPMTorchProfile)"
-    $env:VOXCPM_TORCH_PROFILE = $VoxCPMTorchProfile
-    & $VoxCPMPython (Join-Path $RootDir "scripts\install_voxcpm_runtime.py") --repo-root $VoxCPMDir --torch-profile $VoxCPMTorchProfile | Out-Host
+        $VoxCPMTorchProfile = if ($env:VOXCPM_TORCH_PROFILE) { $env:VOXCPM_TORCH_PROFILE } else { Detect-TorchProfileForWindows }
+        Write-Host "Installing VoxCPM runtime into $VoxCPMVenv (torch profile: $VoxCPMTorchProfile)"
+        $env:VOXCPM_TORCH_PROFILE = $VoxCPMTorchProfile
+        & $VoxCPMPython (Join-Path $RootDir "scripts\install_voxcpm_runtime.py") --repo-root $VoxCPMDir --torch-profile $VoxCPMTorchProfile | Out-Host
+    }
+    else {
+        Write-Host "Skipping VoxCPM runtime install during model download."
+    }
 
     python -c @"
 from pathlib import Path
@@ -619,6 +664,7 @@ snapshot_download(
 )
 print('VoxCPM2 model download completed.')
 "@
+    Assert-NonEmptyModelDir -Name "VoxCPM2" -TargetDir (Join-Path $VoxCPMModelDir $VoxCPMLocalDirname)
 }
 
 # --------------------------------------------------------------------------
@@ -647,6 +693,7 @@ snapshot_download(
 )
 print('Supertonic 3 ONNX bundle download completed.')
 "@
+    Assert-NonEmptyModelDir -Name "Supertonic 3" -TargetDir $SupertonicModelDir
 }
 
 Write-Host "Suggested next step:"

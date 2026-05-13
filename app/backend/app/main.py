@@ -147,6 +147,8 @@ from .schemas import (
     VoiceDesignRequest,
     Supertonic3GenerateRequest,
     Supertonic3RuntimeResponse,
+    Supertonic3TrainingRequest,
+    Supertonic3TrainingResponse,
     Supertonic3VoicePresetCreateRequest,
     Supertonic3VoicePresetResponse,
     VoxCPM2GenerateRequest,
@@ -1769,7 +1771,7 @@ def list_audio_dataset_records() -> List[AudioDatasetRecord]:
     """Qwen 외 엔진용 데이터셋 manifest를 최신순으로 반환한다."""
 
     records: List[AudioDatasetRecord] = []
-    valid_targets = {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step"}
+    valid_targets = {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step", "cosyvoice", "voxcpm", "supertonic", "omnivoice"}
     for path in sorted(storage.datasets_dir.glob("*/manifest.json"), reverse=True):
         try:
             record = storage.read_json(path)
@@ -1800,6 +1802,88 @@ def list_audio_dataset_records() -> List[AudioDatasetRecord]:
         except Exception:
             continue
     return sorted(records, key=lambda item: item.created_at or "", reverse=True)
+
+
+def load_audio_dataset_manifest(dataset_id: str, expected_target: Optional[str] = None) -> JsonDict:
+    """공용 오디오 데이터셋 manifest를 읽고 target을 검증한다."""
+
+    dataset_root = storage.dataset_dir(dataset_id)
+    manifest_path = dataset_root / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail=f"Audio dataset not found: {dataset_id}")
+    try:
+        manifest = storage.read_json(manifest_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid audio dataset manifest: {exc}") from exc
+    if expected_target and manifest.get("target") != expected_target:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dataset {dataset_id} target is {manifest.get('target')}, expected {expected_target}.",
+        )
+    return manifest
+
+
+def extract_reference_audio_paths_from_manifest(manifest: JsonDict, limit: int = 12) -> List[str]:
+    """Supertonic style cloning에 사용할 대표 오디오 경로를 manifest에서 추출한다."""
+
+    paths: List[str] = []
+    reference_audio = str(manifest.get("reference_audio_path") or "").strip()
+    if reference_audio:
+        paths.append(reference_audio)
+    for sample in manifest.get("samples", []) or []:
+        audio_path = str(sample.get("audio_path") or sample.get("lab_audio_path") or sample.get("source_audio_path") or "").strip()
+        if audio_path and audio_path not in paths:
+            paths.append(audio_path)
+        if len(paths) >= limit:
+            break
+    return paths
+
+
+def summarize_reference_audio_features(audio_paths: List[str]) -> JsonDict:
+    """참조 오디오의 간단한 음향 특징을 추출해 Supertonic style adapter에 넘긴다."""
+
+    summaries: List[JsonDict] = []
+    for audio_path in audio_paths:
+        resolved = Path(resolve_repo_audio_path(audio_path))
+        if not resolved.exists() or not resolved.is_file():
+            continue
+        try:
+            audio, sample_rate = librosa.load(str(resolved), sr=24000, mono=True)
+            if audio.size == 0:
+                continue
+            trimmed, _ = librosa.effects.trim(audio, top_db=32)
+            if trimmed.size == 0:
+                trimmed = audio
+            duration = float(len(trimmed) / 24000)
+            rms = librosa.feature.rms(y=trimmed).reshape(-1)
+            centroid = librosa.feature.spectral_centroid(y=trimmed, sr=24000).reshape(-1)
+            f0 = librosa.yin(trimmed, fmin=60, fmax=420, sr=24000)
+            finite_f0 = f0[np.isfinite(f0)]
+            summaries.append(
+                {
+                    "path": storage.relpath(resolved) if str(resolved).startswith(str(REPO_ROOT)) else str(resolved),
+                    "source_sample_rate": int(sample_rate),
+                    "duration_seconds": duration,
+                    "rms_mean": float(np.mean(rms)) if rms.size else 0.0,
+                    "spectral_centroid_mean": float(np.mean(centroid)) if centroid.size else 0.0,
+                    "pitch_median_hz": float(np.median(finite_f0)) if finite_f0.size else 0.0,
+                }
+            )
+        except Exception:
+            continue
+
+    if not summaries:
+        raise HTTPException(status_code=400, detail="No readable reference audio found for Supertonic cloning.")
+
+    numeric_keys = ["duration_seconds", "rms_mean", "spectral_centroid_mean", "pitch_median_hz"]
+    aggregate: JsonDict = {
+        "sample_count": len(summaries),
+        "samples": summaries,
+    }
+    for key in numeric_keys:
+        values = [float(item.get(key) or 0.0) for item in summaries if float(item.get(key) or 0.0) > 0.0]
+        aggregate[key] = float(np.mean(values)) if values else 0.0
+    return aggregate
 
 
 def list_finetune_run_records() -> List[FineTuneRun]:
@@ -4211,10 +4295,15 @@ def supertonic_runtime() -> Supertonic3RuntimeResponse:
         onnx_dir=str(supertonic_engine.onnx_dir),
         onnx_assets=supertonic_engine.list_onnx_status(),
         builtin_voice_styles=supertonic_engine.list_builtin_voice_styles(),
+        custom_voice_styles=supertonic_engine.list_custom_voice_styles(),
         voice_presets=supertonic_engine.list_voice_presets(),
         supported_languages=list(SUPPORTED_LANGUAGES),
         supported_expression_tags=list(SUPPORTED_EXPRESSION_TAGS),
-        training_supported=False,
+        training_supported=True,
+        training_notes=(
+            "Upstream publishes ONNX inference only. This app creates reusable "
+            "custom style JSONs by reverse-engineered vector blending from reference audio."
+        ),
     )
 
 
@@ -4294,21 +4383,113 @@ def supertonic_delete_voice(name: str) -> VoiceAssetDeleteResponse:
     return VoiceAssetDeleteResponse(deleted=deleted, id=name)
 
 
-@app.post("/api/supertonic/train")
-def supertonic_train_unsupported() -> Dict[str, Any]:
-    """Supertonic 3는 ONNX 추론만 공개되어 있어 일반적인 학습이 불가능하다.
+@app.post("/api/supertonic/train", response_model=Supertonic3TrainingResponse)
+def supertonic_train(payload: Supertonic3TrainingRequest) -> Supertonic3TrainingResponse:
+    """참조 오디오/데이터셋에서 Supertonic 커스텀 style JSON을 생성한다.
 
-    upstream에 학습용 PyTorch 모델 정의/loss/optimizer가 공개되어 있지 않다.
-    Phase 4에서 ONNX 그래프 역공학으로 별도 PyTorch 재구현이 완료되면 활성화
-    된다. 현 시점에서는 501 Not Implemented를 명시적으로 반환한다.
+    Supertonic 3 upstream은 ONNX 추론 그래프만 공개한다. 따라서 이 엔드포인트는
+    PyTorch full fine-tune이 아니라, 공개 style vector를 보수적으로 섞고 참조
+    오디오 특징으로 미세 조정한 새 voice style 파일을 저장하는 역공학 기반
+    클로닝/실험 학습 경로다.
     """
 
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "Supertonic 3 fine-tuning is not supported by upstream. "
-            "Phase 4 reverse-engineering is required before enabling this endpoint."
-        ),
+    if not payload.dataset_id.strip() and not payload.reference_audio_path.strip():
+        raise HTTPException(status_code=400, detail="dataset_id or reference_audio_path is required.")
+
+    run_id = storage.new_id("supertonic-clone")
+    run_dir = storage.finetune_runs_dir / "supertonic" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    reference_audio_paths: List[str] = []
+    if payload.dataset_id.strip():
+        manifest = load_audio_dataset_manifest(payload.dataset_id, expected_target="supertonic")
+        reference_audio_paths.extend(extract_reference_audio_paths_from_manifest(manifest))
+    if payload.reference_audio_path.strip() and payload.reference_audio_path not in reference_audio_paths:
+        reference_audio_paths.insert(0, payload.reference_audio_path)
+
+    reference_features = summarize_reference_audio_features(reference_audio_paths)
+
+    try:
+        record = supertonic_engine.create_cloned_voice_style(
+            name=payload.output_name,
+            base_voice_styles=payload.base_voice_styles,
+            reference_audio_paths=reference_audio_paths,
+            reference_features=reference_features,
+            language=payload.language,
+            notes="Created from Supertonic reverse-engineered style cloning.",
+            adaptation_strength=payload.adaptation_strength,
+            seed=payload.seed,
+        )
+    except SupertonicError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Supertonic clone training failed: {exc}") from exc
+
+    generated_audio_path_value: Optional[str] = None
+    generated_audio_url_value: Optional[str] = None
+    log_lines = [
+        "Created custom Supertonic style JSON.",
+        f"voice_style={record['voice_style']}",
+        f"base_voice_styles={', '.join(record.get('base_voice_styles') or [])}",
+        f"reference_audio_count={len(reference_audio_paths)}",
+    ]
+
+    if payload.run_final_sample:
+        output_path = generated_audio_path("supertonic-clone", payload.output_name, payload.audio_format)
+        try:
+            audio_path, meta = supertonic_engine.run(
+                text=payload.sample_text,
+                language=payload.language,
+                voice_style=str(record["voice_style"]),
+                output_path=output_path,
+                total_step=payload.total_step,
+                speed=payload.speed,
+                silence_duration=payload.silence_duration,
+                use_gpu=False,
+            )
+            generation_record = build_generation_record(
+                record_id=storage.new_id("supertonic"),
+                mode="supertonic_clone_sample",
+                text=payload.sample_text,
+                language=payload.language,
+                audio_path=audio_path,
+                speaker=str(record["voice_style"]),
+                source_ref_audio_path=reference_audio_paths[0] if reference_audio_paths else "",
+                meta={**meta, "supertonic_clone_run_id": run_id},
+            )
+            save_generation_record(generation_record)
+            generated_audio_path_value = generation_record["output_audio_path"]
+            generated_audio_url_value = generation_record["output_audio_url"]
+            log_lines.append("Generated final sample.")
+        except Exception as exc:
+            log_lines.append(f"Final sample skipped: {exc}")
+
+    run_meta = {
+        "run_id": run_id,
+        "status": "completed",
+        "created_at": utc_now(),
+        "request": payload.model_dump(),
+        "voice_style_record": record,
+        "reference_features": reference_features,
+        "generated_audio_path": generated_audio_path_value,
+        "generated_audio_url": generated_audio_url_value,
+        "log": log_lines,
+    }
+    storage.write_json(run_dir / "run.json", run_meta)
+
+    return Supertonic3TrainingResponse(
+        run_id=run_id,
+        status="completed",
+        run_dir=str(run_dir),
+        voice_style_name=str(record["voice_style"]),
+        voice_style_path=str(record["voice_style_path"]),
+        preset_path=str(record["path"]),
+        selected_sources=list(record.get("base_voice_styles") or []),
+        reference_audio_paths=reference_audio_paths,
+        reference_features=reference_features,
+        generated_audio_path=generated_audio_path_value,
+        generated_audio_url=generated_audio_url_value,
+        log_tail="\n".join(log_lines)[-2000:],
     )
 
 
@@ -6818,7 +6999,7 @@ def delete_audio_dataset(dataset_id: str) -> VoiceAssetDeleteResponse:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid audio dataset manifest: {exc}") from exc
 
-    if record.get("target") not in {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step"}:
+    if record.get("target") not in {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step", "cosyvoice", "voxcpm", "supertonic", "omnivoice"}:
         raise HTTPException(status_code=400, detail="This endpoint only deletes cross-engine audio datasets.")
 
     removed = sum(1 for item in dataset_dir.rglob("*") if item.is_file())
@@ -6838,7 +7019,7 @@ def download_audio_dataset(dataset_id: str) -> FileResponse:
         record = storage.read_json(manifest_path)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid audio dataset manifest: {exc}") from exc
-    if record.get("target") not in {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step"}:
+    if record.get("target") not in {"s2_pro", "vibevoice", "rvc", "mmaudio", "ace_step", "cosyvoice", "voxcpm", "supertonic", "omnivoice"}:
         raise HTTPException(status_code=400, detail="This endpoint only downloads cross-engine audio datasets.")
     return _archive_response(
         str(record.get("name") or dataset_id),

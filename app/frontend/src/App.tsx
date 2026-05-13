@@ -78,6 +78,7 @@ import type {
   OmniVoiceTrainingResponse,
   OmniVoiceVoicePreset,
   Supertonic3RuntimeResponse,
+  Supertonic3TrainingResponse,
   Supertonic3VoicePreset,
   VoxCPM2RuntimeResponse,
   VoxCPM2TrainingResponse,
@@ -121,7 +122,7 @@ type AceStepMode =
   | "lora_train";
 
 type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "rvc" | "datasets";
-type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
+type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
 type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "effect" | "music" | "rvc" | "utility";
 type VoiceBoxMorphSource = "clone_prompt" | "reference_voice";
 type VoiceBoxMorphReferenceSource = "gallery" | "upload";
@@ -713,6 +714,10 @@ function audioDatasetTargetLabel(target: string): string {
     rvc: "RVC",
     mmaudio: "MMAudio",
     ace_step: "ACE-Step",
+    cosyvoice: "CosyVoice",
+    voxcpm: "VoxCPM",
+    supertonic: "Supertonic",
+    omnivoice: "OmniVoice",
   };
   return labels[target] || target;
 }
@@ -725,6 +730,10 @@ function audioDatasetTargetShort(target: string): string {
     rvc: "RV",
     mmaudio: "MM",
     ace_step: "AC",
+    cosyvoice: "CV",
+    voxcpm: "VX",
+    supertonic: "ST",
+    omnivoice: "OV",
   };
   return labels[target] || target.slice(0, 2).toUpperCase();
 }
@@ -997,7 +1006,7 @@ function TrainingDatasetConnector({
   guidance,
 }: {
   title: string;
-  target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
+  target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
   datasets: AudioDatasetRecord[];
   activePath: string;
   pathLabel: string;
@@ -1169,6 +1178,10 @@ function StudioApp() {
     rvc: "gallery",
     mmaudio: "gallery",
     ace_step: "folder",
+    cosyvoice: "gallery",
+    voxcpm: "gallery",
+    supertonic: "gallery",
+    omnivoice: "gallery",
   });
   const [toolDatasetSamples, setToolDatasetSamples] = useState<Record<string, string[]>>({
     s2_pro: [],
@@ -1176,6 +1189,10 @@ function StudioApp() {
     rvc: [],
     mmaudio: [],
     ace_step: [],
+    cosyvoice: [],
+    voxcpm: [],
+    supertonic: [],
+    omnivoice: [],
   });
   const [toolDatasetFolders, setToolDatasetFolders] = useState<Record<string, string>>({
     s2_pro: "",
@@ -1183,6 +1200,10 @@ function StudioApp() {
     rvc: "",
     mmaudio: "",
     ace_step: "",
+    cosyvoice: "",
+    voxcpm: "",
+    supertonic: "",
+    omnivoice: "",
   });
   const [toolDatasetNames, setToolDatasetNames] = useState<Record<string, string>>({
     s2_pro: "s2pro-voice-dataset",
@@ -1190,6 +1211,10 @@ function StudioApp() {
     rvc: "rvc-voice-dataset",
     mmaudio: "mmaudio-effect-dataset",
     ace_step: "ace-step-music-dataset",
+    cosyvoice: "cosyvoice-voice-dataset",
+    voxcpm: "voxcpm-voice-dataset",
+    supertonic: "supertonic-style-dataset",
+    omnivoice: "omnivoice-voice-dataset",
   });
   const [toolDatasetLastBuild, setToolDatasetLastBuild] = useState<AudioDatasetBuildResponse | null>(null);
   const [selectedClonePrompt, setSelectedClonePrompt] = useState<ClonePromptRecord | null>(null);
@@ -1490,6 +1515,7 @@ function StudioApp() {
   const [supertonicRuntime, setSupertonicRuntime] = useState<Supertonic3RuntimeResponse | null>(null);
   const [supertonicPresets, setSupertonicPresets] = useState<Supertonic3VoicePreset[]>([]);
   const [lastSupertonicRecord, setLastSupertonicRecord] = useState<GenerationRecord | null>(null);
+  const [lastSupertonicTrainResult, setLastSupertonicTrainResult] = useState<Supertonic3TrainingResponse | null>(null);
   const [supertonicTtsForm, setSupertonicTtsForm] = useState({
     text: "안녕하세요, 오늘 날씨가 정말 좋네요. <breath> 산책하기 좋은 날입니다.",
     language: "ko",
@@ -1506,6 +1532,21 @@ function StudioApp() {
     voice_style: "M4",
     language: "ko",
     notes: "",
+  });
+  const [supertonicTrainForm, setSupertonicTrainForm] = useState({
+    output_name: "supertonic-clone",
+    dataset_id: "",
+    reference_audio_path: "",
+    base_voice_styles: ["M4", "F4"] as string[],
+    language: "ko",
+    sample_text: "안녕하세요. 이 목소리는 새로 저장한 Supertonic 스타일입니다.",
+    adaptation_strength: "0.08",
+    seed: "",
+    run_final_sample: true,
+    total_step: "8",
+    speed: "1.05",
+    silence_duration: "0.3",
+    audio_format: "wav" as "wav" | "flac" | "mp3" | "ogg",
   });
   const [omnivoiceRuntime, setOmniVoiceRuntime] = useState<OmniVoiceRuntimeResponse | null>(null);
   const [omnivoicePresets, setOmniVoicePresets] = useState<OmniVoiceVoicePreset[]>([]);
@@ -2406,6 +2447,10 @@ function StudioApp() {
     rvc: audioDatasets.filter((dataset) => dataset.target === "rvc").length,
     mmaudio: audioDatasets.filter((dataset) => dataset.target === "mmaudio").length,
     ace_step: audioDatasets.filter((dataset) => dataset.target === "ace_step").length,
+    cosyvoice: audioDatasets.filter((dataset) => dataset.target === "cosyvoice").length,
+    voxcpm: audioDatasets.filter((dataset) => dataset.target === "voxcpm").length,
+    supertonic: audioDatasets.filter((dataset) => dataset.target === "supertonic").length,
+    omnivoice: audioDatasets.filter((dataset) => dataset.target === "omnivoice").length,
   };
   const visibleAudioDatasets = audioDatasets.filter((dataset) => dataset.target === datasetLibraryTarget);
   const selectedS2Voice = s2ProVoices.find((voice) => voice.id === selectedS2VoiceId || voice.reference_id === selectedS2VoiceId) ?? null;
@@ -3452,6 +3497,41 @@ function StudioApp() {
     setMessage(`프리셋 "${preset.name}"을(를) Supertonic TTS에 불러왔습니다.`);
   }
 
+  async function handleSupertonicTrain(event?: FormEvent) {
+    event?.preventDefault();
+    await runAction(async () => {
+      if (!supertonicTrainForm.dataset_id.trim() && !supertonicTrainForm.reference_audio_path.trim()) {
+        setMessage("Supertonic 클로닝에는 데이터셋 또는 참조 오디오가 필요합니다.");
+        return;
+      }
+      const result = await api.trainSupertonic({
+        output_name: supertonicTrainForm.output_name,
+        dataset_id: supertonicTrainForm.dataset_id || undefined,
+        reference_audio_path: supertonicTrainForm.reference_audio_path || undefined,
+        base_voice_styles: supertonicTrainForm.base_voice_styles,
+        language: supertonicTrainForm.language,
+        sample_text: supertonicTrainForm.sample_text,
+        adaptation_strength: Number(supertonicTrainForm.adaptation_strength || "0.08"),
+        seed: supertonicTrainForm.seed.trim() ? Number(supertonicTrainForm.seed) : null,
+        run_final_sample: supertonicTrainForm.run_final_sample,
+        total_step: Number(supertonicTrainForm.total_step || "8"),
+        speed: Number(supertonicTrainForm.speed || "1.05"),
+        silence_duration: Number(supertonicTrainForm.silence_duration || "0.3"),
+        audio_format: supertonicTrainForm.audio_format,
+      });
+      setLastSupertonicTrainResult(result);
+      setSupertonicTtsForm((prev) => ({
+        ...prev,
+        voice_style: result.voice_style_name,
+        language: supertonicTrainForm.language,
+      }));
+      setSupertonicRuntime(await api.supertonicRuntime());
+      setSupertonicPresets(await api.listSupertonicPresets());
+      await refreshAll();
+      setMessage(`Supertonic 스타일 "${result.voice_style_name}"을(를) 생성했습니다.`);
+    });
+  }
+
   async function handleOmniVoiceGenerate(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
@@ -3690,6 +3770,37 @@ function StudioApp() {
       setLastOmniVoiceDataPrepResult(result);
       setMessage(`OmniVoice 데이터 준비 ${result.status} (run: ${result.run_id}).`);
     });
+  }
+
+  function applyOmniVoicePreparedDataToTraining() {
+    if (!lastOmniVoiceDataPrepResult?.token_data_lst_path && !lastOmniVoiceDataPrepResult?.raw_data_lst_path) {
+      setMessage("먼저 OmniVoice 데이터 준비를 실행하세요.");
+      return;
+    }
+    const manifestPath = lastOmniVoiceDataPrepResult.token_data_lst_path || lastOmniVoiceDataPrepResult.raw_data_lst_path || "";
+    setOmniVoiceTrainForm((prev) => {
+      let nextConfig: Record<string, unknown> = {
+        train: [{ manifest_path: [manifestPath] }],
+        dev: [{ manifest_path: [manifestPath] }],
+      };
+      try {
+        const parsed = JSON.parse(prev.data_config_json || "{}") as Record<string, unknown>;
+        nextConfig = {
+          ...parsed,
+          train: [{ manifest_path: [manifestPath] }],
+          dev: [{ manifest_path: [manifestPath] }],
+        };
+      } catch {
+        // Invalid user JSON should not block applying the prepared dataset.
+      }
+      return {
+        ...prev,
+        run_name: prev.run_name || lastOmniVoiceDataPrepResult.run_id,
+        data_config_json: JSON.stringify(nextConfig, null, 2),
+      };
+    });
+    setActiveTab("omnivoice_train");
+    setMessage("OmniVoice 데이터 준비 결과를 학습 config에 반영했습니다.");
   }
 
   async function handleOmniVoiceTrain(event?: FormEvent) {
@@ -4249,7 +4360,7 @@ function StudioApp() {
     }));
   }
 
-  async function buildToolDataset(target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step") {
+  async function buildToolDataset(target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice") {
     const source = toolDatasetSource[target] ?? "gallery";
     const selectedPaths = toolDatasetSamples[target] ?? [];
     const folder = normalizeDatasetPath(toolDatasetFolders[target] ?? "");
@@ -4311,6 +4422,34 @@ function StudioApp() {
           output_name: prev.output_name || name,
           data_mode: "configured",
         }));
+      } else if (target === "cosyvoice") {
+        setCosyVoiceTrainForm((prev) => ({
+          ...prev,
+          dataset_id: result.id,
+          run_name: prev.run_name || name,
+        }));
+      } else if (target === "voxcpm") {
+        setVoxCpmTrainForm((prev) => ({
+          ...prev,
+          dataset_id: result.id,
+          run_name: prev.run_name || name,
+        }));
+      } else if (target === "supertonic") {
+        setSupertonicTrainForm((prev) => ({
+          ...prev,
+          dataset_id: result.id,
+          output_name: prev.output_name || name,
+        }));
+      } else if (target === "omnivoice") {
+        setOmniVoiceDataPrepForm((prev) => ({
+          ...prev,
+          input_jsonl: result.train_jsonl_path || prev.input_jsonl,
+          run_name: prev.run_name || name,
+        }));
+        setOmniVoiceTrainForm((prev) => ({
+          ...prev,
+          run_name: prev.run_name || name,
+        }));
       }
 
       setMessage(`${name} 데이터셋을 준비했습니다. 샘플 ${result.sample_count}개를 학습 탭으로 넘길 수 있습니다.`);
@@ -4352,6 +4491,18 @@ function StudioApp() {
       setSelectedMMAudioDatasetId(dataset.id);
       setMMAudioTrainForm((prev) => ({ ...prev, output_name: prev.output_name || name, data_mode: "configured" }));
       setActiveTab("mmaudio_train");
+    } else if (dataset.target === "cosyvoice") {
+      setCosyVoiceTrainForm((prev) => ({ ...prev, dataset_id: dataset.id, run_name: prev.run_name || name }));
+      setActiveTab("cosyvoice_train");
+    } else if (dataset.target === "voxcpm") {
+      setVoxCpmTrainForm((prev) => ({ ...prev, dataset_id: dataset.id, run_name: prev.run_name || name }));
+      setActiveTab("voxcpm_train");
+    } else if (dataset.target === "supertonic") {
+      setSupertonicTrainForm((prev) => ({ ...prev, dataset_id: dataset.id, output_name: prev.output_name || name }));
+      setActiveTab("supertonic_train");
+    } else if (dataset.target === "omnivoice") {
+      setOmniVoiceDataPrepForm((prev) => ({ ...prev, input_jsonl: dataset.train_jsonl_path || prev.input_jsonl, run_name: prev.run_name || name }));
+      setActiveTab("omnivoice_dataset");
     }
     setMessage(`${name} 데이터셋을 ${audioDatasetTargetLabel(dataset.target)} 학습 탭에 연결했습니다.`);
   }
@@ -5479,6 +5630,7 @@ function StudioApp() {
     if (activeTab === "voxcpm_train") return handleVoxCpmTrain();
     if (activeTab === "supertonic_tts") return handleSupertonicGenerate();
     if (activeTab === "supertonic_voices") return handleSupertonicSavePreset();
+    if (activeTab === "supertonic_train") return handleSupertonicTrain();
     if (activeTab === "omnivoice_tts") return handleOmniVoiceGenerate();
     if (activeTab === "omnivoice_voices") return handleOmniVoiceSavePreset();
     if (activeTab === "omnivoice_dataset") return handleOmniVoiceDataPrep();
@@ -5685,7 +5837,7 @@ function StudioApp() {
               <span>{t("tab.supertonic_dataset", "Supertonic 데이터셋")}</span>
             </button>
             <button className={activeTab === "supertonic_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("supertonic_train")} type="button">
-              <span>{t("tab.supertonic_train", "Supertonic 학습")}</span>
+              <span>{t("tab.supertonic_train", "Supertonic 클로닝")}</span>
             </button>
           </div>
 
@@ -6255,6 +6407,10 @@ function StudioApp() {
                     ["rvc", "RVC"],
                     ["mmaudio", "MMAudio"],
                     ["ace_step", "ACE-Step"],
+                    ["cosyvoice", "CosyVoice"],
+                    ["voxcpm", "VoxCPM"],
+                    ["supertonic", "Supertonic"],
+                    ["omnivoice", "OmniVoice"],
                   ] as Array<[DatasetLibraryTarget, string]>).map(([target, label]) => (
                     <button
                       key={target}
@@ -6355,7 +6511,30 @@ function StudioApp() {
                     title={t("voices.datasets.emptyTitle", "{target} 데이터셋이 없습니다.").replace("{target}", audioDatasetTargetLabel(datasetLibraryTarget))}
                     body={t("voices.datasets.emptyBody", "각 엔진의 학습 탭에서 생성 갤러리나 폴더로 데이터셋을 만들면 여기에서 확인하고 삭제할 수 있습니다.")}
                     action={
-                      <Button onClick={() => setActiveTab(datasetLibraryTarget === "qwen" ? "dataset" : datasetLibraryTarget === "s2_pro" ? "s2pro_dataset" : datasetLibraryTarget === "vibevoice" ? "vibevoice_dataset" : datasetLibraryTarget === "rvc" ? "applio_dataset" : datasetLibraryTarget === "mmaudio" ? "mmaudio_dataset" : "ace_dataset")} type="button">
+                      <Button
+                        onClick={() =>
+                          setActiveTab(
+                            datasetLibraryTarget === "qwen"
+                              ? "dataset"
+                              : datasetLibraryTarget === "s2_pro"
+                                ? "s2pro_dataset"
+                                : datasetLibraryTarget === "vibevoice"
+                                  ? "vibevoice_dataset"
+                                  : datasetLibraryTarget === "rvc"
+                                    ? "applio_dataset"
+                                    : datasetLibraryTarget === "mmaudio"
+                                      ? "mmaudio_dataset"
+                                      : datasetLibraryTarget === "cosyvoice"
+                                        ? "cosyvoice_dataset"
+                                        : datasetLibraryTarget === "voxcpm"
+                                          ? "voxcpm_dataset"
+                                          : datasetLibraryTarget === "omnivoice"
+                                            ? "omnivoice_dataset"
+                                            : "ace_dataset",
+                          )
+                        }
+                        type="button"
+                      >
                         {t("voices.datasets.gotoDataset", "Qwen 데이터셋 만들기")}
                       </Button>
                     }
@@ -9140,12 +9319,8 @@ function StudioApp() {
               </WorkspaceCard>
 
               {lastCosyVoiceRecord ? (
-                <WorkspaceCard className="flex flex-col gap-2">
-                  <div className="text-xs font-medium text-ink-muted">최근 결과</div>
-                  <div className="text-sm text-ink">{lastCosyVoiceRecord.output_audio_url}</div>
-                  {lastCosyVoiceRecord.output_audio_url ? (
-                    <audio controls src={lastCosyVoiceRecord.output_audio_url} className="w-full" />
-                  ) : null}
+                <WorkspaceCard>
+                  <AudioCard title="최근 CosyVoice 결과" subtitle={cosyVoiceTtsForm.task} record={lastCosyVoiceRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
@@ -9180,6 +9355,27 @@ function StudioApp() {
                     ))}
                   </div>
                 ) : null}
+              </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-3">
+                <div>
+                  <div className="text-xs font-medium text-ink-muted">참조 음성 선택</div>
+                  <p className="mt-1 text-xs text-ink-subtle">경로 입력 대신 생성 갤러리에서 prompt/source audio를 고릅니다.</p>
+                </div>
+                <ServerAudioPicker
+                  assets={generatedAudioAssets}
+                  selectedPath={cosyVoiceTtsForm.task === "vc" ? cosyVoiceTtsForm.source_audio_path : cosyVoiceTtsForm.prompt_audio_path}
+                  onSelect={(asset) => {
+                    if (cosyVoiceTtsForm.task === "vc") {
+                      setCosyVoiceTtsForm((prev) => ({ ...prev, source_audio_path: asset.path }));
+                    } else {
+                      setCosyVoiceTtsForm((prev) => ({
+                        ...prev,
+                        prompt_audio_path: asset.path,
+                        prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                      }));
+                    }
+                  }}
+                />
               </WorkspaceCard>
             </aside>
           </form>
@@ -9258,6 +9454,24 @@ function StudioApp() {
                   ))
                 )}
               </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-3">
+                <div>
+                  <div className="text-xs font-medium text-ink-muted">갤러리에서 참조 선택</div>
+                  <p className="mt-1 text-xs text-ink-subtle">프리셋 이름, 참조 경로, transcript를 선택한 음성에서 가져옵니다.</p>
+                </div>
+                <ServerAudioPicker
+                  assets={generatedAudioAssets}
+                  selectedPath={cosyVoicePresetForm.prompt_audio_path}
+                  onSelect={(asset) => {
+                    setCosyVoicePresetForm((prev) => ({
+                      ...prev,
+                      name: prev.name || basenameFromPath(asset.path).replace(/\.[^.]+$/, ""),
+                      prompt_audio_path: asset.path,
+                      prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                    }));
+                  }}
+                />
+              </WorkspaceCard>
             </aside>
           </form>
         </WorkspaceShell>
@@ -9269,18 +9483,37 @@ function StudioApp() {
             eyebrow="COSYVOICE"
             eyebrowIcon={AudioLines}
             title="CosyVoice 3 데이터셋"
-            subtitle="data/datasets/<id>/manifest.jsonl에 audio + text 항목을 정리하세요. 다음 학습 탭에서 dataset_id로 참조합니다."
+            subtitle="생성 갤러리나 폴더의 음성을 CosyVoice 학습용 manifest/train.jsonl 구조로 정리하고 바로 학습 탭에 연결합니다."
+            action={{
+              label: "학습 탭으로 보내기",
+              onClick: () => {
+                const latest = toolDatasetLastBuild?.target === "cosyvoice" ? toolDatasetLastBuild : null;
+                if (!cosyVoiceTrainForm.dataset_id.trim() && latest) {
+                  setCosyVoiceTrainForm((prev) => ({ ...prev, dataset_id: latest.id, run_name: prev.run_name || latest.name }));
+                }
+                setActiveTab("cosyvoice_train");
+              },
+            }}
           />
-          <WorkspaceCard className="flex flex-col gap-3 text-sm text-ink-muted">
-            <div className="text-xs font-medium text-ink">manifest 포맷</div>
-            <pre className="rounded border border-line bg-canvas p-3 text-xs overflow-x-auto">{`{"audio": "wavs/utt_001.wav", "text": "안녕하세요", "speaker": "spk_main"}
-{"audio": "wavs/utt_002.wav", "text": "반갑습니다", "speaker": "spk_main"}`}</pre>
-            <div className="text-xs">
-              파일 트리: <code>data/datasets/&lt;dataset_id&gt;/manifest.jsonl</code> + <code>wavs/</code> (또는 manifest 내 절대경로).
-              speaker 필드는 생략 가능하며 기본값은 <code>spk_default</code>입니다.
-            </div>
-            <div className="text-xs">데이터 준비는 다른 vendor와 동일하게 갤러리/녹음 파일을 모아 jsonl로 작성하는 패턴을 사용합니다. 자동 데이터셋 빌더는 다음 마일스톤에서 추가합니다.</div>
-          </WorkspaceCard>
+          <ToolDatasetBuilder
+            title="CosyVoice 학습 데이터셋 만들기"
+            subtitle="audio/lab_audio/train.jsonl/validation.jsonl을 한 번에 만들고, 비어 있는 전사는 선택한 ASR 모델로 채웁니다."
+            source={toolDatasetSource.cosyvoice ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, cosyvoice: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.cosyvoice ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("cosyvoice", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("cosyvoice", path)}
+            folderPath={toolDatasetFolders.cosyvoice ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, cosyvoice: value }))}
+            datasetName={toolDatasetNames.cosyvoice ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, cosyvoice: value }))}
+            onBuild={() => buildToolDataset("cosyvoice")}
+            lastBuild={toolDatasetLastBuild?.target === "cosyvoice" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+          />
         </WorkspaceShell>
       ) : null}
 
@@ -9300,6 +9533,22 @@ function StudioApp() {
           />
           <form id="cosyvoice-train-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleCosyVoiceTrain}>
             <div className="flex flex-col gap-5">
+              <TrainingDatasetConnector
+                title="학습 데이터셋 선택"
+                target="cosyvoice"
+                datasets={audioDatasets}
+                activePath={cosyVoiceTrainForm.dataset_id}
+                pathLabel="dataset_id"
+                guidance="CosyVoice 데이터셋 탭에서 만든 샘플 묶음을 선택하면 dataset_id와 run_name을 자동으로 채웁니다."
+                onCreateDataset={() => setActiveTab("cosyvoice_dataset")}
+                onUse={(dataset) => {
+                  setCosyVoiceTrainForm((prev) => ({
+                    ...prev,
+                    dataset_id: dataset.id,
+                    run_name: prev.run_name || dataset.name,
+                  }));
+                }}
+              />
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -9572,12 +9821,8 @@ function StudioApp() {
               </WorkspaceCard>
 
               {lastVoxCpmRecord ? (
-                <WorkspaceCard className="flex flex-col gap-2">
-                  <div className="text-xs font-medium text-ink-muted">최근 결과</div>
-                  <div className="text-sm text-ink">{lastVoxCpmRecord.output_audio_url}</div>
-                  {lastVoxCpmRecord.output_audio_url ? (
-                    <audio controls src={lastVoxCpmRecord.output_audio_url} className="w-full" />
-                  ) : null}
+                <WorkspaceCard>
+                  <AudioCard title="최근 VoxCPM 결과" subtitle={voxCpmTtsForm.task} record={lastVoxCpmRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
@@ -9612,6 +9857,27 @@ function StudioApp() {
                     ))}
                   </div>
                 ) : null}
+              </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-3">
+                <div>
+                  <div className="text-xs font-medium text-ink-muted">참조 음성 선택</div>
+                  <p className="mt-1 text-xs text-ink-subtle">voice_cloning은 reference, ultimate_cloning은 prompt까지 같은 갤러리에서 고릅니다.</p>
+                </div>
+                <ServerAudioPicker
+                  assets={generatedAudioAssets}
+                  selectedPath={voxCpmTtsForm.task === "ultimate_cloning" && voxCpmTtsForm.prompt_wav_path ? voxCpmTtsForm.prompt_wav_path : voxCpmTtsForm.reference_wav_path}
+                  onSelect={(asset) => {
+                    if (voxCpmTtsForm.task === "ultimate_cloning" && !voxCpmTtsForm.prompt_wav_path) {
+                      setVoxCpmTtsForm((prev) => ({
+                        ...prev,
+                        prompt_wav_path: asset.path,
+                        prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                      }));
+                    } else {
+                      setVoxCpmTtsForm((prev) => ({ ...prev, reference_wav_path: asset.path }));
+                    }
+                  }}
+                />
               </WorkspaceCard>
             </aside>
           </form>
@@ -9706,6 +9972,25 @@ function StudioApp() {
                   ))
                 )}
               </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-3">
+                <div>
+                  <div className="text-xs font-medium text-ink-muted">갤러리에서 참조 선택</div>
+                  <p className="mt-1 text-xs text-ink-subtle">선택한 음성을 현재 프리셋의 reference 또는 prompt로 채웁니다.</p>
+                </div>
+                <ServerAudioPicker
+                  assets={generatedAudioAssets}
+                  selectedPath={voxCpmPresetForm.reference_wav_path || voxCpmPresetForm.prompt_wav_path}
+                  onSelect={(asset) => {
+                    setVoxCpmPresetForm((prev) => ({
+                      ...prev,
+                      name: prev.name || basenameFromPath(asset.path).replace(/\.[^.]+$/, ""),
+                      reference_wav_path: prev.task === "voice_design" ? prev.reference_wav_path : asset.path,
+                      prompt_wav_path: prev.task === "ultimate_cloning" && !prev.prompt_wav_path ? asset.path : prev.prompt_wav_path,
+                      prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                    }));
+                  }}
+                />
+              </WorkspaceCard>
             </aside>
           </form>
         </WorkspaceShell>
@@ -9717,17 +10002,37 @@ function StudioApp() {
             eyebrow="VOXCPM"
             eyebrowIcon={AudioLines}
             title="VoxCPM2 데이터셋"
-            subtitle="data/datasets/<id>/manifest.jsonl에 audio + text 항목을 정리하세요. 학습 탭에서 dataset_id로 참조합니다."
+            subtitle="VoxCPM2 LoRA 학습에 필요한 audio/text manifest를 만들고 dataset_id를 학습 탭에 자동 연결합니다."
+            action={{
+              label: "학습 탭으로 보내기",
+              onClick: () => {
+                const latest = toolDatasetLastBuild?.target === "voxcpm" ? toolDatasetLastBuild : null;
+                if (!voxCpmTrainForm.dataset_id.trim() && latest) {
+                  setVoxCpmTrainForm((prev) => ({ ...prev, dataset_id: latest.id, run_name: prev.run_name || latest.name }));
+                }
+                setActiveTab("voxcpm_train");
+              },
+            }}
           />
-          <WorkspaceCard className="flex flex-col gap-3 text-sm text-ink-muted">
-            <div className="text-xs font-medium text-ink">manifest 포맷</div>
-            <pre className="rounded border border-line bg-canvas p-3 text-xs overflow-x-auto">{`{"audio": "wavs/utt_001.wav", "text": "안녕하세요"}
-{"audio": "wavs/utt_002.wav", "text": "반갑습니다"}`}</pre>
-            <div className="text-xs">
-              파일 트리: <code>data/datasets/&lt;dataset_id&gt;/manifest.jsonl</code> + <code>wavs/</code> (또는 manifest 내 절대경로).
-              VoxCPM은 16 kHz 모노 WAV를 권장합니다.
-            </div>
-          </WorkspaceCard>
+          <ToolDatasetBuilder
+            title="VoxCPM LoRA 데이터셋 만들기"
+            subtitle="갤러리 음성 또는 폴더를 정리해 train.jsonl/validation.jsonl을 만들고, VoxCPM 학습 폼의 dataset_id로 바로 넘깁니다."
+            source={toolDatasetSource.voxcpm ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, voxcpm: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.voxcpm ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("voxcpm", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("voxcpm", path)}
+            folderPath={toolDatasetFolders.voxcpm ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, voxcpm: value }))}
+            datasetName={toolDatasetNames.voxcpm ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, voxcpm: value }))}
+            onBuild={() => buildToolDataset("voxcpm")}
+            lastBuild={toolDatasetLastBuild?.target === "voxcpm" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+          />
         </WorkspaceShell>
       ) : null}
 
@@ -9747,6 +10052,22 @@ function StudioApp() {
           />
           <form id="voxcpm-train-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVoxCpmTrain}>
             <div className="flex flex-col gap-5">
+              <TrainingDatasetConnector
+                title="학습 데이터셋 선택"
+                target="voxcpm"
+                datasets={audioDatasets}
+                activePath={voxCpmTrainForm.dataset_id}
+                pathLabel="dataset_id"
+                guidance="VoxCPM 데이터셋 탭에서 만든 샘플 묶음을 선택하면 LoRA 학습 입력으로 바로 연결합니다."
+                onCreateDataset={() => setActiveTab("voxcpm_dataset")}
+                onUse={(dataset) => {
+                  setVoxCpmTrainForm((prev) => ({
+                    ...prev,
+                    dataset_id: dataset.id,
+                    run_name: prev.run_name || dataset.name,
+                  }));
+                }}
+              />
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -9975,12 +10296,8 @@ function StudioApp() {
               </WorkspaceCard>
 
               {lastSupertonicRecord ? (
-                <WorkspaceCard className="flex flex-col gap-2">
-                  <div className="text-xs font-medium text-ink-muted">최근 결과</div>
-                  <div className="text-sm text-ink">{lastSupertonicRecord.output_audio_url}</div>
-                  {lastSupertonicRecord.output_audio_url ? (
-                    <audio controls src={lastSupertonicRecord.output_audio_url} className="w-full" />
-                  ) : null}
+                <WorkspaceCard>
+                  <AudioCard title="최근 Supertonic 결과" subtitle={supertonicTtsForm.voice_style} record={lastSupertonicRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
@@ -10093,20 +10410,37 @@ function StudioApp() {
             eyebrow="SUPERTONIC"
             eyebrowIcon={AudioLines}
             title="Supertonic 3 데이터셋"
-            subtitle="Supertonic 3는 ONNX 추론만 공개되어 별도 학습 데이터셋이 필요하지 않습니다."
+            subtitle="참조 음성 묶음을 정리해 Supertonic 스타일 클로닝/실험 학습 입력으로 넘깁니다."
+            action={{
+              label: "클로닝 탭으로 보내기",
+              onClick: () => {
+                const latest = toolDatasetLastBuild?.target === "supertonic" ? toolDatasetLastBuild : null;
+                if (!supertonicTrainForm.dataset_id.trim() && latest) {
+                  setSupertonicTrainForm((prev) => ({ ...prev, dataset_id: latest.id, output_name: prev.output_name || latest.name }));
+                }
+                setActiveTab("supertonic_train");
+              },
+            }}
           />
-          <WorkspaceCard className="flex flex-col gap-3 text-sm text-ink-muted">
-            <div className="text-xs font-medium text-ink">왜 비어 있나요?</div>
-            <div className="text-xs">
-              Supertone은 학습용 PyTorch 모델 정의 / loss / optimizer 코드를 공개하지 않았습니다.
-              따라서 일반적인 fine-tuning 경로가 없으며, Phase 4 역공학이 완료되어야 학습 자체가
-              가능해집니다. 현 단계에서는 데이터셋 빌더가 의미가 없습니다.
-            </div>
-            <div className="text-xs">
-              한국어 클로닝/감정 표현이 필요한 워크플로우는 <b>VoxCPM2 (SIM 1위)</b> 또는
-              <b> CosyVoice 3 (SOTA WER)</b> 학습 라인을 사용하세요.
-            </div>
-          </WorkspaceCard>
+          <ToolDatasetBuilder
+            title="Supertonic 스타일 데이터셋 만들기"
+            subtitle="갤러리 음성 또는 폴더를 정리해 참조 오디오 특징을 추출할 수 있는 manifest/train.jsonl 구조로 만듭니다."
+            source={toolDatasetSource.supertonic ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, supertonic: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.supertonic ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("supertonic", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("supertonic", path)}
+            folderPath={toolDatasetFolders.supertonic ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, supertonic: value }))}
+            datasetName={toolDatasetNames.supertonic ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, supertonic: value }))}
+            onBuild={() => buildToolDataset("supertonic")}
+            lastBuild={toolDatasetLastBuild?.target === "supertonic" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+          />
         </WorkspaceShell>
       ) : null}
 
@@ -10115,25 +10449,137 @@ function StudioApp() {
           <WorkspaceHeader
             eyebrow="SUPERTONIC"
             eyebrowIcon={AudioLines}
-            title="Supertonic 3 학습 (Phase 4 보류)"
-            subtitle="업스트림이 ONNX 추론만 공개해 학습 코드가 없습니다. 활성화하려면 ONNX → PyTorch 역공학이 필요합니다."
+            title="Supertonic 3 클로닝 / 실험 학습"
+            subtitle="공개 ONNX style vector를 기반으로 참조 음성 특징을 반영한 새 voice style JSON을 생성합니다."
+            action={{
+              label: "Supertonic 스타일 생성",
+              formId: "supertonic-train-form",
+              disabled: loading || (!supertonicTrainForm.dataset_id.trim() && !supertonicTrainForm.reference_audio_path.trim()),
+              loading,
+            }}
           />
-          <WorkspaceCard className="flex flex-col gap-3 text-sm text-ink-muted">
-            <div className="text-xs font-medium text-ink">현재 상태</div>
-            <div className="text-xs">
-              <code>POST /api/supertonic/train</code>는 명시적으로 <b>501 Not Implemented</b>를 반환합니다.
-              {supertonicRuntime?.training_notes ? (
-                <span> 백엔드 안내: {supertonicRuntime.training_notes}</span>
-              ) : null}
+          <form id="supertonic-train-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleSupertonicTrain}>
+            <div className="flex flex-col gap-5">
+              <TrainingDatasetConnector
+                title="클로닝 데이터셋 선택"
+                target="supertonic"
+                datasets={audioDatasets}
+                activePath={supertonicTrainForm.dataset_id}
+                pathLabel="dataset_id"
+                guidance="Supertonic 데이터셋 탭에서 만든 샘플 묶음을 선택하면 참조 오디오 특징을 평균 내 새 스타일 벡터를 만듭니다."
+                onCreateDataset={() => setActiveTab("supertonic_dataset")}
+                onUse={(dataset) => {
+                  setSupertonicTrainForm((prev) => ({
+                    ...prev,
+                    dataset_id: dataset.id,
+                    output_name: prev.output_name || dataset.name,
+                  }));
+                }}
+              />
+
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">스타일 이름</Label>
+                    <Input value={supertonicTrainForm.output_name} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">직접 참조 오디오 경로</Label>
+                    <Input value={supertonicTrainForm.reference_audio_path} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, reference_audio_path: normalizeDatasetPath(event.target.value) }))} placeholder="data/generated/..." />
+                  </div>
+                </div>
+                <ServerAudioPicker
+                  assets={generatedAudioAssets}
+                  selectedPath={supertonicTrainForm.reference_audio_path}
+                  onSelect={(asset) => setSupertonicTrainForm((prev) => ({ ...prev, reference_audio_path: asset.path }))}
+                />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">기반 스타일</Label>
+                    <Select
+                      value={supertonicTrainForm.base_voice_styles.join(",")}
+                      onValueChange={(value) => setSupertonicTrainForm((prev) => ({ ...prev, base_voice_styles: value.split(",").filter(Boolean) }))}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="M4,F4">M4 + F4 balanced</SelectItem>
+                        <SelectItem value="M1,M2,M3,M4">Male blend</SelectItem>
+                        <SelectItem value="F1,F2,F3,F4">Female blend</SelectItem>
+                        <SelectItem value="M4">M4 only</SelectItem>
+                        <SelectItem value="F4">F4 only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
+                    <Select value={supertonicTrainForm.language} onValueChange={(language) => setSupertonicTrainForm((prev) => ({ ...prev, language }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(supertonicRuntime?.supported_languages || ["ko", "en", "ja"]).map((lang) => (
+                          <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">adaptation_strength</Label>
+                    <Input value={supertonicTrainForm.adaptation_strength} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, adaptation_strength: event.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">seed</Label>
+                    <Input value={supertonicTrainForm.seed} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, seed: event.target.value }))} placeholder="random" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">total_step</Label>
+                    <Input value={supertonicTrainForm.total_step} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, total_step: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">speed</Label>
+                    <Input value={supertonicTrainForm.speed} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, speed: event.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Format</Label>
+                    <Select value={supertonicTrainForm.audio_format} onValueChange={(audio_format) => setSupertonicTrainForm((prev) => ({ ...prev, audio_format: audio_format as typeof prev.audio_format }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="wav">wav</SelectItem>
+                        <SelectItem value="flac">flac</SelectItem>
+                        <SelectItem value="mp3">mp3</SelectItem>
+                        <SelectItem value="ogg">ogg</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">샘플 대사</Label>
+                  <Textarea value={supertonicTrainForm.sample_text} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, sample_text: event.target.value }))} className="min-h-[110px] resize-y border-line bg-canvas" />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-ink-muted">
+                  <input type="checkbox" checked={supertonicTrainForm.run_final_sample} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, run_final_sample: event.target.checked }))} />
+                  스타일 생성 후 샘플 음성까지 바로 생성
+                </label>
+              </WorkspaceCard>
             </div>
-            <div className="text-xs font-medium text-ink">Phase 4 역공학 단계</div>
-            <ul className="text-xs list-disc pl-5 space-y-1">
-              <li>ONNX 그래프 분석 (duration_predictor, text_encoder, vector_estimator, vocoder)</li>
-              <li>PyTorch 모델 재구현 + 가중치 이식</li>
-              <li>학습 루프 작성 (latent flow matching loss 추정)</li>
-              <li>추론 일치성 검증 후 본 탭 활성화</li>
-            </ul>
-          </WorkspaceCard>
+            <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-2 text-xs text-ink-muted">
+                <div className="font-medium text-ink">동작 방식</div>
+                <p>공개된 built-in voice style JSON을 평균/혼합하고, 참조 오디오의 pitch, energy, spectral 특징으로 style vector를 약하게 조정합니다.</p>
+                <p>완전한 모델 fine-tune은 아니지만 결과는 새 style JSON으로 저장되며 TTS 화면의 Voice style에서 바로 선택할 수 있습니다.</p>
+              </WorkspaceCard>
+              {lastSupertonicTrainResult ? (
+                <WorkspaceCard className="flex flex-col gap-3">
+                  <div className="text-xs font-medium text-ink-muted">최근 생성 스타일</div>
+                  <div className="text-sm font-medium text-ink">{lastSupertonicTrainResult.voice_style_name}</div>
+                  <div className="text-xs text-ink-muted break-all">{lastSupertonicTrainResult.voice_style_path}</div>
+                  {lastSupertonicTrainResult.generated_audio_url ? (
+                    <audio controls className="h-9 w-full" src={mediaUrl(lastSupertonicTrainResult.generated_audio_url)} />
+                  ) : null}
+                </WorkspaceCard>
+              ) : null}
+            </aside>
+          </form>
         </WorkspaceShell>
       ) : null}
 
@@ -10290,10 +10736,8 @@ function StudioApp() {
               </WorkspaceCard>
 
               {lastOmniVoiceRecord ? (
-                <WorkspaceCard className="flex flex-col gap-2">
-                  <div className="text-xs font-medium text-ink-muted">최근 결과</div>
-                  <div className="text-sm text-ink">{lastOmniVoiceRecord.output_audio_url}</div>
-                  {lastOmniVoiceRecord.output_audio_url ? <audio controls src={lastOmniVoiceRecord.output_audio_url} className="w-full" /> : null}
+                <WorkspaceCard>
+                  <AudioCard title="최근 OmniVoice 결과" subtitle={omnivoiceTtsForm.task} record={lastOmniVoiceRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
@@ -10451,6 +10895,25 @@ function StudioApp() {
               loading,
             }}
           />
+          <ToolDatasetBuilder
+            title="OmniVoice 원본 JSONL 만들기"
+            subtitle="생성 갤러리나 폴더 음성을 먼저 train.jsonl로 정리한 뒤, 아래 데이터 준비 폼에서 WebDataset/audio token shard로 변환합니다."
+            source={toolDatasetSource.omnivoice ?? "gallery"}
+            setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, omnivoice: value }))}
+            assets={generatedAudioAssets}
+            selectedPaths={toolDatasetSamples.omnivoice ?? []}
+            onAddAsset={(asset) => addToolDatasetAsset("omnivoice", asset)}
+            onRemoveAsset={(path) => removeToolDatasetAsset("omnivoice", path)}
+            folderPath={toolDatasetFolders.omnivoice ?? ""}
+            setFolderPath={(value) => setToolDatasetFolders((prev) => ({ ...prev, omnivoice: value }))}
+            datasetName={toolDatasetNames.omnivoice ?? ""}
+            setDatasetName={(value) => setToolDatasetNames((prev) => ({ ...prev, omnivoice: value }))}
+            onBuild={() => buildToolDataset("omnivoice")}
+            lastBuild={toolDatasetLastBuild?.target === "omnivoice" ? toolDatasetLastBuild : null}
+            asrModelId={asrModelId}
+            setAsrModelId={setAsrModelId}
+            asrModels={asrModels}
+          />
           <form id="omnivoice-dataset-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceDataPrep}>
             <div className="flex flex-col gap-5">
               <WorkspaceCard className="flex flex-col gap-4">
@@ -10530,6 +10993,9 @@ function StudioApp() {
                   <div className="text-xs text-ink-muted">token manifest: {lastOmniVoiceDataPrepResult.token_data_lst_path || "-"}</div>
                   <div className="text-xs text-ink-muted">raw output: {lastOmniVoiceDataPrepResult.raw_output_dir || "-"}</div>
                   <div className="text-xs text-ink-muted">token output: {lastOmniVoiceDataPrepResult.token_output_dir || "-"}</div>
+                  <Button type="button" size="sm" variant="outline" onClick={applyOmniVoicePreparedDataToTraining}>
+                    학습 config에 반영
+                  </Button>
                 </WorkspaceCard>
               ) : null}
             </aside>

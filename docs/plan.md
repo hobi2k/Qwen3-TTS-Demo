@@ -45,7 +45,7 @@
 - `ACE-Step 데이터셋 / 학습`
 - `CosyVoice 프리셋 / 데이터셋 / 학습`
 - `VoxCPM 프리셋 / 데이터셋 / 학습`
-- `Supertonic 프리셋 / 데이터셋 / 학습 (Phase 4 보류)`
+- `Supertonic 프리셋 / 데이터셋 / 클로닝`
 - `가이드`
 
 이 구조를 기준으로 앞으로의 계획도 정리합니다.
@@ -66,7 +66,7 @@
 10. VibeVoice로 다화자 long-form TTS와 ASR을 별도 작업실로 제공하기
 11. CosyVoice 3 cross_lingual / instruct2로 한국어 등 다국어 SOTA TTS와 SFT 학습을 제공하기 (Apache 2.0)
 12. VoxCPM2 voice_cloning / ultimate_cloning으로 한국어 SIM 1위 클로닝과 LoRA 학습을 제공하기 (Apache 2.0)
-13. Supertonic 3 ONNX in-process로 31개 언어 경량 TTS를 제공하기 (학습은 Phase 4 역공학 보류)
+13. Supertonic 3 ONNX in-process로 31개 언어 경량 TTS와 style-vector 기반 클로닝을 제공하기
 14. hobi2k 고유 커스텀 개조 모델 `VoiceBox`로 self-contained checkpoint 합성, VoiceBox -> VoiceBox 재학습, embedded encoder 기반 clone / clone + instruct, speaker morph를 통합 제공하기 (upstream 환원 없음, 내부 모델군)
 15. hobi2k 고유 커스텀 추론 경로 `Base + CustomVoice instruct` hybrid (`프리셋 기반 생성` 탭 + `/api/generate/hybrid-clone-instruct`)로 별도 Base 체크포인트의 clone prompt와 CustomVoice의 instruct를 한 추론에 결합해 제공하기 (upstream 공식 wrapper 아님, canonical: `qwen_extensions/inference/hybrid_clone_instruct.py`)
 
@@ -121,7 +121,7 @@
 - Qwen 모델 선택 흐름과 분리, 자체 사이드바 섹션
 - ONNX 추론 전용, 메인 venv에서 in-process 실행 (subprocess 없음)
 - 31개 언어 / `<laugh>` `<breath>` `<sigh>` 3개 표현 태그 / built-in voice style M1~F4
-- 학습 라우트는 Phase 4 역공학 완료까지 501 Not Implemented 반환
+- 학습/클로닝 라우트는 full fine-tune이 아니라 참조 오디오 특징 기반 커스텀 style JSON 생성
 
 ### 6. 런타임 unload
 

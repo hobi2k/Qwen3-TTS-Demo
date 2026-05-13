@@ -103,7 +103,7 @@
 - [30-voxcpm2-workspace.md](./30-voxcpm2-workspace.md)
   VoxCPM2 (OpenBMB, Apache 2.0) 작업실. voice_design / voice_cloning / ultimate_cloning 추론, lm/dit/proj LoRA 학습
 - [31-supertonic3-workspace.md](./31-supertonic3-workspace.md)
-  Supertonic 3 (Supertone, BigScience Open RAIL-M) ONNX in-process 추론. `<laugh>`/`<breath>`/`<sigh>` 3개 표현 태그, 학습은 Phase 4 역공학 보류
+  Supertonic 3 (Supertone, BigScience Open RAIL-M) ONNX in-process 추론. `<laugh>`/`<breath>`/`<sigh>` 3개 표현 태그, 참조 오디오 기반 커스텀 style JSON 클로닝
 
 ### 현재 기능에서 중요한 두 문서
 
@@ -200,9 +200,9 @@
 - `Supertonic 프리셋`
   Supertonic built-in voice style(M1~F4) + 라벨/메모 묶음을 프리셋으로 저장합니다.
 - `Supertonic 데이터셋`
-  Supertonic 3는 ONNX 추론 전용이라 학습 데이터셋이 필요 없습니다. 안내만 표시합니다.
+  참조 음성 묶음을 정리해 Supertonic style-vector 클로닝 입력으로 사용합니다.
 - `Supertonic 학습`
-  upstream에 학습 코드가 없어 Phase 4 역공학이 완료될 때까지 `/api/supertonic/train`은 501을 반환합니다.
+  full fine-tune이 아니라 built-in style vector를 섞고 참조 오디오 특징으로 미세 조정한 커스텀 style JSON을 생성합니다.
 - `데이터셋 만들기`
 - `학습 실행`
 - `VoiceBox 융합` *(hobi2k 커스텀)*
@@ -228,7 +228,7 @@
 - `VibeVoice`도 vendor wrapper 방식입니다. `vendor/VibeVoice` source는 저장소에 포함하고, `.venv-vibevoice`, `data/models/vibevoice`만 로컬 산출물로 git에 올리지 않습니다.
 - `MMAudio`는 Qwen 생성 흐름에 섞지 않고 사운드 효과 전용 섹션으로 분리합니다.
 - `Applio`는 하나의 전용 섹션 아래에서 RVC 모델 학습, 단일 변환, 배치 변환, 모델 블렌딩을 나눠 제공합니다.
-- `CosyVoice / VoxCPM / Supertonic`은 각각 자체 사이드바 섹션을 가지며, 다른 vendor와 동일하게 `TTS / 프리셋 / 데이터셋 / 학습` 4탭 구조를 따릅니다. CosyVoice 3와 VoxCPM2는 별도 venv subprocess(`vendor wrapper` 방식)로 실행하고, Supertonic 3는 ONNX 추론만 공개되어 있어 메인 venv 안에서 in-process로 실행하며 학습 탭은 Phase 4 역공학이 끝날 때까지 비활성 안내만 표시합니다.
+- `CosyVoice / VoxCPM / Supertonic`은 각각 자체 사이드바 섹션을 가지며, 다른 vendor와 동일하게 `TTS / 프리셋 / 데이터셋 / 학습` 4탭 구조를 따릅니다. CosyVoice 3와 VoxCPM2는 별도 venv subprocess(`vendor wrapper` 방식)로 실행하고, Supertonic 3는 메인 venv 안에서 in-process로 실행하며 학습 탭은 style-vector 클로닝/실험 학습으로 동작합니다.
 - `VoiceBox`는 외부 vendor 모델이 아니라 **hobi2k 고유 커스텀 개조 모델**입니다. upstream Qwen3-TTS의 `Base 1.7B`/`CustomVoice` 위에 self-contained checkpoint 합성, `VoiceBox -> VoiceBox` 재학습, embedded encoder 기반 clone / clone + instruct, speaker morph 워크플로우를 얹은 결과물이며, 학습·변환·추론 코드는 모두 `qwen_extensions/`와 `scripts/`에 들어 있습니다. upstream으로 환원되지 않습니다.
 - `Base + Instruct hybrid` 추론 경로(`프리셋 기반 생성` 탭과 `/api/generate/hybrid-clone-instruct`)도 **hobi2k 고유 커스텀 파이프라인**입니다. upstream Qwen3-TTS의 공식 high-level wrapper가 아니며, 별도 `Base` 체크포인트의 clone prompt와 `CustomVoice` 체크포인트의 instruct 학습 분포를 한 추론 요청 안에서 결합합니다. canonical 구현은 `qwen_extensions/inference/hybrid_clone_instruct.py`이고 백엔드 런타임은 같은 규칙을 `app/backend/app/qwen.py`에 반영합니다.
 - `가이드`는 한 페이지 카드 묶음이 아니라 문서 목록과 본문으로 나뉜 document 화면입니다.

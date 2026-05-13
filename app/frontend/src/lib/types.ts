@@ -455,7 +455,7 @@ export interface CreateDatasetRequest {
 
 export interface BuildAudioDatasetRequest {
   name: string;
-  target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step";
+  target: "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
   source_type: "gallery" | "folder";
   samples: DatasetSampleInput[];
   sample_folder_path?: string;
@@ -1303,6 +1303,7 @@ export interface Supertonic3RuntimeResponse {
   onnx_dir: string;
   onnx_assets: Array<{ name: string; available: boolean }>;
   builtin_voice_styles: Array<{ name: string; available: boolean }>;
+  custom_voice_styles: Array<{ name: string; available: boolean; path?: string }>;
   voice_presets: Supertonic3VoicePreset[];
   supported_languages: string[];
   supported_expression_tags: string[];
@@ -1329,6 +1330,10 @@ export interface Supertonic3VoicePreset {
   voice_style_path?: string;
   language?: string;
   notes?: string;
+  kind?: string;
+  base_voice_styles?: string[];
+  reference_audio_paths?: string[];
+  reference_features?: Record<string, unknown>;
 }
 
 export interface Supertonic3VoicePresetCreateRequest {
@@ -1336,6 +1341,37 @@ export interface Supertonic3VoicePresetCreateRequest {
   voice_style: string;
   language?: string;
   notes?: string;
+}
+
+export interface Supertonic3TrainingRequest {
+  output_name: string;
+  dataset_id?: string;
+  reference_audio_path?: string;
+  base_voice_styles: string[];
+  language: string;
+  sample_text: string;
+  adaptation_strength?: number;
+  seed?: number | null;
+  run_final_sample?: boolean;
+  total_step?: number;
+  speed?: number;
+  silence_duration?: number;
+  audio_format?: "wav" | "flac" | "mp3" | "ogg";
+}
+
+export interface Supertonic3TrainingResponse {
+  run_id: string;
+  status: string;
+  run_dir: string;
+  voice_style_name: string;
+  voice_style_path: string;
+  preset_path: string;
+  selected_sources: string[];
+  reference_audio_paths: string[];
+  reference_features: Record<string, unknown>;
+  generated_audio_path?: string | null;
+  generated_audio_url?: string | null;
+  log_tail?: string;
 }
 
 export interface OmniVoiceRuntimeResponse {

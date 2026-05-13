@@ -78,6 +78,8 @@ import type {
   CosyVoice3VoicePresetCreateRequest,
   Supertonic3GenerateRequest,
   Supertonic3RuntimeResponse,
+  Supertonic3TrainingRequest,
+  Supertonic3TrainingResponse,
   Supertonic3VoicePreset,
   Supertonic3VoicePresetCreateRequest,
   VoxCPM2GenerateRequest,
@@ -710,6 +712,14 @@ export const api = {
       `/api/supertonic/voices/${encodeURIComponent(name)}`,
       { method: "DELETE" },
     );
+  },
+
+  trainSupertonic(payload: Supertonic3TrainingRequest): Promise<Supertonic3TrainingResponse> {
+    return request<Supertonic3TrainingResponse>("/api/supertonic/train", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
 
   omnivoiceRuntime(): Promise<OmniVoiceRuntimeResponse> {

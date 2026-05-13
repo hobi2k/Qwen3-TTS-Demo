@@ -1,7 +1,7 @@
 # 31. Supertonic 3 작업실
 
 > Supertone Supertonic 3 (BigScience Open RAIL-M) 통합. 31개 언어 ONNX TTS.
-> **추론 전용 — 업스트림 학습 코드 없음** (Phase 4 역공학 보류).
+> 업스트림은 ONNX 추론만 공개하지만, 이 데모는 built-in style vector를 섞고 참조 오디오 특징을 반영해 커스텀 style JSON을 만드는 실험적 클로닝 경로를 제공한다.
 
 ## 한 줄 요약
 
@@ -18,8 +18,8 @@
 | 권장 가중치 | `Supertone/supertonic-3` (HuggingFace ~260 MB ONNX 번들) |
 | 한국어 지원 | (31개 언어 중) |
 | 표현 태그 | `<laugh>`, `<breath>`, `<sigh>` 3개만 (대괄호 `[ ]`는 전처리에서 제거) |
-| 클로닝 | zero-shot 클로닝 미지원 (built-in voice style만 사용) |
-| 학습 | 업스트림 코드 없음 (Phase 4 역공학 보류) |
+| 클로닝 | zero-shot 임베딩 추출은 미지원. 대신 참조 오디오 특징 기반 style JSON 생성 지원 |
+| 학습 | full fine-tune 미지원. `/api/supertonic/train`은 역공학 기반 style-vector clone/train adapter |
 
 ## 설치 / 셋업
 
@@ -100,12 +100,23 @@ curl -X POST http://localhost:8000/api/supertonic/generate \
 
 ### `GET/POST/DELETE /api/supertonic/voices`
 
-Built-in voice style + 라벨/메모 묶음 프리셋 CRUD.
+Built-in voice style + 라벨/메모 묶음 프리셋 CRUD. `/api/supertonic/train`에서 만든 커스텀 style JSON도 같은 프리셋 목록에 표시된다.
 
 ### `POST /api/supertonic/train`
 
-**501 Not Implemented**. 업스트림에 학습 코드가 없어 일반적인 fine-tuning이
-불가능하다. Phase 4 역공학이 완료되어야 활성화된다.
+참조 오디오 또는 `target=supertonic` 데이터셋에서 pitch/RMS/spectral centroid를 추출하고, M1~F4 style vector를 보수적으로 blend한 뒤 낮은 강도의 deterministic adaptation을 적용해 새 style JSON을 만든다.
+
+요청 핵심 필드:
+
+| 필드 | 설명 |
+|---|---|
+| `dataset_id` | Supertonic 데이터셋 탭에서 만든 데이터셋 ID |
+| `reference_audio_path` | 단일 참조 오디오 경로. `dataset_id` 없이도 사용 가능 |
+| `base_voice_styles` | `["M4", "F4"]` 같은 blend source |
+| `adaptation_strength` | 0.0~0.35. 높을수록 참조 특징 반영이 강하지만 깨질 수 있음 |
+| `run_final_sample` | style 저장 후 바로 샘플 TTS 생성 |
+
+주의: 이것은 업스트림 PyTorch 모델을 재학습하는 full fine-tune이 아니다. 공개된 ONNX/JSON 자산으로 가능한 실용적 역공학 클로닝 경로이며, 결과물은 `data/supertonic3-voices/voice_styles/<name>.json`에 저장된다.
 
 ## 표현 태그 한계
 
@@ -122,7 +133,7 @@ Built-in voice style + 라벨/메모 묶음 프리셋 CRUD.
 ## 일관성 체크리스트 (다른 vendor와 동일 패턴)
 
 - [x] `app/backend/app/supertonic.py`에 `Engine` 클래스
-- [x] `status` / `availability_notes` / `run` / `save_voice_preset` / `delete_voice_preset` 메서드
+- [x] `status` / `availability_notes` / `run` / `save_voice_preset` / `delete_voice_preset` / `create_cloned_voice_style` 메서드
 - [x] 환경 변수 `SUPERTONIC_REPO_ROOT` / `SUPERTONIC_MODEL_DIR` / `SUPERTONIC_VOICE_DIR`
 - [x] FastAPI 라우트 `/api/supertonic/{runtime,generate,voices,train}`
 - [x] Pydantic 요청·응답 모델 4종
@@ -152,9 +163,9 @@ Built-in voice style + 라벨/메모 묶음 프리셋 CRUD.
 1. **첫 추론 시 ONNX 그래프 로딩**으로 수십 초 ~ 1분 소요. 이후 캐시된다.
 2. **`onnxruntime-gpu`로 전환**하면 `use_gpu=true`가 의미를 가진다. 기본은 CPU.
 3. **표현력이 매우 제한적** — 위 표 참조. NSFW/강감정 워크플로우에는 부적합.
-4. **학습 불가** — Phase 4 역공학 완료 시점까지 모델은 고정.
+4. **full fine-tune 미지원** — 현재 학습 탭은 새 style JSON을 만드는 clone/train adapter다.
 
 ## 다음 단계
 
 - [ ] **Phase 3.5** — 사용자 환경에서 ONNX 다운로드 + 한국어 smoke test
-- [ ] **Phase 4** — Supertonic 3 역공학 학습 (별도 마일스톤; ONNX→PyTorch 재구현 + LoRA 학습 루프, 결과 보장 없음)
+- [ ] **Phase 4** — ONNX→PyTorch 재구현 + LoRA 학습 루프 검토 (현재 style-vector clone adapter와 별도)
