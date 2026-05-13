@@ -121,9 +121,9 @@ type AceStepMode =
   | "format_sample"
   | "lora_train";
 
-type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "vendor" | "rvc" | "datasets";
+type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "model_assets" | "rvc" | "datasets";
 type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
-type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "effect" | "music" | "rvc" | "utility";
+type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "model_voice" | "effect" | "music" | "rvc" | "utility";
 type VoiceBoxMorphSource = "clone_prompt" | "reference_voice";
 type VoiceBoxMorphReferenceSource = "gallery" | "upload";
 type ActiveJob = {
@@ -436,39 +436,51 @@ function AudioSourceField({
     onFile: (file: File) => void | Promise<void>;
   };
 }) {
+  const selectedAsset = assets.find((asset) => asset.path === value || asset.path === selectedPath);
+  const previewUrl = selectedAsset?.url ? mediaUrl(selectedAsset.url) : value ? fileUrlFromPath(value) : "";
+
   return (
-    <div className="rounded-md border border-line bg-canvas/50 p-3">
-      <div className="flex flex-col gap-1.5">
-        <Label className="text-xs font-medium text-ink-muted">{label}</Label>
-        <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
-        {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
-      </div>
-      <details className="group mt-3 rounded-md border border-line bg-surface [&_summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-ink-muted">
-          생성 갤러리에서 선택
-          <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
-        </summary>
-        <div className="border-t border-line p-3">
-          <ServerAudioPicker
-            assets={assets}
-            selectedPath={selectedPath ?? value}
-            onSelect={(asset) => {
-              onChange(asset.path);
-              onSelectAsset?.(asset);
-            }}
-          />
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-gradient-to-br from-canvas via-surface to-accent-soft/40 p-4">
+        <div className="min-w-0 flex-1">
+          <Label className="text-sm font-semibold text-ink">{label}</Label>
+          <p className="mt-1 truncate text-xs text-ink-muted">
+            {value ? basenameFromPath(value) : "선택된 음성이 없습니다."}
+          </p>
         </div>
-      </details>
-      {upload ? (
-        <div className="mt-3">
+        <div className="grid size-11 place-items-center rounded-xl border border-line bg-surface text-accent">
+          <FileAudio className="size-5" />
+        </div>
+      </div>
+      <div className="flex flex-col gap-3 p-4">
+        {previewUrl ? <audio controls src={previewUrl} className="h-8 w-full" /> : null}
+        <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="bg-canvas" />
+        {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
+        <details className="group rounded-xl border border-line bg-canvas [&_summary::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-ink">
+            생성 갤러리에서 고르기
+            <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+          </summary>
+          <div className="border-t border-line p-3">
+            <ServerAudioPicker
+              assets={assets}
+              selectedPath={selectedPath ?? value}
+              onSelect={(asset) => {
+                onChange(asset.path);
+                onSelectAsset?.(asset);
+              }}
+            />
+          </div>
+        </details>
+        {upload ? (
           <AudioUploadField
             id={upload.id}
             buttonLabel="파일 선택"
             statusLabel={upload.statusLabel}
             onFile={upload.onFile}
           />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -489,26 +501,69 @@ function MultiAudioSourceField({
   helper?: string;
 }) {
   return (
-    <div className="rounded-md border border-line bg-canvas/50 p-3">
-      <div className="flex flex-col gap-1.5">
-        <Label className="text-xs font-medium text-ink-muted">{label}</Label>
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+      <div className="border-b border-line bg-gradient-to-br from-canvas via-surface to-accent-soft/40 p-4">
+        <Label className="text-sm font-semibold text-ink">{label}</Label>
+        <p className="mt-1 text-xs text-ink-muted">{value ? `${value.split(/[\n,]+/).filter(Boolean).length}개 선택됨` : "여러 화자의 참조 음성을 추가하세요."}</p>
+      </div>
+      <div className="flex flex-col gap-3 p-4">
         <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="min-h-[92px] resize-y border-line bg-surface"
+          className="min-h-[92px] resize-y border-line bg-canvas"
           placeholder={placeholder}
         />
         {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
+        <details className="group rounded-xl border border-line bg-canvas [&_summary::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-ink">
+            생성 갤러리에서 추가
+            <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+          </summary>
+          <div className="border-t border-line p-3">
+            <ServerAudioPicker assets={assets} selectedPath="" onSelect={(asset) => onChange(appendPathLine(value, asset.path))} />
+          </div>
+        </details>
       </div>
-      <details className="group mt-3 rounded-md border border-line bg-surface [&_summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-ink-muted">
-          생성 갤러리에서 추가
-          <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
-        </summary>
-        <div className="border-t border-line p-3">
-          <ServerAudioPicker assets={assets} selectedPath="" onSelect={(asset) => onChange(appendPathLine(value, asset.path))} />
-        </div>
-      </details>
+    </div>
+  );
+}
+
+function ModelModeStrip({
+  items,
+}: {
+  items: Array<{
+    id: string;
+    title: string;
+    caption: string;
+    active: boolean;
+    onClick: () => void;
+  }>;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      {items.map((item, index) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={item.onClick}
+          className={`group relative overflow-hidden rounded-3xl border p-4 text-left transition ${
+            item.active
+              ? "border-accent-edge bg-ink text-white shadow-[0_22px_60px_rgba(20,42,36,0.22)]"
+              : "border-line bg-surface hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_18px_44px_rgba(15,23,42,0.07)]"
+          }`}
+        >
+          <span
+            className={`absolute -right-8 -top-8 size-24 rounded-full blur-xl transition ${
+              index % 3 === 0 ? "bg-sky-200/50" : index % 3 === 1 ? "bg-amber-200/50" : "bg-rose-200/50"
+            } ${item.active ? "opacity-70" : "opacity-40 group-hover:opacity-70"}`}
+          />
+          <span className={`relative block text-[11px] font-semibold uppercase tracking-allcaps ${item.active ? "text-white/60" : "text-ink-subtle"}`}>
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <strong className={`relative mt-3 block text-sm font-semibold ${item.active ? "text-white" : "text-ink"}`}>{item.title}</strong>
+          <span className={`relative mt-1 block text-xs leading-5 ${item.active ? "text-white/70" : "text-ink-muted"}`}>{item.caption}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -761,6 +816,9 @@ function gallerySelectionKey(record: GenerationRecord): string {
 function galleryFilterForRecord(record: GenerationRecord): GalleryFilter {
   const mode = record.mode.toLowerCase();
   const meta = record.meta || {};
+  if (["vibevoice", "cosyvoice", "voxcpm", "supertonic", "omnivoice"].some((prefix) => mode.includes(prefix))) {
+    return "model_voice";
+  }
   if (mode.includes("ace") || mode.includes("music")) return "music";
   if (mode.includes("sound") || mode.includes("mmaudio")) return "effect";
   if (mode.includes("voice_changer") || mode.includes("rvc")) return "rvc";
@@ -2225,6 +2283,34 @@ function StudioApp() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab === "cosyvoice_tts") {
+      setCosyVoiceTtsForm((prev) => (prev.task === "instruct2" || prev.task === "sft" ? prev : { ...prev, task: "instruct2" }));
+    }
+    if (activeTab === "cosyvoice_clone") {
+      setCosyVoiceTtsForm((prev) =>
+        prev.task === "cross_lingual" || prev.task === "zero_shot" || prev.task === "vc" ? prev : { ...prev, task: "cross_lingual" },
+      );
+    }
+    if (activeTab === "voxcpm_design") {
+      setVoxCpmTtsForm((prev) => (prev.task === "voice_design" ? prev : { ...prev, task: "voice_design" }));
+    }
+    if (activeTab === "voxcpm_clone") {
+      setVoxCpmTtsForm((prev) =>
+        prev.task === "voice_cloning" || prev.task === "ultimate_cloning" ? prev : { ...prev, task: "voice_cloning" },
+      );
+    }
+    if (activeTab === "omnivoice_tts") {
+      setOmniVoiceTtsForm((prev) => (prev.task === "auto_voice" ? prev : { ...prev, task: "auto_voice" }));
+    }
+    if (activeTab === "omnivoice_design") {
+      setOmniVoiceTtsForm((prev) => (prev.task === "voice_design" ? prev : { ...prev, task: "voice_design" }));
+    }
+    if (activeTab === "omnivoice_clone") {
+      setOmniVoiceTtsForm((prev) => (prev.task === "voice_cloning" ? prev : { ...prev, task: "voice_cloning" }));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     if (!activeJob) {
       return;
     }
@@ -2495,6 +2581,9 @@ function StudioApp() {
     ["base_model", "merged_model", "model_file"].includes(asset.kind),
   );
   const vibeVoiceAdapterAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "lora_adapter");
+  const vibeVoiceReusableAssets = vibeVoiceModelAssets.filter((asset) =>
+    ["lora_adapter", "merged_model"].includes(asset.kind) || asset.notes.toLowerCase().includes("학습 결과"),
+  );
   const vibeVoiceNnScalerAssets = vibeVoiceModelAssets.filter((asset) =>
     ["model_file", "merged_model", "lora_adapter"].includes(asset.kind),
   );
@@ -2526,6 +2615,7 @@ function StudioApp() {
     speech: history.filter((record) => galleryFilterForRecord(record) === "speech").length,
     qwen_preset: history.filter((record) => galleryFilterForRecord(record) === "qwen_preset").length,
     s2pro_preset: history.filter((record) => galleryFilterForRecord(record) === "s2pro_preset").length,
+    model_voice: history.filter((record) => galleryFilterForRecord(record) === "model_voice").length,
     effect: history.filter((record) => galleryFilterForRecord(record) === "effect").length,
     music: history.filter((record) => galleryFilterForRecord(record) === "music").length,
     rvc: history.filter((record) => galleryFilterForRecord(record) === "rvc").length,
@@ -2659,6 +2749,9 @@ function StudioApp() {
       );
       return preset ? `qwen:${preset.id}` : metaPresetId ? `qwen:${metaPresetId}` : "qwen:unknown";
     }
+    if (filterKind === "model_voice") {
+      return `model:${record.mode}`;
+    }
     return "none";
   }
 
@@ -2686,6 +2779,15 @@ function StudioApp() {
           item.reference_audio_path === record.source_ref_audio_path,
       );
       return preset ? `Qwen 프리셋 · ${preset.name}` : "Qwen 프리셋";
+    }
+    if (filterKind === "model_voice") {
+      const mode = record.mode.toLowerCase();
+      if (mode.includes("vibevoice")) return "VibeVoice 생성";
+      if (mode.includes("cosyvoice")) return "CosyVoice 생성";
+      if (mode.includes("voxcpm")) return "VoxCPM 생성";
+      if (mode.includes("supertonic")) return "Supertonic 생성";
+      if (mode.includes("omnivoice")) return "OmniVoice 생성";
+      return "모델별 생성";
     }
     if (filterKind === "effect") return "사운드 이펙트";
     if (filterKind === "music") return "ACE-Step 음악";
@@ -5616,6 +5718,35 @@ function StudioApp() {
     setMessage(`추론 참조 음성으로 ${asset.filename}을(를) 선택했습니다.`);
   }
 
+  function openCosyVoiceTab(tab: Extract<TabKey, "cosyvoice_tts" | "cosyvoice_clone">) {
+    setCosyVoiceTtsForm((prev) => ({
+      ...prev,
+      task: tab === "cosyvoice_clone" ? (prev.task === "zero_shot" ? "zero_shot" : "cross_lingual") : "instruct2",
+    }));
+    setActiveTab(tab);
+  }
+
+  function openVoxCpmTab(tab: Extract<TabKey, "voxcpm_tts" | "voxcpm_design" | "voxcpm_clone">) {
+    setVoxCpmTtsForm((prev) => ({
+      ...prev,
+      task: tab === "voxcpm_design" ? "voice_design" : "voice_cloning",
+    }));
+    setActiveTab(tab);
+  }
+
+  function openOmniVoiceTab(tab: Extract<TabKey, "omnivoice_tts" | "omnivoice_design" | "omnivoice_clone">) {
+    setOmniVoiceTtsForm((prev) => ({
+      ...prev,
+      task:
+        tab === "omnivoice_design"
+          ? "voice_design"
+          : tab === "omnivoice_clone"
+            ? "voice_cloning"
+            : "auto_voice",
+    }));
+    setActiveTab(tab);
+  }
+
   const renderableTabs = new Set<TabKey>([
     "design",
     "tts",
@@ -5657,10 +5788,13 @@ function StudioApp() {
     "voicebox_fusion",
     "voicebox_morph",
     "cosyvoice_tts",
+    "cosyvoice_clone",
     "cosyvoice_voices",
     "cosyvoice_dataset",
     "cosyvoice_train",
     "voxcpm_tts",
+    "voxcpm_design",
+    "voxcpm_clone",
     "voxcpm_voices",
     "voxcpm_dataset",
     "voxcpm_train",
@@ -5669,6 +5803,8 @@ function StudioApp() {
     "supertonic_dataset",
     "supertonic_train",
     "omnivoice_tts",
+    "omnivoice_design",
+    "omnivoice_clone",
     "omnivoice_voices",
     "omnivoice_dataset",
     "omnivoice_batch",
@@ -5732,16 +5868,16 @@ function StudioApp() {
     if (activeTab === "training") return handleCreateRun();
     if (activeTab === "voicebox_fusion") return handleCreateVoiceBoxFusion();
     if (activeTab === "voicebox_morph") return handleCreateVoiceBoxSpeakerMorph();
-    if (activeTab === "cosyvoice_tts") return handleCosyVoiceGenerate();
+    if (activeTab === "cosyvoice_tts" || activeTab === "cosyvoice_clone") return handleCosyVoiceGenerate();
     if (activeTab === "cosyvoice_voices") return handleCosyVoiceSavePreset();
     if (activeTab === "cosyvoice_train") return handleCosyVoiceTrain();
-    if (activeTab === "voxcpm_tts") return handleVoxCpmGenerate();
+    if (activeTab === "voxcpm_tts" || activeTab === "voxcpm_design" || activeTab === "voxcpm_clone") return handleVoxCpmGenerate();
     if (activeTab === "voxcpm_voices") return handleVoxCpmSavePreset();
     if (activeTab === "voxcpm_train") return handleVoxCpmTrain();
     if (activeTab === "supertonic_tts") return handleSupertonicGenerate();
     if (activeTab === "supertonic_voices") return handleSupertonicSavePreset();
     if (activeTab === "supertonic_train") return handleSupertonicTrain();
-    if (activeTab === "omnivoice_tts") return handleOmniVoiceGenerate();
+    if (activeTab === "omnivoice_tts" || activeTab === "omnivoice_design" || activeTab === "omnivoice_clone") return handleOmniVoiceGenerate();
     if (activeTab === "omnivoice_voices") return handleOmniVoiceSavePreset();
     if (activeTab === "omnivoice_dataset") return handleOmniVoiceDataPrep();
     if (activeTab === "omnivoice_batch") return handleOmniVoiceBatch();
@@ -5808,6 +5944,15 @@ function StudioApp() {
     setActiveTab("mmaudio_train");
     setMessage("MMAudio 데이터셋을 학습 탭에 연결했습니다.");
   }
+
+  const isCosyVoiceGenerateTab = activeTab === "cosyvoice_tts" || activeTab === "cosyvoice_clone";
+  const isCosyVoiceCloneTab = activeTab === "cosyvoice_clone";
+  const isVoxCpmGenerateTab = activeTab === "voxcpm_tts" || activeTab === "voxcpm_design" || activeTab === "voxcpm_clone";
+  const isVoxCpmDesignTab = activeTab === "voxcpm_design";
+  const isVoxCpmCloneTab = activeTab === "voxcpm_clone";
+  const isOmniVoiceGenerateTab = activeTab === "omnivoice_tts" || activeTab === "omnivoice_design" || activeTab === "omnivoice_clone";
+  const isOmniVoiceDesignTab = activeTab === "omnivoice_design";
+  const isOmniVoiceCloneTab = activeTab === "omnivoice_clone";
 
   return (
     <>
@@ -5905,8 +6050,11 @@ function StudioApp() {
 
           <div className="studio-nav__group">
             <div className="studio-nav__label"><span>{t("section.cosyvoice", "CosyVoice")}</span></div>
-            <button className={activeTab === "cosyvoice_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("cosyvoice_tts")} type="button">
-              <span>{t("tab.cosyvoice_tts", "CosyVoice TTS")}</span>
+            <button className={activeTab === "cosyvoice_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openCosyVoiceTab("cosyvoice_tts")} type="button">
+              <span>{t("tab.cosyvoice_tts", "텍스트 음성 변환")}</span>
+            </button>
+            <button className={activeTab === "cosyvoice_clone" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openCosyVoiceTab("cosyvoice_clone")} type="button">
+              <span>{t("tab.cosyvoice_clone", "목소리 복제")}</span>
             </button>
             <button className={activeTab === "cosyvoice_voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("cosyvoice_voices")} type="button">
               <span>{t("tab.cosyvoice_voices", "CosyVoice 프리셋")}</span>
@@ -5921,8 +6069,14 @@ function StudioApp() {
 
           <div className="studio-nav__group">
             <div className="studio-nav__label"><span>{t("section.voxcpm", "VoxCPM")}</span></div>
-            <button className={activeTab === "voxcpm_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voxcpm_tts")} type="button">
-              <span>{t("tab.voxcpm_tts", "VoxCPM TTS")}</span>
+            <button className={activeTab === "voxcpm_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openVoxCpmTab("voxcpm_tts")} type="button">
+              <span>{t("tab.voxcpm_tts", "텍스트 음성 변환")}</span>
+            </button>
+            <button className={activeTab === "voxcpm_design" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openVoxCpmTab("voxcpm_design")} type="button">
+              <span>{t("tab.voxcpm_design", "목소리 디자인")}</span>
+            </button>
+            <button className={activeTab === "voxcpm_clone" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openVoxCpmTab("voxcpm_clone")} type="button">
+              <span>{t("tab.voxcpm_clone", "목소리 복제")}</span>
             </button>
             <button className={activeTab === "voxcpm_voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("voxcpm_voices")} type="button">
               <span>{t("tab.voxcpm_voices", "VoxCPM 프리셋")}</span>
@@ -5953,8 +6107,14 @@ function StudioApp() {
 
           <div className="studio-nav__group">
             <div className="studio-nav__label"><span>{t("section.omnivoice", "OmniVoice")}</span></div>
-            <button className={activeTab === "omnivoice_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_tts")} type="button">
-              <span>{t("tab.omnivoice_tts", "OmniVoice TTS")}</span>
+            <button className={activeTab === "omnivoice_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openOmniVoiceTab("omnivoice_tts")} type="button">
+              <span>{t("tab.omnivoice_tts", "텍스트 음성 변환")}</span>
+            </button>
+            <button className={activeTab === "omnivoice_design" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openOmniVoiceTab("omnivoice_design")} type="button">
+              <span>{t("tab.omnivoice_design", "목소리 디자인")}</span>
+            </button>
+            <button className={activeTab === "omnivoice_clone" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => openOmniVoiceTab("omnivoice_clone")} type="button">
+              <span>{t("tab.omnivoice_clone", "목소리 복제")}</span>
             </button>
             <button className={activeTab === "omnivoice_voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("omnivoice_voices")} type="button">
               <span>{t("tab.omnivoice_voices", "OmniVoice 프리셋")}</span>
@@ -6125,8 +6285,8 @@ function StudioApp() {
               <TabsTrigger value="s2pro" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.s2pro", "S2-Pro 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{s2VoiceProjects.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="vendor" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                {t("voices.tab.vendor", "외부 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{vibeVoiceModelAssets.length + cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length}</span>
+              <TabsTrigger value="model_assets" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.modelAssets", "프리셋/학습 결과")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{vibeVoiceReusableAssets.length + cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length}</span>
               </TabsTrigger>
               <TabsTrigger value="rvc" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.rvc", "RVC 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voiceChangerModels.length}</span>
@@ -6435,18 +6595,20 @@ function StudioApp() {
                 )}
               </TabsContent>
 
-              <TabsContent value="vendor" className="m-0 flex flex-col gap-3">
-                {vibeVoiceModelAssets.map((asset) => (
+              <TabsContent value="model_assets" className="m-0 flex flex-col gap-3">
+                {vibeVoiceReusableAssets.map((asset) => (
                   <WorkspaceCard key={`vibevoice-${asset.path}`} className="flex flex-wrap items-center gap-4">
-                    <div className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-canvas">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#e9f7ff] via-[#f2efff] to-[#fff7df] shadow-sm">
                       <span className="font-mono text-xs font-semibold text-accent">VV</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-2">
                         <strong className="text-sm font-medium text-ink">{asset.name}</strong>
-                        <span className="text-xs text-ink-muted">VibeVoice · {asset.kind}</span>
+                        <span className="text-xs text-ink-muted">
+                          VibeVoice · {asset.kind === "lora_adapter" ? "LoRA 학습 결과" : "병합 모델"}
+                        </span>
                       </div>
-                      <p className="mt-1 truncate text-sm text-ink-muted">{asset.path}</p>
+                      <p className="mt-1 truncate text-sm text-ink-muted">{asset.notes || asset.path}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -6558,11 +6720,11 @@ function StudioApp() {
                   </WorkspaceCard>
                 ))}
 
-                {vibeVoiceModelAssets.length + cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length === 0 ? (
+                {vibeVoiceReusableAssets.length + cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length === 0 ? (
                   <WorkspaceEmptyState
                     icon={Library}
-                    title="외부 모델 자산이 없습니다."
-                    body="CosyVoice, VoxCPM, Supertonic, OmniVoice 프리셋이나 VibeVoice LoRA/merged 모델이 생기면 여기에 표시됩니다."
+                    title="저장된 모델별 목소리 자산이 없습니다."
+                    body="CosyVoice, VoxCPM, Supertonic, OmniVoice 프리셋이나 VibeVoice LoRA/병합 모델처럼 바로 재사용할 수 있는 자산만 표시됩니다."
                   />
                 ) : null}
               </TabsContent>
@@ -6805,6 +6967,7 @@ function StudioApp() {
                   ["speech", t("gallery.speech", "음성")],
                   ["qwen_preset", t("gallery.qwenPreset", "Qwen 프리셋 음성")],
                   ["s2pro_preset", t("gallery.s2proPreset", "S2-Pro 프리셋 음성")],
+                  ["model_voice", t("gallery.modelVoice", "모델별 생성")],
                   ["effect", t("gallery.effect", "사운드 이펙트")],
                   ["music", t("gallery.music", "ACE-Step 음악")],
                   ["rvc", t("gallery.rvc", "RVC 변환")],
@@ -6887,10 +7050,19 @@ function StudioApp() {
               {filteredHistory.length ? filteredHistory.map((record) => {
                 const selectionKey = gallerySelectionKey(record);
                 const isSelected = selectedGalleryIds.includes(selectionKey);
+                const recordFilterKind = galleryFilterForRecord(record);
+                const recordAccentClass =
+                  recordFilterKind === "model_voice"
+                    ? "from-[#eef7ff] via-[#f7f2ff] to-[#fff8e8]"
+                    : recordFilterKind === "effect"
+                      ? "from-[#f0fff8] via-[#f5fbff] to-[#fff7ed]"
+                      : recordFilterKind === "music"
+                        ? "from-[#fff7ed] via-[#fff2f2] to-[#f7f3ff]"
+                        : "from-canvas via-surface to-accent-soft/30";
                 return (
                 <article
                   key={selectionKey}
-                  className={`flex flex-wrap items-center gap-3 rounded-md border p-3 transition ${isSelected ? "border-accent-edge bg-accent-soft/30" : "border-line bg-canvas/50 hover:border-line-strong"}`}
+                  className={`group flex flex-wrap items-center gap-4 rounded-2xl border bg-gradient-to-br ${recordAccentClass} p-4 shadow-[0_12px_34px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_18px_44px_rgba(15,23,42,0.075)] ${isSelected ? "border-accent-edge ring-2 ring-accent-soft" : "border-line"}`}
                 >
                   <label className="flex items-center" aria-label={`${getRecordDisplayTitle(record)} 선택`}>
                     <input
@@ -6900,6 +7072,9 @@ function StudioApp() {
                       className="size-4 cursor-pointer rounded border-line accent-accent"
                     />
                   </label>
+                  <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/70 bg-white/70 text-accent shadow-sm backdrop-blur">
+                    <MiniWaveform dense />
+                  </div>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <small className="text-[10px] uppercase tracking-allcaps font-mono text-ink-subtle">{getModeLabel(record.mode)} · {recordLanguageLabel(record)}</small>
                     <strong className="line-clamp-1 text-sm font-medium text-ink">{getRecordDisplayTitle(record)}</strong>
@@ -9416,15 +9591,15 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
-      {activeTab === "cosyvoice_tts" ? (
+      {isCosyVoiceGenerateTab ? (
         <WorkspaceShell>
           <WorkspaceHeader
             eyebrow="COSYVOICE"
             eyebrowIcon={AudioLines}
-            title="CosyVoice 3 텍스트 음성 변환"
-            subtitle="대사와 참조 음성만 고르면 바로 생성합니다. 한국어는 cross_lingual을 먼저 쓰세요."
+            title={isCosyVoiceCloneTab ? "CosyVoice 3 목소리 복제" : "CosyVoice 3 텍스트 음성 변환"}
+            subtitle={isCosyVoiceCloneTab ? "참조 음성의 음색을 가져와 한국어/다국어 대사를 생성합니다." : "참조 복제 입력 없이 텍스트 음성 변환과 지시형 TTS만 다룹니다."}
             action={{
-              label: "CosyVoice 생성",
+              label: isCosyVoiceCloneTab ? "복제 음성 생성" : "TTS 생성",
               formId: "cosyvoice-tts-form",
               disabled: loading || (cosyVoiceTtsForm.task !== "vc" && !cosyVoiceTtsForm.text.trim()),
               loading,
@@ -9432,6 +9607,24 @@ function StudioApp() {
           />
           <form id="cosyvoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleCosyVoiceGenerate}>
             <div className="flex flex-col gap-5">
+              <ModelModeStrip
+                items={[
+                  {
+                    id: "cosyvoice_tts",
+                    title: "텍스트 음성 변환",
+                    caption: "지시형/SFT 기반 대사 생성",
+                    active: activeTab === "cosyvoice_tts",
+                    onClick: () => openCosyVoiceTab("cosyvoice_tts"),
+                  },
+                  {
+                    id: "cosyvoice_clone",
+                    title: "목소리 복제",
+                    caption: "참조 음성 기반 zero-shot 생성",
+                    active: activeTab === "cosyvoice_clone",
+                    onClick: () => openCosyVoiceTab("cosyvoice_clone"),
+                  },
+                ]}
+              />
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="flex flex-col gap-1.5">
@@ -9449,11 +9642,18 @@ function StudioApp() {
                       <Select value={cosyVoiceTtsForm.task} onValueChange={(task) => setCosyVoiceTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="cross_lingual">cross_lingual (한국어 권장)</SelectItem>
-                          <SelectItem value="zero_shot">zero_shot</SelectItem>
-                          <SelectItem value="instruct2">instruct2</SelectItem>
-                          <SelectItem value="sft">sft (CosyVoice-1 only)</SelectItem>
-                          <SelectItem value="vc">vc (voice conversion)</SelectItem>
+                          {isCosyVoiceCloneTab ? (
+                            <>
+                              <SelectItem value="cross_lingual">cross_lingual (한국어 권장)</SelectItem>
+                              <SelectItem value="zero_shot">zero_shot</SelectItem>
+                              <SelectItem value="vc">vc (voice conversion)</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="instruct2">instruct2</SelectItem>
+                              <SelectItem value="sft">sft (CosyVoice-1 only)</SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -9473,7 +9673,7 @@ function StudioApp() {
                   </div>
                 </div>
 
-                {cosyVoiceTtsForm.task === "zero_shot" ? (
+                {isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "zero_shot" ? (
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Prompt text (참조 오디오의 transcript)</Label>
                     <Textarea
@@ -9484,7 +9684,7 @@ function StudioApp() {
                   </div>
                 ) : null}
 
-                {cosyVoiceTtsForm.task === "instruct2" ? (
+                {!isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "instruct2" ? (
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Instruct text (영어 권장, <code>{`<|endofprompt|>`}</code>로 마감)</Label>
                     <Textarea
@@ -9496,7 +9696,7 @@ function StudioApp() {
                   </div>
                 ) : null}
 
-                {cosyVoiceTtsForm.task === "vc" ? (
+                {isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "vc" ? (
                   <AudioSourceField
                     label="변환할 원본 음성"
                     value={cosyVoiceTtsForm.source_audio_path}
@@ -9506,7 +9706,7 @@ function StudioApp() {
                   />
                 ) : null}
 
-                {cosyVoiceTtsForm.task === "sft" ? (
+                {!isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "sft" ? (
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Built-in speaker</Label>
                     <Input
@@ -9515,7 +9715,7 @@ function StudioApp() {
                       placeholder="中文女"
                     />
                   </div>
-                ) : (
+                ) : isCosyVoiceCloneTab ? (
                   <AudioSourceField
                     label="참조 음성"
                     value={cosyVoiceTtsForm.prompt_audio_path}
@@ -9530,7 +9730,7 @@ function StudioApp() {
                     }
                     helper="zero-shot/cross-lingual/instruct2에서 스타일과 음색을 잡는 참조 음성입니다."
                   />
-                )}
+                ) : null}
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
@@ -9880,15 +10080,15 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
-      {activeTab === "voxcpm_tts" ? (
+      {isVoxCpmGenerateTab ? (
         <WorkspaceShell>
           <WorkspaceHeader
             eyebrow="VOXCPM"
             eyebrowIcon={AudioLines}
-            title="VoxCPM2 텍스트 음성 변환"
-            subtitle="voice design, reference cloning, prompt continuation을 한 화면에서 실행합니다."
+            title={isVoxCpmDesignTab ? "VoxCPM2 목소리 디자인" : isVoxCpmCloneTab ? "VoxCPM2 목소리 복제" : "VoxCPM2 텍스트 음성 변환"}
+            subtitle={isVoxCpmDesignTab ? "영문 voice description으로 새 목소리 샘플을 설계합니다." : isVoxCpmCloneTab ? "참조 음성 또는 prompt continuation으로 음색을 복제합니다." : "저장 프리셋과 LoRA를 적용해 대사 생성만 빠르게 확인합니다."}
             action={{
-              label: "VoxCPM 생성",
+              label: isVoxCpmDesignTab ? "디자인 샘플 생성" : isVoxCpmCloneTab ? "복제 음성 생성" : "TTS 생성",
               formId: "voxcpm-tts-form",
               disabled: loading || !voxCpmTtsForm.text.trim(),
               loading,
@@ -9896,6 +10096,31 @@ function StudioApp() {
           />
           <form id="voxcpm-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVoxCpmGenerate}>
             <div className="flex flex-col gap-5">
+              <ModelModeStrip
+                items={[
+                  {
+                    id: "voxcpm_tts",
+                    title: "텍스트 음성 변환",
+                    caption: "프리셋/LoRA로 대사 생성",
+                    active: activeTab === "voxcpm_tts",
+                    onClick: () => openVoxCpmTab("voxcpm_tts"),
+                  },
+                  {
+                    id: "voxcpm_design",
+                    title: "목소리 디자인",
+                    caption: "영문 설명으로 새 음색 설계",
+                    active: activeTab === "voxcpm_design",
+                    onClick: () => openVoxCpmTab("voxcpm_design"),
+                  },
+                  {
+                    id: "voxcpm_clone",
+                    title: "목소리 복제",
+                    caption: "참조 음성으로 음색 복제",
+                    active: activeTab === "voxcpm_clone",
+                    onClick: () => openVoxCpmTab("voxcpm_clone"),
+                  },
+                ]}
+              />
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="flex flex-col gap-1.5">
@@ -9913,9 +10138,14 @@ function StudioApp() {
                       <Select value={voxCpmTtsForm.task} onValueChange={(task) => setVoxCpmTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="voice_cloning">voice_cloning (reference 한 개)</SelectItem>
-                          <SelectItem value="ultimate_cloning">ultimate_cloning (prompt+transcript)</SelectItem>
-                          <SelectItem value="voice_design">voice_design (괄호 디스크립터)</SelectItem>
+                          {isVoxCpmDesignTab ? (
+                            <SelectItem value="voice_design">voice_design</SelectItem>
+                          ) : (
+                            <>
+                              <SelectItem value="voice_cloning">voice_cloning (reference 한 개)</SelectItem>
+                              <SelectItem value="ultimate_cloning">ultimate_cloning (prompt+transcript)</SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -9935,7 +10165,7 @@ function StudioApp() {
                   </div>
                 </div>
 
-                {voxCpmTtsForm.task !== "voice_design" ? (
+                {isVoxCpmCloneTab && voxCpmTtsForm.task !== "voice_design" ? (
                   <AudioSourceField
                     label="참조 음성"
                     value={voxCpmTtsForm.reference_wav_path}
@@ -9945,7 +10175,7 @@ function StudioApp() {
                   />
                 ) : null}
 
-                {voxCpmTtsForm.task === "ultimate_cloning" ? (
+                {isVoxCpmCloneTab && voxCpmTtsForm.task === "ultimate_cloning" ? (
                   <>
                     <AudioSourceField
                       label="이어 말할 prompt 음성"
@@ -9972,7 +10202,7 @@ function StudioApp() {
                   </>
                 ) : null}
 
-                {voxCpmTtsForm.task === "voice_design" ? (
+                {isVoxCpmDesignTab ? (
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Voice description (참고용 메모)</Label>
                     <Input
@@ -10797,15 +11027,15 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
-      {activeTab === "omnivoice_tts" ? (
+      {isOmniVoiceGenerateTab ? (
         <WorkspaceShell>
           <WorkspaceHeader
             eyebrow="OMNIVOICE"
             eyebrowIcon={AudioLines}
-            title="OmniVoice 텍스트 음성 변환"
-            subtitle="auto voice, voice design, voice cloning을 한 화면에서 다룹니다. 스타일 설명과 사운드/감정 토큰은 영어 입력을 권장합니다."
+            title={isOmniVoiceDesignTab ? "OmniVoice 목소리 디자인" : isOmniVoiceCloneTab ? "OmniVoice 목소리 복제" : "OmniVoice 텍스트 음성 변환"}
+            subtitle={isOmniVoiceDesignTab ? "영문 스타일 지시문으로 새 목소리 방향을 설계합니다." : isOmniVoiceCloneTab ? "참조 음성과 선택 전사를 사용해 음색을 복제합니다." : "auto voice 기반의 순수 텍스트 음성 변환만 다룹니다."}
             action={{
-              label: "OmniVoice 생성",
+              label: isOmniVoiceDesignTab ? "디자인 샘플 생성" : isOmniVoiceCloneTab ? "복제 음성 생성" : "TTS 생성",
               formId: "omnivoice-tts-form",
               disabled:
                 loading ||
@@ -10822,18 +11052,36 @@ function StudioApp() {
           />
           <form id="omnivoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceGenerate}>
             <div className="flex flex-col gap-5">
+              <ModelModeStrip
+                items={[
+                  {
+                    id: "omnivoice_tts",
+                    title: "텍스트 음성 변환",
+                    caption: "auto voice로 빠른 생성",
+                    active: activeTab === "omnivoice_tts",
+                    onClick: () => openOmniVoiceTab("omnivoice_tts"),
+                  },
+                  {
+                    id: "omnivoice_design",
+                    title: "목소리 디자인",
+                    caption: "영문 스타일 지시문으로 설계",
+                    active: activeTab === "omnivoice_design",
+                    onClick: () => openOmniVoiceTab("omnivoice_design"),
+                  },
+                  {
+                    id: "omnivoice_clone",
+                    title: "목소리 복제",
+                    caption: "참조 음성으로 복제",
+                    active: activeTab === "omnivoice_clone",
+                    onClick: () => openOmniVoiceTab("omnivoice_clone"),
+                  },
+                ]}
+              />
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Task</Label>
-                    <Select value={omnivoiceTtsForm.task} onValueChange={(task) => setOmniVoiceTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto_voice">auto_voice</SelectItem>
-                        <SelectItem value="voice_design">voice_design</SelectItem>
-                        <SelectItem value="voice_cloning">voice_cloning</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs font-medium text-ink-muted">Mode</Label>
+                    <Input value={isOmniVoiceDesignTab ? "voice_design" : isOmniVoiceCloneTab ? "voice_cloning" : "auto_voice"} readOnly />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Model</Label>
@@ -10881,23 +11129,38 @@ function StudioApp() {
                   <Label className="text-xs font-medium text-ink-muted">Text</Label>
                   <Textarea value={omnivoiceTtsForm.text} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))} className="min-h-[150px] resize-y border-line bg-canvas" />
                 </div>
+                {(isOmniVoiceDesignTab || isOmniVoiceCloneTab) ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Style / instruct (English)</Label>
                     <Textarea value={omnivoiceTtsForm.instruct} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, instruct: event.target.value }))} className="min-h-[110px] resize-y border-line bg-canvas" placeholder="young Korean woman, calm and articulate, clear speech with subtle warmth" />
                   </div>
                   <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">ref_audio</Label>
-                      <Input value={omnivoiceTtsForm.ref_audio} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, ref_audio: event.target.value }))} placeholder="data/generated/..." />
-                    </div>
+                    {isOmniVoiceCloneTab ? (
+                      <AudioSourceField
+                        label="참조 음성"
+                        value={omnivoiceTtsForm.ref_audio}
+                        onChange={(ref_audio) => setOmniVoiceTtsForm((prev) => ({ ...prev, ref_audio }))}
+                        assets={generatedAudioAssets}
+                        onSelectAsset={(asset) =>
+                          setOmniVoiceTtsForm((prev) => ({
+                            ...prev,
+                            ref_audio: asset.path,
+                            ref_text: prev.ref_text || asset.transcript_text || asset.text_preview || "",
+                          }))
+                        }
+                      />
+                    ) : null}
+                    {isOmniVoiceCloneTab ? (
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">ref_text</Label>
                       <Textarea value={omnivoiceTtsForm.ref_text} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, ref_text: event.target.value }))} className="min-h-[72px] resize-y border-line bg-canvas" placeholder="Optional reference transcript" />
                     </div>
+                    ) : null}
                   </div>
                 </div>
-                {omnivoiceRuntime?.voice_design_templates?.length ? (
+                ) : null}
+                {isOmniVoiceDesignTab && omnivoiceRuntime?.voice_design_templates?.length ? (
                   <div className="flex flex-col gap-3 rounded-2xl border border-line/70 bg-canvas px-4 py-3">
                     <div className="text-xs font-medium text-ink-muted">Voice design 템플릿</div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -10968,6 +11231,7 @@ function StudioApp() {
                   language options: {omnivoiceRuntime?.supported_language_options?.length || 0} · template groups: {omnivoiceRuntime?.voice_design_templates?.length || 0}
                 </div>
               </WorkspaceCard>
+              {isOmniVoiceCloneTab ? (
               <WorkspaceCard className="flex flex-col gap-2">
                 <div className="text-xs font-medium text-ink-muted">서버 오디오 선택</div>
                 <ServerAudioPicker
@@ -10982,6 +11246,7 @@ function StudioApp() {
                   }
                 />
               </WorkspaceCard>
+              ) : null}
             </aside>
           </form>
         </WorkspaceShell>

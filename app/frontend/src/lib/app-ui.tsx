@@ -71,10 +71,13 @@ export type TabKey =
   | "mmaudio_train"
   | "mmaudio_dataset"
   | "cosyvoice_tts"
+  | "cosyvoice_clone"
   | "cosyvoice_voices"
   | "cosyvoice_dataset"
   | "cosyvoice_train"
   | "voxcpm_tts"
+  | "voxcpm_design"
+  | "voxcpm_clone"
   | "voxcpm_voices"
   | "voxcpm_dataset"
   | "voxcpm_train"
@@ -83,6 +86,8 @@ export type TabKey =
   | "supertonic_dataset"
   | "supertonic_train"
   | "omnivoice_tts"
+  | "omnivoice_design"
+  | "omnivoice_clone"
   | "omnivoice_voices"
   | "omnivoice_dataset"
   | "omnivoice_batch"
@@ -347,9 +352,14 @@ export const PRODUCT_PAGES = {
     description: "MMAudio upstream train.py로 full/continued training을 실행합니다.",
   },
   cosyvoice_tts: {
-    label: "CosyVoice TTS",
+    label: "텍스트 음성 변환",
     title: "CosyVoice 3 텍스트 음성 변환",
-    description: "FunAudioLLM CosyVoice 3로 zero-shot / cross-lingual / instruct2 / SFT / voice conversion을 실행합니다. 한국어는 cross_lingual 모드를 권장합니다.",
+    description: "CosyVoice 기본/지시형 TTS만 다룹니다. 참조 음성 기반 복제는 별도 탭에서 실행합니다.",
+  },
+  cosyvoice_clone: {
+    label: "목소리 복제",
+    title: "CosyVoice 3 목소리 복제",
+    description: "참조 음성과 전사 텍스트를 사용해 zero-shot 또는 cross-lingual 복제를 실행합니다.",
   },
   cosyvoice_voices: {
     label: "CosyVoice 프리셋",
@@ -367,9 +377,19 @@ export const PRODUCT_PAGES = {
     description: "CosyVoice 사전학습 체크포인트에서 llm/flow/hifigan 서브모듈을 SFT로 이어 학습합니다. LoRA는 미지원.",
   },
   voxcpm_tts: {
-    label: "VoxCPM TTS",
+    label: "텍스트 음성 변환",
     title: "VoxCPM2 텍스트 음성 변환",
-    description: "OpenBMB VoxCPM2로 30개 언어 voice_design / voice_cloning / ultimate_cloning을 실행합니다. 한국어 클로닝 SIM 1위 모델입니다.",
+    description: "저장된 프리셋이나 LoRA를 적용해 대사 생성만 빠르게 확인합니다.",
+  },
+  voxcpm_design: {
+    label: "목소리 디자인",
+    title: "VoxCPM2 목소리 디자인",
+    description: "영문 voice description으로 새 목소리 방향을 설계하고 샘플을 생성합니다.",
+  },
+  voxcpm_clone: {
+    label: "목소리 복제",
+    title: "VoxCPM2 목소리 복제",
+    description: "참조 음성 한 개 또는 prompt continuation 방식으로 목소리를 복제합니다.",
   },
   voxcpm_voices: {
     label: "VoxCPM 프리셋",
@@ -407,9 +427,19 @@ export const PRODUCT_PAGES = {
     description: "공개 ONNX style vector를 섞고 참조 오디오 특징으로 미세 조정한 새 voice style JSON을 생성합니다.",
   },
   omnivoice_tts: {
-    label: "OmniVoice TTS",
+    label: "텍스트 음성 변환",
     title: "OmniVoice 텍스트 음성 변환",
-    description: "auto voice, voice design, voice cloning을 한 페이지에서 다룹니다. non-verbal token과 속도/길이/샘플링 파라미터까지 upstream 기능을 그대로 노출합니다.",
+    description: "auto voice 기반의 순수 텍스트 음성 변환만 다룹니다.",
+  },
+  omnivoice_design: {
+    label: "목소리 디자인",
+    title: "OmniVoice 목소리 디자인",
+    description: "영문 스타일 지시문과 언어 설정으로 새 목소리 샘플을 설계합니다.",
+  },
+  omnivoice_clone: {
+    label: "목소리 복제",
+    title: "OmniVoice 목소리 복제",
+    description: "참조 음성과 선택 전사로 특정 음색을 복제합니다.",
   },
   omnivoice_voices: {
     label: "OmniVoice 프리셋",
