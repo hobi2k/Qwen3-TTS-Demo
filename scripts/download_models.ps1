@@ -20,7 +20,6 @@ $FishSpeechDir = if ($env:FISH_SPEECH_REPO_ROOT) { $env:FISH_SPEECH_REPO_ROOT } 
 $FishSpeechModelDir = if ($env:FISH_SPEECH_MODEL_DIR) { $env:FISH_SPEECH_MODEL_DIR } else { Join-Path $RootDir "data\models\fish-speech\s2-pro" }
 $VibeVoiceDir = if ($env:VIBEVOICE_REPO_ROOT) { $env:VIBEVOICE_REPO_ROOT } else { Join-Path $VendorDir "VibeVoice" }
 $VibeVoiceModelDir = if ($env:VIBEVOICE_MODEL_DIR) { $env:VIBEVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\vibevoice" }
-$VibeVoiceVenv = if ($env:VIBEVOICE_VENV) { $env:VIBEVOICE_VENV } else { Join-Path $RootDir ".venv-vibevoice" }
 $OmniVoiceDir = if ($env:OMNIVOICE_REPO_ROOT) { $env:OMNIVOICE_REPO_ROOT } else { Join-Path $VendorDir "OmniVoice" }
 $OmniVoiceModelDir = if ($env:OMNIVOICE_MODEL_DIR) { $env:OMNIVOICE_MODEL_DIR } else { Join-Path $RootDir "data\models\omnivoice" }
 $OmniVoiceVenv = if ($env:OMNIVOICE_VENV) { $env:OMNIVOICE_VENV } else { Join-Path $RootDir ".venv-omnivoice" }
@@ -207,7 +206,7 @@ print('Fish Speech S2-Pro model download completed.')
 }
 
 # --------------------------------------------------------------------------
-# VibeVoice (Microsoft, MIT) — .venv-vibevoice + HF weight bundles
+# VibeVoice (Microsoft, MIT) — HF weight bundles only
 # --------------------------------------------------------------------------
 $VibeVoiceInclude7B = if ($env:VIBEVOICE_INCLUDE_7B) { $env:VIBEVOICE_INCLUDE_7B } else { "0" }
 if ($Profile -eq "vibevoice-7b") { $VibeVoiceInclude7B = "1" }
@@ -216,23 +215,7 @@ if (($Profile -eq "all") -or ($Profile -eq "vibevoice") -or ($Profile -eq "vibev
     if (-not (Test-Path (Join-Path $VibeVoiceDir "pyproject.toml"))) {
         throw "VibeVoice vendored source is incomplete (missing pyproject.toml): $VibeVoiceDir"
     }
-    if ($InstallVendorRuntimes -eq "1") {
-        if (-not (Test-Path $VibeVoiceVenv)) {
-            Write-Host "Creating VibeVoice venv -> $VibeVoiceVenv"
-            python -m venv $VibeVoiceVenv
-        }
-        $VibeVoicePython = Join-Path $VibeVoiceVenv "Scripts\python.exe"
-        & $VibeVoicePython -m pip install --upgrade pip wheel setuptools | Out-Host
-        $VibeVoiceRequirements = Join-Path $VibeVoiceDir "requirements.txt"
-        if (Test-Path $VibeVoiceRequirements) {
-            & $VibeVoicePython -m pip install -r $VibeVoiceRequirements | Out-Host
-        }
-        & $VibeVoicePython -m pip install -e $VibeVoiceDir | Out-Host
-        & $VibeVoicePython -m pip install librosa soundfile huggingface_hub transformers accelerate peft | Out-Host
-    }
-    else {
-        Write-Host "Skipping VibeVoice runtime install during model download."
-    }
+    Write-Host "Downloading VibeVoice model weights only. Runtime setup is handled outside download_models."
 
     python -c @"
 from pathlib import Path

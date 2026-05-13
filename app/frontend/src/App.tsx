@@ -121,7 +121,7 @@ type AceStepMode =
   | "format_sample"
   | "lora_train";
 
-type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "rvc" | "datasets";
+type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "vendor" | "rvc" | "datasets";
 type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
 type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "effect" | "music" | "rvc" | "utility";
 type VoiceBoxMorphSource = "clone_prompt" | "reference_voice";
@@ -399,6 +399,116 @@ function AudioUploadField({
         {buttonLabel}
       </button>
       <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{statusLabel}</span>
+    </div>
+  );
+}
+
+function appendPathLine(current: string, path: string): string {
+  const items = current
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set([...items, path])).join("\n");
+}
+
+function AudioSourceField({
+  label,
+  value,
+  onChange,
+  assets,
+  selectedPath,
+  onSelectAsset,
+  placeholder = "data/generated/...",
+  helper,
+  upload,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  assets: AudioAsset[];
+  selectedPath?: string;
+  onSelectAsset?: (asset: AudioAsset) => void;
+  placeholder?: string;
+  helper?: string;
+  upload?: {
+    id: string;
+    statusLabel: string;
+    onFile: (file: File) => void | Promise<void>;
+  };
+}) {
+  return (
+    <div className="rounded-md border border-line bg-canvas/50 p-3">
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs font-medium text-ink-muted">{label}</Label>
+        <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+        {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
+      </div>
+      <details className="group mt-3 rounded-md border border-line bg-surface [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-ink-muted">
+          생성 갤러리에서 선택
+          <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="border-t border-line p-3">
+          <ServerAudioPicker
+            assets={assets}
+            selectedPath={selectedPath ?? value}
+            onSelect={(asset) => {
+              onChange(asset.path);
+              onSelectAsset?.(asset);
+            }}
+          />
+        </div>
+      </details>
+      {upload ? (
+        <div className="mt-3">
+          <AudioUploadField
+            id={upload.id}
+            buttonLabel="파일 선택"
+            statusLabel={upload.statusLabel}
+            onFile={upload.onFile}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MultiAudioSourceField({
+  label,
+  value,
+  onChange,
+  assets,
+  placeholder = "data/generated/voice-a.wav\ndata/generated/voice-b.wav",
+  helper,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  assets: AudioAsset[];
+  placeholder?: string;
+  helper?: string;
+}) {
+  return (
+    <div className="rounded-md border border-line bg-canvas/50 p-3">
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs font-medium text-ink-muted">{label}</Label>
+        <Textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-h-[92px] resize-y border-line bg-surface"
+          placeholder={placeholder}
+        />
+        {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
+      </div>
+      <details className="group mt-3 rounded-md border border-line bg-surface [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-ink-muted">
+          생성 갤러리에서 추가
+          <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="border-t border-line p-3">
+          <ServerAudioPicker assets={assets} selectedPath="" onSelect={(asset) => onChange(appendPathLine(value, asset.path))} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -6005,7 +6115,7 @@ function StudioApp() {
             onValueChange={(value) => setVoiceGalleryView(value as typeof voiceGalleryView)}
             className="flex flex-col gap-5"
           >
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-1 bg-surface border border-line p-1 h-auto">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6 gap-1 bg-surface border border-line p-1 h-auto">
               <TabsTrigger value="trained" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.trained", "훈련한 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{latestFineTunedModels.length}</span>
               </TabsTrigger>
@@ -6014,6 +6124,9 @@ function StudioApp() {
               </TabsTrigger>
               <TabsTrigger value="s2pro" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.s2pro", "S2-Pro 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{s2VoiceProjects.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="vendor" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                {t("voices.tab.vendor", "외부 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{vibeVoiceModelAssets.length + cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length}</span>
               </TabsTrigger>
               <TabsTrigger value="rvc" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.rvc", "RVC 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voiceChangerModels.length}</span>
@@ -6320,6 +6433,138 @@ function StudioApp() {
                     }
                   />
                 )}
+              </TabsContent>
+
+              <TabsContent value="vendor" className="m-0 flex flex-col gap-3">
+                {vibeVoiceModelAssets.map((asset) => (
+                  <WorkspaceCard key={`vibevoice-${asset.path}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-canvas">
+                      <span className="font-mono text-xs font-semibold text-accent">VV</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{asset.name}</strong>
+                        <span className="text-xs text-ink-muted">VibeVoice · {asset.kind}</span>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-ink-muted">{asset.path}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={() => {
+                          if (asset.kind === "lora_adapter") {
+                            setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: asset.path }));
+                          }
+                          setActiveTab("vibevoice_tts");
+                        }}
+                      >
+                        VibeVoice에서 사용
+                      </Button>
+                    </div>
+                  </WorkspaceCard>
+                ))}
+
+                {cosyVoicePresets.map((preset) => (
+                  <WorkspaceCard key={`cosyvoice-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-canvas">
+                      <span className="font-mono text-xs font-semibold text-accent">CV</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">CosyVoice · {preset.task}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{preset.notes || preset.prompt_text || preset.prompt_audio_path}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" type="button" onClick={() => { handleCosyVoiceApplyPreset(preset); setActiveTab("cosyvoice_tts"); }}>
+                        생성에 사용
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleCosyVoiceDeletePreset(preset.name)}>
+                        삭제
+                      </Button>
+                    </div>
+                  </WorkspaceCard>
+                ))}
+
+                {voxCpmPresets.map((preset) => (
+                  <WorkspaceCard key={`voxcpm-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-canvas">
+                      <span className="font-mono text-xs font-semibold text-accent">VX</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">VoxCPM · {preset.task}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{preset.notes || preset.voice_description || preset.reference_wav_path}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" type="button" onClick={() => { handleVoxCpmApplyPreset(preset); setActiveTab("voxcpm_tts"); }}>
+                        생성에 사용
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleVoxCpmDeletePreset(preset.name)}>
+                        삭제
+                      </Button>
+                    </div>
+                  </WorkspaceCard>
+                ))}
+
+                {supertonicPresets.map((preset) => (
+                  <WorkspaceCard key={`supertonic-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-canvas">
+                      <span className="font-mono text-xs font-semibold text-accent">ST</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">Supertonic · {preset.voice_style}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{preset.notes || preset.language}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" type="button" onClick={() => { handleSupertonicApplyPreset(preset); setActiveTab("supertonic_tts"); }}>
+                        생성에 사용
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleSupertonicDeletePreset(preset.name)}>
+                        삭제
+                      </Button>
+                    </div>
+                  </WorkspaceCard>
+                ))}
+
+                {omnivoicePresets.map((preset) => (
+                  <WorkspaceCard key={`omnivoice-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-canvas">
+                      <span className="font-mono text-xs font-semibold text-accent">OV</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">OmniVoice · {preset.task}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{preset.notes || preset.instruct || preset.ref_audio}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" type="button" onClick={() => { handleOmniVoiceApplyPreset(preset); setActiveTab("omnivoice_tts"); }}>
+                        생성에 사용
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleOmniVoiceDeletePreset(preset.name)}>
+                        삭제
+                      </Button>
+                    </div>
+                  </WorkspaceCard>
+                ))}
+
+                {vibeVoiceModelAssets.length + cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length === 0 ? (
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title="외부 모델 자산이 없습니다."
+                    body="CosyVoice, VoxCPM, Supertonic, OmniVoice 프리셋이나 VibeVoice LoRA/merged 모델이 생기면 여기에 표시됩니다."
+                  />
+                ) : null}
               </TabsContent>
 
               <TabsContent value="rvc" className="m-0 flex flex-col gap-3">
@@ -8429,18 +8674,13 @@ function StudioApp() {
             eyebrow="VIBEVOICE"
             eyebrowIcon={AudioLines}
             title="VibeVoice TTS"
-            subtitle="Realtime 0.5B, Long-form 1.5B, 7B TTS를 실행하고 참조 음성 또는 LoRA checkpoint를 적용합니다."
+            subtitle="텍스트, 참조 음성, 선택한 LoRA만 지정해 바로 생성합니다."
             action={{
               label: "VibeVoice 생성",
               formId: "vibevoice-tts-form",
               disabled: loading || !vibeVoiceTtsForm.text.trim(),
               loading,
             }}
-            meta={
-              <Badge variant="secondary" className={vibeVoiceRuntime?.available ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
-                {vibeVoiceRuntime?.repo_ready ? "Vendor ready" : "Vendor missing"}
-              </Badge>
-            }
           />
 
           <form id="vibevoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVibeVoiceTTSSubmit}>
@@ -8474,62 +8714,66 @@ function StudioApp() {
                   </div>
                 </div>
 
-                <Tabs defaultValue="gallery">
-                  <TabsList className="grid w-full grid-cols-3 gap-1 bg-canvas border border-line p-1 h-auto">
-                    <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Gallery</TabsTrigger>
-                    <TabsTrigger value="upload" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Upload</TabsTrigger>
-                    <TabsTrigger value="path" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">Path</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="gallery" className="m-0 mt-3">
-                    <ServerAudioPicker assets={generatedAudioAssets} selectedPath={vibeVoiceTtsForm.speaker_audio_path} onSelect={handleSelectVibeVoiceAsset} />
-                  </TabsContent>
-                  <TabsContent value="upload" className="m-0 mt-3 flex flex-col gap-2">
-                    <AudioUploadField
-                      id="vibevoice-reference-upload"
-                      buttonLabel={t("file_upload.choose", "파일 선택")}
-                      statusLabel={vibeVoiceUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음")}
-                      onFile={handleUploadVibeVoiceReference}
-                    />
-                  </TabsContent>
-                  <TabsContent value="path" className="m-0 mt-3">
-                    <Input
-                      placeholder="data/generated/... 또는 절대경로"
-                      value={vibeVoiceTtsForm.speaker_audio_path}
-                      onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_audio_path: event.target.value }))}
-                    />
-                  </TabsContent>
-                </Tabs>
+                <AudioSourceField
+                  label="참조 음성"
+                  value={vibeVoiceTtsForm.speaker_audio_path}
+                  onChange={(speaker_audio_path) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_audio_path }))}
+                  assets={generatedAudioAssets}
+                  onSelectAsset={handleSelectVibeVoiceAsset}
+                  helper="단일 화자 생성에 쓰는 목소리 샘플입니다. 생성 갤러리, 업로드, 직접 경로를 한곳에서 고릅니다."
+                  upload={{
+                    id: "vibevoice-reference-upload",
+                    statusLabel: vibeVoiceUploadedRef?.filename || t("file_upload.none", "선택된 파일 없음"),
+                    onFile: handleUploadVibeVoiceReference,
+                  }}
+                />
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Speaker name</Label>
+                    <Label className="text-xs font-medium text-ink-muted">단일 화자 라벨</Label>
                     <Input value={vibeVoiceTtsForm.speaker_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_name: event.target.value }))} />
+                    <p className="text-xs leading-5 text-ink-subtle">단일 화자 모드에서 이 참조 음성을 부르는 이름입니다.</p>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint path</Label>
-                    <Input value={vibeVoiceTtsForm.checkpoint_path} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="data/audio-tools/vibevoice_training/.../adapter" />
+                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint</Label>
+                    <Select
+                      value={vibeVoiceTtsForm.checkpoint_path || "__none__"}
+                      onValueChange={(checkpoint_path) =>
+                        setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: checkpoint_path === "__none__" ? "" : checkpoint_path }))
+                      }
+                    >
+                      <SelectTrigger><SelectValue placeholder="선택 안 함" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">선택 안 함</SelectItem>
+                        {vibeVoiceAdapterAssets.map((asset) => (
+                          <SelectItem key={asset.path} value={asset.path}>
+                            {asset.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input value={vibeVoiceTtsForm.checkpoint_path} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="직접 경로 입력" />
                   </div>
                 </div>
                 {vibeVoiceTtsForm.model_profile === "tts_15b" || vibeVoiceTtsForm.model_profile === "tts_7b" ? (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Speaker names</Label>
+                      <Label className="text-xs font-medium text-ink-muted">대화용 화자 이름 목록</Label>
                       <Textarea
                         value={vibeVoiceTtsForm.speaker_names}
                         onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_names: event.target.value }))}
                         className="min-h-[72px] resize-y border-line bg-canvas"
                         placeholder="Speaker 1, Speaker 2, Speaker 3, Speaker 4"
                       />
+                      <p className="text-xs leading-5 text-ink-subtle">아래 참조 음성 목록과 같은 순서로 대응됩니다.</p>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Speaker audio paths</Label>
-                      <Textarea
-                        value={vibeVoiceTtsForm.speaker_audio_paths}
-                        onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_audio_paths: event.target.value }))}
-                        className="min-h-[72px] resize-y border-line bg-canvas"
-                        placeholder="data/generated/voice-a.wav&#10;data/generated/voice-b.wav"
-                      />
-                    </div>
+                    <MultiAudioSourceField
+                      label="화자별 참조 음성 목록"
+                      value={vibeVoiceTtsForm.speaker_audio_paths}
+                      onChange={(speaker_audio_paths) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_audio_paths }))}
+                      assets={generatedAudioAssets}
+                      helper="Long-form/다중 화자용입니다. 생성 갤러리에서 선택하면 목록에 추가됩니다."
+                    />
                   </div>
                 ) : null}
               </WorkspaceCard>
@@ -8549,16 +8793,14 @@ function StudioApp() {
 
             <aside className="self-start">
               <WorkspaceCard className="flex flex-col gap-4">
-                <strong className="text-sm font-medium text-ink">Runtime</strong>
-                <div className="grid grid-cols-2 gap-2 text-xs text-ink-muted">
-                  <span>ASR</span><span>{vibeVoiceRuntime?.asr_ready ? "ready" : "missing"}</span>
-                  <span>0.5B TTS</span><span>{vibeVoiceRuntime?.realtime_tts_ready ? "ready" : "missing"}</span>
-                  <span>1.5B TTS</span><span>{vibeVoiceRuntime?.longform_tts_ready ? "ready" : "missing"}</span>
-                  <span>7B TTS</span><span>{vibeVoiceRuntime?.large_tts_ready ? "ready" : "missing"}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="secondary" className={vibeVoiceRuntime?.realtime_tts_ready ? "bg-positive/15 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>0.5B</Badge>
+                  <Badge variant="secondary" className={vibeVoiceRuntime?.longform_tts_ready ? "bg-positive/15 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>1.5B</Badge>
+                  <Badge variant="secondary" className={vibeVoiceRuntime?.large_tts_ready ? "bg-positive/15 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>7B</Badge>
                 </div>
-                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden" open>
+                <details className="group rounded-md border border-line bg-canvas/60 [&_summary::-webkit-details-marker]:hidden">
                   <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-ink-muted">
-                    Advanced settings
+                    고급 생성 파라미터
                     <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
                   </summary>
                   <div className="grid grid-cols-2 gap-3 border-t border-line px-3 py-3">
@@ -8619,7 +8861,6 @@ function StudioApp() {
                     </label>
                   </div>
                 </details>
-                <p className="text-[11px] leading-5 text-ink-subtle">{vibeVoiceRuntime?.notes}</p>
               </WorkspaceCard>
             </aside>
           </form>
@@ -9181,18 +9422,13 @@ function StudioApp() {
             eyebrow="COSYVOICE"
             eyebrowIcon={AudioLines}
             title="CosyVoice 3 텍스트 음성 변환"
-            subtitle="zero-shot / cross-lingual / instruct2 / SFT / voice conversion. 한국어는 cross_lingual 모드를 권장합니다."
+            subtitle="대사와 참조 음성만 고르면 바로 생성합니다. 한국어는 cross_lingual을 먼저 쓰세요."
             action={{
               label: "CosyVoice 생성",
               formId: "cosyvoice-tts-form",
               disabled: loading || (cosyVoiceTtsForm.task !== "vc" && !cosyVoiceTtsForm.text.trim()),
               loading,
             }}
-            meta={
-              <Badge variant="secondary" className={cosyVoiceRuntime?.available ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
-                {cosyVoiceRuntime?.available ? "Vendor ready" : "Vendor missing"}
-              </Badge>
-            }
           />
           <form id="cosyvoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleCosyVoiceGenerate}>
             <div className="flex flex-col gap-5">
@@ -9223,11 +9459,16 @@ function StudioApp() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                      <Input
-                        value={cosyVoiceTtsForm.model_name}
-                        onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, model_name: event.target.value }))}
-                        placeholder="Fun-CosyVoice3-0.5B"
-                      />
+                      <Select value={cosyVoiceTtsForm.model_name} onValueChange={(model_name) => setCosyVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(cosyVoiceRuntime?.model_variants?.length ? cosyVoiceRuntime.model_variants : [{ name: "Fun-CosyVoice3-0.5B", available: true }]).map((model) => (
+                            <SelectItem key={model.name} value={model.name}>
+                              {model.name}{model.available ? "" : " (missing)"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -9256,14 +9497,13 @@ function StudioApp() {
                 ) : null}
 
                 {cosyVoiceTtsForm.task === "vc" ? (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Source audio path (변환할 원본)</Label>
-                    <Input
-                      value={cosyVoiceTtsForm.source_audio_path}
-                      onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, source_audio_path: event.target.value }))}
-                      placeholder="data/generated/source.wav"
-                    />
-                  </div>
+                  <AudioSourceField
+                    label="변환할 원본 음성"
+                    value={cosyVoiceTtsForm.source_audio_path}
+                    onChange={(source_audio_path) => setCosyVoiceTtsForm((prev) => ({ ...prev, source_audio_path }))}
+                    assets={generatedAudioAssets}
+                    helper="Voice conversion에서 음색을 바꿀 원본 음성입니다."
+                  />
                 ) : null}
 
                 {cosyVoiceTtsForm.task === "sft" ? (
@@ -9276,14 +9516,20 @@ function StudioApp() {
                     />
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Prompt audio path (참조 음성)</Label>
-                    <Input
-                      value={cosyVoiceTtsForm.prompt_audio_path}
-                      onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, prompt_audio_path: event.target.value }))}
-                      placeholder="data/generated/reference.wav"
-                    />
-                  </div>
+                  <AudioSourceField
+                    label="참조 음성"
+                    value={cosyVoiceTtsForm.prompt_audio_path}
+                    onChange={(prompt_audio_path) => setCosyVoiceTtsForm((prev) => ({ ...prev, prompt_audio_path }))}
+                    assets={generatedAudioAssets}
+                    onSelectAsset={(asset) =>
+                      setCosyVoiceTtsForm((prev) => ({
+                        ...prev,
+                        prompt_audio_path: asset.path,
+                        prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                      }))
+                    }
+                    helper="zero-shot/cross-lingual/instruct2에서 스타일과 음색을 잡는 참조 음성입니다."
+                  />
                 )}
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -9327,22 +9573,9 @@ function StudioApp() {
 
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">런타임</div>
-                <div className="text-xs text-ink-muted">{cosyVoiceRuntime?.notes || "런타임 정보를 확인하는 중..."}</div>
-                {cosyVoiceRuntime?.model_variants?.length ? (
-                  <div className="flex flex-col gap-1 pt-2">
-                    <div className="text-xs font-medium text-ink-muted">모델 캐시</div>
-                    {cosyVoiceRuntime.model_variants.map((m) => (
-                      <div key={m.name} className="flex items-center justify-between text-xs">
-                        <span>{m.name}</span>
-                        <span className={m.available ? "text-positive" : "text-ink-muted"}>{m.available ? "ready" : "missing"}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="text-xs font-medium text-ink-muted">저장된 프리셋</div>
                 {cosyVoicePresets.length ? (
                   <div className="flex flex-col gap-1 pt-2">
-                    <div className="text-xs font-medium text-ink-muted">저장된 프리셋</div>
                     {cosyVoicePresets.map((preset) => (
                       <button
                         key={preset.name}
@@ -9354,28 +9587,9 @@ function StudioApp() {
                       </button>
                     ))}
                   </div>
-                ) : null}
-              </WorkspaceCard>
-              <WorkspaceCard className="flex flex-col gap-3">
-                <div>
-                  <div className="text-xs font-medium text-ink-muted">참조 음성 선택</div>
-                  <p className="mt-1 text-xs text-ink-subtle">경로 입력 대신 생성 갤러리에서 prompt/source audio를 고릅니다.</p>
-                </div>
-                <ServerAudioPicker
-                  assets={generatedAudioAssets}
-                  selectedPath={cosyVoiceTtsForm.task === "vc" ? cosyVoiceTtsForm.source_audio_path : cosyVoiceTtsForm.prompt_audio_path}
-                  onSelect={(asset) => {
-                    if (cosyVoiceTtsForm.task === "vc") {
-                      setCosyVoiceTtsForm((prev) => ({ ...prev, source_audio_path: asset.path }));
-                    } else {
-                      setCosyVoiceTtsForm((prev) => ({
-                        ...prev,
-                        prompt_audio_path: asset.path,
-                        prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
-                      }));
-                    }
-                  }}
-                />
+                ) : (
+                  <div className="text-xs text-ink-muted">아직 저장된 프리셋이 없습니다.</div>
+                )}
               </WorkspaceCard>
             </aside>
           </form>
@@ -9416,10 +9630,20 @@ function StudioApp() {
                     </Select>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">참조 오디오 경로</Label>
-                  <Input value={cosyVoicePresetForm.prompt_audio_path} onChange={(event) => setCosyVoicePresetForm((prev) => ({ ...prev, prompt_audio_path: event.target.value }))} placeholder="data/generated/reference.wav" />
-                </div>
+                <AudioSourceField
+                  label="참조 음성"
+                  value={cosyVoicePresetForm.prompt_audio_path}
+                  onChange={(prompt_audio_path) => setCosyVoicePresetForm((prev) => ({ ...prev, prompt_audio_path }))}
+                  assets={generatedAudioAssets}
+                  onSelectAsset={(asset) =>
+                    setCosyVoicePresetForm((prev) => ({
+                      ...prev,
+                      name: prev.name || basenameFromPath(asset.path).replace(/\.[^.]+$/, ""),
+                      prompt_audio_path: asset.path,
+                      prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                    }))
+                  }
+                />
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">Prompt text (transcript)</Label>
                   <Textarea value={cosyVoicePresetForm.prompt_text} onChange={(event) => setCosyVoicePresetForm((prev) => ({ ...prev, prompt_text: event.target.value }))} className="min-h-[80px] border-line bg-canvas" />
@@ -9662,18 +9886,13 @@ function StudioApp() {
             eyebrow="VOXCPM"
             eyebrowIcon={AudioLines}
             title="VoxCPM2 텍스트 음성 변환"
-            subtitle="OpenBMB VoxCPM2 (30 languages, Korean SIM 83.3). voice_design / voice_cloning / ultimate_cloning."
+            subtitle="voice design, reference cloning, prompt continuation을 한 화면에서 실행합니다."
             action={{
               label: "VoxCPM 생성",
               formId: "voxcpm-tts-form",
               disabled: loading || !voxCpmTtsForm.text.trim(),
               loading,
             }}
-            meta={
-              <Badge variant="secondary" className={voxCpmRuntime?.available ? "bg-positive/20 text-positive border-0" : "bg-canvas text-ink-muted border-0"}>
-                {voxCpmRuntime?.available ? "Vendor ready" : "Vendor missing"}
-              </Badge>
-            }
           />
           <form id="voxcpm-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVoxCpmGenerate}>
             <div className="flex flex-col gap-5">
@@ -9702,36 +9921,46 @@ function StudioApp() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                      <Input
-                        value={voxCpmTtsForm.model_name}
-                        onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, model_name: event.target.value }))}
-                        placeholder="VoxCPM2"
-                      />
+                      <Select value={voxCpmTtsForm.model_name} onValueChange={(model_name) => setVoxCpmTtsForm((prev) => ({ ...prev, model_name }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(voxCpmRuntime?.model_variants?.length ? voxCpmRuntime.model_variants : [{ name: "VoxCPM2", available: true }]).map((model) => (
+                            <SelectItem key={model.name} value={model.name}>
+                              {model.name}{model.available ? "" : " (missing)"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
 
                 {voxCpmTtsForm.task !== "voice_design" ? (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Reference audio (voice cloning timbre)</Label>
-                    <Input
-                      value={voxCpmTtsForm.reference_wav_path}
-                      onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, reference_wav_path: event.target.value }))}
-                      placeholder="data/generated/reference.wav"
-                    />
-                  </div>
+                  <AudioSourceField
+                    label="참조 음성"
+                    value={voxCpmTtsForm.reference_wav_path}
+                    onChange={(reference_wav_path) => setVoxCpmTtsForm((prev) => ({ ...prev, reference_wav_path }))}
+                    assets={generatedAudioAssets}
+                    helper="voice_cloning에서 음색을 가져올 샘플입니다."
+                  />
                 ) : null}
 
                 {voxCpmTtsForm.task === "ultimate_cloning" ? (
                   <>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Prompt audio (continuation source)</Label>
-                      <Input
-                        value={voxCpmTtsForm.prompt_wav_path}
-                        onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, prompt_wav_path: event.target.value }))}
-                        placeholder="data/generated/prompt.wav"
-                      />
-                    </div>
+                    <AudioSourceField
+                      label="이어 말할 prompt 음성"
+                      value={voxCpmTtsForm.prompt_wav_path}
+                      onChange={(prompt_wav_path) => setVoxCpmTtsForm((prev) => ({ ...prev, prompt_wav_path }))}
+                      assets={generatedAudioAssets}
+                      onSelectAsset={(asset) =>
+                        setVoxCpmTtsForm((prev) => ({
+                          ...prev,
+                          prompt_wav_path: asset.path,
+                          prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                        }))
+                      }
+                      helper="ultimate_cloning에서 이어 말할 기준 음성입니다."
+                    />
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Prompt text (prompt audio transcript)</Label>
                       <Textarea
@@ -9829,22 +10058,9 @@ function StudioApp() {
 
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">런타임</div>
-                <div className="text-xs text-ink-muted">{voxCpmRuntime?.notes || "런타임 정보를 확인하는 중..."}</div>
-                {voxCpmRuntime?.model_variants?.length ? (
-                  <div className="flex flex-col gap-1 pt-2">
-                    <div className="text-xs font-medium text-ink-muted">모델 캐시</div>
-                    {voxCpmRuntime.model_variants.map((m) => (
-                      <div key={m.name} className="flex items-center justify-between text-xs">
-                        <span>{m.name}</span>
-                        <span className={m.available ? "text-positive" : "text-ink-muted"}>{m.available ? "ready" : "missing"}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="text-xs font-medium text-ink-muted">저장된 프리셋</div>
                 {voxCpmPresets.length ? (
                   <div className="flex flex-col gap-1 pt-2">
-                    <div className="text-xs font-medium text-ink-muted">저장된 프리셋</div>
                     {voxCpmPresets.map((preset) => (
                       <button
                         key={preset.name}
@@ -9856,28 +10072,9 @@ function StudioApp() {
                       </button>
                     ))}
                   </div>
-                ) : null}
-              </WorkspaceCard>
-              <WorkspaceCard className="flex flex-col gap-3">
-                <div>
-                  <div className="text-xs font-medium text-ink-muted">참조 음성 선택</div>
-                  <p className="mt-1 text-xs text-ink-subtle">voice_cloning은 reference, ultimate_cloning은 prompt까지 같은 갤러리에서 고릅니다.</p>
-                </div>
-                <ServerAudioPicker
-                  assets={generatedAudioAssets}
-                  selectedPath={voxCpmTtsForm.task === "ultimate_cloning" && voxCpmTtsForm.prompt_wav_path ? voxCpmTtsForm.prompt_wav_path : voxCpmTtsForm.reference_wav_path}
-                  onSelect={(asset) => {
-                    if (voxCpmTtsForm.task === "ultimate_cloning" && !voxCpmTtsForm.prompt_wav_path) {
-                      setVoxCpmTtsForm((prev) => ({
-                        ...prev,
-                        prompt_wav_path: asset.path,
-                        prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
-                      }));
-                    } else {
-                      setVoxCpmTtsForm((prev) => ({ ...prev, reference_wav_path: asset.path }));
-                    }
-                  }}
-                />
+                ) : (
+                  <div className="text-xs text-ink-muted">아직 저장된 프리셋이 없습니다.</div>
+                )}
               </WorkspaceCard>
             </aside>
           </form>
@@ -9919,17 +10116,36 @@ function StudioApp() {
                   </div>
                 </div>
                 {voxCpmPresetForm.task !== "voice_design" ? (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Reference audio path</Label>
-                    <Input value={voxCpmPresetForm.reference_wav_path} onChange={(event) => setVoxCpmPresetForm((prev) => ({ ...prev, reference_wav_path: event.target.value }))} placeholder="data/generated/reference.wav" />
-                  </div>
+                  <AudioSourceField
+                    label="참조 음성"
+                    value={voxCpmPresetForm.reference_wav_path}
+                    onChange={(reference_wav_path) => setVoxCpmPresetForm((prev) => ({ ...prev, reference_wav_path }))}
+                    assets={generatedAudioAssets}
+                    onSelectAsset={(asset) =>
+                      setVoxCpmPresetForm((prev) => ({
+                        ...prev,
+                        name: prev.name || basenameFromPath(asset.path).replace(/\.[^.]+$/, ""),
+                        reference_wav_path: asset.path,
+                        prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                      }))
+                    }
+                  />
                 ) : null}
                 {voxCpmPresetForm.task === "ultimate_cloning" ? (
                   <>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Prompt audio path</Label>
-                      <Input value={voxCpmPresetForm.prompt_wav_path} onChange={(event) => setVoxCpmPresetForm((prev) => ({ ...prev, prompt_wav_path: event.target.value }))} placeholder="data/generated/prompt.wav" />
-                    </div>
+                    <AudioSourceField
+                      label="이어 말할 prompt 음성"
+                      value={voxCpmPresetForm.prompt_wav_path}
+                      onChange={(prompt_wav_path) => setVoxCpmPresetForm((prev) => ({ ...prev, prompt_wav_path }))}
+                      assets={generatedAudioAssets}
+                      onSelectAsset={(asset) =>
+                        setVoxCpmPresetForm((prev) => ({
+                          ...prev,
+                          prompt_wav_path: asset.path,
+                          prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
+                        }))
+                      }
+                    />
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium text-ink-muted">Prompt text</Label>
                       <Textarea value={voxCpmPresetForm.prompt_text} onChange={(event) => setVoxCpmPresetForm((prev) => ({ ...prev, prompt_text: event.target.value }))} className="min-h-[80px] border-line bg-canvas" />
@@ -10483,16 +10699,14 @@ function StudioApp() {
                     <Label className="text-xs font-medium text-ink-muted">스타일 이름</Label>
                     <Input value={supertonicTrainForm.output_name} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">직접 참조 오디오 경로</Label>
-                    <Input value={supertonicTrainForm.reference_audio_path} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, reference_audio_path: normalizeDatasetPath(event.target.value) }))} placeholder="data/generated/..." />
-                  </div>
+                  <AudioSourceField
+                    label="단일 참조 음성"
+                    value={supertonicTrainForm.reference_audio_path}
+                    onChange={(reference_audio_path) => setSupertonicTrainForm((prev) => ({ ...prev, reference_audio_path: normalizeDatasetPath(reference_audio_path) }))}
+                    assets={generatedAudioAssets}
+                    helper="데이터셋 대신 한 파일만 기준으로 스타일을 만들 때 사용합니다."
+                  />
                 </div>
-                <ServerAudioPicker
-                  assets={generatedAudioAssets}
-                  selectedPath={supertonicTrainForm.reference_audio_path}
-                  onSelect={(asset) => setSupertonicTrainForm((prev) => ({ ...prev, reference_audio_path: asset.path }))}
-                />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">기반 스타일</Label>

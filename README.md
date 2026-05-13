@@ -107,7 +107,7 @@ cd app\frontend; npm install; npm run build
 | `s2pro` | Fish Speech S2-Pro weights + `.venv-fish-speech` |
 | `mmaudio` | MMAudio weights + `.venv-mmaudio` |
 | `ace-step` | ACE-Step-1.5 checkpoints + `.venv-ace-step` (Windows native는 nano-vllm CUDA 커널 때문에 MSVC + CUDA Toolkit 또는 WSL2 권장) |
-| `vibevoice` / `vibevoice-7b` | VibeVoice ASR / Realtime 0.5B / 1.5B (옵션 7B) + `.venv-vibevoice` |
+| `vibevoice` / `vibevoice-7b` | VibeVoice ASR / Realtime 0.5B / 1.5B (옵션 7B) 모델 weight |
 | `omnivoice` | OmniVoice weights + `.venv-omnivoice` (`OMNIVOICE_HF_MODEL_ID` default `k2-fsa/OmniVoice`) |
 | `cosyvoice` | CosyVoice 3 weights + `.venv-cosyvoice3` (`COSYVOICE_HF_MODEL_ID`로 미러 변경 가능, 기본 `FunAudioLLM/CosyVoice2-0.5B`) |
 | `voxcpm` | VoxCPM2 weights + `.venv-voxcpm2` (`VOXCPM_HF_MODEL_ID` default `openbmb/VoxCPM2`) |
@@ -249,7 +249,7 @@ voicestudio/
 - 메인 백엔드: `.venv` (Supertonic 3는 메인 venv 안에서 onnxruntime으로 in-process 실행)
 - MMAudio 전용 런타임: `.venv-mmaudio`
 - Fish Speech S2-Pro 전용 런타임: `.venv-fish-speech`
-- VibeVoice 전용 런타임: `.venv-vibevoice`
+- VibeVoice: 별도 `.venv-vibevoice`를 만들지 않고 앱의 벤더 wrapper가 실행합니다. `download_models`는 weight만 받습니다.
 - ACE-Step 전용 런타임: `.venv-ace-step`
 - CosyVoice 3 전용 런타임: `.venv-cosyvoice3`
 - VoxCPM2 전용 런타임: `.venv-voxcpm2`
@@ -425,7 +425,7 @@ FISH_AUDIO_API_KEY=
 ./scripts/download_models.sh vibevoice
 ```
 
-`all` 프로필에도 위 세 모델이 모두 포함됩니다. `vendor/VibeVoice`는 Applio/MMAudio처럼 저장소에 포함된 vendor source입니다. `.venv-vibevoice`와 `data/models/vibevoice/*`만 로컬 산출물이라 `.gitignore`에 들어갑니다. `download_models.sh`는 VibeVoice 코드를 clone하지 않고, 이미 존재하는 `vendor/VibeVoice`를 사용해 전용 venv와 모델 weight만 준비합니다.
+`all` 프로필에도 위 세 모델이 모두 포함됩니다. `vendor/VibeVoice`는 Applio/MMAudio처럼 저장소에 포함된 vendor source입니다. `download_models.sh`/`.ps1`는 VibeVoice 코드를 clone하거나 `.venv-vibevoice`를 만들지 않고, 이미 존재하는 `vendor/VibeVoice`를 확인한 뒤 `data/models/vibevoice/*` weight만 준비합니다.
 
 7B 모델은 용량과 출처가 다르므로 기본 `all`에는 넣지 않고 아래처럼 따로 받습니다.
 

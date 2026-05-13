@@ -181,7 +181,6 @@ echo
 echo "Downloaded model profile: ${PROFILE}"
 echo "Models stored in: ${MODELS_DIR}"
 
-VIBEVOICE_VENV="${VIBEVOICE_VENV:-${ROOT_DIR}/.venv-vibevoice}"
 if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "vibevoice-7b" ]]; then
   if [[ ! -f "${VIBEVOICE_DIR}/pyproject.toml" || ! -d "${VIBEVOICE_DIR}/vibevoice" ]]; then
     echo "VibeVoice vendored source is missing or incomplete: ${VIBEVOICE_DIR}" >&2
@@ -189,23 +188,7 @@ if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "v
     exit 1
   fi
   echo "Using vendored VibeVoice source: ${VIBEVOICE_DIR}"
-
-  if [[ "${INSTALL_VENDOR_RUNTIMES}" == "1" ]]; then
-    if [[ ! -d "${VIBEVOICE_VENV}" ]]; then
-      echo "Creating VibeVoice venv -> ${VIBEVOICE_VENV}"
-      python -m venv "${VIBEVOICE_VENV}"
-    fi
-    "${VIBEVOICE_VENV}/bin/python" -m pip install --upgrade pip wheel setuptools
-    if [[ -f "${VIBEVOICE_DIR}/requirements.txt" ]]; then
-      "${VIBEVOICE_VENV}/bin/python" -m pip install -r "${VIBEVOICE_DIR}/requirements.txt"
-    fi
-    if [[ -f "${VIBEVOICE_DIR}/pyproject.toml" || -f "${VIBEVOICE_DIR}/setup.py" ]]; then
-      "${VIBEVOICE_VENV}/bin/python" -m pip install -e "${VIBEVOICE_DIR}"
-    fi
-    "${VIBEVOICE_VENV}/bin/python" -m pip install librosa soundfile huggingface_hub transformers accelerate peft
-  else
-    echo "Skipping VibeVoice runtime install during model download."
-  fi
+  echo "Downloading VibeVoice model weights only. Runtime setup is handled outside download_models."
 
   VIBEVOICE_INCLUDE_7B="${VIBEVOICE_INCLUDE_7B:-0}"
   if [[ "${PROFILE}" == "vibevoice-7b" ]]; then
