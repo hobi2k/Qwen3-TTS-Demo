@@ -595,7 +595,7 @@ function ToggleCard({
     <label
       className={cn(
         "flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-2xl border border-line bg-canvas/80 px-4 py-3 text-xs text-ink-muted transition hover:border-line-strong hover:bg-surface",
-        checked && "border-accent-edge bg-accent-soft/70 text-ink shadow-[0_10px_30px_rgba(197,55,119,0.08)]",
+        checked && "border-accent-edge bg-canvas text-ink shadow-[0_10px_30px_rgba(197,55,119,0.06)]",
         className,
       )}
     >
@@ -8981,7 +8981,16 @@ function StudioApp() {
           <form id="vibevoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVibeVoiceTTSSubmit}>
             <div className="flex flex-col gap-5">
               <WorkspaceCard className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_minmax(220px,260px)_minmax(0,1fr)]">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Text</Label>
+                  <Textarea
+                    value={vibeVoiceTtsForm.text}
+                    onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))}
+                    className="min-h-[112px] resize-y border-line bg-canvas"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 md:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Model</Label>
                     <Select value={vibeVoiceTtsForm.model_profile} onValueChange={(model_profile) => setVibeVoiceTtsForm((prev) => ({ ...prev, model_profile: model_profile as "realtime" | "tts_15b" | "tts_7b" }))}>
@@ -8996,14 +9005,6 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Output name</Label>
                     <Input value={vibeVoiceTtsForm.output_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, output_name: event.target.value }))} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Text</Label>
-                    <Textarea
-                      value={vibeVoiceTtsForm.text}
-                      onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))}
-                      className="min-h-[92px] resize-y border-line bg-canvas"
-                    />
                   </div>
                 </div>
 
@@ -9744,7 +9745,10 @@ function StudioApp() {
 
                 {isCosyVoiceCloneTab && cosyVoiceTaskValue === "zero_shot" ? (
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Prompt text (참조 오디오 transcript)</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label className="text-xs font-medium text-ink-muted">Prompt text</Label>
+                      <span className="rounded-full border border-line bg-canvas px-2 py-0.5 text-[10px] text-ink-subtle">참조 오디오 transcript</span>
+                    </div>
                     <Textarea
                       value={cosyVoiceTtsForm.prompt_text}
                       onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, prompt_text: event.target.value }))}
@@ -9755,7 +9759,16 @@ function StudioApp() {
 
                 {!isCosyVoiceCloneTab && cosyVoiceTaskValue === "instruct2" ? (
                   <div className="flex flex-col gap-3">
-                    <Label className="text-xs font-medium text-ink-muted">Instruct text (영어 권장, <code>{`<|endofprompt|>`}</code>로 마감)</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label className="text-xs font-medium text-ink-muted">Instruct text</Label>
+                      <span className="rounded-full border border-line bg-canvas px-2 py-0.5 text-[10px] text-ink-subtle">영어 권장</span>
+                      <code className="rounded-full border border-line bg-sunken px-2 py-0.5 font-mono text-[10px] text-ink-muted">
+                        {"<|endofprompt|>"}
+                      </code>
+                    </div>
+                    <p className="text-[11px] leading-5 text-ink-subtle">
+                      말투와 발성 지시만 짧게 적고, 마지막은 위 종료 토큰으로 닫습니다.
+                    </p>
                     <Textarea
                       value={cosyVoiceTtsForm.instruct_text}
                       onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, instruct_text: event.target.value }))}
@@ -10245,7 +10258,10 @@ function StudioApp() {
                       helper="ultimate_cloning에서 이어 말할 기준 음성입니다."
                     />
                     <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Prompt text (prompt audio transcript)</Label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Label className="text-xs font-medium text-ink-muted">Prompt text</Label>
+                        <span className="rounded-full border border-line bg-canvas px-2 py-0.5 text-[10px] text-ink-subtle">prompt audio transcript</span>
+                      </div>
                       <Textarea
                         value={voxCpmTtsForm.prompt_text}
                         onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, prompt_text: event.target.value }))}
@@ -11145,7 +11161,7 @@ function StudioApp() {
                     <div className="text-xs font-medium text-ink-muted">Voice design 템플릿</div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {omnivoiceRuntime.voice_design_templates.map((group) => (
-                        <div key={group.label} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-3 py-3">
+                        <div key={group.label} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-3 py-3">
                           <div className="text-xs font-medium text-ink">{group.label}</div>
                           <div className="flex flex-wrap gap-2">
                             {group.options.map((option) => (
@@ -11273,7 +11289,7 @@ function StudioApp() {
                     <div className="text-xs font-medium text-ink-muted">Preset용 voice design 템플릿</div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {omnivoiceRuntime.voice_design_templates.map((group) => (
-                        <div key={group.label} className="flex flex-col gap-2 rounded-2xl border border-line bg-white px-3 py-3">
+                        <div key={group.label} className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-3 py-3">
                           <div className="text-xs font-medium text-ink">{group.label}</div>
                           <div className="flex flex-wrap gap-2">
                             {group.options.map((option) => (
