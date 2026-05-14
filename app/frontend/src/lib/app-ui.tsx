@@ -656,6 +656,77 @@ export const S2_PRO_TAGS = S2_PRO_TAG_CATEGORIES.flatMap((category) =>
   category.tags.map((tag) => ({ label: tag, prompt: tag, category: category.label })),
 );
 
+export const VOXCPM_CONTROL_TAG_CATEGORIES = [
+  {
+    label: "Voice",
+    tags: [
+      "young female voice",
+      "mature female voice",
+      "young male voice",
+      "middle-aged male voice",
+      "soft and sweet voice",
+      "low and calm voice",
+      "slightly nasal voice",
+      "clear articulation",
+      "breathy texture",
+      "warm tone",
+      "cold tone",
+    ],
+  },
+  {
+    label: "Emotion",
+    tags: [
+      "cheerful tone",
+      "melancholic tone",
+      "restrained emotion",
+      "angry and impatient",
+      "nervous and shaky",
+      "calm and composed",
+      "playful and teasing",
+      "sad but controlled",
+      "gentle and intimate",
+      "confident and bright",
+    ],
+  },
+  {
+    label: "Pace",
+    tags: [
+      "speaks slowly",
+      "slightly faster",
+      "lazy drawl",
+      "short pauses between phrases",
+      "steady rhythm",
+      "dramatic pacing",
+      "whisper-like delivery",
+      "soft-spoken delivery",
+      "energetic delivery",
+      "natural conversational pace",
+    ],
+  },
+  {
+    label: "Accent / Style",
+    tags: [
+      "Korean accent",
+      "Seoul dialect",
+      "Cantonese style",
+      "casual everyday speech",
+      "professional narration",
+      "radio host style",
+      "anime character style",
+      "documentary narrator",
+      "ASMR-like close mic feel",
+      "emotion grows near the end",
+    ],
+  },
+] as const;
+
+export const SUPERTONIC_EXPRESSION_TAG_CATEGORIES = [
+  {
+    label: "Expression",
+    tags: ["<laugh>", "<breath>", "<sigh>"],
+  },
+] as const;
+
 export const S2_PRO_FEATURES = [
   "Saved voice TTS",
   "Reusable voice assets",

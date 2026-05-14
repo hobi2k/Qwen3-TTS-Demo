@@ -211,11 +211,11 @@ VIBEVOICE_TTS_FINETUNE_COMMAND_TEMPLATE="..."
 `VibeVoice Model Tools` 탭은 학습 이후 모델 자산을 정리하는 전용 화면입니다.
 
 - `Merge LoRA into base model`
-  `vibevoice/scripts/merge_vibevoice_models.py`로 base model과 LoRA checkpoint를 병합합니다.
+  학습 결과를 기본 모델과 합쳐 생성 화면에서 바로 선택할 수 있는 완성 모델로 만듭니다.
 - `Verify merged checkpoint`
-  같은 merge script의 verify mode를 실행해 병합 결과를 점검합니다.
+  병합된 모델이 정상적으로 열리는지 점검합니다.
 - `Convert NnScaler checkpoint`
-  `vibevoice/scripts/convert_nnscaler_checkpoint_to_transformers.py`로 NnScaler checkpoint를 Transformers 폴더로 변환합니다.
+  NnScaler 형식의 학습 결과를 앱에서 다루기 쉬운 모델 폴더로 변환합니다.
 
 ## 모델 준비 확인
 

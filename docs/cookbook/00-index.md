@@ -69,7 +69,7 @@
 ### 학습과 추론 상세
 
 - [06-training-pipeline-changes.md](./06-training-pipeline-changes.md)
-  데이터셋과 학습 파이프라인 확장
+  데이터셋과 학습 기능 확장
 - [07-inference-pipeline-changes.md](./07-inference-pipeline-changes.md)
   추론 경로 확장
 - [09-quality-validation-workflow.md](./09-quality-validation-workflow.md)
@@ -99,9 +99,9 @@
 - [28-new-vendors-integration-plan.md](./28-new-vendors-integration-plan.md)
   CosyVoice 3 / VoxCPM2 / Supertonic 3 통합 계획서, 일관성 체크리스트, Phase별 작업 분해
 - [29-cosyvoice3-workspace.md](./29-cosyvoice3-workspace.md)
-  CosyVoice 3 (FunAudioLLM, Apache 2.0) 작업실. zero_shot / cross_lingual / instruct2 / sft / vc 추론, llm/flow/hifigan SFT 학습
+  CosyVoice 3 (FunAudioLLM, Apache 2.0) 작업실. 텍스트 음성 변환, 목소리 복제, 말투 지시, 음색 변환, 커스텀 목소리 학습
 - [30-voxcpm2-workspace.md](./30-voxcpm2-workspace.md)
-  VoxCPM2 (OpenBMB, Apache 2.0) 작업실. voice_design / voice_cloning / ultimate_cloning 추론, lm/dit/proj LoRA 학습
+  VoxCPM2 (OpenBMB, Apache 2.0) 작업실. 목소리 디자인, 목소리 복제, 프리셋 저장, 커스텀 목소리 학습
 - [31-supertonic3-workspace.md](./31-supertonic3-workspace.md)
   Supertonic 3 (Supertone, BigScience Open RAIL-M) ONNX in-process 추론. `<laugh>`/`<breath>`/`<sigh>` 3개 표현 태그, 참조 오디오 기반 커스텀 style JSON 클로닝
 
@@ -186,15 +186,15 @@
 - `CosyVoice 데이터셋`
   CosyVoice 학습용 manifest.jsonl을 `data/datasets/<id>/` 폴더로 정리합니다.
 - `CosyVoice 학습`
-  사전학습 체크포인트에서 llm/flow/hifigan 서브모듈을 SFT로 이어 학습합니다 (LoRA는 upstream 미지원).
+  준비된 데이터셋으로 CosyVoice 커스텀 목소리를 만듭니다.
 - `VoxCPM TTS`
   OpenBMB VoxCPM2로 voice_design (괄호 디스크립터) / voice_cloning / ultimate_cloning 30개 언어 추론을 실행합니다.
 - `VoxCPM 프리셋`
   voice_design 디스크립터, voice_cloning / ultimate_cloning 참조 오디오 묶음을 프리셋으로 저장합니다.
 - `VoxCPM 데이터셋`
-  VoxCPM2 LoRA 학습용 manifest.jsonl을 정리합니다.
+  VoxCPM2 학습에 사용할 음성 샘플과 대사를 정리합니다.
 - `VoxCPM 학습`
-  VoxCPM2의 lm/dit/proj LoRA 어댑터를 upstream trainer로 fine-tuning합니다.
+  준비된 데이터셋으로 VoxCPM 커스텀 목소리를 만듭니다.
 - `Supertonic TTS`
   Supertone Supertonic 3 ONNX 모델(31개 언어)로 한국어 등 TTS를 생성합니다. `<laugh>` / `<breath>` / `<sigh>` 3개 표현 태그만 학습되어 있습니다.
 - `Supertonic 프리셋`

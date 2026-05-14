@@ -1140,6 +1140,8 @@ export interface CosyVoice3GenerateRequest {
   model_dir?: string;
   model_name?: string;
   stream?: boolean;
+  speed?: number;
+  text_frontend?: boolean;
   seed?: number;
   label?: string;
   preset_name?: string;

@@ -832,6 +832,8 @@ class CosyVoice3GenerateRequest(BaseModel):
     model_dir: Optional[str] = None
     model_name: Optional[str] = None
     stream: bool = False
+    speed: float = Field(1.0, ge=0.5, le=2.0)
+    text_frontend: bool = True
     seed: Optional[int] = None
     label: Optional[str] = None
     preset_name: str = ""

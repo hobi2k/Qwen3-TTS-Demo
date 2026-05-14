@@ -114,7 +114,7 @@
 - Qwen 모델 선택 흐름과 분리, 자체 사이드바 섹션
 - voice_design (괄호 디스크립터) / voice_cloning / ultimate_cloning 3개 추론 모드
 - vendor wrapper subprocess + `.venv-voxcpm2` 격리 실행
-- 학습은 lm/dit/proj LoRA 어댑터 (upstream trainer 직접 호출)
+- 학습은 준비된 데이터셋으로 VoxCPM 커스텀 목소리를 만들고 생성 화면에서 재사용
 
 ### 5c. Supertonic 3
 

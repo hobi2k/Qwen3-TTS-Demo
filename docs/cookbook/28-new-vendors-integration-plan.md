@@ -9,7 +9,7 @@
 | 모델 | 라이선스 | 공개 weights | 한국어 | 추론 모드 | 학습 모드 |
 |---|---|---|---|---|---|
 | **CosyVoice 3** | Apache 2.0 | ModelScope/HF | (9개 언어 중) | zero-shot / cross-lingual / instruct / streaming | LoRA / SFT (examples/libritts) |
-| **VoxCPM2** | Apache 2.0 | HF `openbmb/VoxCPM2` | (30개 언어) | voice design / cloning / ultimate cloning / streaming | LoRA / SFT (scripts/train_voxcpm_finetune.py) |
+| **VoxCPM2** | Apache 2.0 | HF `openbmb/VoxCPM2` | (30개 언어) | voice design / cloning / ultimate cloning / streaming | 커스텀 학습 |
 | **Supertonic 3** | BigScience Open RAIL-M | HF `Supertone/supertonic-3` | (31개 언어) | TTS (3개 표현 태그: `<laugh>` `<breath>` `<sigh>`) | **업스트림 학습 코드 없음 — 역공학 필요** |
 
 ## Supertonic 3 역공학 — 별도 위험 평가
@@ -200,7 +200,7 @@ SUPERTONIC_MODEL_DIR           (default: data/models/supertonic3)
 
 CosyVoice 3와 동일한 5단계, 다음 차이만:
 - 추론 모드: `voice_design (자연어 괄호)`, `cloning`, `ultimate_cloning`, `streaming`
-- 학습 스크립트: `scripts/train_voxcpm_finetune.py` 래핑 (LoRA가 권장 경로)
+- 학습: 데이터셋을 고르면 VoxCPM용 커스텀 목소리를 만들고, 완료된 결과를 생성 화면에서 바로 재사용
 - 한국어 클로닝 SIM 1위 모델임을 강조한 문서
 
 ### Phase 3 — Supertonic 3 추론

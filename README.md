@@ -38,17 +38,17 @@
   `오디오 분리`, `RVC 데이터셋`, `RVC 모델 학습`, `단일 변환`, `배치 변환`, `모델 블렌딩`을 묶은 voice conversion 작업공간입니다. 업로드 파일과 생성 갤러리 음성을 모두 변환 입력으로 사용할 수 있습니다.
   오디오 분리는 `audio-separator` 기반 Stem Separator로 보컬/반주 또는 다중 stem을 분리합니다. 이 기능은 TTS나 목소리 저장에는 필요 없고, RVC용 보컬 추출/반주 제거가 필요할 때만 씁니다. 기본 보컬 모델은 설치된 `audio-separator 0.44.1`의 vocals 필터 상위권 Roformer 모델인 `vocals_mel_band_roformer.ckpt` 하나만 사용합니다.
 - `MMAudio 데이터셋 / 사운드 효과 / MMAudio 학습`
-  효과음 생성, 데이터셋 준비, MMAudio upstream full/continued training을 분리합니다. 데이터셋 탭에서 샘플을 프로젝트 폴더로 정리하고, 학습 탭에서는 준비된 MMAudio 데이터셋을 선택한 뒤 모델/반복 수 같은 학습 설정만 조정합니다.
+  효과음 생성, 데이터셋 준비, MMAudio 학습을 분리합니다. 데이터셋 탭에서 샘플을 프로젝트 폴더로 정리하고, 학습 탭에서는 준비된 MMAudio 데이터셋을 선택한 뒤 모델/반복 수 같은 학습 설정만 조정합니다.
 - `ACE-Step 작곡 / 데이터셋 / LoRA-LoKr 학습`
-  ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 데이터셋 탭에서 음악 학습 세트를 먼저 준비하고, `LoRA / LoKr 학습` 탭에서는 준비된 데이터셋을 선택해 upstream `train.py`로 ACE-Step 어댑터를 만듭니다.
+  ACE-Step-1.5 기반 음악 작곡실입니다. 작곡, 커버, 이어쓰기, 편집, 분석 같은 작업을 전환할 수 있고 모델 변형과 학습 결과를 UI에서 직접 선택할 수 있습니다. 별도 데이터셋 탭에서 음악 학습 세트를 먼저 준비하고, `LoRA / LoKr 학습` 탭에서는 준비된 데이터셋으로 새 음악 스타일을 만듭니다.
 - `VibeVoice`
-  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, community 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR 학습 세트를 먼저 만들고, 학습은 `TTS Fine-tune`과 `ASR Fine-tune` 탭에서 준비된 데이터셋을 선택해 실행합니다. `Model Tools`에서는 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
+  Microsoft VibeVoice를 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, community 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR 학습 세트를 먼저 만들고, 학습 탭에서 준비된 데이터셋을 선택해 실행합니다. `Model Tools`에서는 학습 결과 병합, 병합 검증, 변환을 실행합니다.
 - `CosyVoice 3 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
-  FunAudioLLM CosyVoice 3 (Apache 2.0)를 `.venv-cosyvoice3` subprocess로 다룹니다. `zero_shot`, `cross_lingual` (한국어 권장), `instruct2`, `sft`, `vc` 모드를 한 탭에서 전환할 수 있고, zero-shot/cross-lingual 보이스 프리셋을 저장해 재사용할 수 있습니다. 학습 탭은 `llm`/`flow`/`hifigan` 서브모듈을 데이터셋 manifest로 SFT 합니다 (LoRA는 upstream 미지원).
+  FunAudioLLM CosyVoice 3 (Apache 2.0)를 다룹니다. 텍스트 음성 변환, 참조 음성 기반 복제, 다국어 생성, 말투 지시, 음색 변환을 전환할 수 있고, 보이스 프리셋을 저장해 재사용할 수 있습니다. 학습 탭에서는 준비된 데이터셋으로 커스텀 목소리를 만듭니다.
 - `VoxCPM2 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
-  OpenBMB VoxCPM2 (Apache 2.0, 30개 언어, 한국어 SIM 1위)를 `.venv-voxcpm2` subprocess로 다룹니다. `voice_design` (괄호 디스크립터), `voice_cloning`, `ultimate_cloning` 세 가지 추론 모드와 `lm`/`dit`/`proj` LoRA 어댑터 학습을 한 화면에서 실행합니다. 학습 런처는 upstream `scripts/train_voxcpm_finetune.py`를 직접 호출합니다.
+  OpenBMB VoxCPM2 (Apache 2.0, 30개 언어, 한국어 SIM 1위)를 다룹니다. 텍스트 음성 변환, 목소리 디자인, 목소리 복제, 프리셋 저장, 데이터셋 구성, 커스텀 학습을 모델별 화면에서 각각 실행합니다. 영어 제어 태그를 검색해 목소리 설명이나 대사 앞 지시문에 바로 넣을 수 있고, 학습 결과는 나의 목소리들에서 다시 선택해 생성에 사용할 수 있습니다.
 - `Supertonic 3 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
-  Supertone Supertonic 3 (BigScience Open RAIL-M, 31개 언어, ONNX 추론)를 메인 venv 안에서 in-process로 실행합니다. `<laugh>`, `<breath>`, `<sigh>` 3개의 학습된 표현 태그를 인식하며, built-in voice style(M1~F4)과 역공학 기반 커스텀 style JSON을 모두 사용할 수 있습니다. 학습 탭은 full fine-tune이 아니라 참조 오디오 특징을 바탕으로 새 style vector를 생성하는 클로닝/실험 학습 경로입니다.
+  Supertone Supertonic 3 (BigScience Open RAIL-M, 31개 언어, ONNX 추론)를 메인 venv 안에서 in-process로 실행합니다. `<laugh>`, `<breath>`, `<sigh>` 3개의 학습된 표현 태그를 검색해 대사에 바로 넣을 수 있으며, built-in voice style(M1~F4)과 역공학 기반 커스텀 style JSON을 모두 사용할 수 있습니다. 학습 탭은 full fine-tune이 아니라 참조 오디오 특징을 바탕으로 새 style vector를 생성하는 클로닝/실험 학습 경로입니다.
 - `가이드`
   앱이 지원하는 모든 탭과 사용 순서를 앱 안에서 바로 확인하는 문서형 화면입니다.
 

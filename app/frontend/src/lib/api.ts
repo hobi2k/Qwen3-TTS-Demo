@@ -573,6 +573,10 @@ export const api = {
     return request<VibeVoiceModelAsset[]>("/api/vibevoice/model-assets");
   },
 
+  voxCpmModelAssets(): Promise<VibeVoiceModelAsset[]> {
+    return request<VibeVoiceModelAsset[]>("/api/voxcpm/model-assets");
+  },
+
   generateVibeVoiceTTS(payload: VibeVoiceTTSRequest): Promise<GenerationResponse> {
     return request<GenerationResponse>("/api/vibevoice/tts", {
       method: "POST",

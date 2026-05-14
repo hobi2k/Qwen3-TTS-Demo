@@ -119,6 +119,10 @@ def _run_task(
 
     text = _require(payload, "text")
     stream = _coerce_bool(payload.get("stream"), default=False)
+    speed = _coerce_optional_float(payload.get("speed")) or 1.0
+    if stream:
+        speed = 1.0
+    text_frontend = _coerce_bool(payload.get("text_frontend"), default=True)
     seed = _coerce_optional_int(payload.get("seed"))
     if seed is not None:
         try:
@@ -141,30 +145,40 @@ def _run_task(
             prompt_audio,
             zero_shot_spk_id=zero_shot_spk_id,
             stream=stream,
+            speed=speed,
+            text_frontend=text_frontend,
         )
     elif task == "cross_lingual":
         prompt_audio = _resolve_existing_path(payload, "prompt_audio_path", required=True)
+        zero_shot_spk_id = payload.get("zero_shot_spk_id") or ""
         iterator = model.inference_cross_lingual(
             text,
             prompt_audio,
+            zero_shot_spk_id=zero_shot_spk_id,
             stream=stream,
+            speed=speed,
+            text_frontend=text_frontend,
         )
     elif task == "instruct2":
         prompt_audio = _resolve_existing_path(payload, "prompt_audio_path", required=True)
         instruct_text = _require(payload, "instruct_text")
+        zero_shot_spk_id = payload.get("zero_shot_spk_id") or ""
         iterator = model.inference_instruct2(
             text,
             instruct_text,
             prompt_audio,
+            zero_shot_spk_id=zero_shot_spk_id,
             stream=stream,
+            speed=speed,
+            text_frontend=text_frontend,
         )
     elif task == "sft":
         spk_id = _require(payload, "speaker")
-        iterator = model.inference_sft(text, spk_id, stream=stream)
+        iterator = model.inference_sft(text, spk_id, stream=stream, speed=speed, text_frontend=text_frontend)
     elif task == "vc":
         source_audio = _resolve_existing_path(payload, "source_audio_path", required=True)
         prompt_audio = _resolve_existing_path(payload, "prompt_audio_path", required=True)
-        iterator = model.inference_vc(source_audio, prompt_audio, stream=stream)
+        iterator = model.inference_vc(source_audio, prompt_audio, stream=stream, speed=speed)
 
     if iterator is None:
         raise RuntimeError(f"No iterator produced for task: {task}")
@@ -195,6 +209,8 @@ def _run_task(
         "duration_seconds": duration,
         "model_dir": str(model_dir),
         "stream": stream,
+        "speed": speed,
+        "text_frontend": text_frontend,
         "seed": seed,
     }
 

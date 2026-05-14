@@ -54,8 +54,10 @@ import {
   S2_PRO_TAG_CATEGORIES,
   S2ProMode,
   SOUND_EFFECT_LIBRARY,
+  SUPERTONIC_EXPRESSION_TAG_CATEGORIES,
   SpotlightCard,
   TabKey,
+  VOXCPM_CONTROL_TAG_CATEGORIES,
   VOICEBOX_ACTIONS,
   VOICEBOX_STEPS,
 } from "./lib/app-ui";
@@ -447,6 +449,7 @@ function AudioSourceField({
   value,
   onChange,
   assets,
+  modes,
   selectedPath,
   onSelectAsset,
   placeholder = "data/generated/...",
@@ -457,6 +460,7 @@ function AudioSourceField({
   value: string;
   onChange: (value: string) => void;
   assets: AudioAsset[];
+  modes?: Array<"path" | "gallery" | "upload">;
   selectedPath?: string;
   onSelectAsset?: (asset: AudioAsset) => void;
   placeholder?: string;
@@ -468,8 +472,11 @@ function AudioSourceField({
   };
 }) {
   const [sourceTab, setSourceTab] = useState<"path" | "gallery" | "upload">("gallery");
+  const availableModes = modes ?? (upload ? ["path", "gallery", "upload"] : ["path", "gallery"]);
+  const activeSourceTab = availableModes.includes(sourceTab) ? sourceTab : availableModes[0] ?? "path";
   const selectedAsset = assets.find((asset) => asset.path === value || asset.path === selectedPath);
   const previewUrl = selectedAsset?.url ? mediaUrl(selectedAsset.url) : value ? fileUrlFromPath(value) : "";
+  const modeGridClass = availableModes.length === 3 ? "grid-cols-3" : availableModes.length === 2 ? "grid-cols-2" : "grid-cols-1";
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
@@ -487,23 +494,32 @@ function AudioSourceField({
       <div className="flex flex-col gap-3 p-4">
         {previewUrl ? <audio controls src={previewUrl} className="h-8 w-full" /> : null}
         {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
-        <Tabs value={sourceTab} onValueChange={(next) => setSourceTab(next as "path" | "gallery" | "upload")} className="flex flex-col gap-3">
-          <TabsList className={`grid h-auto w-full gap-1 border border-line bg-canvas p-1 ${upload ? "grid-cols-3" : "grid-cols-2"}`}>
-            <TabsTrigger value="path" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
-              경로
-            </TabsTrigger>
-            <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
-              생성 갤러리
-            </TabsTrigger>
-            {upload ? (
+        <Tabs value={activeSourceTab} onValueChange={(next) => setSourceTab(next as "path" | "gallery" | "upload")} className="flex flex-col gap-3">
+          {availableModes.length > 1 ? (
+            <TabsList className={`grid h-auto w-full gap-1 border border-line bg-canvas p-1 ${modeGridClass}`}>
+              {availableModes.includes("path") ? (
+                <TabsTrigger value="path" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+                  경로
+                </TabsTrigger>
+              ) : null}
+              {availableModes.includes("gallery") ? (
+                <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+                  생성 갤러리
+                </TabsTrigger>
+              ) : null}
+              {upload && availableModes.includes("upload") ? (
               <TabsTrigger value="upload" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
                 파일 선택
               </TabsTrigger>
-            ) : null}
-          </TabsList>
+              ) : null}
+            </TabsList>
+          ) : null}
+          {availableModes.includes("path") ? (
           <TabsContent value="path" className="m-0">
             <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="bg-canvas" />
           </TabsContent>
+          ) : null}
+          {availableModes.includes("gallery") ? (
           <TabsContent value="gallery" className="m-0 rounded-xl border border-line bg-canvas p-3">
             <ServerAudioPicker
               assets={assets}
@@ -514,7 +530,8 @@ function AudioSourceField({
               }}
             />
           </TabsContent>
-          {upload ? (
+          ) : null}
+          {upload && availableModes.includes("upload") ? (
             <TabsContent value="upload" className="m-0">
               <AudioUploadField
                 id={upload.id}
@@ -527,6 +544,80 @@ function AudioSourceField({
         </Tabs>
       </div>
     </div>
+  );
+}
+
+type ExpressionTagCategory = {
+  label: string;
+  tags: readonly string[];
+};
+
+function ExpressionTagPicker({
+  title,
+  hint,
+  search,
+  onSearch,
+  categories,
+  onApply,
+  disabled = false,
+  emptyLabel = "검색 결과가 없습니다.",
+  searchPlaceholder = "태그 검색",
+}: {
+  title: string;
+  hint: string;
+  search: string;
+  onSearch: (value: string) => void;
+  categories: ExpressionTagCategory[];
+  onApply: (tag: string) => void;
+  disabled?: boolean;
+  emptyLabel?: string;
+  searchPlaceholder?: string;
+}) {
+  const hasTags = categories.some((category) => category.tags.length > 0);
+
+  return (
+    <details className="group rounded-2xl border border-line bg-gradient-to-br from-canvas via-surface to-accent-soft/30 [&_summary::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink">
+        <span>{title}</span>
+        <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-subtle transition group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="flex flex-col gap-3 border-t border-line px-4 py-4">
+        <p className="text-xs leading-5 text-ink-muted">{hint}</p>
+        <Input
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder={searchPlaceholder}
+          disabled={disabled}
+          className="bg-surface"
+        />
+        {hasTags ? (
+          <div className="flex max-h-72 flex-col gap-3 overflow-y-auto pr-1" aria-label={title}>
+            {categories.map((category, categoryIndex) => (
+              <section key={`${category.label}-${categoryIndex}`} className="flex flex-col gap-1.5">
+                <strong className="text-xs font-medium text-ink-muted">{category.label}</strong>
+                <div className="flex flex-wrap gap-1.5">
+                  {category.tags.map((tag, tagIndex) => (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 rounded-full bg-surface px-2.5 text-xs hover:border-accent hover:bg-accent-soft hover:text-accent-ink"
+                      key={`${category.label}-${tag}-${tagIndex}`}
+                      onClick={() => onApply(tag)}
+                      type="button"
+                      disabled={disabled}
+                    >
+                      {tag}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-line bg-surface px-3 py-4 text-xs text-ink-muted">{emptyLabel}</div>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -1662,6 +1753,8 @@ function StudioApp() {
   const [s2ProVoices, setS2ProVoices] = useState<S2ProVoiceRecord[]>([]);
   const [selectedS2VoiceId, setSelectedS2VoiceId] = useState("");
   const [s2TagSearch, setS2TagSearch] = useState("");
+  const [voxCpmTagSearch, setVoxCpmTagSearch] = useState("");
+  const [supertonicTagSearch, setSupertonicTagSearch] = useState("");
   const [s2ProForm, setS2ProForm] = useState({
     runtime_source: "local" as "local" | "api",
     output_name: "s2pro-voice-tts",
@@ -1739,8 +1832,12 @@ function StudioApp() {
     instruct_text: "",
     speaker: "",
     source_audio_path: "",
+    zero_shot_spk_id: "",
     model_name: "Fun-CosyVoice3-0.5B",
     seed: "",
+    speed: "1.0",
+    stream: false,
+    text_frontend: true,
     label: "",
     audio_format: "wav" as "wav" | "flac" | "mp3" | "ogg",
   });
@@ -1767,6 +1864,7 @@ function StudioApp() {
   });
   const [voxCpmRuntime, setVoxCpmRuntime] = useState<VoxCPM2RuntimeResponse | null>(null);
   const [voxCpmPresets, setVoxCpmPresets] = useState<VoxCPM2VoicePreset[]>([]);
+  const [voxCpmModelAssets, setVoxCpmModelAssets] = useState<VibeVoiceModelAsset[]>([]);
   const [lastVoxCpmRecord, setLastVoxCpmRecord] = useState<GenerationRecord | null>(null);
   const [lastVoxCpmTrainResult, setLastVoxCpmTrainResult] = useState<VoxCPM2TrainingResponse | null>(null);
   const [voxCpmTtsForm, setVoxCpmTtsForm] = useState({
@@ -1786,7 +1884,7 @@ function StudioApp() {
     denoise: false,
     enable_denoiser: true,
     optimize: true,
-    device: "",
+    device: "auto",
     seed: "",
     lora_weights_path: "",
     label: "",
@@ -2390,9 +2488,11 @@ function StudioApp() {
     try {
       setVoxCpmRuntime(await api.voxcpmRuntime());
       setVoxCpmPresets(await api.listVoxCPMPresets());
+      setVoxCpmModelAssets(await api.voxCpmModelAssets());
     } catch {
       setVoxCpmRuntime(null);
       setVoxCpmPresets([]);
+      setVoxCpmModelAssets([]);
     }
     try {
       setSupertonicRuntime(await api.supertonicRuntime());
@@ -2729,6 +2829,8 @@ function StudioApp() {
   const vibeVoiceAdapterAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "lora_adapter");
   const vibeVoiceMergedAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "merged_model");
   const reusableModelAssetCount = vibeVoiceAdapterAssets.length + vibeVoiceMergedAssets.length;
+  const voxCpmLoraAssets = voxCpmModelAssets.filter((asset) => asset.kind === "lora_adapter");
+  const voxCpmLibraryCount = voxCpmPresets.length + voxCpmLoraAssets.length;
   const vibeVoiceNnScalerAssets = vibeVoiceModelAssets.filter((asset) =>
     ["model_file", "merged_model", "lora_adapter"].includes(asset.kind),
   );
@@ -3077,6 +3179,24 @@ function StudioApp() {
       return !query || `${category.label} ${tag}`.toLowerCase().includes(query);
     }),
   })).filter((category) => category.tags.length > 0);
+  const filteredVoxCpmControlTagCategories = VOXCPM_CONTROL_TAG_CATEGORIES.map((category) => ({
+    ...category,
+    tags: category.tags.filter((tag) => {
+      const query = voxCpmTagSearch.trim().toLowerCase();
+      return !query || `${category.label} ${tag}`.toLowerCase().includes(query);
+    }),
+  })).filter((category) => category.tags.length > 0);
+  const supertonicSupportedExpressionTags =
+    supertonicRuntime?.supported_expression_tags?.length
+      ? supertonicRuntime.supported_expression_tags
+      : SUPERTONIC_EXPRESSION_TAG_CATEGORIES.flatMap((category) => [...category.tags]);
+  const filteredSupertonicExpressionTagCategories = SUPERTONIC_EXPRESSION_TAG_CATEGORIES.map((category) => ({
+    ...category,
+    tags: category.tags.filter((tag) => {
+      const query = supertonicTagSearch.trim().toLowerCase();
+      return supertonicSupportedExpressionTags.includes(tag) && (!query || `${category.label} ${tag}`.toLowerCase().includes(query));
+    }),
+  })).filter((category) => category.tags.length > 0);
   const cloneModelOptions = [...baseModels, ...voiceBoxModels];
   const selectedCloneModelId = cloneEngine === "voicebox" ? voiceBoxCloneForm.model_id : selectedBaseModelId;
   const selectedVoiceChangerModel = voiceChangerModels.find((item) => item.id === voiceChangerForm.selected_model_id) ?? null;
@@ -3257,6 +3377,51 @@ function StudioApp() {
     setS2ProForm((prev) => ({
       ...prev,
       text: prev.text.trim() ? `${prev.text.trim()} ${prompt}` : prompt,
+    }));
+  }
+
+  function appendInlineTag(current: string, tag: string): string {
+    return current.trim() ? `${current.trim()} ${tag}` : tag;
+  }
+
+  function addVoxCpmControlInstruction(current: string, instruction: string): string {
+    const text = current.trim();
+    const cleanInstruction = instruction.trim();
+    if (!text) {
+      return `(${cleanInstruction})`;
+    }
+    const match = text.match(/^\(([^)]*)\)\s*(.*)$/s);
+    if (!match) {
+      return `(${cleanInstruction})${text}`;
+    }
+    const existing = match[1].trim();
+    const rest = match[2] ?? "";
+    const merged = existing ? `${existing}, ${cleanInstruction}` : cleanInstruction;
+    return `(${merged})${rest}`;
+  }
+
+  function applyVoxCpmControlTag(tag: string) {
+    if (voxCpmTaskValue === "ultimate_cloning") {
+      setMessage("VoxCPM 이어 말하기 복제는 기준 음성의 대사와 흐름을 우선합니다. 제어 태그는 목소리 디자인이나 참조 음성 복제에서 사용하세요.");
+      return;
+    }
+    if (isVoxCpmDesignTab) {
+      setVoxCpmTtsForm((prev) => ({
+        ...prev,
+        voice_description: prev.voice_description.trim() ? `${prev.voice_description.trim()}, ${tag}` : tag,
+      }));
+      return;
+    }
+    setVoxCpmTtsForm((prev) => ({
+      ...prev,
+      text: addVoxCpmControlInstruction(prev.text, tag),
+    }));
+  }
+
+  function applySupertonicExpressionTag(tag: string) {
+    setSupertonicTtsForm((prev) => ({
+      ...prev,
+      text: appendInlineTag(prev.text, tag),
     }));
   }
 
@@ -3737,27 +3902,38 @@ function StudioApp() {
   async function handleCosyVoiceGenerate(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
-      if (!cosyVoiceTtsForm.text.trim() && cosyVoiceTtsForm.task !== "vc") {
+      const taskForRequest = cosyVoiceTaskValue;
+      if (!cosyVoiceTtsForm.text.trim() && taskForRequest !== "vc") {
         setMessage("CosyVoice 텍스트를 입력하세요.");
         return;
       }
       const seedTrim = cosyVoiceTtsForm.seed.trim();
+      const speedValue = cosyVoiceTtsForm.stream ? 1.0 : Number(cosyVoiceTtsForm.speed || "1.0");
+      const instructText = cosyVoiceTtsForm.instruct_text.trim();
+      const normalizedInstructText =
+        taskForRequest === "instruct2" && instructText && !instructText.includes("<|endofprompt|>")
+          ? `${instructText}<|endofprompt|>`
+          : instructText;
       const activePreset = cosyVoicePresets.find(
         (preset) =>
           pathsMatch(preset.prompt_audio_path, cosyVoiceTtsForm.prompt_audio_path) &&
-          (!preset.task || preset.task === cosyVoiceTtsForm.task) &&
+          (!preset.task || preset.task === taskForRequest) &&
           (!preset.prompt_text || textMatches(preset.prompt_text, cosyVoiceTtsForm.prompt_text)),
       );
       const response = await api.generateCosyVoice({
-        task: cosyVoiceTtsForm.task,
+        task: taskForRequest,
         text: cosyVoiceTtsForm.text,
         language: cosyVoiceTtsForm.language || undefined,
         prompt_text: cosyVoiceTtsForm.prompt_text || undefined,
         prompt_audio_path: cosyVoiceTtsForm.prompt_audio_path || undefined,
-        instruct_text: cosyVoiceTtsForm.instruct_text || undefined,
+        instruct_text: normalizedInstructText || undefined,
         speaker: cosyVoiceTtsForm.speaker || undefined,
         source_audio_path: cosyVoiceTtsForm.source_audio_path || undefined,
+        zero_shot_spk_id: cosyVoiceTtsForm.zero_shot_spk_id || undefined,
         model_name: cosyVoiceTtsForm.model_name || undefined,
+        speed: Number.isFinite(speedValue) ? speedValue : 1.0,
+        stream: cosyVoiceTtsForm.stream,
+        text_frontend: cosyVoiceTtsForm.text_frontend,
         seed: seedTrim ? Number(seedTrim) : undefined,
         label: cosyVoiceTtsForm.label || undefined,
         preset_name: activePreset?.name || undefined,
@@ -3850,7 +4026,19 @@ function StudioApp() {
     event?.preventDefault();
     await runAction(async () => {
       if (!voxCpmTtsForm.text.trim()) {
-        setMessage("VoxCPM 텍스트를 입력하세요.");
+        setMessage("생성할 대사를 입력하세요.");
+        return;
+      }
+      if (voxCpmTaskValue === "voice_design" && !voxCpmTtsForm.voice_description.trim()) {
+        setMessage("목소리 디자인 설명을 입력하세요.");
+        return;
+      }
+      if (voxCpmTaskValue === "voice_cloning" && !voxCpmTtsForm.reference_wav_path.trim()) {
+        setMessage("복제할 참조 음성을 선택하세요.");
+        return;
+      }
+      if (voxCpmTaskValue === "ultimate_cloning" && (!voxCpmTtsForm.prompt_wav_path.trim() || !voxCpmTtsForm.prompt_text.trim())) {
+        setMessage("이어 말하기 복제에는 prompt 음성과 prompt 대사가 필요합니다.");
         return;
       }
       const seedTrim = voxCpmTtsForm.seed.trim();
@@ -3880,7 +4068,7 @@ function StudioApp() {
         denoise: voxCpmTtsForm.denoise,
         enable_denoiser: voxCpmTtsForm.enable_denoiser,
         optimize: voxCpmTtsForm.optimize,
-        device: voxCpmTtsForm.device || undefined,
+        device: voxCpmTtsForm.device && voxCpmTtsForm.device !== "auto" ? voxCpmTtsForm.device : undefined,
         seed: seedTrim ? Number(seedTrim) : undefined,
         lora_weights_path: voxCpmTtsForm.lora_weights_path || undefined,
         label: voxCpmTtsForm.label || undefined,
@@ -4383,6 +4571,7 @@ function StudioApp() {
           .filter(Boolean),
       });
       setLastVoxCpmTrainResult(result);
+      await refreshAll();
       setMessage(`VoxCPM 학습 ${result.status} (run: ${result.run_id}).`);
     });
   }
@@ -6262,6 +6451,12 @@ function StudioApp() {
   const voxCpmTaskValue = isVoxCpmDesignTab
     ? "voice_design"
     : (voxCpmTtsForm.task === "ultimate_cloning" || voxCpmTtsForm.task === "voice_cloning" ? voxCpmTtsForm.task : "voice_cloning");
+  const voxCpmSubmitDisabled =
+    loading ||
+    !voxCpmTtsForm.text.trim() ||
+    (voxCpmTaskValue === "voice_design" && !voxCpmTtsForm.voice_description.trim()) ||
+    (voxCpmTaskValue === "voice_cloning" && !voxCpmTtsForm.reference_wav_path.trim()) ||
+    (voxCpmTaskValue === "ultimate_cloning" && (!voxCpmTtsForm.prompt_wav_path.trim() || !voxCpmTtsForm.prompt_text.trim()));
   const isOmniVoiceGenerateTab = activeTab === "omnivoice_tts" || activeTab === "omnivoice_design" || activeTab === "omnivoice_clone";
   const isOmniVoiceDesignTab = activeTab === "omnivoice_design";
   const isOmniVoiceCloneTab = activeTab === "omnivoice_clone";
@@ -6602,7 +6797,7 @@ function StudioApp() {
                 CosyVoice <span className="ml-1 font-mono text-[10px] text-ink-subtle">{cosyVoicePresets.length}</span>
               </TabsTrigger>
               <TabsTrigger value="voxcpm" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                VoxCPM <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voxCpmPresets.length}</span>
+                VoxCPM <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voxCpmLibraryCount}</span>
               </TabsTrigger>
               <TabsTrigger value="supertonic" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 Supertonic <span className="ml-1 font-mono text-[10px] text-ink-subtle">{supertonicPresets.length}</span>
@@ -7050,8 +7245,43 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="voxcpm" className="m-0 flex flex-col gap-3">
-                {voxCpmPresets.length ? (
+                {voxCpmLibraryCount ? (
                   <>
+                    {voxCpmLoraAssets.length ? (
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                        <div>
+                          <strong className="text-sm font-semibold text-ink">훈련한 모델</strong>
+                          <p className="mt-1 text-xs text-ink-muted">VoxCPM 학습으로 만든 LoRA 가중치입니다.</p>
+                        </div>
+                        <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{voxCpmLoraAssets.length}</Badge>
+                      </div>
+                    ) : null}
+                    {voxCpmLoraAssets.map((asset) => (
+                      <WorkspaceCard key={`voxcpm-lora-${asset.path}`} className="flex flex-wrap items-center gap-4">
+                        <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#ecfff7] via-[#edf7ff] to-[#fff7df] shadow-sm">
+                          <span className="font-mono text-xs font-semibold text-accent">VX</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <strong className="text-sm font-medium text-ink">{asset.name}</strong>
+                            <span className="text-xs text-ink-muted">LoRA</span>
+                          </div>
+                          <p className="mt-1 truncate text-sm text-ink-muted">{asset.notes || asset.path}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => {
+                            setVoxCpmTtsForm((prev) => ({ ...prev, lora_weights_path: asset.path }));
+                            setActiveTab("voxcpm_tts");
+                          }}
+                        >
+                          TTS에서 사용
+                        </Button>
+                      </WorkspaceCard>
+                    ))}
+                    {voxCpmPresets.length ? (
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
                       <div>
                         <strong className="text-sm font-semibold text-ink">프리셋</strong>
@@ -7059,6 +7289,7 @@ function StudioApp() {
                       </div>
                       <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{voxCpmPresets.length}</Badge>
                     </div>
+                    ) : null}
                     {voxCpmPresets.map((preset) => (
                   <WorkspaceCard key={`voxcpm-${preset.name}`} className="flex flex-wrap items-center gap-4">
                     <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#ecfff7] via-[#f5f1ff] to-[#fff7df] shadow-sm">
@@ -7079,8 +7310,8 @@ function StudioApp() {
                 ) : (
                   <WorkspaceEmptyState
                     icon={Library}
-                    title="VoxCPM 프리셋이 없습니다."
-                    body="VoxCPM 목소리 디자인이나 복제에서 저장한 프리셋만 이 영역에 표시됩니다."
+                    title="VoxCPM 목소리 자산이 없습니다."
+                    body="VoxCPM 프리셋과 학습한 LoRA 가중치가 이 영역에 표시됩니다."
                     action={<Button onClick={() => setActiveTab("voxcpm_voices")} type="button">VoxCPM 프리셋 만들기</Button>}
                   />
                 )}
@@ -9356,7 +9587,7 @@ function StudioApp() {
                     <p className="text-xs leading-5 text-ink-subtle">참조 음성을 대본 안에서 부르는 화자 이름입니다.</p>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <Label className="text-xs font-semibold text-ink-muted">LoRA checkpoint</Label>
+                    <Label className="text-xs font-semibold text-ink-muted">학습한 목소리</Label>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
                       <Select
                         value={vibeVoiceTtsForm.checkpoint_path || "__none__"}
@@ -9980,14 +10211,14 @@ function StudioApp() {
                     </TabsContent>
                   </Tabs>
                   <Tabs value={vibeVoiceModelToolSource.checkpoint} onValueChange={(value) => setVibeVoiceModelToolSource((prev) => ({ ...prev, checkpoint: value as "library" | "path" }))} className="flex flex-col gap-2">
-                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint</Label>
+                    <Label className="text-xs font-medium text-ink-muted">학습 결과</Label>
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="library" disabled={vibeVoiceModelToolForm.tool === "verify_merge"}>생성된 모델에서 선택</TabsTrigger>
                       <TabsTrigger value="path" disabled={vibeVoiceModelToolForm.tool === "verify_merge"}>직접 경로</TabsTrigger>
                     </TabsList>
                     <TabsContent value="library" className="m-0">
                       <Select value={vibeVoiceModelToolForm.checkpoint_path} onValueChange={(checkpoint_path) => setVibeVoiceModelToolForm((prev) => ({ ...prev, checkpoint_path }))} disabled={vibeVoiceModelToolForm.tool === "verify_merge"}>
-                        <SelectTrigger><SelectValue placeholder="학습 결과 adapter 선택" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="학습 결과 선택" /></SelectTrigger>
                         <SelectContent>
                           {vibeVoiceAdapterAssets.length ? vibeVoiceAdapterAssets.map((asset) => (
                             <SelectItem key={asset.id} value={asset.path}>{asset.name} · {vibeVoiceAssetKindLabel(asset.kind)}</SelectItem>
@@ -10016,7 +10247,7 @@ function StudioApp() {
                   </Select>
                 </div>
                 <p className="self-end text-xs leading-5 text-ink-subtle">
-                  병합 결과는 VibeVoice TTS의 `LoRA checkpoint path` 없이 바로 쓰는 self-contained 모델 폴더로 관리할 수 있습니다.
+                  병합 결과는 VibeVoice TTS에서 바로 선택할 수 있는 완성 모델 폴더로 관리됩니다.
                 </p>
               </div>
             </WorkspaceCard>
@@ -10082,21 +10313,17 @@ function StudioApp() {
 
                 {!isCosyVoiceCloneTab && cosyVoiceTaskValue === "instruct2" ? (
                   <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label className="text-xs font-medium text-ink-muted">Instruct text</Label>
-                      <span className="rounded-full border border-line bg-canvas px-2 py-0.5 text-[10px] text-ink-subtle">영어 권장</span>
-                      <code className="rounded-full border border-line bg-sunken px-2 py-0.5 font-mono text-[10px] text-ink-muted">
-                        {"<|endofprompt|>"}
-                      </code>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs font-semibold text-ink-muted">말투 지시문</Label>
+                      <p className="text-[11px] leading-5 text-ink-subtle">
+                        영어로 짧게 적으면 안정적입니다. 생성 요청 때 필요한 마무리 형식은 자동으로 맞춥니다.
+                      </p>
                     </div>
-                    <p className="text-[11px] leading-5 text-ink-subtle">
-                      말투와 발성 지시만 짧게 적고, 마지막은 위 종료 토큰으로 닫습니다.
-                    </p>
                     <Textarea
                       value={cosyVoiceTtsForm.instruct_text}
                       onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, instruct_text: event.target.value }))}
                       className="min-h-[112px] border-line bg-canvas"
-                      placeholder="You are a helpful assistant. Speak in a calm, low voice.<|endofprompt|>"
+                      placeholder="Speak in a calm, low voice with clear articulation."
                     />
                   </div>
                 ) : null}
@@ -10107,13 +10334,14 @@ function StudioApp() {
                     value={cosyVoiceTtsForm.source_audio_path}
                     onChange={(source_audio_path) => setCosyVoiceTtsForm((prev) => ({ ...prev, source_audio_path }))}
                     assets={generatedAudioAssets}
-                    helper="Voice conversion에서 음색을 바꿀 원본 음성입니다."
+                    modes={["path"]}
+                    helper="Voice conversion에서 음색을 바꿀 원본 음성 경로입니다."
                   />
                 ) : null}
 
-                {isCosyVoiceCloneTab ? (
+                {isCosyVoiceCloneTab || cosyVoiceTaskValue === "instruct2" ? (
                   <AudioSourceField
-                    label="참조 음성"
+                    label={cosyVoiceTaskValue === "instruct2" ? "말투 기준 음성" : "참조 음성"}
                     value={cosyVoiceTtsForm.prompt_audio_path}
                     onChange={(prompt_audio_path) => setCosyVoiceTtsForm((prev) => ({ ...prev, prompt_audio_path }))}
                     assets={generatedAudioAssets}
@@ -10124,7 +10352,7 @@ function StudioApp() {
                         prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
                       }))
                     }
-                    helper="zero-shot/cross-lingual/instruct2에서 스타일과 음색을 잡는 참조 음성입니다."
+                    helper={cosyVoiceTaskValue === "instruct2" ? "지시형 TTS가 발성 기준으로 쓰는 짧은 음성입니다." : "zero-shot/cross-lingual/voice conversion에서 스타일과 음색을 잡는 참조 음성입니다."}
                   />
                 ) : null}
 
@@ -10213,6 +10441,69 @@ function StudioApp() {
                     />
                   </div>
                 ) : null}
+
+                <div className="rounded-2xl border border-line bg-canvas/70 p-3">
+                  <details className="group">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-ink">
+                      고급 옵션
+                      <span className="text-[11px] font-medium text-ink-subtle transition group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div className="mt-4 flex flex-col gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium text-ink-muted">출력 이름</Label>
+                        <Input
+                          value={cosyVoiceTtsForm.label}
+                          onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, label: event.target.value }))}
+                          placeholder="cosyvoice-sample"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">속도</Label>
+                          <Input
+                            value={cosyVoiceTtsForm.speed}
+                            disabled={cosyVoiceTtsForm.stream}
+                            onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, speed: event.target.value }))}
+                            placeholder="1.0"
+                          />
+                          <span className="text-[10px] leading-4 text-ink-subtle">0.5-2.0, streaming이 켜지면 1.0으로 고정됩니다.</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-sunken px-3 py-2.5">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-medium text-ink">스트리밍</span>
+                            <span className="text-[10px] text-ink-subtle">긴 문장 첫 출력 대기시간을 줄입니다.</span>
+                          </div>
+                          <Switch
+                            checked={cosyVoiceTtsForm.stream}
+                            onCheckedChange={(stream) => setCosyVoiceTtsForm((prev) => ({ ...prev, stream }))}
+                          />
+                        </div>
+                        {cosyVoiceTaskValue !== "vc" ? (
+                          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-sunken px-3 py-2.5">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs font-medium text-ink">텍스트 정규화</span>
+                              <span className="text-[10px] text-ink-subtle">숫자, 기호, 다국어 문장을 읽기 좋게 정리합니다.</span>
+                            </div>
+                            <Switch
+                              checked={cosyVoiceTtsForm.text_frontend}
+                              onCheckedChange={(text_frontend) => setCosyVoiceTtsForm((prev) => ({ ...prev, text_frontend }))}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                      {cosyVoiceTaskValue === "zero_shot" || cosyVoiceTaskValue === "cross_lingual" || cosyVoiceTaskValue === "instruct2" ? (
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-medium text-ink-muted">저장 화자 ID</Label>
+                          <Input
+                            value={cosyVoiceTtsForm.zero_shot_spk_id}
+                            onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, zero_shot_spk_id: event.target.value }))}
+                            placeholder="비워두면 참조 음성에서 바로 추출"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </details>
+                </div>
               </WorkspaceCard>
 
               <WorkspaceCard className="flex flex-col gap-3">
@@ -10426,16 +10717,16 @@ function StudioApp() {
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">dataset_id (train)</Label>
+                    <Label className="text-xs font-medium text-ink-muted">학습 데이터셋</Label>
                     <Input value={cosyVoiceTrainForm.dataset_id} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, dataset_id: event.target.value }))} placeholder="my-cosyvoice-dataset" />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">cv_dataset_id (validation, 선택)</Label>
+                    <Label className="text-xs font-medium text-ink-muted">검증 데이터셋</Label>
                     <Input value={cosyVoiceTrainForm.cv_dataset_id} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, cv_dataset_id: event.target.value }))} placeholder="" />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">학습할 submodels</Label>
+                  <Label className="text-xs font-medium text-ink-muted">학습 대상</Label>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {(["llm", "flow", "hifigan"] as const).map((name) => {
                       const checked = cosyVoiceTrainForm.submodels.includes(name);
@@ -10460,44 +10751,44 @@ function StudioApp() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">train_engine</Label>
+                    <Label className="text-xs font-medium text-ink-muted">학습 방식</Label>
                     <Select value={cosyVoiceTrainForm.train_engine} onValueChange={(train_engine) => setCosyVoiceTrainForm((prev) => ({ ...prev, train_engine: train_engine as typeof prev.train_engine }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="torch_ddp">torch_ddp</SelectItem>
-                        <SelectItem value="deepspeed">deepspeed (Linux/CUDA)</SelectItem>
+                        <SelectItem value="torch_ddp">자동</SelectItem>
+                        <SelectItem value="deepspeed">고성능 GPU</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">base_model</Label>
+                    <Label className="text-xs font-medium text-ink-muted">기준 모델</Label>
                     <Input value={cosyVoiceTrainForm.base_model} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, base_model: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">run_name (선택)</Label>
+                    <Label className="text-xs font-medium text-ink-muted">실행 이름</Label>
                     <Input value={cosyVoiceTrainForm.run_name} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, run_name: event.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 sm:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">max_epoch</Label>
+                    <Label className="text-xs font-medium text-ink-muted">반복 횟수</Label>
                     <Input value={cosyVoiceTrainForm.max_epoch} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, max_epoch: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">batch_size</Label>
+                    <Label className="text-xs font-medium text-ink-muted">배치 크기</Label>
                     <Input value={cosyVoiceTrainForm.batch_size} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, batch_size: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">learning_rate</Label>
+                    <Label className="text-xs font-medium text-ink-muted">학습률</Label>
                     <Input value={cosyVoiceTrainForm.learning_rate} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, learning_rate: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">num_workers</Label>
+                    <Label className="text-xs font-medium text-ink-muted">작업 수</Label>
                     <Input value={cosyVoiceTrainForm.num_workers} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, num_workers: event.target.value }))} />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">extra args (공백 구분)</Label>
+                  <Label className="text-xs font-medium text-ink-muted">추가 옵션</Label>
                   <Textarea value={cosyVoiceTrainForm.extra_args} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, extra_args: event.target.value }))} className="min-h-[60px] border-line bg-canvas" placeholder="--use_amp --pin_memory" />
                 </div>
               </WorkspaceCard>
@@ -10506,7 +10797,7 @@ function StudioApp() {
                 <WorkspaceCard className="flex flex-col gap-2">
                   <div className="text-xs font-medium text-ink-muted">최근 학습 결과</div>
                   <div className="text-sm text-ink">run_id: {lastCosyVoiceTrainResult.run_id} · status: {lastCosyVoiceTrainResult.status}</div>
-                  <div className="text-xs text-ink-muted">checkpoint_dir: {lastCosyVoiceTrainResult.checkpoint_dir}</div>
+                  <div className="text-xs text-ink-muted">저장 폴더: {lastCosyVoiceTrainResult.checkpoint_dir}</div>
                   {lastCosyVoiceTrainResult.log_tail ? (
                     <pre className="rounded border border-line bg-canvas p-3 text-xs overflow-x-auto max-h-48">{lastCosyVoiceTrainResult.log_tail}</pre>
                   ) : null}
@@ -10515,12 +10806,11 @@ function StudioApp() {
             </div>
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">학습 파이프라인</div>
-                <div className="text-xs text-ink-muted">
-                  prepare → extract_embedding (campplus) → extract_speech_token (speech_tokenizer_v1) → make_parquet → train_&lt;submodel&gt;.
-                  GPU가 보이면 torchrun으로 분산 실행, 없으면 단일 프로세스 fallback.
+                <div className="text-xs font-medium text-ink-muted">학습 안내</div>
+                <div className="text-xs leading-5 text-ink-muted">
+                  데이터셋과 학습 대상을 고른 뒤 시작하면, 가능한 장비 설정에 맞춰 자동으로 실행합니다.
+                  완료된 결과는 최근 학습 결과와 나의 목소리들에서 확인할 수 있습니다.
                 </div>
-                <div className="text-xs text-ink-muted">결과는 <code>data/finetune-runs/cosyvoice3/&lt;run_id&gt;/exp/&lt;submodel&gt;/</code>에 저장됩니다.</div>
               </WorkspaceCard>
             </aside>
           </form>
@@ -10537,37 +10827,79 @@ function StudioApp() {
             action={{
               label: isVoxCpmDesignTab ? "디자인 샘플 생성" : isVoxCpmCloneTab ? "복제 음성 생성" : "TTS 생성",
               formId: "voxcpm-tts-form",
-              disabled: loading || !voxCpmTtsForm.text.trim(),
+              disabled: voxCpmSubmitDisabled,
               loading,
             }}
           />
           <form id="voxcpm-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleVoxCpmGenerate}>
             <div className="flex flex-col gap-5">
               <WorkspaceCard className="flex flex-col gap-5">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Text</Label>
-                  <Textarea
-                    value={voxCpmTtsForm.text}
-                    onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, text: event.target.value }))}
-                    className="min-h-[116px] resize-y border-line bg-canvas"
-                    placeholder="voice_design은 '(A young woman, gentle voice)안녕하세요' 처럼 괄호 디스크립터를 앞에 붙입니다."
-                  />
-                </div>
+                {isVoxCpmDesignTab ? (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold text-ink-muted">목소리 디자인 설명</Label>
+                      <Textarea
+                        value={voxCpmTtsForm.voice_description}
+                        onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, voice_description: event.target.value }))}
+                        className="min-h-[140px] resize-y border-line bg-canvas"
+                        placeholder="Young Korean woman, calm, soft-spoken, clear articulation, warm but restrained."
+                      />
+                      <p className="text-[11px] leading-5 text-ink-subtle">영어로 목소리 성별, 나이감, 톤, 감정, 발음 스타일을 적습니다.</p>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold text-ink-muted">샘플 대사</Label>
+                      <Textarea
+                        value={voxCpmTtsForm.text}
+                        onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, text: event.target.value }))}
+                        className="min-h-[140px] resize-y border-line bg-canvas"
+                        placeholder="안녕하세요, 오늘은 조금 낮은 목소리로 또박또박 말해볼게요."
+                      />
+                      <p className="text-[11px] leading-5 text-ink-subtle">괄호 문법은 자동으로 붙습니다. 대사에는 실제 말할 문장만 쓰면 됩니다.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-semibold text-ink-muted">대사</Label>
+                    <Textarea
+                      value={voxCpmTtsForm.text}
+                      onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, text: event.target.value }))}
+                      className="min-h-[116px] resize-y border-line bg-canvas"
+                      placeholder="생성할 한국어 대사를 입력하세요."
+                    />
+                  </div>
+                )}
 
-                {isVoxCpmCloneTab && voxCpmTaskValue !== "voice_design" ? (
+                <ExpressionTagPicker
+                  title="제어 태그"
+                  hint={
+                    voxCpmTaskValue === "ultimate_cloning"
+                      ? "VoxCPM 이어 말하기 복제는 기준 음성의 대사와 리듬을 그대로 이어가는 모드라 제어 태그를 넣지 않습니다."
+                      : isVoxCpmDesignTab
+                        ? "VoxCPM은 대괄호 태그가 아니라 영어 제어 지시문을 사용합니다. 선택한 항목은 목소리 디자인 설명에 추가됩니다."
+                        : "VoxCPM은 S2-Pro식 [tag]가 아니라 대사 앞의 영어 제어 지시문을 사용합니다. 선택한 항목은 대사 앞 괄호 지시문으로 들어갑니다."
+                  }
+                  search={voxCpmTagSearch}
+                  onSearch={setVoxCpmTagSearch}
+                  categories={filteredVoxCpmControlTagCategories}
+                  onApply={applyVoxCpmControlTag}
+                  disabled={voxCpmTaskValue === "ultimate_cloning"}
+                  searchPlaceholder="Search controls, e.g. breathy, calm, slow"
+                />
+
+                {isVoxCpmCloneTab && voxCpmTaskValue === "voice_cloning" ? (
                   <AudioSourceField
-                    label="참조 음성"
+                    label="복제할 목소리"
                     value={voxCpmTtsForm.reference_wav_path}
                     onChange={(reference_wav_path) => setVoxCpmTtsForm((prev) => ({ ...prev, reference_wav_path }))}
                     assets={generatedAudioAssets}
-                    helper="voice_cloning에서 음색을 가져올 샘플입니다."
+                    helper="이 음성의 음색으로 위 대사를 말합니다."
                   />
                 ) : null}
 
                 {isVoxCpmCloneTab && voxCpmTaskValue === "ultimate_cloning" ? (
                   <>
                     <AudioSourceField
-                      label="이어 말할 prompt 음성"
+                      label="이어 말할 기준 음성"
                       value={voxCpmTtsForm.prompt_wav_path}
                       onChange={(prompt_wav_path) => setVoxCpmTtsForm((prev) => ({ ...prev, prompt_wav_path }))}
                       assets={generatedAudioAssets}
@@ -10578,49 +10910,52 @@ function StudioApp() {
                           prompt_text: prev.prompt_text || asset.transcript_text || asset.text_preview || "",
                         }))
                       }
-                      helper="ultimate_cloning에서 이어 말할 기준 음성입니다."
+                      helper="이 음성의 말투와 흐름을 이어서 새 대사를 생성합니다."
                     />
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Label className="text-xs font-medium text-ink-muted">Prompt text</Label>
-                        <span className="rounded-full border border-line bg-canvas px-2 py-0.5 text-[10px] text-ink-subtle">prompt audio transcript</span>
-                      </div>
+                      <Label className="text-xs font-semibold text-ink-muted">기준 음성의 대사</Label>
                       <Textarea
                         value={voxCpmTtsForm.prompt_text}
                         onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, prompt_text: event.target.value }))}
-                        className="min-h-[80px] border-line bg-canvas"
+                        className="min-h-[90px] border-line bg-canvas"
+                        placeholder="기준 음성에서 실제로 말한 문장을 적습니다."
                       />
                     </div>
-                  </>
-                ) : null}
-
-                {isVoxCpmDesignTab ? (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Voice description (참고용 메모)</Label>
-                    <Input
-                      value={voxCpmTtsForm.voice_description}
-                      onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, voice_description: event.target.value }))}
-                      placeholder="A young woman, gentle and sweet voice"
+                    <AudioSourceField
+                      label="추가 음색 참조"
+                      value={voxCpmTtsForm.reference_wav_path}
+                      onChange={(reference_wav_path) => setVoxCpmTtsForm((prev) => ({ ...prev, reference_wav_path }))}
+                      assets={generatedAudioAssets}
+                      helper="선택 사항입니다. 비워두면 위 기준 음성만 사용합니다."
                     />
-                  </div>
+                  </>
                 ) : null}
 
                 <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 sm:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">cfg_value</Label>
-                    <Input value={voxCpmTtsForm.cfg_value} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, cfg_value: event.target.value }))} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">inference_timesteps</Label>
-                    <Input value={voxCpmTtsForm.inference_timesteps} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, inference_timesteps: event.target.value }))} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
+                    <Label className="text-xs font-medium text-ink-muted">언어</Label>
                     <ModelLanguageSelect
                       value={voxCpmTtsForm.language}
                       onChange={(language) => setVoxCpmTtsForm((prev) => ({ ...prev, language }))}
                       languages={voxCpmRuntime?.supported_languages}
                     />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">디바이스</Label>
+                    <Select value={voxCpmTtsForm.device} onValueChange={(device) => setVoxCpmTtsForm((prev) => ({ ...prev, device }))}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">자동</SelectItem>
+                        <SelectItem value="cuda">CUDA</SelectItem>
+                        <SelectItem value="cuda:0">CUDA 0</SelectItem>
+                        <SelectItem value="mps">Apple MPS</SelectItem>
+                        <SelectItem value="cpu">CPU</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Seed</Label>
+                    <Input value={voxCpmTtsForm.seed} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, seed: event.target.value }))} placeholder="비우면 랜덤" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Format</Label>
@@ -10636,31 +10971,36 @@ function StudioApp() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Device</Label>
-                    <Input value={voxCpmTtsForm.device} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, device: event.target.value }))} placeholder="auto / cuda / mps / cpu" />
+                <details className="group rounded-2xl border border-line bg-canvas/70 p-4">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink">
+                    고급 옵션
+                    <span className="text-[11px] font-medium text-ink-subtle transition group-open:rotate-180">⌄</span>
+                  </summary>
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">CFG</Label>
+                      <Input value={voxCpmTtsForm.cfg_value} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, cfg_value: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">추론 단계</Label>
+                      <Input value={voxCpmTtsForm.inference_timesteps} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, inference_timesteps: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">최소 길이</Label>
+                      <Input value={voxCpmTtsForm.min_len} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, min_len: event.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium text-ink-muted">최대 길이</Label>
+                      <Input value={voxCpmTtsForm.max_len} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, max_len: event.target.value }))} />
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Seed</Label>
-                    <Input value={voxCpmTtsForm.seed} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, seed: event.target.value }))} />
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
+                    <ToggleCard checked={voxCpmTtsForm.normalize} onChange={(normalize) => setVoxCpmTtsForm((prev) => ({ ...prev, normalize }))} label="텍스트 정규화" />
+                    <ToggleCard checked={voxCpmTtsForm.denoise} onChange={(denoise) => setVoxCpmTtsForm((prev) => ({ ...prev, denoise }))} label="참조 음성 정리" />
+                    <ToggleCard checked={voxCpmTtsForm.enable_denoiser} onChange={(enable_denoiser) => setVoxCpmTtsForm((prev) => ({ ...prev, enable_denoiser }))} label="디노이저 사용" />
+                    <ToggleCard checked={voxCpmTtsForm.optimize} onChange={(optimize) => setVoxCpmTtsForm((prev) => ({ ...prev, optimize }))} label="최적화" />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">LoRA weights path</Label>
-                    <Input value={voxCpmTtsForm.lora_weights_path} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, lora_weights_path: event.target.value }))} placeholder="(선택) LoRA .pth 또는 디렉터리" />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">max_len</Label>
-                    <Input value={voxCpmTtsForm.max_len} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, max_len: event.target.value }))} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                  <ToggleCard checked={voxCpmTtsForm.normalize} onChange={(normalize) => setVoxCpmTtsForm((prev) => ({ ...prev, normalize }))} label="Text normalize" />
-                  <ToggleCard checked={voxCpmTtsForm.denoise} onChange={(denoise) => setVoxCpmTtsForm((prev) => ({ ...prev, denoise }))} label="Denoise reference" />
-                  <ToggleCard checked={voxCpmTtsForm.enable_denoiser} onChange={(enable_denoiser) => setVoxCpmTtsForm((prev) => ({ ...prev, enable_denoiser }))} label="Load denoiser" />
-                  <ToggleCard checked={voxCpmTtsForm.optimize} onChange={(optimize) => setVoxCpmTtsForm((prev) => ({ ...prev, optimize }))} label="torch.compile" />
-                </div>
+                </details>
               </WorkspaceCard>
 
               {lastVoxCpmRecord ? (
@@ -10674,23 +11014,23 @@ function StudioApp() {
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="text-xs font-medium text-ink-muted">생성 설정</div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Task</Label>
+                  <Label className="text-xs font-medium text-ink-muted">{isVoxCpmDesignTab ? "작업" : "복제 방식"}</Label>
                   <Select value={voxCpmTaskValue} onValueChange={(task) => setVoxCpmTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {isVoxCpmDesignTab ? (
-                        <SelectItem value="voice_design">voice_design</SelectItem>
+                        <SelectItem value="voice_design">목소리 디자인</SelectItem>
                       ) : (
                         <>
-                          <SelectItem value="voice_cloning">voice_cloning</SelectItem>
-                          <SelectItem value="ultimate_cloning">ultimate_cloning</SelectItem>
+                          <SelectItem value="voice_cloning">참조 음성 복제</SelectItem>
+                          <SelectItem value="ultimate_cloning">이어 말하기 복제</SelectItem>
                         </>
                       )}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                  <Label className="text-xs font-medium text-ink-muted">모델</Label>
                   <Select value={voxCpmTtsForm.model_name} onValueChange={(model_name) => setVoxCpmTtsForm((prev) => ({ ...prev, model_name }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -10701,6 +11041,34 @@ function StudioApp() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </WorkspaceCard>
+              <WorkspaceCard className="flex flex-col gap-3">
+                <div>
+                  <div className="text-xs font-medium text-ink-muted">LoRA 가중치</div>
+                  <p className="mt-1 text-xs leading-5 text-ink-subtle">나의 목소리들에 저장된 VoxCPM 학습 결과를 고르거나, 직접 폴더 경로를 넣습니다.</p>
+                </div>
+                <Select
+                  value={voxCpmTtsForm.lora_weights_path || "__none"}
+                  onValueChange={(value) => setVoxCpmTtsForm((prev) => ({ ...prev, lora_weights_path: value === "__none" ? "" : value }))}
+                >
+                  <SelectTrigger className="w-full"><SelectValue placeholder="저장된 LoRA 선택" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">사용 안 함</SelectItem>
+                    {voxCpmLoraAssets.map((asset) => (
+                      <SelectItem key={asset.path} value={asset.path}>
+                        {asset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">폴더 경로</Label>
+                  <Input
+                    value={voxCpmTtsForm.lora_weights_path}
+                    onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, lora_weights_path: event.target.value }))}
+                    placeholder="나의 목소리들에서 선택하거나 폴더 경로를 입력"
+                  />
                 </div>
               </WorkspaceCard>
               <WorkspaceCard className="flex flex-col gap-2">
@@ -11041,10 +11409,10 @@ function StudioApp() {
             </div>
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">학습 파이프라인</div>
-                <div className="text-xs text-ink-muted">
-                  prepare manifest → train_voxcpm_finetune.py (LoRA: lm/dit/proj). 결과는
-                  <code> data/finetune-runs/voxcpm2/&lt;run_id&gt;/checkpoints/</code>에 저장됩니다.
+                <div className="text-xs font-medium text-ink-muted">학습 안내</div>
+                <div className="text-xs leading-5 text-ink-muted">
+                  데이터셋과 학습할 영역을 고른 뒤 시작하면 자동으로 학습을 실행합니다.
+                  완료된 결과는 최근 학습 결과와 나의 목소리들에서 확인할 수 있습니다.
                 </div>
               </WorkspaceCard>
             </aside>
@@ -11112,6 +11480,16 @@ function StudioApp() {
                   </div>
                 </div>
 
+                <ExpressionTagPicker
+                  title="표현 태그"
+                  hint="Supertonic이 실제로 학습한 태그만 넣습니다. 대괄호 태그는 제거되므로 <laugh>, <breath>, <sigh> 형식만 사용하세요."
+                  search={supertonicTagSearch}
+                  onSearch={setSupertonicTagSearch}
+                  categories={filteredSupertonicExpressionTagCategories}
+                  onApply={applySupertonicExpressionTag}
+                  searchPlaceholder="Search tags, e.g. breath, laugh, sigh"
+                />
+
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">total_step (denoising)</Label>
@@ -11156,17 +11534,10 @@ function StudioApp() {
 
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">표현 태그</div>
-                <div className="text-xs leading-5 text-ink-muted">Supertonic에서 학습된 표현 태그만 짧게 골라 넣습니다. 모델 파일 다운로드 여부는 나의 목소리들 → 프리셋/학습 결과 → 모델 상태에서 확인합니다.</div>
-                {supertonicRuntime?.supported_expression_tags?.length ? (
-                  <div className="flex flex-col gap-1 pt-2">
-                    <div className="flex flex-wrap gap-1 text-xs">
-                      {supertonicRuntime.supported_expression_tags.map((tag) => (
-                        <code key={tag} className="rounded border border-line bg-canvas px-1.5 py-0.5">{tag}</code>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                <div className="text-xs font-medium text-ink-muted">태그 규칙</div>
+                <div className="text-xs leading-5 text-ink-muted">
+                  Supertonic은 공식적으로 3개 표현 태그만 안정적으로 처리합니다. 태그는 말할 문장 사이 원하는 위치에 넣으세요.
+                </div>
               </WorkspaceCard>
             </aside>
           </form>

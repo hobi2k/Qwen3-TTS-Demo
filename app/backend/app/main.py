@@ -2421,6 +2421,50 @@ def vibevoice_model_assets() -> List[VibeVoiceModelAsset]:
     return list_vibevoice_model_assets()
 
 
+def list_voxcpm_model_assets() -> List[VibeVoiceModelAsset]:
+    """List local VoxCPM reusable assets for the Web UI."""
+
+    records: Dict[str, VibeVoiceModelAsset] = {}
+
+    def add_asset(path: Path, *, name: str, kind: str, notes: str = "") -> None:
+        if not path.exists():
+            return
+        relpath = storage.relpath(path)
+        records[relpath] = VibeVoiceModelAsset(
+            id=hashlib.sha1(relpath.encode("utf-8")).hexdigest()[:12],
+            name=name,
+            kind=kind,
+            path=relpath,
+            created_at=_path_mtime_iso(path),
+            notes=notes,
+        )
+
+    try:
+        add_asset(voxcpm_engine.resolve_model_dir("VoxCPM2"), name="VoxCPM2", kind="base_model", notes="기준 모델")
+    except Exception:
+        pass
+
+    run_root = REPO_ROOT / "data" / "finetune-runs" / "voxcpm2"
+    if run_root.exists():
+        for checkpoint_dir in sorted(run_root.glob("*/checkpoints"), key=lambda item: item.stat().st_mtime if item.exists() else 0, reverse=True):
+            if checkpoint_dir.is_dir() and any(checkpoint_dir.iterdir()):
+                add_asset(
+                    checkpoint_dir,
+                    name=checkpoint_dir.parent.name,
+                    kind="lora_adapter",
+                    notes="VoxCPM 학습 결과",
+                )
+
+    return sorted(records.values(), key=lambda item: item.created_at or "", reverse=True)
+
+
+@app.get("/api/voxcpm/model-assets", response_model=List[VibeVoiceModelAsset])
+def voxcpm_model_assets() -> List[VibeVoiceModelAsset]:
+    """Return selectable VoxCPM model assets for the Web UI."""
+
+    return list_voxcpm_model_assets()
+
+
 @app.post("/api/vibevoice/asr", response_model=VibeVoiceASRResponse)
 def transcribe_vibevoice_audio(payload: VibeVoiceASRRequest) -> VibeVoiceASRResponse:
     """Run Microsoft VibeVoice-ASR on a stored audio file."""

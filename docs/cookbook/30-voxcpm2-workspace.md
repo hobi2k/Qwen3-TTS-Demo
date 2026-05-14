@@ -118,12 +118,9 @@ manifest 포맷 (JSONL):
 {"audio": "wavs/utt_002.wav", "text": "반갑습니다"}
 ```
 
-학습 파이프라인:
-1. **prepare** — workshop manifest → VoxCPM JSONL 형식 (절대경로 audio)
-2. **train** — upstream `scripts/train_voxcpm_finetune.py` 호출 (LoRA 모드)
-
-체크포인트: `data/finetune-runs/voxcpm2/<run_id>/checkpoints/`
-TensorBoard: `data/finetune-runs/voxcpm2/<run_id>/tensorboard/`
+학습은 앱에서 만든 데이터셋을 선택해 실행합니다. 완료된 커스텀 목소리는
+나의 목소리들에 표시되며, VoxCPM 생성 화면에서 바로 선택해 사용할 수 있습니다.
+학습 상태와 결과 파일은 앱의 학습 화면에서 확인합니다.
 
 ## 한국어 사용 팁
 
@@ -132,25 +129,21 @@ TensorBoard: `data/finetune-runs/voxcpm2/<run_id>/tensorboard/`
    ZipEnhancer denoiser를 통과시키면 노이즈 있는 샘플도 안전.
 3. **voice_design의 괄호 디스크립터는 영어로** 작성하는 게 안전
    (학습 데이터가 영어 위주).
-4. **ultimate_cloning은 `prompt_text` (transcript)가 정확해야** 최대
+4. **제어 태그는 대괄호가 아니라 영어 지시문**입니다. UI의 제어 태그를 누르면
+   목소리 디자인 설명 또는 대사 앞 괄호 지시문으로 자동 삽입됩니다.
+5. **ultimate_cloning은 `prompt_text` (transcript)가 정확해야** 최대
    효과. 길이는 5~30초 prompt audio가 sweet spot.
 
 ## 일관성 체크리스트 (다른 vendor와 동일 패턴)
 
 - [x] `app/backend/app/voxcpm.py`에 `Engine` 클래스
 - [x] `status` / `availability_notes` / `run` / `train` 메서드
-- [x] 환경 변수 `VOXCPM_REPO_ROOT` / `VOXCPM_PYTHON_EXECUTABLE` / `VOXCPM_MODEL_DIR`
-- [x] FastAPI 라우트 `/api/voxcpm/runtime` / `generate` / `voices` / `train`
-- [x] Pydantic 요청·응답 모델 7종
-- [x] `scripts/install_voxcpm_runtime.py`
-- [x] `scripts/run_voxcpm_generate.py` subprocess JSON 프로토콜
-- [x] `scripts/run_voxcpm_train.py` upstream wrapper
-- [x] `data/models/voxcpm2/`, `data/finetune-runs/voxcpm2/`, `data/voxcpm2-voices/` 자동 생성
-- [x] TS 타입 7개 (`lib/types.ts`)
-- [x] API 클라이언트 wrapper 6개 (`lib/api.ts`)
-- [x] `TabKey` enum + `PRODUCT_PAGES` 항목 4종
-- [x] App.tsx 패널 4종 (TTS / Voices / Dataset / Training)
-- [x] 사이드바 nav group (VOXCPM 섹션 4개 버튼)
+- [x] VoxCPM 모델 파일과 작업 폴더 자동 준비
+- [x] 텍스트 음성 변환, 목소리 디자인, 목소리 복제 화면 연결
+- [x] 프리셋 저장과 재사용
+- [x] 데이터셋 만들기와 학습 실행
+- [x] 학습한 목소리를 나의 목소리들과 생성 화면에서 다시 선택
+- [x] 사이드바 VOXCPM 섹션 구성
 - [x] i18n 번역 (한국어/영어/일본어 9개 키)
 - [x] TypeScript 컴파일 검증 (`tsc --noEmit` 통과)
 - [x] vendor git 메타데이터 제거

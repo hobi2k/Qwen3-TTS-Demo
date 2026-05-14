@@ -116,6 +116,9 @@ def _run_task(*, task: str, payload: Dict[str, Any], output_path: Path, model_di
     text = payload.get("text") or ""
     if not text.strip():
         raise ValueError("text is required")
+    voice_description = str(payload.get("voice_description") or "").strip()
+    if task == "voice_design" and voice_description and not text.lstrip().startswith("("):
+        text = f"({voice_description}){text.strip()}"
 
     cfg_value = _coerce_float(payload.get("cfg_value"), 2.0) or 2.0
     inference_timesteps = _coerce_int(payload.get("inference_timesteps"), 10) or 10

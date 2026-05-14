@@ -131,16 +131,9 @@ zero-shot/cross-lingual 프리셋 (참조 오디오 + 대본) 저장·조회.
 {"audio": "wavs/utt_002.wav", "text": "반갑습니다", "speaker": "spk_main"}
 ```
 
-학습 파이프라인은 다음 단계를 자동으로 실행:
-1. ``prepare`` — wav.scp / text / utt2spk / spk2utt 생성
-2. ``extract_embedding`` — ``campplus.onnx`` 화자 임베딩
-3. ``extract_speech_token`` — ``speech_tokenizer_v1.onnx`` 토큰화
-4. ``make_parquet`` — parquet 직렬화
-5. ``train_<submodel>`` — ``cosyvoice/bin/train.py`` 실행
-
-GPU가 보이면 ``torchrun --nproc_per_node=N``로 자동 분산. GPU가 없으면
-단일 프로세스 fallback (``deepspeed`` 인자 자동 제거). 학습 결과는
-``data/finetune-runs/cosyvoice3/<run_id>/exp/<submodel>/``에 저장.
+학습은 앱에서 선택한 데이터셋을 기준으로 필요한 변환과 목소리 학습을 자동으로 처리합니다.
+사용자는 데이터셋, 학습 대상, 반복 수 같은 설정만 고르면 됩니다. 완료된 결과는 나의 목소리들에서
+확인하고, CosyVoice 생성 화면에서 다시 선택해 사용할 수 있습니다.
 
 ## 한국어 사용 팁
 
