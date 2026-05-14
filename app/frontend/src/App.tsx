@@ -67,6 +67,7 @@ import type {
   AsrModelInfo,
   AudioAsset,
   AudioToolCapability,
+  AudioToolJob,
   AudioToolResponse,
   CharacterPreset,
   ClonePromptRecord,
@@ -123,7 +124,6 @@ type AceStepMode =
   | "lora_train";
 
 type VoiceLibraryView =
-  | "trained"
   | "qwen"
   | "s2pro"
   | "vibevoice"
@@ -134,7 +134,27 @@ type VoiceLibraryView =
   | "rvc"
   | "datasets";
 type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
-type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "model_voice" | "effect" | "music" | "rvc" | "utility";
+type GalleryFilter =
+  | "all"
+  | "qwen"
+  | "s2pro"
+  | "vibevoice"
+  | "cosyvoice"
+  | "voxcpm"
+  | "supertonic"
+  | "omnivoice"
+  | "effect"
+  | "music"
+  | "rvc"
+  | "utility";
+type GalleryPresetOption = {
+  key: string;
+  label: string;
+  count: number;
+};
+type GalleryRecordGroup = GalleryPresetOption & {
+  records: GenerationRecord[];
+};
 type VoiceBoxMorphSource = "clone_prompt" | "reference_voice";
 type VoiceBoxMorphReferenceSource = "gallery" | "upload";
 type ActiveJob = {
@@ -908,9 +928,11 @@ function gallerySelectionKey(record: GenerationRecord): string {
 function galleryFilterForRecord(record: GenerationRecord): GalleryFilter {
   const mode = record.mode.toLowerCase();
   const meta = record.meta || {};
-  if (["vibevoice", "cosyvoice", "voxcpm", "supertonic", "omnivoice"].some((prefix) => mode.includes(prefix))) {
-    return "model_voice";
-  }
+  if (mode.includes("vibevoice")) return "vibevoice";
+  if (mode.includes("cosyvoice")) return "cosyvoice";
+  if (mode.includes("voxcpm")) return "voxcpm";
+  if (mode.includes("supertonic")) return "supertonic";
+  if (mode.includes("omnivoice")) return "omnivoice";
   if (mode.includes("ace") || mode.includes("music")) return "music";
   if (mode.includes("sound") || mode.includes("mmaudio")) return "effect";
   if (mode.includes("voice_changer") || mode.includes("rvc")) return "rvc";
@@ -919,18 +941,19 @@ function galleryFilterForRecord(record: GenerationRecord): GalleryFilter {
     mode.startsWith("s2_pro") &&
     (typeof meta.s2_pro_reference_id === "string" || typeof meta.reference_id === "string" || Boolean(record.source_ref_audio_path))
   ) {
-    return "s2pro_preset";
+    return "s2pro";
   }
   if (
+    mode.includes("qwen") ||
     mode.includes("preset") ||
     mode.includes("hybrid") ||
     Boolean(record.preset_id) ||
     typeof meta.preset_id === "string" ||
     typeof meta.clone_prompt_path === "string"
   ) {
-    return "qwen_preset";
+    return "qwen";
   }
-  return "speech";
+  return "qwen";
 }
 
 function formatShortDate(value: string): string {
@@ -964,6 +987,35 @@ function recordLanguageLabel(record: GenerationRecord): string {
 function getRecordModelLabel(record: GenerationRecord): string {
   const model = record.meta?.model_id || record.meta?.model || record.meta?.model_profile || record.meta?.runtime_source || "";
   return typeof model === "string" && model.trim() ? basenameFromPath(model).replace(/\.[^.]+$/, "") : getModeLabel(record.mode);
+}
+
+function metadataString(meta: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = meta[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (Array.isArray(value)) {
+      const first = value.find((item) => typeof item === "string" && item.trim());
+      if (typeof first === "string") return first.trim();
+    }
+  }
+  return "";
+}
+
+function normalizeComparablePath(value?: string | null): string {
+  return String(value || "").replace(/\\/g, "/").trim();
+}
+
+function pathsMatch(left?: string | null, right?: string | null): boolean {
+  const a = normalizeComparablePath(left);
+  const b = normalizeComparablePath(right);
+  if (!a || !b) return false;
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
+function textMatches(left?: string | null, right?: string | null): boolean {
+  const a = String(left || "").trim();
+  const b = String(right || "").trim();
+  return Boolean(a && b && a === b);
 }
 
 function audioDatasetTargetLabel(target: string): string {
@@ -1370,7 +1422,7 @@ function ActiveJobPanel({ job, elapsedSeconds }: { job: ActiveJob; elapsedSecond
 function StudioApp() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
-  const [voiceGalleryView, setVoiceGalleryView] = useState<VoiceLibraryView>("trained");
+  const [voiceGalleryView, setVoiceGalleryView] = useState<VoiceLibraryView>("qwen");
   const [datasetLibraryTarget, setDatasetLibraryTarget] = useState<DatasetLibraryTarget>("qwen");
   const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>("all");
   const [gallerySortMode, setGallerySortMode] = useState<"recent" | "preset">("recent");
@@ -1602,6 +1654,7 @@ function StudioApp() {
   const [hybridControls, setHybridControls] = useState<GenerationControlsForm>(createGenerationControls("clone"));
   const [lastHybridRecord, setLastHybridRecord] = useState<GenerationRecord | null>(null);
   const [audioToolCapabilities, setAudioToolCapabilities] = useState<AudioToolCapability[]>([]);
+  const [audioToolJobs, setAudioToolJobs] = useState<AudioToolJob[]>([]);
   const [voiceChangerModels, setVoiceChangerModels] = useState<VoiceChangerModelInfo[]>([]);
   const [s2ProRuntime, setS2ProRuntime] = useState<S2ProRuntimeResponse | null>(null);
   const [vibeVoiceModelAssets, setVibeVoiceModelAssets] = useState<VibeVoiceModelAsset[]>([]);
@@ -2311,6 +2364,7 @@ function StudioApp() {
     setAudioDatasets(data.audio_datasets || []);
     setRuns(data.finetune_runs);
     setAudioToolCapabilities(data.audio_tool_capabilities || []);
+    setAudioToolJobs(data.audio_tool_jobs || []);
     setVoiceChangerModels(data.voice_changer_models || []);
     try {
       setS2ProRuntime(await api.s2ProCapabilities());
@@ -2701,28 +2755,40 @@ function StudioApp() {
     }));
   }, [vibeVoiceBaseAssets[0]?.path, vibeVoiceAdapterAssets[0]?.path]);
 
-  const galleryBuckets = {
-    all: history.length,
-    speech: history.filter((record) => galleryFilterForRecord(record) === "speech").length,
-    qwen_preset: history.filter((record) => galleryFilterForRecord(record) === "qwen_preset").length,
-    s2pro_preset: history.filter((record) => galleryFilterForRecord(record) === "s2pro_preset").length,
-    model_voice: history.filter((record) => galleryFilterForRecord(record) === "model_voice").length,
-    effect: history.filter((record) => galleryFilterForRecord(record) === "effect").length,
-    music: history.filter((record) => galleryFilterForRecord(record) === "music").length,
-    rvc: history.filter((record) => galleryFilterForRecord(record) === "rvc").length,
-    utility: history.filter((record) => galleryFilterForRecord(record) === "utility").length,
-  };
+  const galleryFilterOptions: Array<[GalleryFilter, string]> = [
+    ["all", t("gallery.total", "전체")],
+    ["qwen", "Qwen"],
+    ["s2pro", "S2-Pro"],
+    ["vibevoice", "VibeVoice"],
+    ["cosyvoice", "CosyVoice"],
+    ["voxcpm", "VoxCPM"],
+    ["supertonic", "Supertonic"],
+    ["omnivoice", "OmniVoice"],
+    ["effect", t("gallery.effect", "사운드 이펙트")],
+    ["music", t("gallery.music", "ACE-Step 음악")],
+    ["rvc", t("gallery.rvc", "RVC 변환")],
+    ["utility", t("gallery.utility", "정제/분리")],
+  ];
+  const galleryBuckets = galleryFilterOptions.reduce<Record<GalleryFilter, number>>((buckets, [filter]) => {
+    buckets[filter] = filter === "all" ? history.length : history.filter((record) => galleryFilterForRecord(record) === filter).length;
+    return buckets;
+  }, {} as Record<GalleryFilter, number>);
+  const modelFilteredHistory = history.filter((record) => galleryFilter === "all" || galleryFilterForRecord(record) === galleryFilter);
   const galleryPresetOptions = Array.from(
-    history.reduce((items, record) => {
+    modelFilteredHistory.reduce((items, record) => {
       const key = galleryPresetKey(record);
       if (key !== "none") {
-        items.set(key, galleryPresetDescription(record));
+        const current = items.get(key);
+        items.set(key, {
+          key,
+          label: galleryPresetDescription(record),
+          count: (current?.count || 0) + 1,
+        });
       }
       return items;
-    }, new Map<string, string>()),
-  ).sort((a, b) => a[1].localeCompare(b[1], locale));
-  const filteredHistory = history
-    .filter((record) => galleryFilter === "all" || galleryFilterForRecord(record) === galleryFilter)
+    }, new Map<string, GalleryPresetOption>()),
+  ).map(([, option]) => option).sort((a, b) => a.label.localeCompare(b.label, locale));
+  const filteredHistory = modelFilteredHistory
     .filter((record) => galleryPresetFilter === "all" || galleryPresetKey(record) === galleryPresetFilter)
     .sort((a, b) => {
       if (gallerySortMode === "preset") {
@@ -2731,6 +2797,27 @@ function StudioApp() {
       }
       return String(b.created_at || "").localeCompare(String(a.created_at || ""));
     });
+  const galleryRecordGroups: GalleryRecordGroup[] =
+    gallerySortMode === "preset"
+      ? Array.from(
+          filteredHistory.reduce((groups, record) => {
+            const key = galleryPresetKey(record);
+            const label = galleryPresetDescription(record);
+            const current = groups.get(key) || { key, label, count: 0, records: [] };
+            current.records.push(record);
+            current.count += 1;
+            groups.set(key, current);
+            return groups;
+          }, new Map<string, GalleryRecordGroup>()),
+        ).map(([, group]) => group)
+      : [
+          {
+            key: "recent",
+            label: t("gallery.sort.recent", "최신순"),
+            count: filteredHistory.length,
+            records: filteredHistory,
+          },
+        ];
   const datasetLibraryBuckets: Record<DatasetLibraryTarget, number> = {
     qwen: datasets.length,
     s2_pro: audioDatasets.filter((dataset) => dataset.target === "s2_pro").length,
@@ -2814,11 +2901,14 @@ function StudioApp() {
     );
     return { voice, relatedHistory, relatedPresets };
   });
+  const s2ProTrainingJobs = audioToolJobs.filter((job) => job.kind === "s2_pro_training");
   const qwenVoiceAssetCount = presets.length;
+  const qwenVoiceLibraryCount = qwenVoiceAssetCount + latestFineTunedModels.length;
+  const s2ProLibraryCount = s2VoiceProjects.length + s2ProTrainingJobs.length;
   function galleryPresetKey(record: GenerationRecord): string {
     const filterKind = galleryFilterForRecord(record);
     const meta = record.meta || {};
-    if (filterKind === "s2pro_preset") {
+    if (filterKind === "s2pro") {
       const referenceId = String(meta.s2_pro_reference_id || meta.reference_id || meta.voice_id || "");
       const voice = s2ProVoices.find(
         (item) =>
@@ -2828,7 +2918,7 @@ function StudioApp() {
       );
       return voice ? `s2:${voice.id || voice.reference_id}` : referenceId ? `s2:${referenceId}` : "s2:unknown";
     }
-    if (filterKind === "qwen_preset") {
+    if (filterKind === "qwen") {
       const clonePromptPath = typeof meta.clone_prompt_path === "string" ? meta.clone_prompt_path : "";
       const metaPresetId = typeof meta.preset_id === "string" ? meta.preset_id : "";
       const preset = presets.find(
@@ -2838,10 +2928,60 @@ function StudioApp() {
           (!!clonePromptPath && item.clone_prompt_path === clonePromptPath) ||
           item.reference_audio_path === record.source_ref_audio_path,
       );
-      return preset ? `qwen:${preset.id}` : metaPresetId ? `qwen:${metaPresetId}` : "qwen:unknown";
+      return preset ? `qwen:${preset.id}` : metaPresetId ? `qwen:${metaPresetId}` : `qwen:${record.mode || "speech"}`;
     }
-    if (filterKind === "model_voice") {
-      return `model:${record.mode}`;
+    if (filterKind === "vibevoice") {
+      const speakerName = String(record.speaker || metadataString(meta, ["speaker_name", "speaker", "speaker_names"]) || "").trim();
+      const checkpoint = metadataString(meta, ["lora_checkpoint", "lora_checkpoint_path", "checkpoint_path", "adapter_path", "output_model_path"]);
+      if (speakerName) return `vibevoice:speaker:${speakerName}`;
+      if (checkpoint) return `vibevoice:model:${checkpoint}`;
+      return `vibevoice:${record.mode}`;
+    }
+    if (filterKind === "cosyvoice") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `cosyvoice:preset:${metaPresetName}`;
+      const promptAudioPath = metadataString(meta, ["prompt_audio_path", "reference_audio_path"]);
+      const preset = cosyVoicePresets.find(
+        (item) =>
+          pathsMatch(item.prompt_audio_path, record.source_ref_audio_path) ||
+          pathsMatch(item.prompt_audio_path, promptAudioPath) ||
+          (textMatches(item.prompt_text, record.source_ref_text) && (!item.task || record.mode.includes(item.task))),
+      );
+      return preset ? `cosyvoice:preset:${preset.name}` : `cosyvoice:${record.mode}`;
+    }
+    if (filterKind === "voxcpm") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `voxcpm:preset:${metaPresetName}`;
+      const referencePath = metadataString(meta, ["prompt_wav_path", "reference_wav_path", "reference_audio_path"]);
+      const preset = voxCpmPresets.find(
+        (item) =>
+          pathsMatch(item.prompt_wav_path, record.source_ref_audio_path) ||
+          pathsMatch(item.reference_wav_path, record.source_ref_audio_path) ||
+          pathsMatch(item.prompt_wav_path, referencePath) ||
+          pathsMatch(item.reference_wav_path, referencePath) ||
+          textMatches(item.voice_description, record.instruction),
+      );
+      return preset ? `voxcpm:preset:${preset.name}` : `voxcpm:${record.mode}`;
+    }
+    if (filterKind === "supertonic") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `supertonic:preset:${metaPresetName}`;
+      const voiceStyle = String(record.speaker || metadataString(meta, ["voice_style", "speaker", "style"]) || "").trim();
+      const preset = supertonicPresets.find((item) => item.name === voiceStyle || item.voice_style === voiceStyle);
+      return preset ? `supertonic:preset:${preset.name}` : voiceStyle ? `supertonic:style:${voiceStyle}` : `supertonic:${record.mode}`;
+    }
+    if (filterKind === "omnivoice") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `omnivoice:preset:${metaPresetName}`;
+      const refAudio = metadataString(meta, ["ref_audio", "reference_audio_path"]);
+      const preset = omnivoicePresets.find(
+        (item) =>
+          pathsMatch(item.ref_audio, record.source_ref_audio_path) ||
+          pathsMatch(item.ref_audio, refAudio) ||
+          textMatches(item.instruct, record.instruction) ||
+          textMatches(item.ref_text, record.source_ref_text),
+      );
+      return preset ? `omnivoice:preset:${preset.name}` : `omnivoice:${record.mode}`;
     }
     return "none";
   }
@@ -2849,7 +2989,7 @@ function StudioApp() {
   function galleryPresetDescription(record: GenerationRecord): string {
     const filterKind = galleryFilterForRecord(record);
     const meta = record.meta || {};
-    if (filterKind === "s2pro_preset") {
+    if (filterKind === "s2pro") {
       const referenceId = String(meta.s2_pro_reference_id || meta.reference_id || meta.voice_id || "");
       const voice = s2ProVoices.find(
         (item) =>
@@ -2857,9 +2997,9 @@ function StudioApp() {
           item.reference_id === referenceId ||
           item.reference_audio_path === record.source_ref_audio_path,
       );
-      return voice ? `S2-Pro 프리셋 · ${voice.name}` : "S2-Pro 프리셋";
+      return voice ? `S2-Pro · ${voice.name}` : "S2-Pro 생성";
     }
-    if (filterKind === "qwen_preset") {
+    if (filterKind === "qwen") {
       const clonePromptPath = typeof meta.clone_prompt_path === "string" ? meta.clone_prompt_path : "";
       const metaPresetId = typeof meta.preset_id === "string" ? meta.preset_id : "";
       const preset = presets.find(
@@ -2869,16 +3009,60 @@ function StudioApp() {
           (!!clonePromptPath && item.clone_prompt_path === clonePromptPath) ||
           item.reference_audio_path === record.source_ref_audio_path,
       );
-      return preset ? `Qwen 프리셋 · ${preset.name}` : "Qwen 프리셋";
+      return preset ? `Qwen · ${preset.name}` : "Qwen 생성";
     }
-    if (filterKind === "model_voice") {
-      const mode = record.mode.toLowerCase();
-      if (mode.includes("vibevoice")) return "VibeVoice 생성";
-      if (mode.includes("cosyvoice")) return "CosyVoice 생성";
-      if (mode.includes("voxcpm")) return "VoxCPM 생성";
-      if (mode.includes("supertonic")) return "Supertonic 생성";
-      if (mode.includes("omnivoice")) return "OmniVoice 생성";
-      return "모델별 생성";
+    if (filterKind === "vibevoice") {
+      const speakerName = String(record.speaker || metadataString(meta, ["speaker_name", "speaker", "speaker_names"]) || "").trim();
+      const checkpoint = metadataString(meta, ["lora_checkpoint", "lora_checkpoint_path", "checkpoint_path", "adapter_path", "output_model_path"]);
+      if (speakerName) return `VibeVoice · ${speakerName}`;
+      if (checkpoint) return `VibeVoice · ${basenameFromPath(checkpoint).replace(/\.[^.]+$/, "")}`;
+      return "VibeVoice 생성";
+    }
+    if (filterKind === "cosyvoice") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `CosyVoice · ${metaPresetName}`;
+      const promptAudioPath = metadataString(meta, ["prompt_audio_path", "reference_audio_path"]);
+      const preset = cosyVoicePresets.find(
+        (item) =>
+          pathsMatch(item.prompt_audio_path, record.source_ref_audio_path) ||
+          pathsMatch(item.prompt_audio_path, promptAudioPath) ||
+          (textMatches(item.prompt_text, record.source_ref_text) && (!item.task || record.mode.includes(item.task))),
+      );
+      return preset ? `CosyVoice · ${preset.name}` : "CosyVoice 생성";
+    }
+    if (filterKind === "voxcpm") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `VoxCPM · ${metaPresetName}`;
+      const referencePath = metadataString(meta, ["prompt_wav_path", "reference_wav_path", "reference_audio_path"]);
+      const preset = voxCpmPresets.find(
+        (item) =>
+          pathsMatch(item.prompt_wav_path, record.source_ref_audio_path) ||
+          pathsMatch(item.reference_wav_path, record.source_ref_audio_path) ||
+          pathsMatch(item.prompt_wav_path, referencePath) ||
+          pathsMatch(item.reference_wav_path, referencePath) ||
+          textMatches(item.voice_description, record.instruction),
+      );
+      return preset ? `VoxCPM · ${preset.name}` : "VoxCPM 생성";
+    }
+    if (filterKind === "supertonic") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `Supertonic · ${metaPresetName}`;
+      const voiceStyle = String(record.speaker || metadataString(meta, ["voice_style", "speaker", "style"]) || "").trim();
+      const preset = supertonicPresets.find((item) => item.name === voiceStyle || item.voice_style === voiceStyle);
+      return preset ? `Supertonic · ${preset.name}` : voiceStyle ? `Supertonic · ${voiceStyle}` : "Supertonic 생성";
+    }
+    if (filterKind === "omnivoice") {
+      const metaPresetName = metadataString(meta, ["preset_name", "voice_preset_name"]);
+      if (metaPresetName) return `OmniVoice · ${metaPresetName}`;
+      const refAudio = metadataString(meta, ["ref_audio", "reference_audio_path"]);
+      const preset = omnivoicePresets.find(
+        (item) =>
+          pathsMatch(item.ref_audio, record.source_ref_audio_path) ||
+          pathsMatch(item.ref_audio, refAudio) ||
+          textMatches(item.instruct, record.instruction) ||
+          textMatches(item.ref_text, record.source_ref_text),
+      );
+      return preset ? `OmniVoice · ${preset.name}` : "OmniVoice 생성";
     }
     if (filterKind === "effect") return "사운드 이펙트";
     if (filterKind === "music") return "ACE-Step 음악";
@@ -3558,6 +3742,12 @@ function StudioApp() {
         return;
       }
       const seedTrim = cosyVoiceTtsForm.seed.trim();
+      const activePreset = cosyVoicePresets.find(
+        (preset) =>
+          pathsMatch(preset.prompt_audio_path, cosyVoiceTtsForm.prompt_audio_path) &&
+          (!preset.task || preset.task === cosyVoiceTtsForm.task) &&
+          (!preset.prompt_text || textMatches(preset.prompt_text, cosyVoiceTtsForm.prompt_text)),
+      );
       const response = await api.generateCosyVoice({
         task: cosyVoiceTtsForm.task,
         text: cosyVoiceTtsForm.text,
@@ -3570,6 +3760,7 @@ function StudioApp() {
         model_name: cosyVoiceTtsForm.model_name || undefined,
         seed: seedTrim ? Number(seedTrim) : undefined,
         label: cosyVoiceTtsForm.label || undefined,
+        preset_name: activePreset?.name || undefined,
         audio_format: cosyVoiceTtsForm.audio_format,
       });
       setLastCosyVoiceRecord(response.record);
@@ -3663,6 +3854,15 @@ function StudioApp() {
         return;
       }
       const seedTrim = voxCpmTtsForm.seed.trim();
+      const activePreset = voxCpmPresets.find(
+        (preset) =>
+          preset.task === voxCpmTaskValue &&
+          (
+            pathsMatch(preset.prompt_wav_path, voxCpmTtsForm.prompt_wav_path) ||
+            pathsMatch(preset.reference_wav_path, voxCpmTtsForm.reference_wav_path) ||
+            textMatches(preset.voice_description, voxCpmTtsForm.voice_description)
+          ),
+      );
       const response = await api.generateVoxCPM({
         task: voxCpmTaskValue,
         text: voxCpmTtsForm.text,
@@ -3684,6 +3884,7 @@ function StudioApp() {
         seed: seedTrim ? Number(seedTrim) : undefined,
         lora_weights_path: voxCpmTtsForm.lora_weights_path || undefined,
         label: voxCpmTtsForm.label || undefined,
+        preset_name: activePreset?.name || undefined,
         audio_format: voxCpmTtsForm.audio_format,
       });
       setLastVoxCpmRecord(response.record);
@@ -3747,6 +3948,9 @@ function StudioApp() {
         setMessage("Supertonic 텍스트를 입력하세요.");
         return;
       }
+      const activePreset = supertonicPresets.find(
+        (preset) => preset.name === supertonicTtsForm.voice_style || preset.voice_style === supertonicTtsForm.voice_style,
+      );
       const response = await api.generateSupertonic({
         text: supertonicTtsForm.text,
         language: supertonicTtsForm.language,
@@ -3756,6 +3960,7 @@ function StudioApp() {
         silence_duration: Number(supertonicTtsForm.silence_duration || "0.3"),
         use_gpu: supertonicTtsForm.use_gpu,
         label: supertonicTtsForm.label || undefined,
+        preset_name: activePreset?.name || undefined,
         audio_format: supertonicTtsForm.audio_format,
       });
       setLastSupertonicRecord(response.record);
@@ -3852,6 +4057,15 @@ function StudioApp() {
       }
 
       const seedTrim = omnivoiceTtsForm.seed.trim();
+      const activePreset = omnivoicePresets.find(
+        (preset) =>
+          preset.task === omniVoiceTaskValue &&
+          (
+            pathsMatch(preset.ref_audio, omnivoiceTtsForm.ref_audio) ||
+            textMatches(preset.instruct, omnivoiceTtsForm.instruct) ||
+            textMatches(preset.ref_text, omnivoiceTtsForm.ref_text)
+          ),
+      );
       const response = await api.generateOmniVoice({
         task: omniVoiceTaskValue,
         text: omnivoiceTtsForm.text,
@@ -3876,6 +4090,7 @@ function StudioApp() {
         audio_chunk_duration: Number(omnivoiceTtsForm.audio_chunk_duration || "15.0"),
         audio_chunk_threshold: Number(omnivoiceTtsForm.audio_chunk_threshold || "30.0"),
         label: omnivoiceTtsForm.label || undefined,
+        preset_name: activePreset?.name || undefined,
         audio_format: omnivoiceTtsForm.audio_format,
       });
       setLastOmniVoiceRecord(response.record);
@@ -4223,7 +4438,7 @@ function StudioApp() {
     }, {
       title: "MMAudio 학습 중",
       detail: `${mmaudioTrainForm.output_name || "mmaudio-run"} full/continued training을 실행하고 있습니다.`,
-      steps: ["데이터셋 로드", "upstream train.py 실행", "weights/checkpoint 저장"],
+      steps: ["데이터셋 로드", "학습 실행", "weights/checkpoint 저장"],
       note: "MMAudio 학습은 iteration 수에 따라 오래 걸립니다. 완료 전까지 이 패널이 유지됩니다.",
     });
   }
@@ -4592,7 +4807,7 @@ function StudioApp() {
       setMessage(result.message);
     }, {
       title: `ACE-Step ${aceStepTrainForm.adapter_type.toUpperCase()} 학습 중`,
-      detail: `${aceStepTrainForm.output_name || "ace-step-adapter"} adapter를 upstream trainer로 만들고 있습니다.`,
+      detail: `${aceStepTrainForm.output_name || "ace-step-adapter"} adapter를 만들고 있습니다.`,
       steps: ["학습 입력 확인", "adapter 학습", "생성 LoRA 목록 갱신"],
       note: "ACE-Step adapter 학습은 오디오 길이와 epoch 수에 따라 오래 걸릴 수 있습니다.",
     });
@@ -6374,14 +6589,11 @@ function StudioApp() {
             className="flex flex-col gap-5"
           >
             <TabsList className="grid h-auto w-full grid-cols-2 gap-1 border border-line bg-surface p-1 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
-              <TabsTrigger value="trained" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                {t("voices.tab.trained", "훈련한 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{latestFineTunedModels.length}</span>
-              </TabsTrigger>
               <TabsTrigger value="qwen" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                {t("voices.tab.qwen", "Qwen 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{qwenVoiceAssetCount}</span>
+                Qwen <span className="ml-1 font-mono text-[10px] text-ink-subtle">{qwenVoiceLibraryCount}</span>
               </TabsTrigger>
               <TabsTrigger value="s2pro" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                {t("voices.tab.s2pro", "S2-Pro 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{s2VoiceProjects.length}</span>
+                S2-Pro <span className="ml-1 font-mono text-[10px] text-ink-subtle">{s2ProLibraryCount}</span>
               </TabsTrigger>
               <TabsTrigger value="vibevoice" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 VibeVoice <span className="ml-1 font-mono text-[10px] text-ink-subtle">{reusableModelAssetCount}</span>
@@ -6407,111 +6619,100 @@ function StudioApp() {
             </TabsList>
 
             <div className="flex flex-col gap-3">
-              <TabsContent value="trained" className="m-0 flex flex-col gap-3">
-                {latestFineTunedModels.length ? (
-                  latestFineTunedModels.map((model) => {
-                    const runId = fineTuneRunIdFromModel(model);
-                    const isEditing = editingModelRunId === runId;
-                    return (
-                    <WorkspaceCard key={model.model_id} className="flex flex-wrap items-center gap-4">
-                      <VoiceAssetAvatar
-                        kind="trained"
-                        assetId={runId}
-                        imageUrl={model.image_url}
-                        alt={displayModelName(model)}
-                        fallback={<MiniWaveform dense />}
-                        onChange={(nextUrl) =>
-                          setModels((items) =>
-                            items.map((item) => (item.model_id === model.model_id ? { ...item, image_url: nextUrl } : item)),
-                          )
-                        }
-                      />
-                      <div className="flex min-w-0 flex-1 flex-col gap-2">
-                        {isEditing ? (
-                          <div className="flex flex-col gap-2">
-                            <Label className="text-xs font-medium text-ink-muted">{t("voices.trained.editName", "모델 이름")}</Label>
-                            <div className="flex flex-wrap gap-2">
-                              <Input
-                                value={modelEditName}
-                                onChange={(event) => setModelEditName(event.target.value)}
-                                className="min-w-[220px] flex-1"
-                              />
-                              <Button size="sm" disabled={!modelEditName.trim()} onClick={() => handleSaveModelEdit(runId)} type="button">
-                                {t("action.save", "저장")}
-                              </Button>
-                              <Button variant="outline" size="sm" onClick={() => setEditingModelRunId("")} type="button">
-                                {t("action.cancel", "취소")}
-                              </Button>
+              <TabsContent value="qwen" className="m-0 flex flex-col gap-3">
+                {qwenVoiceLibraryCount ? (
+                  <>
+                    {latestFineTunedModels.length ? (
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                        <div>
+                          <strong className="text-sm font-semibold text-ink">훈련한 모델</strong>
+                          <p className="mt-1 text-xs text-ink-muted">Qwen 파인튜닝으로 만든 재사용 모델입니다.</p>
+                        </div>
+                        <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{latestFineTunedModels.length}</Badge>
+                      </div>
+                    ) : null}
+                    {latestFineTunedModels.map((model) => {
+                      const runId = fineTuneRunIdFromModel(model);
+                      const isEditing = editingModelRunId === runId;
+                      return (
+                        <WorkspaceCard key={`qwen-trained-${model.model_id}`} className="flex flex-wrap items-center gap-4">
+                          <VoiceAssetAvatar
+                            kind="trained"
+                            assetId={runId}
+                            imageUrl={model.image_url}
+                            alt={displayModelName(model)}
+                            fallback={<MiniWaveform dense />}
+                            onChange={(nextUrl) =>
+                              setModels((items) =>
+                                items.map((item) => (item.model_id === model.model_id ? { ...item, image_url: nextUrl } : item)),
+                              )
+                            }
+                          />
+                          <div className="flex min-w-0 flex-1 flex-col gap-2">
+                            {isEditing ? (
+                              <div className="flex flex-col gap-2">
+                                <Label className="text-xs font-medium text-ink-muted">모델 이름</Label>
+                                <div className="flex flex-wrap gap-2">
+                                  <Input value={modelEditName} onChange={(event) => setModelEditName(event.target.value)} className="min-w-[220px] flex-1" />
+                                  <Button size="sm" disabled={!modelEditName.trim()} onClick={() => handleSaveModelEdit(runId)} type="button">저장</Button>
+                                  <Button variant="outline" size="sm" onClick={() => setEditingModelRunId("")} type="button">취소</Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex flex-wrap items-baseline gap-2">
+                                  <strong className="text-sm font-medium text-ink">{displayModelName(model)}</strong>
+                                  <span className="text-xs text-ink-muted">{model.default_speaker ? `${model.default_speaker} 목소리` : "Qwen 학습 모델"}</span>
+                                </div>
+                                <p className="text-sm text-ink-muted">{model.notes || "Qwen 파인튜닝으로 만든 재사용 모델입니다."}</p>
+                              </>
+                            )}
+                            <div className="flex flex-wrap gap-1.5">
+                              <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">Qwen 학습 모델</Badge>
+                              <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.default_speaker || "speaker"}</Badge>
                             </div>
                           </div>
-                        ) : (
-                          <>
-                            <div className="flex flex-wrap items-baseline gap-2">
-                              <strong className="text-sm font-medium text-ink">{displayModelName(model)}</strong>
-                              <span className="text-xs text-ink-muted">{model.default_speaker ? t("voices.trained.speaker", "{name} 목소리").replace("{name}", model.default_speaker) : t("voices.trained.fallback", "학습 모델")}</span>
-                            </div>
-                            <p className="text-sm text-ink-muted">{model.notes || t("voices.trained.note", "바로 선택해서 텍스트 음성 변환에 사용할 수 있는 학습 결과입니다.")}</p>
-                          </>
-                        )}
-                        <div className="flex flex-wrap gap-1.5">
-                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.source}</Badge>
-                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.default_speaker || "speaker"}</Badge>
-                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">{model.speaker_encoder_included ? t("voices.trained.encoderYes", "speaker encoder 포함") : t("voices.trained.encoderNo", "speaker encoder 없음")}</Badge>
+                          <div className="flex flex-wrap gap-2">
+                            <DownloadAssetButton href={apiUrl(`/api/finetune-runs/${encodeURIComponent(runId)}/download`)} />
+                            <Button variant="outline" size="sm" onClick={() => startModelEdit(model)} type="button">수정</Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setInferenceForm((prev) => ({
+                                  ...prev,
+                                  model_id: model.model_id,
+                                  speaker: model.default_speaker || prev.speaker,
+                                }));
+                                setActiveTab("tts");
+                              }}
+                              type="button"
+                            >
+                              TTS에서 사용
+                            </Button>
+                            <DeleteAssetButton
+                              kind="trained"
+                              assetId={runId}
+                              assetName={displayModelName(model)}
+                              onDeleted={() => {
+                                setModels((items) => items.filter((item) => item.model_id !== model.model_id));
+                                setRuns((items) => items.filter((item) => item.id !== runId));
+                                void refreshAll();
+                              }}
+                            />
+                          </div>
+                        </WorkspaceCard>
+                      );
+                    })}
+                    {presets.length ? (
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                        <div>
+                          <strong className="text-sm font-semibold text-ink">프리셋</strong>
+                          <p className="mt-1 text-xs text-ink-muted">목소리 복제/설계에서 저장한 Qwen 스타일 자산입니다.</p>
                         </div>
+                        <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{presets.length}</Badge>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <DownloadAssetButton
-                          href={apiUrl(`/api/finetune-runs/${encodeURIComponent(runId)}/download`)}
-                        />
-                        <Button variant="outline" size="sm" onClick={() => startModelEdit(model)} type="button">
-                          {t("action.edit", "수정")}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setInferenceForm((prev) => ({
-                              ...prev,
-                              model_id: model.model_id,
-                              speaker: model.default_speaker || prev.speaker,
-                            }));
-                            setActiveTab("tts");
-                          }}
-                          type="button"
-                        >
-                          {t("voices.trained.useInTts", "텍스트 음성 변환에서 사용")}
-                        </Button>
-                        <DeleteAssetButton
-                          kind="trained"
-                          assetId={runId}
-                          assetName={displayModelName(model)}
-                          onDeleted={() => {
-                            setModels((items) => items.filter((item) => item.model_id !== model.model_id));
-                            setRuns((items) => items.filter((item) => item.id !== runId));
-                            void refreshAll();
-                          }}
-                        />
-                      </div>
-                    </WorkspaceCard>
-                    );
-                  })
-                ) : (
-                  <WorkspaceEmptyState
-                    icon={Library}
-                    title={t("voices.trained.emptyTitle", "훈련한 모델이 없습니다.")}
-                    body={t("voices.trained.emptyBody", "Qwen 학습을 완료한 모델만 이 영역에 표시됩니다.")}
-                    action={
-                      <Button onClick={() => setActiveTab("training")} type="button">
-                        {t("voices.trained.gotoTraining", "학습 실행으로 이동")}
-                      </Button>
-                    }
-                  />
-                )}
-              </TabsContent>
-
-              <TabsContent value="qwen" className="m-0 flex flex-col gap-3">
-                {qwenVoiceAssetCount ? (
-                  <>
+                    ) : null}
                     {presets.map((preset) => {
                       const isEditing = editingPresetId === preset.id;
                       return (
@@ -6619,8 +6820,8 @@ function StudioApp() {
                 ) : (
                   <WorkspaceEmptyState
                     icon={Library}
-                    title={t("voices.qwen.emptyTitle", "Qwen 프리셋이 없습니다.")}
-                    body={t("voices.qwen.emptyBody", "목소리 복제나 목소리 설계에서 저장한 프리셋만 이 영역에 표시됩니다.")}
+                    title="Qwen 목소리 자산이 없습니다."
+                    body="Qwen 프리셋과 Qwen 파인튜닝 모델이 이 영역에 표시됩니다."
                     action={
                       <Button onClick={() => setActiveTab("clone")} type="button">
                         {t("voices.qwen.gotoClone", "목소리 복제로 이동")}
@@ -6631,8 +6832,48 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="s2pro" className="m-0 flex flex-col gap-3">
-                {s2VoiceProjects.length ? (
-                  s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
+                {s2ProLibraryCount ? (
+                  <>
+                  {s2ProTrainingJobs.length ? (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                      <div>
+                        <strong className="text-sm font-semibold text-ink">훈련한 모델</strong>
+                        <p className="mt-1 text-xs text-ink-muted">S2-Pro LoRA/Full 학습 실행 결과입니다.</p>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{s2ProTrainingJobs.length}</Badge>
+                    </div>
+                  ) : null}
+                  {s2ProTrainingJobs.map((job) => (
+                    <WorkspaceCard key={`s2pro-training-${job.id}`} className="flex flex-wrap items-center gap-4">
+                      <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#f7f3ff] via-[#eef8ff] to-[#fff7df] shadow-sm">
+                        <span className="font-mono text-xs font-semibold text-accent">S2</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <strong className="text-sm font-medium text-ink">{job.input_summary || job.id}</strong>
+                          <span className="text-xs text-ink-muted">{formatDate(job.created_at)}</span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{job.message || "S2-Pro 학습 실행 결과입니다."}</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <Badge variant="secondary" className="bg-canvas text-ink-muted text-[10px]">S2-Pro 학습 결과</Badge>
+                          <Badge variant="secondary" className={job.status === "completed" ? "border-0 bg-positive/15 text-positive" : "border-0 bg-amber-100 text-amber-800"}>{job.status}</Badge>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" type="button" onClick={() => setActiveTab("s2pro_train")}>
+                        학습 화면으로 이동
+                      </Button>
+                    </WorkspaceCard>
+                  ))}
+                  {s2VoiceProjects.length ? (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                      <div>
+                        <strong className="text-sm font-semibold text-ink">프리셋</strong>
+                        <p className="mt-1 text-xs text-ink-muted">S2-Pro 목소리 저장에서 만든 재사용 목소리입니다.</p>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{s2VoiceProjects.length}</Badge>
+                    </div>
+                  ) : null}
+                  {s2VoiceProjects.map(({ voice, relatedHistory, relatedPresets }) => (
                     <WorkspaceCard key={voice.id} className="flex flex-wrap items-start gap-4">
                       <VoiceAssetAvatar
                         kind="s2pro"
@@ -6690,12 +6931,13 @@ function StudioApp() {
                         />
                       </div>
                     </WorkspaceCard>
-                  ))
+                  ))}
+                  </>
                 ) : (
                   <WorkspaceEmptyState
                     icon={Library}
-                    title={t("voices.s2pro.emptyTitle", "S2-Pro 프리셋이 없습니다.")}
-                    body={t("voices.s2pro.emptyBody", "S2-Pro 목소리 저장에서 만든 재사용 목소리만 이 영역에 표시됩니다.")}
+                    title="S2-Pro 목소리 자산이 없습니다."
+                    body="S2-Pro 저장 목소리와 S2-Pro 학습 실행 결과가 이 영역에 표시됩니다."
                     action={
                       <Button onClick={() => openS2ProTab("s2pro_clone")} type="button">
                         {t("voices.s2pro.gotoClone", "S2-Pro 목소리 저장으로 이동")}
@@ -6711,7 +6953,7 @@ function StudioApp() {
                     <WorkspaceCard className="flex flex-col gap-3">
                       <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
                         <div>
-                          <strong className="text-sm font-semibold text-ink">VibeVoice LoRA</strong>
+                          <strong className="text-sm font-semibold text-ink">훈련한 모델 · LoRA</strong>
                           <p className="mt-1 text-xs text-ink-muted">TTS 파인튜닝에서 만든 어댑터입니다.</p>
                         </div>
                         <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{vibeVoiceAdapterAssets.length}</Badge>
@@ -6733,7 +6975,7 @@ function StudioApp() {
                     <WorkspaceCard className="flex flex-col gap-3">
                       <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
                         <div>
-                          <strong className="text-sm font-semibold text-ink">VibeVoice 병합 모델</strong>
+                          <strong className="text-sm font-semibold text-ink">훈련한 모델 · 병합 모델</strong>
                           <p className="mt-1 text-xs text-ink-muted">LoRA를 병합한 재사용 모델입니다.</p>
                         </div>
                         <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{vibeVoiceMergedAssets.length}</Badge>
@@ -6771,7 +7013,16 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="cosyvoice" className="m-0 flex flex-col gap-3">
-                {cosyVoicePresets.length ? cosyVoicePresets.map((preset) => (
+                {cosyVoicePresets.length ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                      <div>
+                        <strong className="text-sm font-semibold text-ink">프리셋</strong>
+                        <p className="mt-1 text-xs text-ink-muted">CosyVoice 목소리 저장에서 만든 재사용 설정입니다.</p>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{cosyVoicePresets.length}</Badge>
+                    </div>
+                    {cosyVoicePresets.map((preset) => (
                   <WorkspaceCard key={`cosyvoice-${preset.name}`} className="flex flex-wrap items-center gap-4">
                     <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#e9f7ff] via-[#f5f1ff] to-[#fff7df] shadow-sm">
                       <span className="font-mono text-xs font-semibold text-accent">CV</span>
@@ -6786,7 +7037,9 @@ function StudioApp() {
                     <Button variant="outline" size="sm" type="button" onClick={() => void handleCosyVoiceApplyPreset(preset)}>사용</Button>
                     <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleCosyVoiceDeletePreset(preset.name)}>삭제</Button>
                   </WorkspaceCard>
-                )) : (
+                    ))}
+                  </>
+                ) : (
                   <WorkspaceEmptyState
                     icon={Library}
                     title="CosyVoice 프리셋이 없습니다."
@@ -6797,7 +7050,16 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="voxcpm" className="m-0 flex flex-col gap-3">
-                {voxCpmPresets.length ? voxCpmPresets.map((preset) => (
+                {voxCpmPresets.length ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                      <div>
+                        <strong className="text-sm font-semibold text-ink">프리셋</strong>
+                        <p className="mt-1 text-xs text-ink-muted">VoxCPM 목소리 디자인/복제에서 저장한 재사용 설정입니다.</p>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{voxCpmPresets.length}</Badge>
+                    </div>
+                    {voxCpmPresets.map((preset) => (
                   <WorkspaceCard key={`voxcpm-${preset.name}`} className="flex flex-wrap items-center gap-4">
                     <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#ecfff7] via-[#f5f1ff] to-[#fff7df] shadow-sm">
                       <span className="font-mono text-xs font-semibold text-accent">VX</span>
@@ -6812,7 +7074,9 @@ function StudioApp() {
                     <Button variant="outline" size="sm" type="button" onClick={() => void handleVoxCpmApplyPreset(preset)}>사용</Button>
                     <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleVoxCpmDeletePreset(preset.name)}>삭제</Button>
                   </WorkspaceCard>
-                )) : (
+                    ))}
+                  </>
+                ) : (
                   <WorkspaceEmptyState
                     icon={Library}
                     title="VoxCPM 프리셋이 없습니다."
@@ -6823,7 +7087,16 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="supertonic" className="m-0 flex flex-col gap-3">
-                {supertonicPresets.length ? supertonicPresets.map((preset) => (
+                {supertonicPresets.length ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                      <div>
+                        <strong className="text-sm font-semibold text-ink">프리셋</strong>
+                        <p className="mt-1 text-xs text-ink-muted">Supertonic 목소리 프리셋과 역설계 style 자산입니다.</p>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{supertonicPresets.length}</Badge>
+                    </div>
+                    {supertonicPresets.map((preset) => (
                   <WorkspaceCard key={`supertonic-${preset.name}`} className="flex flex-wrap items-center gap-4">
                     <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#fff1f7] via-[#f7f5ff] to-[#eef8ff] shadow-sm">
                       <span className="font-mono text-xs font-semibold text-accent">ST</span>
@@ -6838,7 +7111,9 @@ function StudioApp() {
                     <Button variant="outline" size="sm" type="button" onClick={() => { handleSupertonicApplyPreset(preset); setActiveTab("supertonic_tts"); }}>사용</Button>
                     <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleSupertonicDeletePreset(preset.name)}>삭제</Button>
                   </WorkspaceCard>
-                )) : (
+                    ))}
+                  </>
+                ) : (
                   <WorkspaceEmptyState
                     icon={Library}
                     title="Supertonic 프리셋이 없습니다."
@@ -6849,7 +7124,16 @@ function StudioApp() {
               </TabsContent>
 
               <TabsContent value="omnivoice" className="m-0 flex flex-col gap-3">
-                {omnivoicePresets.length ? omnivoicePresets.map((preset) => (
+                {omnivoicePresets.length ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                      <div>
+                        <strong className="text-sm font-semibold text-ink">프리셋</strong>
+                        <p className="mt-1 text-xs text-ink-muted">OmniVoice auto/design/clone 프리셋입니다.</p>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{omnivoicePresets.length}</Badge>
+                    </div>
+                    {omnivoicePresets.map((preset) => (
                   <WorkspaceCard key={`omnivoice-${preset.name}`} className="flex flex-wrap items-center gap-4">
                     <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#eef8ff] via-[#f7f5ff] to-[#fff7df] shadow-sm">
                       <span className="font-mono text-xs font-semibold text-accent">OV</span>
@@ -6864,7 +7148,9 @@ function StudioApp() {
                     <Button variant="outline" size="sm" type="button" onClick={() => handleOmniVoiceApplyPreset(preset)}>사용</Button>
                     <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleOmniVoiceDeletePreset(preset.name)}>삭제</Button>
                   </WorkspaceCard>
-                )) : (
+                    ))}
+                  </>
+                ) : (
                   <WorkspaceEmptyState
                     icon={Library}
                     title="OmniVoice 프리셋이 없습니다."
@@ -7106,18 +7392,8 @@ function StudioApp() {
             title={t("gallery.title")}
             subtitle={t("gallery.description")}
             meta={
-              <div className="mt-2 flex flex-wrap gap-2" aria-label="생성 통계">
-                {([
-                  ["all", t("gallery.total", "전체")],
-                  ["speech", t("gallery.speech", "음성")],
-                  ["qwen_preset", t("gallery.qwenPreset", "Qwen 프리셋 음성")],
-                  ["s2pro_preset", t("gallery.s2proPreset", "S2-Pro 프리셋 음성")],
-                  ["model_voice", t("gallery.modelVoice", "모델별 생성")],
-                  ["effect", t("gallery.effect", "사운드 이펙트")],
-                  ["music", t("gallery.music", "ACE-Step 음악")],
-                  ["rvc", t("gallery.rvc", "RVC 변환")],
-                  ["utility", t("gallery.utility", "정제/분리")],
-                ] as Array<[GalleryFilter, string]>).map(([filter, label]) => (
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6" aria-label="생성 통계">
+                {galleryFilterOptions.map(([filter, label]) => (
                   <button
                     key={filter}
                     type="button"
@@ -7158,7 +7434,7 @@ function StudioApp() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="recent">{t("gallery.sort.recent", "최신순")}</SelectItem>
-                    <SelectItem value="preset">{t("gallery.sort.preset", "프리셋별")}</SelectItem>
+                    <SelectItem value="preset">{t("gallery.sort.preset", "프리셋별 묶기")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -7173,9 +7449,9 @@ function StudioApp() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("gallery.presetFilter.all", "전체 프리셋")}</SelectItem>
-                    {galleryPresetOptions.map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
+                    {galleryPresetOptions.map((option) => (
+                      <SelectItem key={option.key} value={option.key}>
+                        {option.label} ({option.count})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -7191,13 +7467,26 @@ function StudioApp() {
                 </Button>
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              {filteredHistory.length ? filteredHistory.map((record) => {
+            <div className="flex flex-col gap-4">
+              {filteredHistory.length ? galleryRecordGroups.map((group) => (
+                <section key={group.key} className="flex flex-col gap-2">
+                  {gallerySortMode === "preset" ? (
+                    <div className="flex items-center justify-between rounded-2xl border border-line bg-canvas/80 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.035)]">
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="font-mono text-[10px] uppercase tracking-allcaps text-ink-subtle">{t("gallery.group.preset", "프리셋 그룹")}</span>
+                        <strong className="truncate text-sm font-medium text-ink">{group.label}</strong>
+                      </div>
+                      <Badge variant="secondary" className="border-0 bg-accent-soft text-accent-ink">{group.count}</Badge>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-col gap-2">
+              {group.records.map((record) => {
                 const selectionKey = gallerySelectionKey(record);
                 const isSelected = selectedGalleryIds.includes(selectionKey);
                 const recordFilterKind = galleryFilterForRecord(record);
+                const isModelVoiceRecord = ["qwen", "s2pro", "vibevoice", "cosyvoice", "voxcpm", "supertonic", "omnivoice"].includes(recordFilterKind);
                 const recordAccentClass =
-                  recordFilterKind === "model_voice"
+                  isModelVoiceRecord
                     ? "from-[#eef7ff] via-[#f7f2ff] to-[#fff8e8]"
                     : recordFilterKind === "effect"
                       ? "from-[#f0fff8] via-[#f5fbff] to-[#fff7ed]"
@@ -7247,7 +7536,10 @@ function StudioApp() {
                   </div>
                 </article>
                 );
-              }) : (
+              })}
+                  </div>
+                </section>
+              )) : (
                 <WorkspaceEmptyState
                   icon={Headphones}
                   title={galleryFilter === "all" ? t("gallery.emptyTitle") : t("gallery.emptyFilteredTitle", "이 분류에는 생성 결과가 없습니다.")}
@@ -9330,7 +9622,7 @@ function StudioApp() {
             eyebrow="VIBEVOICE"
             eyebrowIcon={Database}
             title={activeTab === "vibevoice_tts_train" ? "VibeVoice TTS Fine-tune" : "VibeVoice ASR Fine-tune"}
-            subtitle={activeTab === "vibevoice_tts_train" ? "VibeVoice TTS LoRA trainer의 dataset, column, LoRA, diffusion 옵션을 실행합니다." : "VibeVoice-ASR LoRA script가 있는 checkout에서 ASR fine-tuning을 실행합니다."}
+            subtitle={activeTab === "vibevoice_tts_train" ? "대사와 참조 음성 데이터셋으로 말투와 음색을 조정합니다." : "전사 데이터셋으로 음성 인식 정확도를 조정합니다."}
             action={{
               label: activeTab === "vibevoice_tts_train" ? "TTS 학습 시작" : "ASR 학습 시작",
               formId: "vibevoice-train-form",
@@ -9392,7 +9684,7 @@ function StudioApp() {
                   </SelectContent>
                 </Select>
                 <span className="text-[11px] text-ink-subtle">
-                  저장된 VibeVoice 모델을 고르면 그 모델에서 이어서 학습합니다. 기본값은 다운로드된 공식 모델을 자동으로 사용합니다.
+                  저장된 모델을 고르면 그 모델에서 이어서 학습합니다. 비워두면 기본 모델을 사용합니다.
                 </span>
               </div>
               {activeTab === "vibevoice_tts_train" ? (
@@ -9555,7 +9847,7 @@ function StudioApp() {
                     <div className="flex flex-col gap-1.5 md:col-span-2">
                       <Label className="text-xs font-medium text-ink-muted">Extra args</Label>
                       <Input value={vibeVoiceTrainForm.extra_args} onChange={(event) => setVibeVoiceTrainForm((prev) => ({ ...prev, extra_args: event.target.value }))} />
-                      <span className="text-[11px] text-ink-subtle">UI에 없는 upstream 인자를 공백으로 구분해 추가합니다.</span>
+                      <span className="text-[11px] text-ink-subtle">고급 실행 옵션을 공백으로 구분해 추가합니다.</span>
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -9586,7 +9878,7 @@ function StudioApp() {
                     <span>{vibeVoiceTrainResult.log_path ? "Training log saved" : "Training log pending"}</span>
                   </div>
                 ) : (
-                  <p className="text-xs text-ink-muted">ASR LoRA는 Microsoft 공식 `finetuning-asr/lora_finetune.py`를 사용합니다.</p>
+                  <p className="text-xs text-ink-muted">학습을 시작하면 진행 상태와 결과 경로가 여기에 표시됩니다.</p>
                 )}
               </WorkspaceCard>
             </aside>
@@ -9739,7 +10031,7 @@ function StudioApp() {
                     <span>{vibeVoiceModelToolResult.log_path ? "Operation log saved" : "Operation log pending"}</span>
                   </div>
                 ) : (
-                  <p className="text-xs leading-5 text-ink-muted">VibeVoice checkout에 포함된 공식 merge/convert utilities를 직접 호출합니다.</p>
+                  <p className="text-xs leading-5 text-ink-muted">모델 작업을 실행하면 결과 파일과 로그 위치가 여기에 표시됩니다.</p>
                 )}
               </WorkspaceCard>
             </aside>
@@ -10105,7 +10397,7 @@ function StudioApp() {
             eyebrow="COSYVOICE"
             eyebrowIcon={AudioLines}
             title="CosyVoice 3 파인튜닝"
-            subtitle="사전학습 체크포인트에서 llm/flow/hifigan 서브모듈을 SFT로 이어 학습합니다. LoRA는 upstream 미지원."
+            subtitle="선택한 서브모듈을 기존 체크포인트에서 이어 학습합니다."
             action={{
               label: "CosyVoice 학습 시작",
               formId: "cosyvoice-train-form",
@@ -10616,7 +10908,7 @@ function StudioApp() {
             eyebrow="VOXCPM"
             eyebrowIcon={AudioLines}
             title="VoxCPM2 LoRA 파인튜닝"
-            subtitle="upstream scripts/train_voxcpm_finetune.py를 그대로 실행합니다. enable_lm / enable_dit / enable_proj로 어댑터 위치 선택."
+            subtitle="학습할 계층을 고르고 데이터셋으로 LoRA 어댑터를 만듭니다."
             action={{
               label: "VoxCPM 학습 시작",
               formId: "voxcpm-train-form",
@@ -11518,7 +11810,7 @@ function StudioApp() {
             eyebrow="OMNIVOICE"
             eyebrowIcon={AudioLines}
             title="OmniVoice 배치 생성"
-            subtitle="upstream JSONL test list 형식으로 여러 샘플을 한 번에 생성합니다. 항목마다 task / ref_audio / instruct / language_id를 섞을 수 있습니다."
+            subtitle="여러 샘플을 한 번에 생성합니다. 항목마다 task / ref_audio / instruct / language_id를 섞을 수 있습니다."
             action={{
               label: "배치 실행",
               formId: "omnivoice-batch-form",
@@ -11558,7 +11850,7 @@ function StudioApp() {
               <WorkspaceCard className="flex flex-col gap-2">
                 <div className="text-xs font-medium text-ink-muted">작성 팁</div>
                 <div className="text-xs text-ink-muted">필수 필드: <code>id</code>, <code>text</code>. 선택 필드: <code>task</code>, <code>ref_audio</code>, <code>ref_text</code>, <code>instruct</code>, <code>language_id</code>, <code>duration</code>, <code>speed</code>.</div>
-                <div className="text-xs text-ink-muted">upstream batch CLI는 run-level 기본값과 sample-level override를 함께 사용합니다. 템플릿 값은 좌측 상단 TTS/프리셋 폼과 맞춰 씁니다.</div>
+                <div className="text-xs text-ink-muted">작업 기본값과 샘플별 설정을 함께 사용할 수 있습니다. 템플릿 값은 좌측 상단 TTS/프리셋 폼과 맞춰 씁니다.</div>
               </WorkspaceCard>
               {lastOmniVoiceBatchResult ? (
                 <WorkspaceCard className="flex flex-col gap-2">
@@ -11587,7 +11879,7 @@ function StudioApp() {
             eyebrow="OMNIVOICE"
             eyebrowIcon={AudioLines}
             title="OmniVoice 학습"
-            subtitle="upstream JSON train/data config를 그대로 사용합니다. macOS/Windows에서는 기본적으로 sdpa 경로를 쓰도록 보정됩니다."
+            subtitle="학습 설정과 데이터 설정을 연결해 OmniVoice 학습을 실행합니다."
             action={{
               label: "학습 실행",
               formId: "omnivoice-train-form",
@@ -11618,8 +11910,8 @@ function StudioApp() {
             </div>
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">upstream 메모</div>
-                <div className="text-xs text-ink-muted">학습은 <code>accelerate launch -m omnivoice.cli.train</code>를 감싸는 방식입니다. config 안의 <code>init_from_checkpoint</code>가 비어 있으면 현재 base model 경로를 자동으로 넣습니다.</div>
+                <div className="text-xs font-medium text-ink-muted">학습 설정 안내</div>
+                <div className="text-xs text-ink-muted">config 안의 <code>init_from_checkpoint</code>가 비어 있으면 현재 base model 경로를 자동으로 넣습니다.</div>
               </WorkspaceCard>
               {lastOmniVoiceTrainResult ? (
                 <WorkspaceCard className="flex flex-col gap-2">
@@ -11986,7 +12278,7 @@ function StudioApp() {
             eyebrow={t("effects.eyebrow", "SOUND EFFECTS")}
             eyebrowIcon={Volume2}
             title={t("mmaudio.train.title", "MMAudio 학습")}
-            subtitle={t("mmaudio.train.subtitle", "MMAudio upstream train.py를 실행합니다. 현재 upstream은 LoRA/adapter가 아니라 full/continued training 구조입니다.")}
+            subtitle={t("mmaudio.train.subtitle", "준비한 데이터셋으로 사운드 효과 모델 학습을 실행합니다.")}
             action={{
               label: t("mmaudio.train.submit", "MMAudio 학습 시작"),
               formId: "mmaudio-train-form",
@@ -12117,7 +12409,7 @@ function StudioApp() {
                 ) : (
                   <p className="text-xs text-ink-muted">MMAudio 학습 결과가 여기에 표시됩니다.</p>
                 )}
-                <p className="text-[11px] text-ink-subtle">MMAudio upstream에는 LoRA/adapter 경로가 없어 전체 모델 학습/이어학습만 실행합니다.</p>
+                <p className="text-[11px] text-ink-subtle">현재는 전체 모델 학습 또는 이어학습 방식으로 실행합니다.</p>
               </WorkspaceCard>
             </aside>
           </div>
@@ -12157,7 +12449,7 @@ function StudioApp() {
                 : currentAceStepMode === "complete" ? t("ace.complete.subtitle", "드럼, 베이스, 보컬처럼 비어 있거나 약한 여러 트랙을 한 번에 보강합니다.")
                 : currentAceStepMode === "understand" ? t("ace.understand.subtitle", "오디오를 듣고 BPM, 키, 언어, 가사, 스타일 캡션을 추정해 다음 작곡 입력으로 재사용합니다.")
                 : currentAceStepMode === "create_sample" ? t("ace.create_sample.subtitle", "한 줄 아이디어를 스타일 설명과 가사 초안으로 펼칩니다.")
-                : currentAceStepMode === "lora_train" ? t("ace.train.subtitle", "ACE-Step upstream 학습기로 LoRA 또는 LoKr adapter를 만들고 생성 LoRA 목록에 바로 연결합니다.")
+                : currentAceStepMode === "lora_train" ? t("ace.train.subtitle", "LoRA 또는 LoKr adapter를 만들고 생성 LoRA 목록에 바로 연결합니다.")
                 : t("ace.format_sample.subtitle", "Style prompt와 Lyrics를 ACE-Step이 안정적으로 읽는 입력문으로 다듬습니다.")
             }
           />

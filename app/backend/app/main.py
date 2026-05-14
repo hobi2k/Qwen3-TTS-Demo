@@ -3995,7 +3995,7 @@ def cosyvoice_generate(payload: CosyVoice3GenerateRequest) -> GenerationResponse
         instruction=payload.instruct_text,
         source_ref_audio_path=payload.prompt_audio_path or "",
         source_ref_text=payload.prompt_text or "",
-        meta=meta,
+        meta={**meta, "preset_name": payload.preset_name or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
@@ -4166,7 +4166,7 @@ def voxcpm_generate(payload: VoxCPM2GenerateRequest) -> GenerationResponse:
         instruction=payload.voice_description,
         source_ref_audio_path=payload.prompt_wav_path or payload.reference_wav_path or "",
         source_ref_text=payload.prompt_text or "",
-        meta=meta,
+        meta={**meta, "preset_name": payload.preset_name or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
@@ -4343,7 +4343,7 @@ def supertonic_generate(payload: Supertonic3GenerateRequest) -> GenerationRespon
         language=payload.language,
         audio_path=audio_path,
         speaker=payload.voice_style,
-        meta=meta,
+        meta={**meta, "preset_name": payload.preset_name or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))
@@ -4552,7 +4552,7 @@ def omnivoice_generate(payload: OmniVoiceGenerateRequest) -> GenerationResponse:
         instruction=payload.instruct,
         source_ref_audio_path=payload.ref_audio or "",
         source_ref_text=payload.ref_text or "",
-        meta=meta,
+        meta={**meta, "preset_name": payload.preset_name or None},
     )
     save_generation_record(record)
     return GenerationResponse(record=GenerationRecord(**record))

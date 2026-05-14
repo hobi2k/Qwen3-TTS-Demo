@@ -1142,6 +1142,7 @@ export interface CosyVoice3GenerateRequest {
   stream?: boolean;
   seed?: number;
   label?: string;
+  preset_name?: string;
   audio_format?: "wav" | "flac" | "mp3" | "ogg";
 }
 
@@ -1228,6 +1229,7 @@ export interface VoxCPM2GenerateRequest {
   seed?: number;
   lora_weights_path?: string;
   label?: string;
+  preset_name?: string;
   audio_format?: "wav" | "flac" | "mp3" | "ogg";
 }
 
@@ -1320,6 +1322,7 @@ export interface Supertonic3GenerateRequest {
   silence_duration?: number;
   use_gpu?: boolean;
   label?: string;
+  preset_name?: string;
   audio_format?: "wav" | "flac" | "mp3" | "ogg";
 }
 
@@ -1419,6 +1422,7 @@ export interface OmniVoiceGenerateRequest {
   audio_chunk_duration?: number;
   audio_chunk_threshold?: number;
   label?: string;
+  preset_name?: string;
   audio_format?: "wav" | "flac" | "mp3" | "ogg";
 }
 

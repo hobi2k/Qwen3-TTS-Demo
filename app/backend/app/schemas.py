@@ -834,6 +834,7 @@ class CosyVoice3GenerateRequest(BaseModel):
     stream: bool = False
     seed: Optional[int] = None
     label: Optional[str] = None
+    preset_name: str = ""
     audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
 
 
@@ -944,6 +945,7 @@ class VoxCPM2GenerateRequest(BaseModel):
     seed: Optional[int] = None
     lora_weights_path: Optional[str] = None
     label: Optional[str] = None
+    preset_name: str = ""
     audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
 
 
@@ -1063,6 +1065,7 @@ class Supertonic3GenerateRequest(BaseModel):
     silence_duration: float = Field(0.3, ge=0.0, le=5.0)
     use_gpu: bool = False
     label: Optional[str] = None
+    preset_name: str = ""
     audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
 
 
@@ -1176,6 +1179,7 @@ class OmniVoiceGenerateRequest(BaseModel):
     audio_chunk_duration: float = Field(15.0, gt=0.0, le=120.0)
     audio_chunk_threshold: float = Field(30.0, gt=0.0, le=300.0)
     label: Optional[str] = None
+    preset_name: str = ""
     audio_format: str = Field("wav", pattern="^(wav|flac|mp3|ogg)$")
 
 

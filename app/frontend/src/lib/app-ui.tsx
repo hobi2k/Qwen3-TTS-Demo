@@ -239,7 +239,7 @@ export const PRODUCT_PAGES = {
   ace_lora_train: {
     label: "LoRA / LoKr 학습",
     title: "ACE-Step LoRA / LoKr 학습",
-    description: "ACE-Step upstream 학습기로 스타일 adapter를 만들고 생성 LoRA 목록에 바로 연결합니다.",
+    description: "스타일 어댑터를 만들고 생성용 LoRA 목록에 바로 연결합니다.",
   },
   separation: {
     label: "오디오 분리",
@@ -304,12 +304,12 @@ export const PRODUCT_PAGES = {
   vibevoice_tts: {
     label: "TTS",
     title: "VibeVoice TTS",
-    description: "Microsoft VibeVoice Realtime 0.5B와 1.5B TTS 모델을 vendor checkout으로 실행합니다.",
+    description: "0.5B와 1.5B 음성 생성 모델로 대사를 만듭니다.",
   },
   vibevoice_asr: {
     label: "ASR",
     title: "VibeVoice ASR",
-    description: "Microsoft VibeVoice-ASR 모델로 업로드/생성 음성을 전사합니다.",
+    description: "업로드/생성 음성을 텍스트로 전사합니다.",
   },
   vibevoice_dataset: {
     label: "VibeVoice 데이터셋",
@@ -319,7 +319,7 @@ export const PRODUCT_PAGES = {
   vibevoice_tts_train: {
     label: "TTS Fine-tune",
     title: "VibeVoice TTS Fine-tune",
-    description: "VibeVoice TTS LoRA 학습 옵션을 upstream trainer 기준으로 실행합니다.",
+    description: "대사와 참조 음성 데이터셋으로 말투와 음색을 조정합니다.",
   },
   vibevoice_asr_train: {
     label: "ASR Fine-tune",
@@ -344,12 +344,12 @@ export const PRODUCT_PAGES = {
   mmaudio_dataset: {
     label: "MMAudio 데이터셋",
     title: "MMAudio 데이터셋",
-    description: "MMAudio upstream 학습 모드에 맞춰 example/configured 데이터 입력을 정리합니다.",
+    description: "사운드 효과 학습에 사용할 오디오와 설명 데이터를 정리합니다.",
   },
   mmaudio_train: {
     label: "MMAudio 학습",
     title: "MMAudio 학습",
-    description: "MMAudio upstream train.py로 full/continued training을 실행합니다.",
+    description: "준비한 데이터셋으로 사운드 효과 모델 학습을 실행합니다.",
   },
   cosyvoice_tts: {
     label: "텍스트 음성 변환",
@@ -404,7 +404,7 @@ export const PRODUCT_PAGES = {
   voxcpm_train: {
     label: "VoxCPM 학습",
     title: "VoxCPM2 LoRA 파인튜닝",
-    description: "VoxCPM2의 lm/dit/proj 어댑터를 LoRA로 fine-tuning합니다. upstream scripts/train_voxcpm_finetune.py를 그대로 활용합니다.",
+    description: "텍스트, 음색 생성, 연결 계층 중 필요한 부분만 LoRA로 조정합니다.",
   },
   supertonic_tts: {
     label: "텍스트 음성 변환",
@@ -459,7 +459,7 @@ export const PRODUCT_PAGES = {
   omnivoice_train: {
     label: "학습 실행",
     title: "OmniVoice 학습",
-    description: "upstream JSON train/data config를 그대로 사용해 accelerate 기반 학습을 실행합니다.",
+    description: "학습 설정과 데이터 설정을 연결해 OmniVoice 학습을 실행합니다.",
   },
   guide: {
     label: "가이드",
@@ -699,7 +699,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     title: "프롬프트 작성 (Voice Design)",
     summary: "목소리 설계의 instruction 필드는 자연어 프롬프트입니다. 잘 쓰면 그대로 캐릭터가 만들어지고, 못 쓰면 모델이 흐릿한 평균값으로 갑니다.",
     body: [
-      "Qwen3-TTS의 Voice Design은 instruct 텍스트를 음성 디자인 신호로 해석합니다. 공식 가이드는 \"5가지 원칙\"을 제안합니다 — 구체적으로(deep, crisp, fast-paced 같은 물리 기술어, '좋은 목소리' 같은 추상어 X), 다차원적으로(성별·나이·감정·발성·속도·톤을 동시에 명시), 객관적으로(감상이 아니라 음향 특성), 독창적으로(특정 인물 흉내 X), 그리고 길이는 1~3문장(15~40단어)이 sweet spot.",
+      "Voice Design은 instruct 텍스트를 음성 디자인 신호로 해석합니다. 구체적인 물리 기술어(deep, crisp, fast-paced), 성별·나이·감정·발성·속도·톤 같은 다차원 정보, 객관적인 음향 묘사를 짧게 쓰면 결과가 안정적입니다. 길이는 보통 1~3문장, 15~40단어가 적당합니다.",
       "instruct는 영어 또는 중국어로 적으면 모델이 안정적으로 해석합니다. 출력 언어와 별개입니다 — 영어 설명문으로 일본어 음성을 만들 수 있습니다. 한국어로 적어도 어느 정도 인식되지만 영문이 가장 신뢰도 높습니다.",
       "주의: 모순되는 속성을 같이 적으면 결과가 무너집니다. 'high-pitched deep bass' 같은 충돌 기술은 피하세요.",
     ],
