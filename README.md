@@ -42,7 +42,7 @@
 - `ACE-Step 작곡 / 데이터셋 / LoRA-LoKr 학습`
   ACE-Step-1.5 기반 음악 작곡실입니다. text2music / cover / repaint / extend(complete) / extract / lego / complete / understand / inspiration / format 모드를 전환할 수 있고, DiT 모델 변형(turbo/SFT/base/XL)과 LoRA 어댑터를 UI에서 직접 선택할 수 있습니다. 별도 데이터셋 탭에서 음악 학습 세트를 먼저 준비하고, `LoRA / LoKr 학습` 탭에서는 준비된 데이터셋을 선택해 upstream `train.py`로 ACE-Step 어댑터를 만듭니다.
 - `VibeVoice`
-  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, optional 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR 학습 세트를 먼저 만들고, 학습은 `TTS Fine-tune`과 `ASR Fine-tune` 탭에서 준비된 데이터셋을 선택해 실행합니다. `Model Tools`에서는 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
+  Microsoft VibeVoice를 vendor wrapper 방식으로 다룹니다. `VibeVoice TTS`는 Realtime 0.5B, Long-form 1.5B, community 7B를 선택해 생성하고, `VibeVoice ASR`은 파일/폴더/HF dataset 전사를 제공합니다. 데이터셋 탭에서 TTS/ASR 학습 세트를 먼저 만들고, 학습은 `TTS Fine-tune`과 `ASR Fine-tune` 탭에서 준비된 데이터셋을 선택해 실행합니다. `Model Tools`에서는 LoRA merge, merge 검증, NnScaler 변환을 실행합니다.
 - `CosyVoice 3 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
   FunAudioLLM CosyVoice 3 (Apache 2.0)를 `.venv-cosyvoice3` subprocess로 다룹니다. `zero_shot`, `cross_lingual` (한국어 권장), `instruct2`, `sft`, `vc` 모드를 한 탭에서 전환할 수 있고, zero-shot/cross-lingual 보이스 프리셋을 저장해 재사용할 수 있습니다. 학습 탭은 `llm`/`flow`/`hifigan` 서브모듈을 데이터셋 manifest로 SFT 합니다 (LoRA는 upstream 미지원).
 - `VoxCPM2 텍스트 음성 변환 / 프리셋 / 데이터셋 / 학습`
@@ -107,7 +107,7 @@ cd app\frontend; npm install; npm run build
 | `s2pro` | Fish Speech S2-Pro weights + `.venv-fish-speech` |
 | `mmaudio` | MMAudio weights + `.venv-mmaudio` |
 | `ace-step` | ACE-Step-1.5 checkpoints + `.venv-ace-step` (Windows native는 nano-vllm CUDA 커널 때문에 MSVC + CUDA Toolkit 또는 WSL2 권장) |
-| `vibevoice` / `vibevoice-7b` | VibeVoice ASR / Realtime 0.5B / 1.5B (옵션 7B) 모델 weight |
+| `vibevoice` / `vibevoice-7b` | VibeVoice ASR / Realtime 0.5B / 1.5B / 7B 모델 weight |
 | `omnivoice` | OmniVoice weights + `.venv-omnivoice` (`OMNIVOICE_HF_MODEL_ID` default `k2-fsa/OmniVoice`) |
 | `cosyvoice` | CosyVoice 3 weights + `.venv-cosyvoice3` (`COSYVOICE_HF_MODEL_ID`로 미러 변경 가능, 기본 `FunAudioLLM/CosyVoice2-0.5B`) |
 | `voxcpm` | VoxCPM2 weights + `.venv-voxcpm2` (`VOXCPM_HF_MODEL_ID` default `openbmb/VoxCPM2`) |
@@ -417,7 +417,7 @@ FISH_AUDIO_API_KEY=
 - `microsoft/VibeVoice-ASR`: VibeVoice ASR 탭과 공통 ASR 모델 선택에서 사용
 - `microsoft/VibeVoice-Realtime-0.5B`: VibeVoice TTS의 realtime 모델
 - `vibevoice/VibeVoice-1.5B`: 장문 TTS 모델 weight. 다운로드와 UI 선택을 지원하며, 앱에 포함된 `scripts/run_vibevoice_tts_15b.py`와 vendored VibeVoice inference code로 기본 실행 경로를 제공합니다.
-- `vibevoice/VibeVoice-7B`: community 쪽 7B 장문 TTS 모델입니다. Microsoft official model zoo에는 enabled download로 남아 있지 않아 별도 opt-in 모델로 취급합니다.
+- `vibevoice/VibeVoice-7B`: community 쪽 7B 장문 TTS 모델입니다. `all`과 `vibevoice` 프로필에서도 함께 받습니다.
 
 설치/다운로드:
 
@@ -425,9 +425,9 @@ FISH_AUDIO_API_KEY=
 ./scripts/download_models.sh vibevoice
 ```
 
-`all` 프로필에도 위 세 모델이 모두 포함됩니다. `vendor/VibeVoice`는 Applio/MMAudio처럼 저장소에 포함된 vendor source입니다. `download_models.sh`/`.ps1`는 VibeVoice 코드를 clone하거나 `.venv-vibevoice`를 만들지 않고, 이미 존재하는 `vendor/VibeVoice`를 확인한 뒤 `data/models/vibevoice/*` weight만 준비합니다.
+`all` 프로필에도 위 네 모델이 모두 포함됩니다. `vendor/VibeVoice`는 Applio/MMAudio처럼 저장소에 포함된 vendor source입니다. `download_models.sh`/`.ps1`는 VibeVoice 코드를 clone하거나 `.venv-vibevoice`를 만들지 않고, 이미 존재하는 `vendor/VibeVoice`를 확인한 뒤 `data/models/vibevoice/*` weight만 준비합니다.
 
-7B 모델은 용량과 출처가 다르므로 기본 `all`에는 넣지 않고 아래처럼 따로 받습니다.
+7B 모델도 `all`과 `vibevoice` 프로필에 포함됩니다. 7B만 다시 받고 싶을 때는 아래처럼 부분 실행할 수 있습니다.
 
 ```bash
 ./scripts/download_models.sh vibevoice-7b

@@ -208,8 +208,8 @@ print('Fish Speech S2-Pro model download completed.')
 # --------------------------------------------------------------------------
 # VibeVoice (Microsoft, MIT) — HF weight bundles only
 # --------------------------------------------------------------------------
-$VibeVoiceInclude7B = if ($env:VIBEVOICE_INCLUDE_7B) { $env:VIBEVOICE_INCLUDE_7B } else { "0" }
-if ($Profile -eq "vibevoice-7b") { $VibeVoiceInclude7B = "1" }
+$VibeVoiceInclude7B = if ($env:VIBEVOICE_INCLUDE_7B) { $env:VIBEVOICE_INCLUDE_7B } else { "1" }
+if (($Profile -eq "all") -or ($Profile -eq "vibevoice") -or ($Profile -eq "vibevoice-7b")) { $VibeVoiceInclude7B = "1" }
 if (($Profile -eq "all") -or ($Profile -eq "vibevoice") -or ($Profile -eq "vibevoice-7b")) {
     Assert-VendoredSource -Name "VibeVoice" -TargetDir $VibeVoiceDir
     if (-not (Test-Path (Join-Path $VibeVoiceDir "pyproject.toml"))) {

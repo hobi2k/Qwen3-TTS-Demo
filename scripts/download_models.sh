@@ -190,8 +190,8 @@ if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "v
   echo "Using vendored VibeVoice source: ${VIBEVOICE_DIR}"
   echo "Downloading VibeVoice model weights only. Runtime setup is handled outside download_models."
 
-  VIBEVOICE_INCLUDE_7B="${VIBEVOICE_INCLUDE_7B:-0}"
-  if [[ "${PROFILE}" == "vibevoice-7b" ]]; then
+  VIBEVOICE_INCLUDE_7B="${VIBEVOICE_INCLUDE_7B:-1}"
+  if [[ "${PROFILE}" == "all" || "${PROFILE}" == "vibevoice" || "${PROFILE}" == "vibevoice-7b" ]]; then
     VIBEVOICE_INCLUDE_7B=1
   fi
   python - "${VIBEVOICE_MODEL_DIR}" "${PRIVATE_ASSET_REPO_ID}" "${PRIVATE_ASSET_REVISION}" "${QWEN_USE_PRIVATE_ASSET_REPO}" "${VIBEVOICE_INCLUDE_7B}" <<'PY'

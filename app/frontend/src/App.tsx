@@ -26,6 +26,7 @@ import {
 } from "./components/workspace";
 import { VoiceAssetAvatar, DeleteAssetButton, DownloadAssetButton } from "./components/voice-asset";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 import { api, apiUrl } from "./lib/api";
 import {
@@ -437,6 +438,7 @@ function AudioSourceField({
     onFile: (file: File) => void | Promise<void>;
   };
 }) {
+  const [sourceTab, setSourceTab] = useState<"path" | "gallery" | "upload">("gallery");
   const selectedAsset = assets.find((asset) => asset.path === value || asset.path === selectedPath);
   const previewUrl = selectedAsset?.url ? mediaUrl(selectedAsset.url) : value ? fileUrlFromPath(value) : "";
 
@@ -455,14 +457,25 @@ function AudioSourceField({
       </div>
       <div className="flex flex-col gap-3 p-4">
         {previewUrl ? <audio controls src={previewUrl} className="h-8 w-full" /> : null}
-        <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="bg-canvas" />
         {helper ? <p className="text-xs leading-5 text-ink-subtle">{helper}</p> : null}
-        <details className="group rounded-xl border border-line bg-canvas [&_summary::-webkit-details-marker]:hidden">
-          <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-ink">
-            생성 갤러리에서 고르기
-            <span className="text-ink-subtle transition group-open:rotate-180">▾</span>
-          </summary>
-          <div className="border-t border-line p-3">
+        <Tabs value={sourceTab} onValueChange={(next) => setSourceTab(next as "path" | "gallery" | "upload")} className="flex flex-col gap-3">
+          <TabsList className={`grid h-auto w-full gap-1 border border-line bg-canvas p-1 ${upload ? "grid-cols-3" : "grid-cols-2"}`}>
+            <TabsTrigger value="path" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+              경로
+            </TabsTrigger>
+            <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+              생성 갤러리
+            </TabsTrigger>
+            {upload ? (
+              <TabsTrigger value="upload" className="text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink">
+                파일 선택
+              </TabsTrigger>
+            ) : null}
+          </TabsList>
+          <TabsContent value="path" className="m-0">
+            <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="bg-canvas" />
+          </TabsContent>
+          <TabsContent value="gallery" className="m-0 rounded-xl border border-line bg-canvas p-3">
             <ServerAudioPicker
               assets={assets}
               selectedPath={selectedPath ?? value}
@@ -471,18 +484,127 @@ function AudioSourceField({
                 onSelectAsset?.(asset);
               }}
             />
-          </div>
-        </details>
-        {upload ? (
-          <AudioUploadField
-            id={upload.id}
-            buttonLabel="파일 선택"
-            statusLabel={upload.statusLabel}
-            onFile={upload.onFile}
-          />
-        ) : null}
+          </TabsContent>
+          {upload ? (
+            <TabsContent value="upload" className="m-0">
+              <AudioUploadField
+                id={upload.id}
+                buttonLabel="파일 선택"
+                statusLabel={upload.statusLabel}
+                onFile={upload.onFile}
+              />
+            </TabsContent>
+          ) : null}
+        </Tabs>
       </div>
     </div>
+  );
+}
+
+const MODEL_LANGUAGE_LABELS: Record<string, string> = {
+  auto: "Auto",
+  ar: "Arabic",
+  my: "Burmese",
+  zh: "Chinese",
+  yue: "Cantonese",
+  da: "Danish",
+  nl: "Dutch",
+  en: "English",
+  fi: "Finnish",
+  fr: "French",
+  de: "German",
+  el: "Greek",
+  he: "Hebrew",
+  hi: "Hindi",
+  id: "Indonesian",
+  it: "Italian",
+  ja: "Japanese",
+  km: "Khmer",
+  ko: "Korean",
+  lo: "Lao",
+  ms: "Malay",
+  no: "Norwegian",
+  pl: "Polish",
+  pt: "Portuguese",
+  ru: "Russian",
+  es: "Spanish",
+  sw: "Swahili",
+  sv: "Swedish",
+  tl: "Tagalog",
+  th: "Thai",
+  tr: "Turkish",
+  vi: "Vietnamese",
+};
+
+function ModelLanguageSelect({
+  value,
+  onChange,
+  languages,
+  options,
+  placeholder = "언어 선택",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  languages?: string[];
+  options?: Array<{ id: string; display?: string; name?: string }>;
+  placeholder?: string;
+}) {
+  const items = (options?.length
+    ? options.map((option) => ({
+        value: option.id,
+        label: option.display || option.name || MODEL_LANGUAGE_LABELS[option.id] || option.id,
+      }))
+    : (languages?.length ? languages : ["ko", "en", "ja", "zh"]).map((language) => ({
+        value: language,
+        label: MODEL_LANGUAGE_LABELS[language] || language,
+      }))
+  ).filter((item, index, list) => list.findIndex((candidate) => candidate.value === item.value) === index);
+  const hasCurrentValue = value ? items.some((item) => item.value === value) : true;
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {!hasCurrentValue && value ? <SelectItem value={value}>{value}</SelectItem> : null}
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label} · {item.value}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ToggleCard({
+  checked,
+  onChange,
+  label,
+  description,
+  className,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  description?: string;
+  className?: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-2xl border border-line bg-canvas/80 px-4 py-3 text-xs text-ink-muted transition hover:border-line-strong hover:bg-surface",
+        checked && "border-accent-edge bg-accent-soft/70 text-ink shadow-[0_10px_30px_rgba(197,55,119,0.08)]",
+        className,
+      )}
+    >
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="font-medium text-ink">{label}</span>
+        {description ? <span className="text-[11px] leading-4 text-ink-subtle">{description}</span> : null}
+      </span>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </label>
   );
 }
 
@@ -525,46 +647,6 @@ function MultiAudioSourceField({
           </div>
         </details>
       </div>
-    </div>
-  );
-}
-
-function ModelModeStrip({
-  items,
-}: {
-  items: Array<{
-    id: string;
-    title: string;
-    caption: string;
-    active: boolean;
-    onClick: () => void;
-  }>;
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-      {items.map((item, index) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={item.onClick}
-          className={`group relative overflow-hidden rounded-3xl border p-4 text-left transition ${
-            item.active
-              ? "border-accent-edge bg-ink text-white shadow-[0_22px_60px_rgba(20,42,36,0.22)]"
-              : "border-line bg-surface hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_18px_44px_rgba(15,23,42,0.07)]"
-          }`}
-        >
-          <span
-            className={`absolute -right-8 -top-8 size-24 rounded-full blur-xl transition ${
-              index % 3 === 0 ? "bg-sky-200/50" : index % 3 === 1 ? "bg-amber-200/50" : "bg-rose-200/50"
-            } ${item.active ? "opacity-70" : "opacity-40 group-hover:opacity-70"}`}
-          />
-          <span className={`relative block text-[11px] font-semibold uppercase tracking-allcaps ${item.active ? "text-white/60" : "text-ink-subtle"}`}>
-            {String(index + 1).padStart(2, "0")}
-          </span>
-          <strong className={`relative mt-3 block text-sm font-semibold ${item.active ? "text-white" : "text-ink"}`}>{item.title}</strong>
-          <span className={`relative mt-1 block text-xs leading-5 ${item.active ? "text-white/70" : "text-ink-muted"}`}>{item.caption}</span>
-        </button>
-      ))}
     </div>
   );
 }
@@ -3585,7 +3667,7 @@ function StudioApp() {
       }
       const seedTrim = voxCpmTtsForm.seed.trim();
       const response = await api.generateVoxCPM({
-        task: voxCpmTtsForm.task,
+        task: voxCpmTaskValue,
         text: voxCpmTtsForm.text,
         language: voxCpmTtsForm.language || undefined,
         prompt_text: voxCpmTtsForm.prompt_text || undefined,
@@ -3763,18 +3845,18 @@ function StudioApp() {
         setMessage("OmniVoice 텍스트를 입력하세요.");
         return;
       }
-      if (omnivoiceTtsForm.task === "voice_design" && !omnivoiceTtsForm.instruct.trim()) {
+      if (omniVoiceTaskValue === "voice_design" && !omnivoiceTtsForm.instruct.trim()) {
         setMessage("voice_design에는 영어 스타일 지시문이 필요합니다.");
         return;
       }
-      if (omnivoiceTtsForm.task === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()) {
+      if (omniVoiceTaskValue === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()) {
         setMessage("voice_cloning에는 참조 오디오 경로가 필요합니다.");
         return;
       }
 
       const seedTrim = omnivoiceTtsForm.seed.trim();
       const response = await api.generateOmniVoice({
-        task: omnivoiceTtsForm.task,
+        task: omniVoiceTaskValue,
         text: omnivoiceTtsForm.text,
         language: omnivoiceTtsForm.language || undefined,
         instruct: omnivoiceTtsForm.instruct || undefined,
@@ -5959,12 +6041,19 @@ function StudioApp() {
 
   const isCosyVoiceGenerateTab = activeTab === "cosyvoice_tts" || activeTab === "cosyvoice_clone";
   const isCosyVoiceCloneTab = activeTab === "cosyvoice_clone";
+  const cosyVoiceTaskValue = isCosyVoiceCloneTab
+    ? (cosyVoiceTtsForm.task === "zero_shot" || cosyVoiceTtsForm.task === "vc" || cosyVoiceTtsForm.task === "cross_lingual" ? cosyVoiceTtsForm.task : "cross_lingual")
+    : (cosyVoiceTtsForm.task === "sft" || cosyVoiceTtsForm.task === "instruct2" ? cosyVoiceTtsForm.task : "instruct2");
   const isVoxCpmGenerateTab = activeTab === "voxcpm_tts" || activeTab === "voxcpm_design" || activeTab === "voxcpm_clone";
   const isVoxCpmDesignTab = activeTab === "voxcpm_design";
   const isVoxCpmCloneTab = activeTab === "voxcpm_clone";
+  const voxCpmTaskValue = isVoxCpmDesignTab
+    ? "voice_design"
+    : (voxCpmTtsForm.task === "ultimate_cloning" || voxCpmTtsForm.task === "voice_cloning" ? voxCpmTtsForm.task : "voice_cloning");
   const isOmniVoiceGenerateTab = activeTab === "omnivoice_tts" || activeTab === "omnivoice_design" || activeTab === "omnivoice_clone";
   const isOmniVoiceDesignTab = activeTab === "omnivoice_design";
   const isOmniVoiceCloneTab = activeTab === "omnivoice_clone";
+  const omniVoiceTaskValue = isOmniVoiceDesignTab ? "voice_design" : isOmniVoiceCloneTab ? "voice_cloning" : "auto_voice";
 
   return (
     <>
@@ -6069,13 +6158,13 @@ function StudioApp() {
               <span>{t("tab.cosyvoice_clone", "목소리 복제")}</span>
             </button>
             <button className={activeTab === "cosyvoice_voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("cosyvoice_voices")} type="button">
-              <span>{t("tab.cosyvoice_voices", "CosyVoice 프리셋")}</span>
+              <span>{t("tab.cosyvoice_voices", "목소리 프리셋")}</span>
             </button>
             <button className={activeTab === "cosyvoice_dataset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("cosyvoice_dataset")} type="button">
-              <span>{t("tab.cosyvoice_dataset", "CosyVoice 데이터셋")}</span>
+              <span>{t("tab.cosyvoice_dataset", "데이터셋 만들기")}</span>
             </button>
             <button className={activeTab === "cosyvoice_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("cosyvoice_train")} type="button">
-              <span>{t("tab.cosyvoice_train", "CosyVoice 학습")}</span>
+              <span>{t("tab.cosyvoice_train", "학습 실행")}</span>
             </button>
           </div>
 
@@ -7089,14 +7178,20 @@ function StudioApp() {
                   key={selectionKey}
                   className={`group flex flex-wrap items-center gap-4 rounded-2xl border bg-gradient-to-br ${recordAccentClass} p-4 shadow-[0_12px_34px_rgba(15,23,42,0.045)] transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_18px_44px_rgba(15,23,42,0.075)] ${isSelected ? "border-accent-edge ring-2 ring-accent-soft" : "border-line"}`}
                 >
-                  <label className="flex items-center" aria-label={`${getRecordDisplayTitle(record)} 선택`}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleGallerySelection(selectionKey)}
-                      className="size-4 cursor-pointer rounded border-line accent-accent"
-                    />
-                  </label>
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    aria-label={`${getRecordDisplayTitle(record)} 선택`}
+                    onClick={() => toggleGallerySelection(selectionKey)}
+                    className={cn(
+                      "shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-medium transition",
+                      isSelected
+                        ? "border-accent bg-accent text-white shadow-[0_10px_24px_rgba(197,55,119,0.24)]"
+                        : "border-line bg-canvas text-ink-muted hover:border-line-strong hover:bg-surface hover:text-ink",
+                    )}
+                  >
+                    {isSelected ? "선택됨" : "선택"}
+                  </button>
                   <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/70 bg-white/70 text-accent shadow-sm backdrop-blur">
                     <MiniWaveform dense />
                   </div>
@@ -8886,31 +8981,29 @@ function StudioApp() {
           <form id="vibevoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVibeVoiceTTSSubmit}>
             <div className="flex flex-col gap-5">
               <WorkspaceCard className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_minmax(220px,260px)_minmax(0,1fr)]">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                    <Select value={vibeVoiceTtsForm.model_profile} onValueChange={(model_profile) => setVibeVoiceTtsForm((prev) => ({ ...prev, model_profile: model_profile as "realtime" | "tts_15b" | "tts_7b" }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="realtime">Realtime TTS 0.5B</SelectItem>
+                        <SelectItem value="tts_15b">Long-form TTS 1.5B</SelectItem>
+                        <SelectItem value="tts_7b">Community TTS 7B</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Output name</Label>
+                    <Input value={vibeVoiceTtsForm.output_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, output_name: event.target.value }))} />
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Text</Label>
                     <Textarea
                       value={vibeVoiceTtsForm.text}
                       onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))}
-                      className="min-h-[160px] resize-y border-line bg-canvas"
+                      className="min-h-[92px] resize-y border-line bg-canvas"
                     />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                      <Select value={vibeVoiceTtsForm.model_profile} onValueChange={(model_profile) => setVibeVoiceTtsForm((prev) => ({ ...prev, model_profile: model_profile as "realtime" | "tts_15b" | "tts_7b" }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="realtime">Realtime TTS 0.5B</SelectItem>
-                          <SelectItem value="tts_15b">Long-form TTS 1.5B</SelectItem>
-                          <SelectItem value="tts_7b">Community TTS 7B</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Output name</Label>
-                      <Input value={vibeVoiceTtsForm.output_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, output_name: event.target.value }))} />
-                    </div>
                   </div>
                 </div>
 
@@ -8928,31 +9021,43 @@ function StudioApp() {
                   }}
                 />
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">단일 화자 라벨</Label>
-                    <Input value={vibeVoiceTtsForm.speaker_name} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_name: event.target.value }))} />
-                    <p className="text-xs leading-5 text-ink-subtle">단일 화자 모드에서 이 참조 음성을 부르는 이름입니다.</p>
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-ink-muted">단일 화자 라벨</Label>
+                    <Input
+                      value={vibeVoiceTtsForm.speaker_name}
+                      onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, speaker_name: event.target.value }))}
+                      className="bg-surface"
+                    />
+                    <p className="text-xs leading-5 text-ink-subtle">참조 음성을 대본 안에서 부르는 화자 이름입니다.</p>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">LoRA checkpoint</Label>
-                    <Select
-                      value={vibeVoiceTtsForm.checkpoint_path || "__none__"}
-                      onValueChange={(checkpoint_path) =>
-                        setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: checkpoint_path === "__none__" ? "" : checkpoint_path }))
-                      }
-                    >
-                      <SelectTrigger><SelectValue placeholder="선택 안 함" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">선택 안 함</SelectItem>
-                        {vibeVoiceAdapterAssets.map((asset) => (
-                          <SelectItem key={asset.path} value={asset.path}>
-                            {asset.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input value={vibeVoiceTtsForm.checkpoint_path} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))} placeholder="직접 경로 입력" />
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold text-ink-muted">LoRA checkpoint</Label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
+                      <Select
+                        value={vibeVoiceTtsForm.checkpoint_path || "__none__"}
+                        onValueChange={(checkpoint_path) =>
+                          setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: checkpoint_path === "__none__" ? "" : checkpoint_path }))
+                        }
+                      >
+                        <SelectTrigger className="bg-surface"><SelectValue placeholder="선택 안 함" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">선택 안 함</SelectItem>
+                          {vibeVoiceAdapterAssets.map((asset) => (
+                            <SelectItem key={asset.path} value={asset.path}>
+                              {asset.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={vibeVoiceTtsForm.checkpoint_path}
+                        onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: event.target.value }))}
+                        placeholder="직접 경로 입력"
+                        className="bg-surface"
+                      />
+                    </div>
+                    <p className="text-xs leading-5 text-ink-subtle">학습한 LoRA가 있으면 선택하고, 없으면 비워둡니다.</p>
                   </div>
                 </div>
                 {vibeVoiceTtsForm.model_profile === "tts_15b" || vibeVoiceTtsForm.model_profile === "tts_7b" ? (
@@ -9051,14 +9156,8 @@ function StudioApp() {
                       <Label className="text-xs font-medium text-ink-muted">Extra CLI args</Label>
                       <Input value={vibeVoiceTtsForm.extra_args} onChange={(event) => setVibeVoiceTtsForm((prev) => ({ ...prev, extra_args: event.target.value }))} />
                     </div>
-                    <label className="col-span-2 flex items-center gap-2 text-xs text-ink-muted">
-                      <Switch checked={vibeVoiceTtsForm.disable_prefill} onCheckedChange={(disable_prefill) => setVibeVoiceTtsForm((prev) => ({ ...prev, disable_prefill }))} />
-                      Disable prefill
-                    </label>
-                    <label className="col-span-2 flex items-center gap-2 text-xs text-ink-muted">
-                      <Switch checked={vibeVoiceTtsForm.show_progress} onCheckedChange={(show_progress) => setVibeVoiceTtsForm((prev) => ({ ...prev, show_progress }))} />
-                      Show progress
-                    </label>
+                    <ToggleCard checked={vibeVoiceTtsForm.disable_prefill} onChange={(disable_prefill) => setVibeVoiceTtsForm((prev) => ({ ...prev, disable_prefill }))} label="Disable prefill" className="col-span-2" />
+                    <ToggleCard checked={vibeVoiceTtsForm.show_progress} onChange={(show_progress) => setVibeVoiceTtsForm((prev) => ({ ...prev, show_progress }))} label="Show progress" className="col-span-2" />
                   </div>
                 </details>
               </WorkspaceCard>
@@ -9428,19 +9527,19 @@ function StudioApp() {
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
-                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.bf16} onCheckedChange={(bf16) => setVibeVoiceTrainForm((prev) => ({ ...prev, bf16 }))} /> <strong className="ml-2 text-ink">bf16</strong><span className="mt-1 block">GPU 메모리를 줄이는 mixed precision입니다.</span></label>
-                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.gradient_checkpointing} onCheckedChange={(gradient_checkpointing) => setVibeVoiceTrainForm((prev) => ({ ...prev, gradient_checkpointing }))} /> <strong className="ml-2 text-ink">Gradient checkpointing</strong><span className="mt-1 block">속도를 조금 포기하고 VRAM 사용량을 낮춥니다.</span></label>
-                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.use_customized_context} onCheckedChange={(use_customized_context) => setVibeVoiceTrainForm((prev) => ({ ...prev, use_customized_context }))} /> <strong className="ml-2 text-ink">Customized context</strong><span className="mt-1 block">ASR 학습에서 문맥 정보를 함께 쓰는 옵션입니다.</span></label>
-                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.ignore_verifications} onCheckedChange={(ignore_verifications) => setVibeVoiceTrainForm((prev) => ({ ...prev, ignore_verifications }))} /> <strong className="ml-2 text-ink">Ignore verifications</strong><span className="mt-1 block">데이터 검증 실패를 무시합니다. 디버깅 외에는 권장하지 않습니다.</span></label>
+                    <ToggleCard checked={vibeVoiceTrainForm.bf16} onChange={(bf16) => setVibeVoiceTrainForm((prev) => ({ ...prev, bf16 }))} label="bf16" description="GPU 메모리를 줄이는 mixed precision입니다." />
+                    <ToggleCard checked={vibeVoiceTrainForm.gradient_checkpointing} onChange={(gradient_checkpointing) => setVibeVoiceTrainForm((prev) => ({ ...prev, gradient_checkpointing }))} label="Gradient checkpointing" description="속도를 조금 포기하고 VRAM 사용량을 낮춥니다." />
+                    <ToggleCard checked={vibeVoiceTrainForm.use_customized_context} onChange={(use_customized_context) => setVibeVoiceTrainForm((prev) => ({ ...prev, use_customized_context }))} label="Customized context" description="ASR 학습에서 문맥 정보를 함께 씁니다." />
+                    <ToggleCard checked={vibeVoiceTrainForm.ignore_verifications} onChange={(ignore_verifications) => setVibeVoiceTrainForm((prev) => ({ ...prev, ignore_verifications }))} label="Ignore verifications" description="검증 실패를 무시합니다. 디버깅 외에는 권장하지 않습니다." />
                     {activeTab === "vibevoice_tts_train" ? (
                       <>
-                        <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.lora_wrap_diffusion_head} onCheckedChange={(lora_wrap_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_wrap_diffusion_head }))} /> <strong className="ml-2 text-ink">LoRA diffusion head</strong><span className="mt-1 block">확산 음성 헤드에도 LoRA wrapper를 적용합니다.</span></label>
-                        <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_diffusion_head} onCheckedChange={(train_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_diffusion_head }))} /> <strong className="ml-2 text-ink">Train diffusion head</strong><span className="mt-1 block">음색과 음향 품질에 직접 관여하는 diffusion head를 학습합니다.</span></label>
-                        <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.train_connectors} onCheckedChange={(train_connectors) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_connectors }))} /> <strong className="ml-2 text-ink">Train connectors</strong><span className="mt-1 block">텍스트 모델과 음성 생성부 사이 연결층까지 조정합니다.</span></label>
+                        <ToggleCard checked={vibeVoiceTrainForm.lora_wrap_diffusion_head} onChange={(lora_wrap_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, lora_wrap_diffusion_head }))} label="LoRA diffusion head" description="확산 음성 헤드에도 LoRA wrapper를 적용합니다." />
+                        <ToggleCard checked={vibeVoiceTrainForm.train_diffusion_head} onChange={(train_diffusion_head) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_diffusion_head }))} label="Train diffusion head" description="음색과 음향 품질에 직접 관여하는 head를 학습합니다." />
+                        <ToggleCard checked={vibeVoiceTrainForm.train_connectors} onChange={(train_connectors) => setVibeVoiceTrainForm((prev) => ({ ...prev, train_connectors }))} label="Train connectors" description="텍스트 모델과 음성 생성부 사이 연결층까지 조정합니다." />
                       </>
                     ) : null}
-                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_save} onCheckedChange={(debug_save) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_save }))} /> <strong className="ml-2 text-ink">Debug save</strong><span className="mt-1 block">중간 디버그 산출물을 저장합니다.</span></label>
-                    <label className="rounded-md border border-line bg-surface/70 p-3 text-xs text-ink-muted"><Switch checked={vibeVoiceTrainForm.debug_ce_details} onCheckedChange={(debug_ce_details) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_ce_details }))} /> <strong className="ml-2 text-ink">Debug CE</strong><span className="mt-1 block">CE loss 상세 값을 로그에 남깁니다.</span></label>
+                    <ToggleCard checked={vibeVoiceTrainForm.debug_save} onChange={(debug_save) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_save }))} label="Debug save" description="중간 디버그 산출물을 저장합니다." />
+                    <ToggleCard checked={vibeVoiceTrainForm.debug_ce_details} onChange={(debug_ce_details) => setVibeVoiceTrainForm((prev) => ({ ...prev, debug_ce_details }))} label="Debug CE" description="CE loss 상세 값을 로그에 남깁니다." />
                   </div>
                 </div>
               </details>
@@ -9626,102 +9725,47 @@ function StudioApp() {
             action={{
               label: isCosyVoiceCloneTab ? "복제 음성 생성" : "TTS 생성",
               formId: "cosyvoice-tts-form",
-              disabled: loading || (cosyVoiceTtsForm.task !== "vc" && !cosyVoiceTtsForm.text.trim()),
+              disabled: loading || (cosyVoiceTaskValue !== "vc" && !cosyVoiceTtsForm.text.trim()),
               loading,
             }}
           />
-          <form id="cosyvoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleCosyVoiceGenerate}>
+          <form id="cosyvoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleCosyVoiceGenerate}>
             <div className="flex flex-col gap-5">
-              <ModelModeStrip
-                items={[
-                  {
-                    id: "cosyvoice_tts",
-                    title: "텍스트 음성 변환",
-                    caption: "지시형/SFT 기반 대사 생성",
-                    active: activeTab === "cosyvoice_tts",
-                    onClick: () => openCosyVoiceTab("cosyvoice_tts"),
-                  },
-                  {
-                    id: "cosyvoice_clone",
-                    title: "목소리 복제",
-                    caption: "참조 음성 기반 zero-shot 생성",
-                    active: activeTab === "cosyvoice_clone",
-                    onClick: () => openCosyVoiceTab("cosyvoice_clone"),
-                  },
-                ]}
-              />
-              <WorkspaceCard className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Text</Label>
-                    <Textarea
-                      value={cosyVoiceTtsForm.text}
-                      onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))}
-                      className="min-h-[160px] resize-y border-line bg-canvas"
-                      placeholder="한국어 텍스트. cross_lingual 모드는 [breath] [laughter] 태그도 지원합니다."
-                    />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Task</Label>
-                      <Select value={cosyVoiceTtsForm.task} onValueChange={(task) => setCosyVoiceTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {isCosyVoiceCloneTab ? (
-                            <>
-                              <SelectItem value="cross_lingual">cross_lingual (한국어 권장)</SelectItem>
-                              <SelectItem value="zero_shot">zero_shot</SelectItem>
-                              <SelectItem value="vc">vc (voice conversion)</SelectItem>
-                            </>
-                          ) : (
-                            <>
-                              <SelectItem value="instruct2">instruct2</SelectItem>
-                              <SelectItem value="sft">sft (CosyVoice-1 only)</SelectItem>
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                      <Select value={cosyVoiceTtsForm.model_name} onValueChange={(model_name) => setCosyVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {(cosyVoiceRuntime?.model_variants?.length ? cosyVoiceRuntime.model_variants : [{ name: "Fun-CosyVoice3-0.5B", available: true }]).map((model) => (
-                            <SelectItem key={model.name} value={model.name}>
-                              {model.name}{model.available ? "" : " (missing)"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+              <WorkspaceCard className="flex flex-col gap-5">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Text</Label>
+                  <Textarea
+                    value={cosyVoiceTtsForm.text}
+                    onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))}
+                    className="min-h-[92px] resize-y border-line bg-canvas"
+                    placeholder="한국어 텍스트. cross_lingual 모드는 [breath] [laughter] 태그도 지원합니다."
+                  />
                 </div>
 
-                {isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "zero_shot" ? (
+                {isCosyVoiceCloneTab && cosyVoiceTaskValue === "zero_shot" ? (
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Prompt text (참조 오디오의 transcript)</Label>
+                    <Label className="text-xs font-medium text-ink-muted">Prompt text (참조 오디오 transcript)</Label>
                     <Textarea
                       value={cosyVoiceTtsForm.prompt_text}
                       onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, prompt_text: event.target.value }))}
-                      className="min-h-[80px] border-line bg-canvas"
+                      className="min-h-[96px] border-line bg-canvas"
                     />
                   </div>
                 ) : null}
 
-                {!isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "instruct2" ? (
-                  <div className="flex flex-col gap-1.5">
+                {!isCosyVoiceCloneTab && cosyVoiceTaskValue === "instruct2" ? (
+                  <div className="flex flex-col gap-3">
                     <Label className="text-xs font-medium text-ink-muted">Instruct text (영어 권장, <code>{`<|endofprompt|>`}</code>로 마감)</Label>
                     <Textarea
                       value={cosyVoiceTtsForm.instruct_text}
                       onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, instruct_text: event.target.value }))}
-                      className="min-h-[80px] border-line bg-canvas"
+                      className="min-h-[112px] border-line bg-canvas"
                       placeholder="You are a helpful assistant. Speak in a calm, low voice.<|endofprompt|>"
                     />
                   </div>
                 ) : null}
 
-                {isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "vc" ? (
+                {isCosyVoiceCloneTab && cosyVoiceTaskValue === "vc" ? (
                   <AudioSourceField
                     label="변환할 원본 음성"
                     value={cosyVoiceTtsForm.source_audio_path}
@@ -9731,16 +9775,7 @@ function StudioApp() {
                   />
                 ) : null}
 
-                {!isCosyVoiceCloneTab && cosyVoiceTtsForm.task === "sft" ? (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Built-in speaker</Label>
-                    <Input
-                      value={cosyVoiceTtsForm.speaker}
-                      onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, speaker: event.target.value }))}
-                      placeholder="中文女"
-                    />
-                  </div>
-                ) : isCosyVoiceCloneTab ? (
+                {isCosyVoiceCloneTab ? (
                   <AudioSourceField
                     label="참조 음성"
                     value={cosyVoiceTtsForm.prompt_audio_path}
@@ -9757,17 +9792,17 @@ function StudioApp() {
                   />
                 ) : null}
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 sm:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                    <Input
+                    <Label className="text-xs font-semibold text-ink-muted">Language</Label>
+                    <ModelLanguageSelect
                       value={cosyVoiceTtsForm.language}
-                      onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, language: event.target.value }))}
-                      placeholder="ko"
+                      onChange={(language) => setCosyVoiceTtsForm((prev) => ({ ...prev, language }))}
+                      languages={cosyVoiceRuntime?.supported_languages}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Seed</Label>
+                    <Label className="text-xs font-semibold text-ink-muted">Seed</Label>
                     <Input
                       value={cosyVoiceTtsForm.seed}
                       onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, seed: event.target.value }))}
@@ -9775,9 +9810,9 @@ function StudioApp() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Format</Label>
+                    <Label className="text-xs font-semibold text-ink-muted">Format</Label>
                     <Select value={cosyVoiceTtsForm.audio_format} onValueChange={(audio_format) => setCosyVoiceTtsForm((prev) => ({ ...prev, audio_format: audio_format as typeof prev.audio_format }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="wav">wav</SelectItem>
                         <SelectItem value="flac">flac</SelectItem>
@@ -9791,29 +9826,79 @@ function StudioApp() {
 
               {lastCosyVoiceRecord ? (
                 <WorkspaceCard>
-                  <AudioCard title="최근 CosyVoice 결과" subtitle={cosyVoiceTtsForm.task} record={lastCosyVoiceRecord} />
+                <AudioCard title="최근 CosyVoice 결과" subtitle={cosyVoiceTaskValue} record={lastCosyVoiceRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
 
             <aside className="flex flex-col gap-4">
-              <WorkspaceCard className="flex flex-col gap-2">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="text-xs font-medium text-ink-muted">생성 설정</div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Task</Label>
+                  <Select value={cosyVoiceTaskValue} onValueChange={(task) => setCosyVoiceTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {isCosyVoiceCloneTab ? (
+                        <>
+                          <SelectItem value="cross_lingual">cross_lingual</SelectItem>
+                          <SelectItem value="zero_shot">zero_shot</SelectItem>
+                          <SelectItem value="vc">voice conversion</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="instruct2">instruct2</SelectItem>
+                          <SelectItem value="sft">sft</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                  <Select value={cosyVoiceTtsForm.model_name} onValueChange={(model_name) => setCosyVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(cosyVoiceRuntime?.model_variants?.length ? cosyVoiceRuntime.model_variants : [{ name: "Fun-CosyVoice3-0.5B", available: true }]).map((model) => (
+                        <SelectItem key={model.name} value={model.name}>
+                          {model.name}{model.available ? "" : " (missing)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {!isCosyVoiceCloneTab && cosyVoiceTaskValue === "sft" ? (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Built-in speaker</Label>
+                    <Input
+                      value={cosyVoiceTtsForm.speaker}
+                      onChange={(event) => setCosyVoiceTtsForm((prev) => ({ ...prev, speaker: event.target.value }))}
+                      placeholder="中文女"
+                    />
+                  </div>
+                ) : null}
+              </WorkspaceCard>
+
+              <WorkspaceCard className="flex flex-col gap-3">
                 <div className="text-xs font-medium text-ink-muted">저장된 프리셋</div>
                 {cosyVoicePresets.length ? (
-                  <div className="flex flex-col gap-1 pt-2">
-                    {cosyVoicePresets.map((preset) => (
+                  <div className="flex flex-col gap-2">
+                    {cosyVoicePresets.slice(0, 6).map((preset) => (
                       <button
                         key={preset.name}
                         type="button"
-                        className="text-left text-xs underline-offset-2 hover:underline"
+                        className="rounded-xl border border-line bg-canvas px-3 py-2 text-left text-xs transition hover:border-accent/40 hover:bg-accent-soft/30"
                         onClick={() => handleCosyVoiceApplyPreset(preset)}
                       >
-                        {preset.name} ({preset.task || "cross_lingual"})
+                        <span className="block truncate font-medium text-ink">{preset.name}</span>
+                        <span className="mt-1 block text-ink-muted">{preset.task || "cross_lingual"}</span>
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-xs text-ink-muted">아직 저장된 프리셋이 없습니다.</div>
+                  <div className="rounded-xl border border-dashed border-line bg-canvas px-3 py-4 text-xs text-ink-muted">
+                    아직 저장된 프리셋이 없습니다.
+                  </div>
                 )}
               </WorkspaceCard>
             </aside>
@@ -9876,7 +9961,11 @@ function StudioApp() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                    <Input value={cosyVoicePresetForm.language} onChange={(event) => setCosyVoicePresetForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko" />
+                    <ModelLanguageSelect
+                      value={cosyVoicePresetForm.language}
+                      onChange={(language) => setCosyVoicePresetForm((prev) => ({ ...prev, language }))}
+                      languages={cosyVoiceRuntime?.supported_languages}
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Notes</Label>
@@ -10011,27 +10100,24 @@ function StudioApp() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">학습할 submodels</Label>
-                  <div className="flex flex-wrap gap-2 text-xs">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {(["llm", "flow", "hifigan"] as const).map((name) => {
                       const checked = cosyVoiceTrainForm.submodels.includes(name);
                       return (
-                        <label key={name} className={`px-2 py-1 rounded border cursor-pointer ${checked ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-canvas text-ink"}`}>
-                          <input
-                            type="checkbox"
-                            className="mr-1"
-                            checked={checked}
-                            onChange={(event) => {
-                              const isChecked = event.target.checked;
-                              setCosyVoiceTrainForm((prev) => ({
-                                ...prev,
-                                submodels: isChecked
-                                  ? Array.from(new Set([...prev.submodels, name]))
-                                  : prev.submodels.filter((s) => s !== name),
-                              }));
-                            }}
-                          />
-                          {name}
-                        </label>
+                        <ToggleCard
+                          key={name}
+                          checked={checked}
+                          label={name}
+                          description={name === "llm" ? "텍스트/의미 모델" : name === "flow" ? "음성 생성 흐름" : "보코더 출력"}
+                          onChange={(isChecked) => {
+                            setCosyVoiceTrainForm((prev) => ({
+                              ...prev,
+                              submodels: isChecked
+                                ? Array.from(new Set([...prev.submodels, name]))
+                                : prev.submodels.filter((s) => s !== name),
+                            }));
+                          }}
+                        />
                       );
                     })}
                   </div>
@@ -10056,7 +10142,7 @@ function StudioApp() {
                     <Input value={cosyVoiceTrainForm.run_name} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, run_name: event.target.value }))} />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 sm:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">max_epoch</Label>
                     <Input value={cosyVoiceTrainForm.max_epoch} onChange={(event) => setCosyVoiceTrainForm((prev) => ({ ...prev, max_epoch: event.target.value }))} />
@@ -10119,78 +10205,20 @@ function StudioApp() {
               loading,
             }}
           />
-          <form id="voxcpm-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleVoxCpmGenerate}>
+          <form id="voxcpm-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleVoxCpmGenerate}>
             <div className="flex flex-col gap-5">
-              <ModelModeStrip
-                items={[
-                  {
-                    id: "voxcpm_tts",
-                    title: "텍스트 음성 변환",
-                    caption: "프리셋/LoRA로 대사 생성",
-                    active: activeTab === "voxcpm_tts",
-                    onClick: () => openVoxCpmTab("voxcpm_tts"),
-                  },
-                  {
-                    id: "voxcpm_design",
-                    title: "목소리 디자인",
-                    caption: "영문 설명으로 새 음색 설계",
-                    active: activeTab === "voxcpm_design",
-                    onClick: () => openVoxCpmTab("voxcpm_design"),
-                  },
-                  {
-                    id: "voxcpm_clone",
-                    title: "목소리 복제",
-                    caption: "참조 음성으로 음색 복제",
-                    active: activeTab === "voxcpm_clone",
-                    onClick: () => openVoxCpmTab("voxcpm_clone"),
-                  },
-                ]}
-              />
-              <WorkspaceCard className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Text</Label>
-                    <Textarea
-                      value={voxCpmTtsForm.text}
-                      onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, text: event.target.value }))}
-                      className="min-h-[160px] resize-y border-line bg-canvas"
-                      placeholder="voice_design은 '(A young woman, gentle voice)안녕하세요' 처럼 괄호 디스크립터를 앞에 붙입니다."
-                    />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Task</Label>
-                      <Select value={voxCpmTtsForm.task} onValueChange={(task) => setVoxCpmTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {isVoxCpmDesignTab ? (
-                            <SelectItem value="voice_design">voice_design</SelectItem>
-                          ) : (
-                            <>
-                              <SelectItem value="voice_cloning">voice_cloning (reference 한 개)</SelectItem>
-                              <SelectItem value="ultimate_cloning">ultimate_cloning (prompt+transcript)</SelectItem>
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                      <Select value={voxCpmTtsForm.model_name} onValueChange={(model_name) => setVoxCpmTtsForm((prev) => ({ ...prev, model_name }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {(voxCpmRuntime?.model_variants?.length ? voxCpmRuntime.model_variants : [{ name: "VoxCPM2", available: true }]).map((model) => (
-                            <SelectItem key={model.name} value={model.name}>
-                              {model.name}{model.available ? "" : " (missing)"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+              <WorkspaceCard className="flex flex-col gap-5">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Text</Label>
+                  <Textarea
+                    value={voxCpmTtsForm.text}
+                    onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, text: event.target.value }))}
+                    className="min-h-[116px] resize-y border-line bg-canvas"
+                    placeholder="voice_design은 '(A young woman, gentle voice)안녕하세요' 처럼 괄호 디스크립터를 앞에 붙입니다."
+                  />
                 </div>
 
-                {isVoxCpmCloneTab && voxCpmTtsForm.task !== "voice_design" ? (
+                {isVoxCpmCloneTab && voxCpmTaskValue !== "voice_design" ? (
                   <AudioSourceField
                     label="참조 음성"
                     value={voxCpmTtsForm.reference_wav_path}
@@ -10200,7 +10228,7 @@ function StudioApp() {
                   />
                 ) : null}
 
-                {isVoxCpmCloneTab && voxCpmTtsForm.task === "ultimate_cloning" ? (
+                {isVoxCpmCloneTab && voxCpmTaskValue === "ultimate_cloning" ? (
                   <>
                     <AudioSourceField
                       label="이어 말할 prompt 음성"
@@ -10238,7 +10266,7 @@ function StudioApp() {
                   </div>
                 ) : null}
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-canvas/60 p-4 sm:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">cfg_value</Label>
                     <Input value={voxCpmTtsForm.cfg_value} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, cfg_value: event.target.value }))} />
@@ -10249,12 +10277,16 @@ function StudioApp() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                    <Input value={voxCpmTtsForm.language} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko" />
+                    <ModelLanguageSelect
+                      value={voxCpmTtsForm.language}
+                      onChange={(language) => setVoxCpmTtsForm((prev) => ({ ...prev, language }))}
+                      languages={voxCpmRuntime?.supported_languages}
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Format</Label>
                     <Select value={voxCpmTtsForm.audio_format} onValueChange={(audio_format) => setVoxCpmTtsForm((prev) => ({ ...prev, audio_format: audio_format as typeof prev.audio_format }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="wav">wav</SelectItem>
                         <SelectItem value="flac">flac</SelectItem>
@@ -10284,34 +10316,54 @@ function StudioApp() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3 text-xs">
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={voxCpmTtsForm.normalize} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, normalize: event.target.checked }))} />
-                    text normalize
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={voxCpmTtsForm.denoise} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, denoise: event.target.checked }))} />
-                    denoise reference
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={voxCpmTtsForm.enable_denoiser} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, enable_denoiser: event.target.checked }))} />
-                    load denoiser
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={voxCpmTtsForm.optimize} onChange={(event) => setVoxCpmTtsForm((prev) => ({ ...prev, optimize: event.target.checked }))} />
-                    torch.compile
-                  </label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                  <ToggleCard checked={voxCpmTtsForm.normalize} onChange={(normalize) => setVoxCpmTtsForm((prev) => ({ ...prev, normalize }))} label="Text normalize" />
+                  <ToggleCard checked={voxCpmTtsForm.denoise} onChange={(denoise) => setVoxCpmTtsForm((prev) => ({ ...prev, denoise }))} label="Denoise reference" />
+                  <ToggleCard checked={voxCpmTtsForm.enable_denoiser} onChange={(enable_denoiser) => setVoxCpmTtsForm((prev) => ({ ...prev, enable_denoiser }))} label="Load denoiser" />
+                  <ToggleCard checked={voxCpmTtsForm.optimize} onChange={(optimize) => setVoxCpmTtsForm((prev) => ({ ...prev, optimize }))} label="torch.compile" />
                 </div>
               </WorkspaceCard>
 
               {lastVoxCpmRecord ? (
                 <WorkspaceCard>
-                  <AudioCard title="최근 VoxCPM 결과" subtitle={voxCpmTtsForm.task} record={lastVoxCpmRecord} />
+                  <AudioCard title="최근 VoxCPM 결과" subtitle={voxCpmTaskValue} record={lastVoxCpmRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
 
             <aside className="flex flex-col gap-4">
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="text-xs font-medium text-ink-muted">생성 설정</div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Task</Label>
+                  <Select value={voxCpmTaskValue} onValueChange={(task) => setVoxCpmTtsForm((prev) => ({ ...prev, task: task as typeof prev.task }))}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {isVoxCpmDesignTab ? (
+                        <SelectItem value="voice_design">voice_design</SelectItem>
+                      ) : (
+                        <>
+                          <SelectItem value="voice_cloning">voice_cloning</SelectItem>
+                          <SelectItem value="ultimate_cloning">ultimate_cloning</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                  <Select value={voxCpmTtsForm.model_name} onValueChange={(model_name) => setVoxCpmTtsForm((prev) => ({ ...prev, model_name }))}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(voxCpmRuntime?.model_variants?.length ? voxCpmRuntime.model_variants : [{ name: "VoxCPM2", available: true }]).map((model) => (
+                        <SelectItem key={model.name} value={model.name}>
+                          {model.name}{model.available ? "" : " (missing)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </WorkspaceCard>
               <WorkspaceCard className="flex flex-col gap-2">
                 <div className="text-xs font-medium text-ink-muted">저장된 프리셋</div>
                 {voxCpmPresets.length ? (
@@ -10416,7 +10468,11 @@ function StudioApp() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                    <Input value={voxCpmPresetForm.language} onChange={(event) => setVoxCpmPresetForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko" />
+                    <ModelLanguageSelect
+                      value={voxCpmPresetForm.language}
+                      onChange={(language) => setVoxCpmPresetForm((prev) => ({ ...prev, language }))}
+                      languages={voxCpmRuntime?.supported_languages}
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs font-medium text-ink-muted">Notes</Label>
@@ -10552,19 +10608,10 @@ function StudioApp() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">LoRA targets</Label>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <label className={`px-2 py-1 rounded border cursor-pointer ${voxCpmTrainForm.enable_lm ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-canvas text-ink"}`}>
-                      <input type="checkbox" className="mr-1" checked={voxCpmTrainForm.enable_lm} onChange={(event) => setVoxCpmTrainForm((prev) => ({ ...prev, enable_lm: event.target.checked }))} />
-                      enable_lm
-                    </label>
-                    <label className={`px-2 py-1 rounded border cursor-pointer ${voxCpmTrainForm.enable_dit ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-canvas text-ink"}`}>
-                      <input type="checkbox" className="mr-1" checked={voxCpmTrainForm.enable_dit} onChange={(event) => setVoxCpmTrainForm((prev) => ({ ...prev, enable_dit: event.target.checked }))} />
-                      enable_dit
-                    </label>
-                    <label className={`px-2 py-1 rounded border cursor-pointer ${voxCpmTrainForm.enable_proj ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-canvas text-ink"}`}>
-                      <input type="checkbox" className="mr-1" checked={voxCpmTrainForm.enable_proj} onChange={(event) => setVoxCpmTrainForm((prev) => ({ ...prev, enable_proj: event.target.checked }))} />
-                      enable_proj
-                    </label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <ToggleCard checked={voxCpmTrainForm.enable_lm} onChange={(enable_lm) => setVoxCpmTrainForm((prev) => ({ ...prev, enable_lm }))} label="LM" description="텍스트/의미 계층" />
+                    <ToggleCard checked={voxCpmTrainForm.enable_dit} onChange={(enable_dit) => setVoxCpmTrainForm((prev) => ({ ...prev, enable_dit }))} label="DiT" description="음색 생성 계층" />
+                    <ToggleCard checked={voxCpmTrainForm.enable_proj} onChange={(enable_proj) => setVoxCpmTrainForm((prev) => ({ ...prev, enable_proj }))} label="Projection" description="연결 투영층" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -10753,12 +10800,12 @@ function StudioApp() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3 text-xs">
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={supertonicTtsForm.use_gpu} onChange={(event) => setSupertonicTtsForm((prev) => ({ ...prev, use_gpu: event.target.checked }))} />
-                    use GPU (실험)
-                  </label>
-                </div>
+                <ToggleCard
+                  checked={supertonicTtsForm.use_gpu}
+                  onChange={(use_gpu) => setSupertonicTtsForm((prev) => ({ ...prev, use_gpu }))}
+                  label="GPU 사용"
+                  description="지원 환경에서만 활성화되는 실험 옵션입니다."
+                />
               </WorkspaceCard>
 
               {lastSupertonicRecord ? (
@@ -11008,10 +11055,12 @@ function StudioApp() {
                   <Label className="text-xs font-medium text-ink-muted">샘플 대사</Label>
                   <Textarea value={supertonicTrainForm.sample_text} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, sample_text: event.target.value }))} className="min-h-[110px] resize-y border-line bg-canvas" />
                 </div>
-                <label className="flex items-center gap-2 text-xs text-ink-muted">
-                  <input type="checkbox" checked={supertonicTrainForm.run_final_sample} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, run_final_sample: event.target.checked }))} />
-                  스타일 생성 후 샘플 음성까지 바로 생성
-                </label>
+                <ToggleCard
+                  checked={supertonicTrainForm.run_final_sample}
+                  onChange={(run_final_sample) => setSupertonicTrainForm((prev) => ({ ...prev, run_final_sample }))}
+                  label="샘플 음성까지 생성"
+                  description="스타일 생성 후 확인용 샘플을 바로 만듭니다."
+                />
               </WorkspaceCard>
             </div>
             <aside className="flex flex-col gap-4">
@@ -11048,89 +11097,17 @@ function StudioApp() {
               disabled:
                 loading ||
                 !omnivoiceTtsForm.text.trim() ||
-                (omnivoiceTtsForm.task === "voice_design" && !omnivoiceTtsForm.instruct.trim()) ||
-                (omnivoiceTtsForm.task === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()),
+                (omniVoiceTaskValue === "voice_design" && !omnivoiceTtsForm.instruct.trim()) ||
+                (omniVoiceTaskValue === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()),
               loading,
             }}
           />
-          <form id="omnivoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleOmniVoiceGenerate}>
+          <form id="omnivoice-tts-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleOmniVoiceGenerate}>
             <div className="flex flex-col gap-5">
-              <ModelModeStrip
-                items={[
-                  {
-                    id: "omnivoice_tts",
-                    title: "텍스트 음성 변환",
-                    caption: "auto voice로 빠른 생성",
-                    active: activeTab === "omnivoice_tts",
-                    onClick: () => openOmniVoiceTab("omnivoice_tts"),
-                  },
-                  {
-                    id: "omnivoice_design",
-                    title: "목소리 디자인",
-                    caption: "영문 스타일 지시문으로 설계",
-                    active: activeTab === "omnivoice_design",
-                    onClick: () => openOmniVoiceTab("omnivoice_design"),
-                  },
-                  {
-                    id: "omnivoice_clone",
-                    title: "목소리 복제",
-                    caption: "참조 음성으로 복제",
-                    active: activeTab === "omnivoice_clone",
-                    onClick: () => openOmniVoiceTab("omnivoice_clone"),
-                  },
-                ]}
-              />
-              <WorkspaceCard className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Mode</Label>
-                    <Input value={isOmniVoiceDesignTab ? "voice_design" : isOmniVoiceCloneTab ? "voice_cloning" : "auto_voice"} readOnly />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Model</Label>
-                    <Select value={omnivoiceTtsForm.model_name} onValueChange={(model_name) => setOmniVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {(omnivoiceRuntime?.model_variants || []).map((m) => (
-                          <SelectItem key={m.name} value={m.name} disabled={!m.available}>
-                            {m.name}{m.available ? "" : " (missing)"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                    <Input list="omnivoice-language-options" value={omnivoiceTtsForm.language} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko / en / ja / zh" />
-                  </div>
-                </div>
-                <datalist id="omnivoice-language-options">
-                  {(omnivoiceRuntime?.supported_language_options || []).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.display}
-                    </option>
-                  ))}
-                </datalist>
-                {omnivoiceRuntime?.supported_language_options?.length ? (
-                  <div className="flex flex-col gap-2 rounded-2xl border border-line/70 bg-canvas px-4 py-3">
-                    <div className="text-xs font-medium text-ink-muted">언어 옵션</div>
-                    <div className="flex flex-wrap gap-2">
-                      {omnivoiceRuntime.supported_language_options.slice(0, 18).map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          className="rounded-full border border-line bg-white px-2.5 py-1 text-[11px] text-ink transition hover:border-ink"
-                          onClick={() => setOmniVoiceTtsForm((prev) => ({ ...prev, language: option.id }))}
-                        >
-                          {option.display}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+              <WorkspaceCard className="flex flex-col gap-5">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">Text</Label>
-                  <Textarea value={omnivoiceTtsForm.text} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))} className="min-h-[150px] resize-y border-line bg-canvas" />
+                  <Textarea value={omnivoiceTtsForm.text} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, text: event.target.value }))} className="min-h-[116px] resize-y border-line bg-canvas" />
                 </div>
                 {(isOmniVoiceDesignTab || isOmniVoiceCloneTab) ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -11206,46 +11183,52 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">chunk_duration</Label><Input value={omnivoiceTtsForm.audio_chunk_duration} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_chunk_duration: event.target.value }))} /></div>
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">chunk_threshold</Label><Input value={omnivoiceTtsForm.audio_chunk_threshold} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_chunk_threshold: event.target.value }))} /></div>
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Seed</Label><Input value={omnivoiceTtsForm.seed} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, seed: event.target.value }))} /></div>
-                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Format</Label><Select value={omnivoiceTtsForm.audio_format} onValueChange={(audio_format) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_format: audio_format as typeof prev.audio_format }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wav">wav</SelectItem><SelectItem value="flac">flac</SelectItem><SelectItem value="mp3">mp3</SelectItem><SelectItem value="ogg">ogg</SelectItem></SelectContent></Select></div>
+                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Format</Label><Select value={omnivoiceTtsForm.audio_format} onValueChange={(audio_format) => setOmniVoiceTtsForm((prev) => ({ ...prev, audio_format: audio_format as typeof prev.audio_format }))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wav">wav</SelectItem><SelectItem value="flac">flac</SelectItem><SelectItem value="mp3">mp3</SelectItem><SelectItem value="ogg">ogg</SelectItem></SelectContent></Select></div>
                 </div>
-                <div className="flex flex-wrap gap-4 text-xs">
-                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceTtsForm.denoise} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, denoise: event.target.checked }))} /> denoise</label>
-                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceTtsForm.preprocess_prompt} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, preprocess_prompt: event.target.checked }))} /> preprocess_prompt</label>
-                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceTtsForm.postprocess_output} onChange={(event) => setOmniVoiceTtsForm((prev) => ({ ...prev, postprocess_output: event.target.checked }))} /> postprocess_output</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <ToggleCard checked={omnivoiceTtsForm.denoise} onChange={(denoise) => setOmniVoiceTtsForm((prev) => ({ ...prev, denoise }))} label="Denoise" />
+                  <ToggleCard checked={omnivoiceTtsForm.preprocess_prompt} onChange={(preprocess_prompt) => setOmniVoiceTtsForm((prev) => ({ ...prev, preprocess_prompt }))} label="Preprocess prompt" />
+                  <ToggleCard checked={omnivoiceTtsForm.postprocess_output} onChange={(postprocess_output) => setOmniVoiceTtsForm((prev) => ({ ...prev, postprocess_output }))} label="Postprocess output" />
                 </div>
               </WorkspaceCard>
 
               {lastOmniVoiceRecord ? (
                 <WorkspaceCard>
-                  <AudioCard title="최근 OmniVoice 결과" subtitle={omnivoiceTtsForm.task} record={lastOmniVoiceRecord} />
+                  <AudioCard title="최근 OmniVoice 결과" subtitle={omniVoiceTaskValue} record={lastOmniVoiceRecord} />
                 </WorkspaceCard>
               ) : null}
             </div>
 
             <aside className="flex flex-col gap-4">
-              <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">작업 도움말</div>
-                <div className="text-xs leading-5 text-ink-muted">
-                  스타일 지시문은 영어로 작성하고, 모델 다운로드 여부는 나의 목소리들 → 프리셋/학습 결과 → 모델 상태에서 확인합니다.
+              <WorkspaceCard className="flex flex-col gap-4">
+                <div className="text-xs font-medium text-ink-muted">생성 설정</div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Mode</Label>
+                  <Input value={omniVoiceTaskValue} readOnly className="bg-canvas" />
                 </div>
-                <div className="text-xs text-ink-muted">언어 옵션 {omnivoiceRuntime?.supported_language_options?.length || 0}개 · 디자인 템플릿 {omnivoiceRuntime?.voice_design_templates?.length || 0}그룹</div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Model</Label>
+                  <Select value={omnivoiceTtsForm.model_name} onValueChange={(model_name) => setOmniVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(omnivoiceRuntime?.model_variants || [{ name: "OmniVoice", available: true }]).map((m) => (
+                        <SelectItem key={m.name} value={m.name} disabled={!m.available}>
+                          {m.name}{m.available ? "" : " (missing)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-ink-muted">Language</Label>
+                  <ModelLanguageSelect
+                    value={omnivoiceTtsForm.language}
+                    onChange={(language) => setOmniVoiceTtsForm((prev) => ({ ...prev, language }))}
+                    languages={omnivoiceRuntime?.supported_languages}
+                    options={omnivoiceRuntime?.supported_language_options}
+                  />
+                </div>
               </WorkspaceCard>
-              {isOmniVoiceCloneTab ? (
-              <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">서버 오디오 선택</div>
-                <ServerAudioPicker
-                  assets={audioAssets}
-                  selectedPath={omnivoiceTtsForm.ref_audio}
-                  onSelect={(asset) =>
-                    setOmniVoiceTtsForm((prev) => ({
-                      ...prev,
-                      ref_audio: asset.path,
-                      ref_text: asset.transcript_text?.trim() || prev.ref_text,
-                    }))
-                  }
-                />
-              </WorkspaceCard>
-              ) : null}
             </aside>
           </form>
         </WorkspaceShell>
@@ -11273,16 +11256,17 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Task</Label><Select value={omnivoicePresetForm.task} onValueChange={(task) => setOmniVoicePresetForm((prev) => ({ ...prev, task: task as typeof prev.task }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto_voice">auto_voice</SelectItem><SelectItem value="voice_design">voice_design</SelectItem><SelectItem value="voice_cloning">voice_cloning</SelectItem></SelectContent></Select></div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Language</Label><Input list="omnivoice-preset-language-options" value={omnivoicePresetForm.language} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko" /></div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
+                    <ModelLanguageSelect
+                      value={omnivoicePresetForm.language}
+                      onChange={(language) => setOmniVoicePresetForm((prev) => ({ ...prev, language }))}
+                      languages={omnivoiceRuntime?.supported_languages}
+                      options={omnivoiceRuntime?.supported_language_options}
+                    />
+                  </div>
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">Model</Label><Input value={omnivoicePresetForm.model_name} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, model_name: event.target.value }))} placeholder="OmniVoice" /></div>
                 </div>
-                <datalist id="omnivoice-preset-language-options">
-                  {(omnivoiceRuntime?.supported_language_options || []).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.display}
-                    </option>
-                  ))}
-                </datalist>
                 <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">instruct (English)</Label><Textarea value={omnivoicePresetForm.instruct} onChange={(event) => setOmniVoicePresetForm((prev) => ({ ...prev, instruct: event.target.value }))} className="min-h-[96px] resize-y border-line bg-canvas" /></div>
                 {omnivoiceRuntime?.voice_design_templates?.length ? (
                   <div className="flex flex-col gap-3 rounded-2xl border border-line/70 bg-canvas px-4 py-3">
@@ -11450,9 +11434,9 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">min_length</Label><Input value={omnivoiceDataPrepForm.min_length} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, min_length: event.target.value }))} /></div>
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">max_length</Label><Input value={omnivoiceDataPrepForm.max_length} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, max_length: event.target.value }))} /></div>
                 </div>
-                <div className="flex flex-wrap gap-4 text-xs">
-                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceDataPrepForm.shuffle} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, shuffle: event.target.checked }))} /> shuffle</label>
-                  <label className="flex items-center gap-1"><input type="checkbox" checked={omnivoiceDataPrepForm.skip_errors} onChange={(event) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, skip_errors: event.target.checked }))} /> skip_errors</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <ToggleCard checked={omnivoiceDataPrepForm.shuffle} onChange={(shuffle) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, shuffle }))} label="Shuffle" description="샘플 순서를 섞어서 준비합니다." />
+                  <ToggleCard checked={omnivoiceDataPrepForm.skip_errors} onChange={(skip_errors) => setOmniVoiceDataPrepForm((prev) => ({ ...prev, skip_errors }))} label="Skip errors" description="깨진 샘플은 건너뜁니다." />
                 </div>
               </WorkspaceCard>
             </div>
@@ -11507,15 +11491,16 @@ function StudioApp() {
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">batch_size</Label><Input value={omnivoiceBatchForm.batch_size} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, batch_size: event.target.value }))} /></div>
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">warmup</Label><Input value={omnivoiceBatchForm.warmup} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, warmup: event.target.value }))} /></div>
                   <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">nj_per_gpu</Label><Input value={omnivoiceBatchForm.nj_per_gpu} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, nj_per_gpu: event.target.value }))} /></div>
-                  <div className="flex flex-col gap-1.5"><Label className="text-xs font-medium text-ink-muted">lang_id default</Label><Input list="omnivoice-batch-language-options" value={omnivoiceBatchForm.lang_id} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, lang_id: event.target.value }))} placeholder="optional" /></div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium text-ink-muted">lang_id default</Label>
+                    <ModelLanguageSelect
+                      value={omnivoiceBatchForm.lang_id || "ko"}
+                      onChange={(lang_id) => setOmniVoiceBatchForm((prev) => ({ ...prev, lang_id }))}
+                      languages={omnivoiceRuntime?.supported_languages}
+                      options={omnivoiceRuntime?.supported_language_options}
+                    />
+                  </div>
                 </div>
-                <datalist id="omnivoice-batch-language-options">
-                  {(omnivoiceRuntime?.supported_language_options || []).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.display}
-                    </option>
-                  ))}
-                </datalist>
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-medium text-ink-muted">JSONL samples</Label>
                   <Textarea value={omnivoiceBatchForm.samples_jsonl} onChange={(event) => setOmniVoiceBatchForm((prev) => ({ ...prev, samples_jsonl: event.target.value }))} className="min-h-[280px] resize-y border-line bg-canvas font-mono text-xs" />
@@ -12328,16 +12313,16 @@ function StudioApp() {
                       <Input value={aceStepCommonForm.fade_out_duration} onChange={(event) => setAceStepCommonForm({ ...aceStepCommonForm, fade_out_duration: event.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.offload_dit_to_cpu} onCheckedChange={(offload_dit_to_cpu) => setAceStepCommonForm({ ...aceStepCommonForm, offload_dit_to_cpu })} /> Offload DiT</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_adg} onCheckedChange={(use_adg) => setAceStepCommonForm({ ...aceStepCommonForm, use_adg })} /> ADG</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.thinking} onCheckedChange={(thinking) => setAceStepCommonForm({ ...aceStepCommonForm, thinking })} /> Thinking</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_metas} onCheckedChange={(use_cot_metas) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_metas })} /> CoT metas</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_caption} onCheckedChange={(use_cot_caption) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_caption })} /> CoT caption</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_lyrics} onCheckedChange={(use_cot_lyrics) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_lyrics })} /> CoT lyrics</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_cot_language} onCheckedChange={(use_cot_language) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_language })} /> CoT language</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.use_constrained_decoding} onCheckedChange={(use_constrained_decoding) => setAceStepCommonForm({ ...aceStepCommonForm, use_constrained_decoding })} /> Constrained decoding</label>
-                    <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepCommonForm.enable_normalization} onCheckedChange={(enable_normalization) => setAceStepCommonForm({ ...aceStepCommonForm, enable_normalization })} /> Normalize</label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <ToggleCard checked={aceStepCommonForm.offload_dit_to_cpu} onChange={(offload_dit_to_cpu) => setAceStepCommonForm({ ...aceStepCommonForm, offload_dit_to_cpu })} label="Offload DiT" />
+                    <ToggleCard checked={aceStepCommonForm.use_adg} onChange={(use_adg) => setAceStepCommonForm({ ...aceStepCommonForm, use_adg })} label="ADG" />
+                    <ToggleCard checked={aceStepCommonForm.thinking} onChange={(thinking) => setAceStepCommonForm({ ...aceStepCommonForm, thinking })} label="Thinking" />
+                    <ToggleCard checked={aceStepCommonForm.use_cot_metas} onChange={(use_cot_metas) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_metas })} label="CoT metas" />
+                    <ToggleCard checked={aceStepCommonForm.use_cot_caption} onChange={(use_cot_caption) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_caption })} label="CoT caption" />
+                    <ToggleCard checked={aceStepCommonForm.use_cot_lyrics} onChange={(use_cot_lyrics) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_lyrics })} label="CoT lyrics" />
+                    <ToggleCard checked={aceStepCommonForm.use_cot_language} onChange={(use_cot_language) => setAceStepCommonForm({ ...aceStepCommonForm, use_cot_language })} label="CoT language" />
+                    <ToggleCard checked={aceStepCommonForm.use_constrained_decoding} onChange={(use_constrained_decoding) => setAceStepCommonForm({ ...aceStepCommonForm, use_constrained_decoding })} label="Constrained decoding" />
+                    <ToggleCard checked={aceStepCommonForm.enable_normalization} onChange={(enable_normalization) => setAceStepCommonForm({ ...aceStepCommonForm, enable_normalization })} label="Normalize" />
                   </div>
                 </div>
               </details>
@@ -12467,14 +12452,14 @@ function StudioApp() {
                         <Input value={aceStepForm.device_id} onChange={(event) => setAceStepForm({ ...aceStepForm, device_id: event.target.value })} />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.use_erg_tag} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_tag: checked })} /> ERG tag</label>
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.use_erg_lyric} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_lyric: checked })} /> ERG lyric</label>
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.use_erg_diffusion} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: checked })} /> ERG diffusion</label>
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.bf16} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, bf16: checked })} /> BF16</label>
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.torch_compile} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, torch_compile: checked })} /> torch.compile</label>
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.cpu_offload} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, cpu_offload: checked })} /> CPU offload</label>
-                      <label className="flex items-center gap-2 text-xs text-ink-muted"><Switch checked={aceStepForm.overlapped_decode} onCheckedChange={(checked) => setAceStepForm({ ...aceStepForm, overlapped_decode: checked })} /> Overlapped decode</label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      <ToggleCard checked={aceStepForm.use_erg_tag} onChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_tag: checked })} label="ERG tag" />
+                      <ToggleCard checked={aceStepForm.use_erg_lyric} onChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_lyric: checked })} label="ERG lyric" />
+                      <ToggleCard checked={aceStepForm.use_erg_diffusion} onChange={(checked) => setAceStepForm({ ...aceStepForm, use_erg_diffusion: checked })} label="ERG diffusion" />
+                      <ToggleCard checked={aceStepForm.bf16} onChange={(checked) => setAceStepForm({ ...aceStepForm, bf16: checked })} label="BF16" />
+                      <ToggleCard checked={aceStepForm.torch_compile} onChange={(checked) => setAceStepForm({ ...aceStepForm, torch_compile: checked })} label="torch.compile" />
+                      <ToggleCard checked={aceStepForm.cpu_offload} onChange={(checked) => setAceStepForm({ ...aceStepForm, cpu_offload: checked })} label="CPU offload" />
+                      <ToggleCard checked={aceStepForm.overlapped_decode} onChange={(checked) => setAceStepForm({ ...aceStepForm, overlapped_decode: checked })} label="Overlapped decode" />
                     </div>
                   </div>
                 </details>

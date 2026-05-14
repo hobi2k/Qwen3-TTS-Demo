@@ -362,17 +362,17 @@ export const PRODUCT_PAGES = {
     description: "참조 음성과 전사 텍스트를 사용해 zero-shot 또는 cross-lingual 복제를 실행합니다.",
   },
   cosyvoice_voices: {
-    label: "CosyVoice 프리셋",
-    title: "CosyVoice 3 프리셋",
+    label: "목소리 프리셋",
+    title: "CosyVoice 3 목소리 프리셋",
     description: "CosyVoice zero-shot/cross-lingual 보이스 프리셋(참조 오디오 + 대본)을 저장하고 재사용합니다.",
   },
   cosyvoice_dataset: {
-    label: "CosyVoice 데이터셋",
+    label: "데이터셋 만들기",
     title: "CosyVoice 3 데이터셋",
     description: "CosyVoice 학습용 manifest.jsonl (audio + text)을 data/datasets/<id>/ 폴더로 정리합니다.",
   },
   cosyvoice_train: {
-    label: "CosyVoice 학습",
+    label: "학습 실행",
     title: "CosyVoice 3 파인튜닝",
     description: "CosyVoice 사전학습 체크포인트에서 llm/flow/hifigan 서브모듈을 SFT로 이어 학습합니다. LoRA는 미지원.",
   },

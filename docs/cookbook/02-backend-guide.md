@@ -362,7 +362,7 @@ VibeVoice는 저장소에 포함된 `vendor/VibeVoice` source와 전용 `.venv-v
 - `GET /api/vibevoice/runtime`
   vendor checkout, Python executable, 모델 폴더, 지원 기능, 준비 상태를 반환합니다.
 - `POST /api/vibevoice/tts`
-  Realtime 0.5B, 1.5B, optional community 7B TTS를 실행하고 결과를 생성 갤러리에 저장합니다. 1.5B/7B는 `scripts/run_vibevoice_tts_15b.py` helper와 compatibility patch를 기본 경로로 사용합니다.
+  Realtime 0.5B, 1.5B, community 7B TTS를 실행하고 결과를 생성 갤러리에 저장합니다. 1.5B/7B는 `scripts/run_vibevoice_tts_15b.py` helper와 compatibility patch를 기본 경로로 사용합니다.
 - `POST /api/vibevoice/asr`
   VibeVoice-ASR로 저장된 오디오를 전사합니다. context/hotwords가 있거나 upstream entrypoint가 맞지 않을 때는 `scripts/run_vibevoice_asr.py` helper를 사용합니다.
 - `POST /api/vibevoice/train`
@@ -372,9 +372,9 @@ VibeVoice는 저장소에 포함된 `vendor/VibeVoice` source와 전용 `.venv-v
 
 - `vendor/VibeVoice`는 저장소에 포함되는 tracked vendor source입니다.
 - `.venv-vibevoice`, `data/models/vibevoice`는 gitignore 대상입니다.
-- `./scripts/download_models.sh vibevoice`가 전용 venv와 ASR/0.5B/1.5B 모델 weight를 준비합니다.
+- `./scripts/download_models.sh vibevoice`가 ASR/0.5B/1.5B/7B 모델 weight를 준비합니다.
 - 다운로드 스크립트는 VibeVoice source를 clone하지 않습니다. `vendor/VibeVoice`가 없으면 저장소 상태가 잘못된 것으로 보고 실패합니다.
-- 7B community 모델은 `./scripts/download_models.sh vibevoice-7b`로 opt-in 준비합니다.
+- 7B community 모델은 `./scripts/download_models.sh all` 또는 `./scripts/download_models.sh vibevoice`에 포함되며, 7B만 다시 받을 때 `./scripts/download_models.sh vibevoice-7b`를 사용할 수 있습니다.
 - 기본 fine-tuning 경로는 community TTS LoRA입니다. ASR LoRA는 checkout 제공 여부를 확인한 뒤 실행합니다.
 
 ## 학습 래퍼 원칙
