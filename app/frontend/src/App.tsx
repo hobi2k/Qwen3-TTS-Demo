@@ -122,8 +122,17 @@ type AceStepMode =
   | "format_sample"
   | "lora_train";
 
-type VoiceLibraryView = "trained" | "qwen" | "s2pro" | "model_assets" | "rvc" | "datasets";
-type ModelAssetsView = "status" | "presets" | "lora" | "merged";
+type VoiceLibraryView =
+  | "trained"
+  | "qwen"
+  | "s2pro"
+  | "vibevoice"
+  | "cosyvoice"
+  | "voxcpm"
+  | "supertonic"
+  | "omnivoice"
+  | "rvc"
+  | "datasets";
 type DatasetLibraryTarget = "qwen" | "s2_pro" | "vibevoice" | "rvc" | "mmaudio" | "ace_step" | "cosyvoice" | "voxcpm" | "supertonic" | "omnivoice";
 type GalleryFilter = "all" | "speech" | "qwen_preset" | "s2pro_preset" | "model_voice" | "effect" | "music" | "rvc" | "utility";
 type VoiceBoxMorphSource = "clone_prompt" | "reference_voice";
@@ -1362,7 +1371,6 @@ function StudioApp() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [voiceGalleryView, setVoiceGalleryView] = useState<VoiceLibraryView>("trained");
-  const [modelAssetsView, setModelAssetsView] = useState<ModelAssetsView>("presets");
   const [datasetLibraryTarget, setDatasetLibraryTarget] = useState<DatasetLibraryTarget>("qwen");
   const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>("all");
   const [gallerySortMode, setGallerySortMode] = useState<"recent" | "preset">("recent");
@@ -2667,17 +2675,6 @@ function StudioApp() {
   const vibeVoiceAdapterAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "lora_adapter");
   const vibeVoiceMergedAssets = vibeVoiceModelAssets.filter((asset) => asset.kind === "merged_model");
   const reusableModelAssetCount = vibeVoiceAdapterAssets.length + vibeVoiceMergedAssets.length;
-  const modelPresetCount = cosyVoicePresets.length + voxCpmPresets.length + supertonicPresets.length + omnivoicePresets.length;
-  const modelDownloadCards = [
-    { id: "vv-realtime", model: "VibeVoice", name: "Realtime TTS 0.5B", available: Boolean(vibeVoiceRuntime?.realtime_tts_ready) },
-    { id: "vv-longform", model: "VibeVoice", name: "Long-form TTS 1.5B", available: Boolean(vibeVoiceRuntime?.longform_tts_ready) },
-    { id: "vv-asr", model: "VibeVoice", name: "ASR", available: Boolean(vibeVoiceRuntime?.asr_ready) },
-    ...(cosyVoiceRuntime?.model_variants || []).map((item) => ({ id: `cv-${item.name}`, model: "CosyVoice", name: item.name, available: item.available })),
-    ...(voxCpmRuntime?.model_variants || []).map((item) => ({ id: `vx-${item.name}`, model: "VoxCPM", name: item.name, available: item.available })),
-    ...(supertonicRuntime?.onnx_assets || []).map((item) => ({ id: `st-onnx-${item.name}`, model: "Supertonic", name: item.name, available: item.available })),
-    ...(omnivoiceRuntime?.model_variants || []).map((item) => ({ id: `ov-${item.name}`, model: "OmniVoice", name: item.name, available: item.available })),
-  ];
-  const modelDownloadReadyCount = modelDownloadCards.filter((item) => item.available).length;
   const vibeVoiceNnScalerAssets = vibeVoiceModelAssets.filter((asset) =>
     ["model_file", "merged_model", "lora_adapter"].includes(asset.kind),
   );
@@ -6373,10 +6370,10 @@ function StudioApp() {
 
           <Tabs
             value={voiceGalleryView}
-            onValueChange={(value) => setVoiceGalleryView(value as typeof voiceGalleryView)}
+            onValueChange={(value) => setVoiceGalleryView(value as VoiceLibraryView)}
             className="flex flex-col gap-5"
           >
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6 gap-1 bg-surface border border-line p-1 h-auto">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 border border-line bg-surface p-1 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
               <TabsTrigger value="trained" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.trained", "훈련한 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{latestFineTunedModels.length}</span>
               </TabsTrigger>
@@ -6386,8 +6383,20 @@ function StudioApp() {
               <TabsTrigger value="s2pro" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.s2pro", "S2-Pro 프리셋")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{s2VoiceProjects.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="model_assets" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
-                {t("voices.tab.modelAssets", "프리셋/학습 결과")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{reusableModelAssetCount + modelPresetCount}</span>
+              <TabsTrigger value="vibevoice" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                VibeVoice <span className="ml-1 font-mono text-[10px] text-ink-subtle">{reusableModelAssetCount}</span>
+              </TabsTrigger>
+              <TabsTrigger value="cosyvoice" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                CosyVoice <span className="ml-1 font-mono text-[10px] text-ink-subtle">{cosyVoicePresets.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="voxcpm" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                VoxCPM <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voxCpmPresets.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="supertonic" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                Supertonic <span className="ml-1 font-mono text-[10px] text-ink-subtle">{supertonicPresets.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="omnivoice" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
+                OmniVoice <span className="ml-1 font-mono text-[10px] text-ink-subtle">{omnivoicePresets.length}</span>
               </TabsTrigger>
               <TabsTrigger value="rvc" className="data-[state=active]:bg-accent-soft data-[state=active]:text-accent-ink text-xs sm:text-sm">
                 {t("voices.tab.rvc", "RVC 모델")} <span className="ml-1 font-mono text-[10px] text-ink-subtle">{voiceChangerModels.length}</span>
@@ -6696,151 +6705,173 @@ function StudioApp() {
                 )}
               </TabsContent>
 
-              <TabsContent value="model_assets" className="m-0">
-                <Tabs value={modelAssetsView} onValueChange={(value) => setModelAssetsView(value as ModelAssetsView)} className="flex flex-col gap-4">
-                  <TabsList className="grid w-full grid-cols-2 gap-1 bg-surface border border-line p-1 h-auto md:grid-cols-4">
-                    <TabsTrigger value="status" className="text-xs sm:text-sm">모델 상태 <span className="ml-1 font-mono text-[10px] text-ink-subtle">{modelDownloadReadyCount}/{modelDownloadCards.length || 0}</span></TabsTrigger>
-                    <TabsTrigger value="presets" className="text-xs sm:text-sm">프리셋 <span className="ml-1 font-mono text-[10px] text-ink-subtle">{modelPresetCount}</span></TabsTrigger>
-                    <TabsTrigger value="lora" className="text-xs sm:text-sm">LoRA <span className="ml-1 font-mono text-[10px] text-ink-subtle">{vibeVoiceAdapterAssets.length}</span></TabsTrigger>
-                    <TabsTrigger value="merged" className="text-xs sm:text-sm">병합 모델 <span className="ml-1 font-mono text-[10px] text-ink-subtle">{vibeVoiceMergedAssets.length}</span></TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="status" className="m-0 flex flex-col gap-3">
-                    <WorkspaceCard className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {modelDownloadCards.length ? modelDownloadCards.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
-                          <div className="min-w-0">
-                            <div className="text-[11px] font-semibold uppercase tracking-allcaps text-ink-subtle">{item.model}</div>
-                            <div className="mt-1 truncate text-sm font-medium text-ink">{item.name}</div>
-                          </div>
-                          <Badge variant="secondary" className={item.available ? "border-0 bg-positive/15 text-positive" : "border-0 bg-amber-100 text-amber-800"}>
-                            {item.available ? "downloaded" : "missing"}
-                          </Badge>
+              <TabsContent value="vibevoice" className="m-0 flex flex-col gap-4">
+                {reusableModelAssetCount ? (
+                  <>
+                    <WorkspaceCard className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
+                        <div>
+                          <strong className="text-sm font-semibold text-ink">VibeVoice LoRA</strong>
+                          <p className="mt-1 text-xs text-ink-muted">TTS 파인튜닝에서 만든 어댑터입니다.</p>
                         </div>
-                      )) : (
-                        <WorkspaceEmptyState
-                          icon={Library}
-                          title="모델 상태를 아직 불러오지 못했습니다."
-                          body="백엔드가 켜져 있으면 각 모델의 다운로드 여부가 이곳에 표시됩니다."
-                        />
-                      )}
+                        <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{vibeVoiceAdapterAssets.length}</Badge>
+                      </div>
+                      {vibeVoiceAdapterAssets.length ? vibeVoiceAdapterAssets.map((asset) => (
+                        <div key={`vibevoice-lora-${asset.path}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
+                          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#e9f7ff] via-[#f2efff] to-[#fff7df] font-mono text-xs font-semibold text-accent">VV</div>
+                          <div className="min-w-0 flex-1">
+                            <strong className="text-sm text-ink">{asset.name}</strong>
+                            <p className="mt-1 truncate text-xs text-ink-muted">{asset.notes || asset.path}</p>
+                          </div>
+                          <Button variant="outline" size="sm" type="button" onClick={() => { setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: asset.path })); setActiveTab("vibevoice_tts"); }}>
+                            TTS에서 사용
+                          </Button>
+                        </div>
+                      )) : <p className="text-xs text-ink-muted">저장된 VibeVoice LoRA가 없습니다.</p>}
                     </WorkspaceCard>
-                  </TabsContent>
 
-                  <TabsContent value="presets" className="m-0 flex flex-col gap-5">
-                    {[
-                      { id: "cosyvoice", label: "CosyVoice", count: cosyVoicePresets.length },
-                      { id: "voxcpm", label: "VoxCPM", count: voxCpmPresets.length },
-                      { id: "supertonic", label: "Supertonic", count: supertonicPresets.length },
-                      { id: "omnivoice", label: "OmniVoice", count: omnivoicePresets.length },
-                    ].map((group) => (
-                      <WorkspaceCard key={group.id} className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
-                          <div>
-                            <strong className="text-sm font-semibold text-ink">{group.label} 프리셋</strong>
-                            <p className="mt-1 text-xs text-ink-muted">저장한 목소리 설정만 표시합니다.</p>
+                    <WorkspaceCard className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
+                        <div>
+                          <strong className="text-sm font-semibold text-ink">VibeVoice 병합 모델</strong>
+                          <p className="mt-1 text-xs text-ink-muted">LoRA를 병합한 재사용 모델입니다.</p>
+                        </div>
+                        <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{vibeVoiceMergedAssets.length}</Badge>
+                      </div>
+                      {vibeVoiceMergedAssets.length ? vibeVoiceMergedAssets.map((asset) => (
+                        <div key={`vibevoice-merged-${asset.path}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
+                          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#f7f3ff] via-[#f9fbff] to-[#fff7df] font-mono text-xs font-semibold text-accent">MG</div>
+                          <div className="min-w-0 flex-1">
+                            <strong className="text-sm text-ink">{asset.name}</strong>
+                            <p className="mt-1 truncate text-xs text-ink-muted">{asset.notes || asset.path}</p>
                           </div>
-                          <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{group.count}</Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => {
+                              setVibeVoiceModelToolForm((prev) => ({ ...prev, tool: "verify_merge", base_model_path: asset.path, checkpoint_path: "" }));
+                              setActiveTab("vibevoice_model_tools");
+                            }}
+                          >
+                            병합 검증
+                          </Button>
                         </div>
-                        {group.id === "cosyvoice" ? (
-                          cosyVoicePresets.length ? cosyVoicePresets.map((preset) => (
-                            <div key={`cosyvoice-${preset.name}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
-                              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface font-mono text-xs font-semibold text-accent">CV</div>
-                              <div className="min-w-0 flex-1">
-                                <strong className="text-sm text-ink">{preset.name}</strong>
-                                <p className="mt-1 line-clamp-1 text-xs text-ink-muted">{preset.task} · {preset.notes || preset.prompt_text || preset.prompt_audio_path || "프리셋"}</p>
-                              </div>
-                              <Button variant="outline" size="sm" type="button" onClick={() => void handleCosyVoiceApplyPreset(preset)}>사용</Button>
-                              <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleCosyVoiceDeletePreset(preset.name)}>삭제</Button>
-                            </div>
-                          )) : <p className="text-xs text-ink-muted">저장된 CosyVoice 프리셋이 없습니다.</p>
-                        ) : group.id === "voxcpm" ? (
-                          voxCpmPresets.length ? voxCpmPresets.map((preset) => (
-                            <div key={`voxcpm-${preset.name}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
-                              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface font-mono text-xs font-semibold text-accent">VX</div>
-                              <div className="min-w-0 flex-1">
-                                <strong className="text-sm text-ink">{preset.name}</strong>
-                                <p className="mt-1 line-clamp-1 text-xs text-ink-muted">{preset.task} · {preset.notes || preset.voice_description || preset.reference_wav_path || "프리셋"}</p>
-                              </div>
-                              <Button variant="outline" size="sm" type="button" onClick={() => void handleVoxCpmApplyPreset(preset)}>사용</Button>
-                              <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleVoxCpmDeletePreset(preset.name)}>삭제</Button>
-                            </div>
-                          )) : <p className="text-xs text-ink-muted">저장된 VoxCPM 프리셋이 없습니다.</p>
-                        ) : group.id === "supertonic" ? (
-                          supertonicPresets.length ? supertonicPresets.map((preset) => (
-                            <div key={`supertonic-${preset.name}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
-                              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface font-mono text-xs font-semibold text-accent">ST</div>
-                              <div className="min-w-0 flex-1">
-                                <strong className="text-sm text-ink">{preset.name}</strong>
-                                <p className="mt-1 line-clamp-1 text-xs text-ink-muted">{preset.kind || "preset"} · {preset.voice_style || preset.language || "style"}</p>
-                              </div>
-                              <Button variant="outline" size="sm" type="button" onClick={() => { handleSupertonicApplyPreset(preset); setActiveTab("supertonic_tts"); }}>사용</Button>
-                              <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleSupertonicDeletePreset(preset.name)}>삭제</Button>
-                            </div>
-                          )) : <p className="text-xs text-ink-muted">저장된 Supertonic 프리셋이 없습니다.</p>
-                        ) : (
-                          omnivoicePresets.length ? omnivoicePresets.map((preset) => (
-                            <div key={`omnivoice-${preset.name}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-3">
-                              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface font-mono text-xs font-semibold text-accent">OV</div>
-                              <div className="min-w-0 flex-1">
-                                <strong className="text-sm text-ink">{preset.name}</strong>
-                                <p className="mt-1 line-clamp-1 text-xs text-ink-muted">{preset.task} · {preset.notes || preset.instruct || preset.ref_audio || "프리셋"}</p>
-                              </div>
-                              <Button variant="outline" size="sm" type="button" onClick={() => handleOmniVoiceApplyPreset(preset)}>사용</Button>
-                              <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleOmniVoiceDeletePreset(preset.name)}>삭제</Button>
-                            </div>
-                          )) : <p className="text-xs text-ink-muted">저장된 OmniVoice 프리셋이 없습니다.</p>
-                        )}
-                      </WorkspaceCard>
-                    ))}
-                  </TabsContent>
+                      )) : <p className="text-xs text-ink-muted">저장된 VibeVoice 병합 모델이 없습니다.</p>}
+                    </WorkspaceCard>
+                  </>
+                ) : (
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title="VibeVoice 목소리 자산이 없습니다."
+                    body="VibeVoice 학습이나 모델 병합을 완료하면 LoRA와 병합 모델이 이곳에 표시됩니다."
+                    action={<Button onClick={() => setActiveTab("vibevoice_tts_train")} type="button">VibeVoice 학습으로 이동</Button>}
+                  />
+                )}
+              </TabsContent>
 
-                  <TabsContent value="lora" className="m-0 flex flex-col gap-3">
-                    {vibeVoiceAdapterAssets.length ? vibeVoiceAdapterAssets.map((asset) => (
-                      <WorkspaceCard key={`vibevoice-lora-${asset.path}`} className="flex flex-wrap items-center gap-4">
-                        <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#e9f7ff] via-[#f2efff] to-[#fff7df] shadow-sm">
-                          <span className="font-mono text-xs font-semibold text-accent">VV</span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <strong className="text-sm font-medium text-ink">{asset.name}</strong>
-                          <p className="mt-1 truncate text-sm text-ink-muted">{asset.notes || asset.path}</p>
-                        </div>
-                        <Button variant="outline" size="sm" type="button" onClick={() => { setVibeVoiceTtsForm((prev) => ({ ...prev, checkpoint_path: asset.path })); setActiveTab("vibevoice_tts"); }}>
-                          VibeVoice에서 사용
-                        </Button>
-                      </WorkspaceCard>
-                    )) : (
-                      <WorkspaceEmptyState icon={Library} title="LoRA 학습 결과가 없습니다." body="VibeVoice TTS 학습을 완료하면 LoRA adapter가 이곳에 표시됩니다." />
-                    )}
-                  </TabsContent>
+              <TabsContent value="cosyvoice" className="m-0 flex flex-col gap-3">
+                {cosyVoicePresets.length ? cosyVoicePresets.map((preset) => (
+                  <WorkspaceCard key={`cosyvoice-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#e9f7ff] via-[#f5f1ff] to-[#fff7df] shadow-sm">
+                      <span className="font-mono text-xs font-semibold text-accent">CV</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">{preset.task}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{preset.notes || preset.prompt_text || preset.prompt_audio_path || "CosyVoice 프리셋"}</p>
+                    </div>
+                    <Button variant="outline" size="sm" type="button" onClick={() => void handleCosyVoiceApplyPreset(preset)}>사용</Button>
+                    <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleCosyVoiceDeletePreset(preset.name)}>삭제</Button>
+                  </WorkspaceCard>
+                )) : (
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title="CosyVoice 프리셋이 없습니다."
+                    body="CosyVoice 목소리 저장에서 만든 프리셋만 이 영역에 표시됩니다."
+                    action={<Button onClick={() => setActiveTab("cosyvoice_voices")} type="button">CosyVoice 프리셋 만들기</Button>}
+                  />
+                )}
+              </TabsContent>
 
-                  <TabsContent value="merged" className="m-0 flex flex-col gap-3">
-                    {vibeVoiceMergedAssets.length ? vibeVoiceMergedAssets.map((asset) => (
-                      <WorkspaceCard key={`vibevoice-merged-${asset.path}`} className="flex flex-wrap items-center gap-4">
-                        <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#f7f3ff] via-[#f9fbff] to-[#fff7df] shadow-sm">
-                          <span className="font-mono text-xs font-semibold text-accent">MG</span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <strong className="text-sm font-medium text-ink">{asset.name}</strong>
-                          <p className="mt-1 truncate text-sm text-ink-muted">{asset.notes || asset.path}</p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => {
-                            setVibeVoiceModelToolForm((prev) => ({ ...prev, tool: "verify_merge", base_model_path: asset.path, checkpoint_path: "" }));
-                            setActiveTab("vibevoice_model_tools");
-                          }}
-                        >
-                          병합 검증으로 열기
-                        </Button>
-                      </WorkspaceCard>
-                    )) : (
-                      <WorkspaceEmptyState icon={Library} title="병합 모델이 없습니다." body="VibeVoice Model Tools에서 LoRA를 병합하면 이곳에 표시됩니다." />
-                    )}
-                  </TabsContent>
-                </Tabs>
+              <TabsContent value="voxcpm" className="m-0 flex flex-col gap-3">
+                {voxCpmPresets.length ? voxCpmPresets.map((preset) => (
+                  <WorkspaceCard key={`voxcpm-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#ecfff7] via-[#f5f1ff] to-[#fff7df] shadow-sm">
+                      <span className="font-mono text-xs font-semibold text-accent">VX</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">{preset.task}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{preset.notes || preset.voice_description || preset.reference_wav_path || "VoxCPM 프리셋"}</p>
+                    </div>
+                    <Button variant="outline" size="sm" type="button" onClick={() => void handleVoxCpmApplyPreset(preset)}>사용</Button>
+                    <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleVoxCpmDeletePreset(preset.name)}>삭제</Button>
+                  </WorkspaceCard>
+                )) : (
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title="VoxCPM 프리셋이 없습니다."
+                    body="VoxCPM 목소리 디자인이나 복제에서 저장한 프리셋만 이 영역에 표시됩니다."
+                    action={<Button onClick={() => setActiveTab("voxcpm_voices")} type="button">VoxCPM 프리셋 만들기</Button>}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="supertonic" className="m-0 flex flex-col gap-3">
+                {supertonicPresets.length ? supertonicPresets.map((preset) => (
+                  <WorkspaceCard key={`supertonic-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#fff1f7] via-[#f7f5ff] to-[#eef8ff] shadow-sm">
+                      <span className="font-mono text-xs font-semibold text-accent">ST</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">{preset.kind || "preset"}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{preset.voice_style || preset.language || "Supertonic 프리셋"}</p>
+                    </div>
+                    <Button variant="outline" size="sm" type="button" onClick={() => { handleSupertonicApplyPreset(preset); setActiveTab("supertonic_tts"); }}>사용</Button>
+                    <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleSupertonicDeletePreset(preset.name)}>삭제</Button>
+                  </WorkspaceCard>
+                )) : (
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title="Supertonic 프리셋이 없습니다."
+                    body="Supertonic 목소리 프리셋과 역설계 결과가 이 영역에 표시됩니다."
+                    action={<Button onClick={() => setActiveTab("supertonic_voices")} type="button">Supertonic 프리셋 만들기</Button>}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="omnivoice" className="m-0 flex flex-col gap-3">
+                {omnivoicePresets.length ? omnivoicePresets.map((preset) => (
+                  <WorkspaceCard key={`omnivoice-${preset.name}`} className="flex flex-wrap items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-gradient-to-br from-[#eef8ff] via-[#f7f5ff] to-[#fff7df] shadow-sm">
+                      <span className="font-mono text-xs font-semibold text-accent">OV</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <strong className="text-sm font-medium text-ink">{preset.name}</strong>
+                        <span className="text-xs text-ink-muted">{preset.task}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{preset.notes || preset.instruct || preset.ref_audio || "OmniVoice 프리셋"}</p>
+                    </div>
+                    <Button variant="outline" size="sm" type="button" onClick={() => handleOmniVoiceApplyPreset(preset)}>사용</Button>
+                    <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleOmniVoiceDeletePreset(preset.name)}>삭제</Button>
+                  </WorkspaceCard>
+                )) : (
+                  <WorkspaceEmptyState
+                    icon={Library}
+                    title="OmniVoice 프리셋이 없습니다."
+                    body="OmniVoice 목소리 프리셋과 복제 결과가 이 영역에 표시됩니다."
+                    action={<Button onClick={() => setActiveTab("omnivoice_voices")} type="button">OmniVoice 프리셋 만들기</Button>}
+                  />
+                )}
               </TabsContent>
 
               <TabsContent value="rvc" className="m-0 flex flex-col gap-3">
