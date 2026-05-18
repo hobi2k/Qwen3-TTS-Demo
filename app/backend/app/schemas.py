@@ -875,7 +875,7 @@ class CosyVoice3TrainingRequest(BaseModel):
     cv_dataset_id: Optional[str] = None
     submodels: List[str] = Field(default_factory=lambda: ["llm"])
     train_engine: str = Field("torch_ddp", pattern="^(torch_ddp|deepspeed)$")
-    base_model: str = "Fun-CosyVoice3-0.5B"
+    base_model: str = "CosyVoice2-0.5B"
     max_epoch: int = Field(5, ge=1, le=200)
     batch_size: int = Field(2, ge=1, le=64)
     learning_rate: float = Field(1e-4, gt=0.0)

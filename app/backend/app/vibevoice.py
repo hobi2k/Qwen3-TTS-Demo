@@ -31,6 +31,13 @@ def _relative_or_absolute(root: Path, value: str) -> Path:
     return candidate
 
 
+def _has_model_files(path: Path) -> bool:
+    return path.is_dir() and any(
+        item.is_file() and item.name != ".gitattributes" and ".cache" not in item.parts
+        for item in path.rglob("*")
+    )
+
+
 class VibeVoiceEngine:
     """Thin subprocess wrapper around the Microsoft VibeVoice vendor repo."""
 
@@ -99,10 +106,10 @@ class VibeVoiceEngine:
 
     def status(self) -> Dict[str, Any]:
         repo_ready = self.vendor_root.exists()
-        asr_ready = self.model_path("asr").exists()
-        realtime_ready = self.model_path("realtime").exists()
-        tts_15b_ready = self.model_path("tts_15b").exists()
-        tts_7b_ready = self.model_path("tts_7b").exists()
+        asr_ready = _has_model_files(self.model_path("asr"))
+        realtime_ready = _has_model_files(self.model_path("realtime"))
+        tts_15b_ready = _has_model_files(self.model_path("tts_15b"))
+        tts_7b_ready = _has_model_files(self.model_path("tts_7b"))
         entrypoints = self.tts_entrypoints()
         return {
             "available": repo_ready and (asr_ready or realtime_ready or tts_15b_ready or tts_7b_ready),

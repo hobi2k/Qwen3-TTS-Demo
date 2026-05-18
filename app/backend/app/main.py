@@ -4344,10 +4344,7 @@ def supertonic_runtime() -> Supertonic3RuntimeResponse:
         supported_languages=list(SUPPORTED_LANGUAGES),
         supported_expression_tags=list(SUPPORTED_EXPRESSION_TAGS),
         training_supported=True,
-        training_notes=(
-            "Upstream publishes ONNX inference only. This app creates reusable "
-            "custom style JSONs by reverse-engineered vector blending from reference audio."
-        ),
+        training_notes="Supertonic 기본 스타일과 참조 음성으로 재사용 가능한 사용자 스타일을 저장합니다.",
     )
 
 
@@ -4460,7 +4457,7 @@ def supertonic_train(payload: Supertonic3TrainingRequest) -> Supertonic3Training
             reference_audio_paths=reference_audio_paths,
             reference_features=reference_features,
             language=payload.language,
-            notes="Created from Supertonic reverse-engineered style cloning.",
+            notes="참조 음성으로 만든 Supertonic 사용자 스타일",
             adaptation_strength=payload.adaptation_strength,
             seed=payload.seed,
         )

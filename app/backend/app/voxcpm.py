@@ -44,6 +44,20 @@ SUPPORTED_LANGUAGES = [
     "he", "hi", "id", "it", "ja", "km", "ko", "lo", "ms", "no",
     "pl", "pt", "ru", "es", "sw", "sv", "tl", "th", "tr", "vi",
 ]
+MODEL_MARKER_FILENAMES = {
+    "config.json",
+    "model.safetensors",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "audiovae.pth",
+}
+
+
+def has_usable_model_files(path: Path) -> bool:
+    return path.is_dir() and any(
+        item.is_file() and (item.name in MODEL_MARKER_FILENAMES or item.suffix.lower() in {".pth", ".safetensors"})
+        for item in path.rglob("*")
+    )
 
 
 def resolve_voxcpm_root(repo_root: Path) -> Path:
@@ -97,13 +111,17 @@ class VoxCPM2Engine:
         self.train_runner_path = repo_root / "scripts" / "run_voxcpm_train.py"
 
     def is_available(self) -> bool:
-        return self.voxcpm_root.exists() and self.runner_path.exists()
+        return self.voxcpm_root.exists() and self.runner_path.exists() and any(
+            item.get("available") for item in self.list_model_variants()
+        )
 
     def availability_notes(self) -> str:
         if not self.voxcpm_root.exists():
             return f"VoxCPM repository not found: {self.voxcpm_root}"
         if not self.runner_path.exists():
             return f"VoxCPM runner not found: {self.runner_path}"
+        if not any(item.get("available") for item in self.list_model_variants()):
+            return f"VoxCPM model weights not found under {self.model_dir}. Run ./scripts/download_models.sh voxcpm."
         if Path(self.python_executable) == Path(sys.executable):
             return (
                 f"VoxCPM root: {self.voxcpm_root} (using shared Python; create a"
@@ -118,14 +136,14 @@ class VoxCPM2Engine:
         if not self.model_dir.exists():
             return [{"name": name, "available": False} for name in DEFAULT_MODEL_VARIANTS]
         for name in DEFAULT_MODEL_VARIANTS:
-            available = (self.model_dir / name).exists()
+            available = has_usable_model_files(self.model_dir / name)
             results.append({"name": name, "available": available})
             seen.add(name)
         for child in sorted(self.model_dir.iterdir()):
             if not child.is_dir() or child.name in seen:
                 continue
             if "voxcpm" in child.name.lower():
-                results.append({"name": child.name, "available": True})
+                results.append({"name": child.name, "available": has_usable_model_files(child)})
                 seen.add(child.name)
         return results
 
@@ -156,15 +174,15 @@ class VoxCPM2Engine:
     def resolve_model_dir(self, requested: Optional[str]) -> Path:
         if requested:
             candidate = Path(requested).expanduser()
-            if candidate.is_absolute() and candidate.exists():
+            if candidate.is_absolute() and has_usable_model_files(candidate):
                 return candidate.resolve()
             local = self.model_dir / requested
-            if local.exists():
+            if has_usable_model_files(local):
                 return local.resolve()
             raise VoxCPMError(f"VoxCPM model not found: {requested}")
         for name in DEFAULT_MODEL_VARIANTS:
             local = self.model_dir / name
-            if local.exists():
+            if has_usable_model_files(local):
                 return local.resolve()
         raise VoxCPMError(
             f"No VoxCPM model checkpoint found under {self.model_dir}. "

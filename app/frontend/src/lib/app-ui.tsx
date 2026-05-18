@@ -82,7 +82,6 @@ export type TabKey =
   | "voxcpm_dataset"
   | "voxcpm_train"
   | "supertonic_tts"
-  | "supertonic_voices"
   | "supertonic_dataset"
   | "supertonic_train"
   | "omnivoice_tts"
@@ -411,20 +410,15 @@ export const PRODUCT_PAGES = {
     title: "Supertonic 3 텍스트 음성 변환",
     description: "저장한 voice style과 표현 태그를 골라 대사 생성만 빠르게 확인합니다.",
   },
-  supertonic_voices: {
-    label: "목소리 프리셋",
-    title: "Supertonic 3 프리셋",
-    description: "기본 voice style, 저장 프리셋, 클로닝으로 만든 커스텀 style JSON을 관리합니다.",
-  },
   supertonic_dataset: {
-    label: "데이터셋 만들기",
-    title: "Supertonic 3 데이터셋",
-    description: "참조 음성 묶음을 정리해 스타일 클로닝 입력으로 사용합니다.",
+    label: "참조 음성",
+    title: "Supertonic 3 참조 음성",
+    description: "새 스타일을 만들 때 사용할 기준 음성을 모읍니다.",
   },
   supertonic_train: {
-    label: "목소리 클로닝",
-    title: "Supertonic 3 목소리 클로닝",
-    description: "참조 오디오 특징을 반영해 새 voice style JSON을 생성합니다.",
+    label: "스타일 만들기",
+    title: "Supertonic 3 스타일 만들기",
+    description: "참조 음성을 바탕으로 TTS에서 바로 선택할 수 있는 새 스타일을 저장합니다.",
   },
   omnivoice_tts: {
     label: "텍스트 음성 변환",

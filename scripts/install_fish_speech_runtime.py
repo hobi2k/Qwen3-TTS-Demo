@@ -122,7 +122,6 @@ def install_requirements(*, repo_root: Path, torch_version: str, torch_profile: 
             for package in torch_packages:
                 handle.write(package + "\n")
         handle.write("protobuf>=3.20.0,<6.0.0\n")
-
     try:
         if dependencies:
             run(["uv", "pip", "install", "--overrides", str(overrides_path), *dependencies])

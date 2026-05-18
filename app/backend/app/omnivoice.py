@@ -22,6 +22,21 @@ class OmniVoiceError(RuntimeError):
 
 SUPPORTED_TASKS = {"auto_voice", "voice_design", "voice_cloning"}
 DEFAULT_MODEL_VARIANTS = ["OmniVoice"]
+MODEL_MARKER_FILENAMES = {
+    "config.json",
+    "model.safetensors",
+    "tokenizer.json",
+    "tokenizer_config.json",
+}
+
+
+def has_usable_model_files(path: Path) -> bool:
+    return path.is_dir() and any(
+        item.is_file() and (item.name in MODEL_MARKER_FILENAMES or item.suffix.lower() == ".safetensors")
+        for item in path.rglob("*")
+    )
+
+
 VOICE_DESIGN_TEMPLATE_CATEGORIES: List[Dict[str, Any]] = [
     {
         "label": "Gender",
@@ -187,13 +202,17 @@ class OmniVoiceEngine:
         self.prepare_runner_path = repo_root / "scripts" / "run_omnivoice_prepare.py"
 
     def is_available(self) -> bool:
-        return self.omnivoice_root.exists() and self.runner_path.exists()
+        return self.omnivoice_root.exists() and self.runner_path.exists() and any(
+            item.get("available") for item in self.list_model_variants()
+        )
 
     def availability_notes(self) -> str:
         if not self.omnivoice_root.exists():
             return f"OmniVoice repository not found: {self.omnivoice_root}"
         if not self.runner_path.exists():
             return f"OmniVoice runner not found: {self.runner_path}"
+        if not any(item.get("available") for item in self.list_model_variants()):
+            return f"OmniVoice model weights not found under {self.model_dir}. Run ./scripts/download_models.sh omnivoice."
         if Path(self.python_executable) == Path(sys.executable):
             return (
                 f"OmniVoice root: {self.omnivoice_root} (using shared Python; create a"
@@ -220,12 +239,12 @@ class OmniVoiceEngine:
         if not self.model_dir.exists():
             return [{"name": name, "available": False} for name in DEFAULT_MODEL_VARIANTS]
         for name in DEFAULT_MODEL_VARIANTS:
-            available = (self.model_dir / name).exists()
+            available = has_usable_model_files(self.model_dir / name)
             results.append({"name": name, "available": available})
             seen.add(name)
         for child in sorted(self.model_dir.iterdir()):
             if child.is_dir() and child.name not in seen:
-                results.append({"name": child.name, "available": True})
+                results.append({"name": child.name, "available": has_usable_model_files(child)})
                 seen.add(child.name)
         return results
 
@@ -257,15 +276,15 @@ class OmniVoiceEngine:
     def resolve_model_dir(self, requested: Optional[str]) -> Path:
         if requested:
             candidate = Path(requested).expanduser()
-            if candidate.is_absolute() and candidate.exists():
+            if candidate.is_absolute() and has_usable_model_files(candidate):
                 return candidate.resolve()
             local = self.model_dir / requested
-            if local.exists():
+            if has_usable_model_files(local):
                 return local.resolve()
             raise OmniVoiceError(f"OmniVoice model not found: {requested}")
         for name in DEFAULT_MODEL_VARIANTS:
             local = self.model_dir / name
-            if local.exists():
+            if has_usable_model_files(local):
                 return local.resolve()
         raise OmniVoiceError(
             f"No OmniVoice model checkpoint found under {self.model_dir}. "

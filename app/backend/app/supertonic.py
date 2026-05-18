@@ -56,6 +56,8 @@ SUPPORTED_EXPRESSION_TAGS = ["<laugh>", "<breath>", "<sigh>"]
 
 # Voice style files Supertonic ships with (M = male, F = female, numbered).
 DEFAULT_VOICE_STYLES = ["M1", "M2", "M3", "M4", "F1", "F2", "F3", "F4"]
+SUPERTONIC_MODEL_ID = "Supertone/supertonic-3"
+SUPERTONIC_MODEL_LICENSE = "OpenRAIL-M"
 
 
 def resolve_supertonic_root(repo_root: Path) -> Path:
@@ -108,7 +110,13 @@ class Supertonic3Engine:
     # Availability / introspection
     # ------------------------------------------------------------------ #
     def is_available(self) -> bool:
-        return self.supertonic_root.exists() and self.helper_module_path.exists()
+        return (
+            self.supertonic_root.exists()
+            and self.helper_module_path.exists()
+            and self.onnx_dir.exists()
+            and all((self.onnx_dir / name).exists() for name in self.required_onnx_files())
+            and any(item.get("available") for item in self.list_builtin_voice_styles())
+        )
 
     def availability_notes(self) -> str:
         if not self.supertonic_root.exists():
@@ -119,6 +127,17 @@ class Supertonic3Engine:
             return (
                 f"Supertonic ONNX assets missing: {self.onnx_dir}. "
                 "Download Supertone/supertonic-3 from HuggingFace into this folder."
+            )
+        missing = [name for name in self.required_onnx_files() if not (self.onnx_dir / name).exists()]
+        if missing:
+            return (
+                f"Supertonic ONNX assets missing under {self.onnx_dir}: {', '.join(missing)}. "
+                "Run ./scripts/download_models.sh supertonic."
+            )
+        if not any(item.get("available") for item in self.list_builtin_voice_styles()):
+            return (
+                f"Supertonic voice styles missing: {self.builtin_voice_style_dir}. "
+                "Run ./scripts/download_models.sh supertonic."
             )
         return f"Supertonic ONNX dir: {self.onnx_dir}"
 
@@ -185,6 +204,7 @@ class Supertonic3Engine:
                     "voice_style_path": meta.get("voice_style_path", ""),
                     "language": meta.get("language", ""),
                     "notes": meta.get("notes", ""),
+                    "kind": meta.get("kind", ""),
                 }
             )
         return presets
@@ -379,6 +399,16 @@ class Supertonic3Engine:
         style_path = self.custom_voice_style_dir / f"{slug}.json"
         preset_path = self.voice_dir / f"{slug}.json"
         cloned_style = self._style_template(styles[0], ttl, dp)
+        cloned_style.setdefault("metadata", {})
+        cloned_style["metadata"].update(
+            {
+                "derived_from": SUPERTONIC_MODEL_ID,
+                "license": SUPERTONIC_MODEL_LICENSE,
+                "kind": "custom_style",
+                "base_voice_styles": selected_names,
+                "modified_by": "Qwen3-TTS-Demo Supertonic style builder",
+            }
+        )
         style_path.write_text(json.dumps(cloned_style, ensure_ascii=False, indent=2), encoding="utf-8")
 
         record = {
@@ -387,11 +417,13 @@ class Supertonic3Engine:
             "voice_style_path": str(style_path),
             "language": language,
             "notes": notes,
-            "kind": "reverse_engineered_style_clone",
+            "kind": "custom_style",
             "base_voice_styles": selected_names,
             "reference_audio_paths": reference_audio_paths,
             "reference_features": reference_features,
             "adaptation_strength": strength,
+            "derived_from": SUPERTONIC_MODEL_ID,
+            "license": SUPERTONIC_MODEL_LICENSE,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         preset_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -457,6 +489,10 @@ class Supertonic3Engine:
 
         return output_path, {
             "engine": "supertonic3",
+            "model_id": SUPERTONIC_MODEL_ID,
+            "model_license": SUPERTONIC_MODEL_LICENSE,
+            "ai_generated": True,
+            "content_disclosure": "AI-generated speech",
             "sample_rate": sample_rate,
             "duration_seconds": duration_sec,
             "voice_style_path": str(style_path),

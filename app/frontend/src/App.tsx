@@ -1109,6 +1109,17 @@ function textMatches(left?: string | null, right?: string | null): boolean {
   return Boolean(a && b && a === b);
 }
 
+function modelSelectionAvailable(
+  runtime: { available: boolean; model_variants?: Array<{ name: string; available: boolean }> } | null,
+  selectedModel: string,
+): boolean {
+  if (!runtime?.available) return false;
+  const normalized = selectedModel.trim();
+  const matchedVariant = runtime.model_variants?.find((model) => model.name === normalized);
+  if (matchedVariant) return Boolean(matchedVariant.available);
+  return Boolean(normalized && (normalized.includes("/") || normalized.startsWith(".") || normalized.startsWith("~")));
+}
+
 function audioDatasetTargetLabel(target: string): string {
   const labels: Record<string, string> = {
     qwen: "Qwen",
@@ -1833,7 +1844,7 @@ function StudioApp() {
     speaker: "",
     source_audio_path: "",
     zero_shot_spk_id: "",
-    model_name: "Fun-CosyVoice3-0.5B",
+    model_name: "CosyVoice2-0.5B",
     seed: "",
     speed: "1.0",
     stream: false,
@@ -1854,7 +1865,7 @@ function StudioApp() {
     cv_dataset_id: "",
     submodels: ["llm"] as Array<"llm" | "flow" | "hifigan">,
     train_engine: "torch_ddp" as "torch_ddp" | "deepspeed",
-    base_model: "Fun-CosyVoice3-0.5B",
+    base_model: "CosyVoice2-0.5B",
     max_epoch: "5",
     batch_size: "2",
     learning_rate: "0.0001",
@@ -3903,6 +3914,10 @@ function StudioApp() {
     event?.preventDefault();
     await runAction(async () => {
       const taskForRequest = cosyVoiceTaskValue;
+      if (!cosyVoiceModelAvailable) {
+        setMessage(cosyVoiceRuntime?.notes || "CosyVoice 모델 파일을 먼저 다운로드하세요.");
+        return;
+      }
       if (!cosyVoiceTtsForm.text.trim() && taskForRequest !== "vc") {
         setMessage("CosyVoice 텍스트를 입력하세요.");
         return;
@@ -3993,6 +4008,10 @@ function StudioApp() {
   async function handleCosyVoiceTrain(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!cosyVoiceTrainBaseModelAvailable) {
+        setMessage(cosyVoiceRuntime?.notes || "CosyVoice 학습용 base model을 먼저 다운로드하세요.");
+        return;
+      }
       if (!cosyVoiceTrainForm.dataset_id.trim()) {
         setMessage("dataset_id를 입력하세요 (data/datasets/<id>/manifest.jsonl).");
         return;
@@ -4025,6 +4044,10 @@ function StudioApp() {
   async function handleVoxCpmGenerate(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!voxCpmModelAvailable) {
+        setMessage(voxCpmRuntime?.notes || "VoxCPM 모델 파일을 먼저 다운로드하세요.");
+        return;
+      }
       if (!voxCpmTtsForm.text.trim()) {
         setMessage("생성할 대사를 입력하세요.");
         return;
@@ -4132,6 +4155,10 @@ function StudioApp() {
   async function handleSupertonicGenerate(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!supertonicReady) {
+        setMessage(supertonicRuntime?.notes || "Supertonic 모델 파일을 먼저 다운로드하세요.");
+        return;
+      }
       if (!supertonicTtsForm.text.trim()) {
         setMessage("Supertonic 텍스트를 입력하세요.");
         return;
@@ -4171,7 +4198,7 @@ function StudioApp() {
         notes: supertonicPresetForm.notes,
       });
       setSupertonicPresets(await api.listSupertonicPresets());
-      setMessage(`Supertonic 프리셋 "${supertonicPresetForm.name}" 저장 완료.`);
+      setMessage(`Supertonic 저장 스타일 "${supertonicPresetForm.name}" 저장 완료.`);
     });
   }
 
@@ -4179,7 +4206,7 @@ function StudioApp() {
     await runAction(async () => {
       await api.deleteSupertonicPreset(name);
       setSupertonicPresets(await api.listSupertonicPresets());
-      setMessage(`Supertonic 프리셋 "${name}"을(를) 삭제했습니다.`);
+      setMessage(`Supertonic 저장 스타일 "${name}"을(를) 삭제했습니다.`);
     });
   }
 
@@ -4190,12 +4217,16 @@ function StudioApp() {
       language: preset.language || prev.language,
     }));
     setActiveTab("supertonic_tts");
-    setMessage(`프리셋 "${preset.name}"을(를) Supertonic 텍스트 음성 변환에 불러왔습니다.`);
+    setMessage(`스타일 "${preset.name}"을(를) Supertonic 텍스트 음성 변환에 불러왔습니다.`);
   }
 
   async function handleSupertonicTrain(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!supertonicReady) {
+        setMessage(supertonicRuntime?.notes || "Supertonic 모델 파일을 먼저 다운로드하세요.");
+        return;
+      }
       if (!supertonicTrainForm.dataset_id.trim() && !supertonicTrainForm.reference_audio_path.trim()) {
         setMessage("Supertonic 클로닝에는 데이터셋 또는 참조 오디오가 필요합니다.");
         return;
@@ -4231,6 +4262,10 @@ function StudioApp() {
   async function handleOmniVoiceGenerate(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!omniVoiceModelAvailable) {
+        setMessage(omnivoiceRuntime?.notes || "OmniVoice 모델 파일을 먼저 다운로드하세요.");
+        return;
+      }
       if (!omnivoiceTtsForm.text.trim()) {
         setMessage("OmniVoice 텍스트를 입력하세요.");
         return;
@@ -4512,6 +4547,10 @@ function StudioApp() {
   async function handleOmniVoiceTrain(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!omniVoiceTrainBaseModelAvailable) {
+        setMessage(omnivoiceRuntime?.notes || "OmniVoice 학습용 base model을 먼저 다운로드하세요.");
+        return;
+      }
       if (!omnivoiceTrainForm.train_config_json.trim() || !omnivoiceTrainForm.data_config_json.trim()) {
         setMessage("train_config_json과 data_config_json을 모두 입력하세요.");
         return;
@@ -4538,6 +4577,10 @@ function StudioApp() {
   async function handleVoxCpmTrain(event?: FormEvent) {
     event?.preventDefault();
     await runAction(async () => {
+      if (!voxCpmTrainBaseModelAvailable) {
+        setMessage(voxCpmRuntime?.notes || "VoxCPM 학습용 base model을 먼저 다운로드하세요.");
+        return;
+      }
       if (!voxCpmTrainForm.dataset_id.trim()) {
         setMessage("dataset_id를 입력하세요 (data/datasets/<id>/manifest.jsonl).");
         return;
@@ -5211,7 +5254,8 @@ function StudioApp() {
       setOmniVoiceDataPrepForm((prev) => ({ ...prev, input_jsonl: dataset.train_jsonl_path || prev.input_jsonl, run_name: prev.run_name || name }));
       setActiveTab("omnivoice_dataset");
     }
-    setMessage(`${name} 데이터셋을 ${audioDatasetTargetLabel(dataset.target)} 학습 탭에 연결했습니다.`);
+    const destinationLabel = dataset.target === "supertonic" ? "스타일 만들기" : "학습";
+    setMessage(`${name} 데이터셋을 ${audioDatasetTargetLabel(dataset.target)} ${destinationLabel} 탭에 연결했습니다.`);
   }
 
   function sendQwenDatasetToTraining(dataset: FineTuneDataset) {
@@ -6294,7 +6338,6 @@ function StudioApp() {
     "voxcpm_dataset",
     "voxcpm_train",
     "supertonic_tts",
-    "supertonic_voices",
     "supertonic_dataset",
     "supertonic_train",
     "omnivoice_tts",
@@ -6370,7 +6413,6 @@ function StudioApp() {
     if (activeTab === "voxcpm_voices") return handleVoxCpmSavePreset();
     if (activeTab === "voxcpm_train") return handleVoxCpmTrain();
     if (activeTab === "supertonic_tts") return handleSupertonicGenerate();
-    if (activeTab === "supertonic_voices") return handleSupertonicSavePreset();
     if (activeTab === "supertonic_train") return handleSupertonicTrain();
     if (activeTab === "omnivoice_tts" || activeTab === "omnivoice_design" || activeTab === "omnivoice_clone") return handleOmniVoiceGenerate();
     if (activeTab === "omnivoice_voices") return handleOmniVoiceSavePreset();
@@ -6445,22 +6487,30 @@ function StudioApp() {
   const cosyVoiceTaskValue = isCosyVoiceCloneTab
     ? (cosyVoiceTtsForm.task === "zero_shot" || cosyVoiceTtsForm.task === "vc" || cosyVoiceTtsForm.task === "cross_lingual" ? cosyVoiceTtsForm.task : "cross_lingual")
     : (cosyVoiceTtsForm.task === "sft" || cosyVoiceTtsForm.task === "instruct2" ? cosyVoiceTtsForm.task : "instruct2");
+  const cosyVoiceModelAvailable = modelSelectionAvailable(cosyVoiceRuntime, cosyVoiceTtsForm.model_name);
+  const cosyVoiceTrainBaseModelAvailable = modelSelectionAvailable(cosyVoiceRuntime, cosyVoiceTrainForm.base_model);
   const isVoxCpmGenerateTab = activeTab === "voxcpm_tts" || activeTab === "voxcpm_design" || activeTab === "voxcpm_clone";
   const isVoxCpmDesignTab = activeTab === "voxcpm_design";
   const isVoxCpmCloneTab = activeTab === "voxcpm_clone";
   const voxCpmTaskValue = isVoxCpmDesignTab
     ? "voice_design"
     : (voxCpmTtsForm.task === "ultimate_cloning" || voxCpmTtsForm.task === "voice_cloning" ? voxCpmTtsForm.task : "voice_cloning");
+  const voxCpmModelAvailable = modelSelectionAvailable(voxCpmRuntime, voxCpmTtsForm.model_name);
+  const voxCpmTrainBaseModelAvailable = modelSelectionAvailable(voxCpmRuntime, voxCpmTrainForm.base_model);
   const voxCpmSubmitDisabled =
     loading ||
+    !voxCpmModelAvailable ||
     !voxCpmTtsForm.text.trim() ||
     (voxCpmTaskValue === "voice_design" && !voxCpmTtsForm.voice_description.trim()) ||
     (voxCpmTaskValue === "voice_cloning" && !voxCpmTtsForm.reference_wav_path.trim()) ||
     (voxCpmTaskValue === "ultimate_cloning" && (!voxCpmTtsForm.prompt_wav_path.trim() || !voxCpmTtsForm.prompt_text.trim()));
+  const supertonicReady = Boolean(supertonicRuntime?.available);
   const isOmniVoiceGenerateTab = activeTab === "omnivoice_tts" || activeTab === "omnivoice_design" || activeTab === "omnivoice_clone";
   const isOmniVoiceDesignTab = activeTab === "omnivoice_design";
   const isOmniVoiceCloneTab = activeTab === "omnivoice_clone";
   const omniVoiceTaskValue = isOmniVoiceDesignTab ? "voice_design" : isOmniVoiceCloneTab ? "voice_cloning" : "auto_voice";
+  const omniVoiceModelAvailable = modelSelectionAvailable(omnivoiceRuntime, omnivoiceTtsForm.model_name);
+  const omniVoiceTrainBaseModelAvailable = modelSelectionAvailable(omnivoiceRuntime, omnivoiceTrainForm.base_model);
 
   return (
     <>
@@ -6602,14 +6652,11 @@ function StudioApp() {
             <button className={activeTab === "supertonic_tts" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("supertonic_tts")} type="button">
               <span>{t("tab.supertonic_tts", "텍스트 음성 변환")}</span>
             </button>
-            <button className={activeTab === "supertonic_voices" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("supertonic_voices")} type="button">
-              <span>{t("tab.supertonic_voices", "목소리 프리셋")}</span>
-            </button>
             <button className={activeTab === "supertonic_dataset" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("supertonic_dataset")} type="button">
-              <span>{t("tab.supertonic_dataset", "데이터셋 만들기")}</span>
+              <span>{t("tab.supertonic_dataset", "참조 음성")}</span>
             </button>
             <button className={activeTab === "supertonic_train" ? "studio-nav__item is-active" : "studio-nav__item"} onClick={() => setActiveTab("supertonic_train")} type="button">
-              <span>{t("tab.supertonic_train", "목소리 클로닝")}</span>
+              <span>{t("tab.supertonic_train", "스타일 만들기")}</span>
             </button>
           </div>
 
@@ -7322,8 +7369,8 @@ function StudioApp() {
                   <>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
                       <div>
-                        <strong className="text-sm font-semibold text-ink">프리셋</strong>
-                        <p className="mt-1 text-xs text-ink-muted">Supertonic 목소리 프리셋과 역설계 style 자산입니다.</p>
+                        <strong className="text-sm font-semibold text-ink">스타일</strong>
+                        <p className="mt-1 text-xs text-ink-muted">직접 만든 Supertonic 스타일만 모아 봅니다.</p>
                       </div>
                       <Badge variant="secondary" className="border-0 bg-canvas text-ink-muted">{supertonicPresets.length}</Badge>
                     </div>
@@ -7335,9 +7382,9 @@ function StudioApp() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-2">
                         <strong className="text-sm font-medium text-ink">{preset.name}</strong>
-                        <span className="text-xs text-ink-muted">{preset.kind || "preset"}</span>
+                        <span className="text-xs text-ink-muted">{preset.kind === "custom_style" ? "직접 만든 스타일" : "저장된 스타일"}</span>
                       </div>
-                      <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{preset.voice_style || preset.language || "Supertonic 프리셋"}</p>
+                      <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{preset.voice_style || preset.language || "Supertonic 스타일"}</p>
                     </div>
                     <Button variant="outline" size="sm" type="button" onClick={() => { handleSupertonicApplyPreset(preset); setActiveTab("supertonic_tts"); }}>사용</Button>
                     <Button variant="outline" size="sm" className="text-danger hover:bg-danger/10" type="button" onClick={() => void handleSupertonicDeletePreset(preset.name)}>삭제</Button>
@@ -7347,9 +7394,9 @@ function StudioApp() {
                 ) : (
                   <WorkspaceEmptyState
                     icon={Library}
-                    title="Supertonic 프리셋이 없습니다."
-                    body="Supertonic 목소리 프리셋과 역설계 결과가 이 영역에 표시됩니다."
-                    action={<Button onClick={() => setActiveTab("supertonic_voices")} type="button">Supertonic 프리셋 만들기</Button>}
+                    title="Supertonic 스타일이 없습니다."
+                    body="참조 음성으로 만든 Supertonic 스타일이 이 영역에 표시됩니다. 기본 M1~F4 스타일은 TTS 화면에서 바로 고르면 됩니다."
+                    action={<Button onClick={() => setActiveTab("supertonic_train")} type="button">Supertonic 스타일 만들기</Button>}
                   />
                 )}
               </TabsContent>
@@ -10280,7 +10327,7 @@ function StudioApp() {
             action={{
               label: isCosyVoiceCloneTab ? "복제 음성 생성" : "TTS 생성",
               formId: "cosyvoice-tts-form",
-              disabled: loading || (cosyVoiceTaskValue !== "vc" && !cosyVoiceTtsForm.text.trim()),
+              disabled: loading || !cosyVoiceModelAvailable || (cosyVoiceTaskValue !== "vc" && !cosyVoiceTtsForm.text.trim()),
               loading,
             }}
           />
@@ -10423,8 +10470,8 @@ function StudioApp() {
                   <Select value={cosyVoiceTtsForm.model_name} onValueChange={(model_name) => setCosyVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(cosyVoiceRuntime?.model_variants?.length ? cosyVoiceRuntime.model_variants : [{ name: "Fun-CosyVoice3-0.5B", available: true }]).map((model) => (
-                        <SelectItem key={model.name} value={model.name}>
+                      {(cosyVoiceRuntime?.model_variants?.length ? cosyVoiceRuntime.model_variants : [{ name: "CosyVoice2-0.5B", available: false }]).map((model) => (
+                        <SelectItem key={model.name} value={model.name} disabled={!model.available}>
                           {model.name}{model.available ? "" : " (missing)"}
                         </SelectItem>
                       ))}
@@ -10692,7 +10739,7 @@ function StudioApp() {
             action={{
               label: "CosyVoice 학습 시작",
               formId: "cosyvoice-train-form",
-              disabled: loading || !cosyVoiceTrainForm.dataset_id.trim() || cosyVoiceTrainForm.submodels.length === 0,
+              disabled: loading || !cosyVoiceTrainBaseModelAvailable || !cosyVoiceTrainForm.dataset_id.trim() || cosyVoiceTrainForm.submodels.length === 0,
               loading,
             }}
           />
@@ -11034,8 +11081,8 @@ function StudioApp() {
                   <Select value={voxCpmTtsForm.model_name} onValueChange={(model_name) => setVoxCpmTtsForm((prev) => ({ ...prev, model_name }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(voxCpmRuntime?.model_variants?.length ? voxCpmRuntime.model_variants : [{ name: "VoxCPM2", available: true }]).map((model) => (
-                        <SelectItem key={model.name} value={model.name}>
+                      {(voxCpmRuntime?.model_variants?.length ? voxCpmRuntime.model_variants : [{ name: "VoxCPM2", available: false }]).map((model) => (
+                        <SelectItem key={model.name} value={model.name} disabled={!model.available}>
                           {model.name}{model.available ? "" : " (missing)"}
                         </SelectItem>
                       ))}
@@ -11280,7 +11327,7 @@ function StudioApp() {
             action={{
               label: "VoxCPM 학습 시작",
               formId: "voxcpm-train-form",
-              disabled: loading || !voxCpmTrainForm.dataset_id.trim(),
+              disabled: loading || !voxCpmTrainBaseModelAvailable || !voxCpmTrainForm.dataset_id.trim(),
               loading,
             }}
           />
@@ -11426,11 +11473,11 @@ function StudioApp() {
             eyebrow="SUPERTONIC"
             eyebrowIcon={AudioLines}
             title="Supertonic 3 텍스트 음성 변환"
-            subtitle="Supertone의 31개 언어 ONNX TTS. 표현 태그는 <laugh> <breath> <sigh> 3개만 학습되어 있습니다."
+            subtitle="31개 언어를 지원하는 로컬 TTS입니다. 기본 목소리 M1~F4를 바로 고르거나 직접 만든 스타일을 선택할 수 있습니다."
             action={{
               label: "Supertonic 생성",
               formId: "supertonic-tts-form",
-              disabled: loading || !supertonicTtsForm.text.trim(),
+              disabled: loading || !supertonicReady || !supertonicTtsForm.text.trim(),
               loading,
             }}
           />
@@ -11460,7 +11507,7 @@ function StudioApp() {
                           ))}
                           {supertonicPresets.map((p) => (
                             <SelectItem key={`preset-${p.name}`} value={p.name}>
-                              {p.name} (preset)
+                              {p.name} (custom)
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -11544,86 +11591,15 @@ function StudioApp() {
         </WorkspaceShell>
       ) : null}
 
-      {activeTab === "supertonic_voices" ? (
-        <WorkspaceShell>
-          <WorkspaceHeader
-            eyebrow="SUPERTONIC"
-            eyebrowIcon={AudioLines}
-            title="Supertonic 3 프리셋"
-            subtitle="Built-in voice style(M1~F4) + 라벨/메모 묶음을 프리셋으로 저장합니다."
-            action={{
-              label: "프리셋 저장",
-              formId: "supertonic-voices-form",
-              disabled: loading || !supertonicPresetForm.name.trim(),
-              loading,
-            }}
-          />
-          <form id="supertonic-voices-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleSupertonicSavePreset}>
-            <div className="flex flex-col gap-5">
-              <WorkspaceCard className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">프리셋 이름</Label>
-                    <Input value={supertonicPresetForm.name} onChange={(event) => setSupertonicPresetForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="my_korean_male" />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Voice style</Label>
-                    <Select value={supertonicPresetForm.voice_style} onValueChange={(voice_style) => setSupertonicPresetForm((prev) => ({ ...prev, voice_style }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {(supertonicRuntime?.builtin_voice_styles || []).map((s) => (
-                          <SelectItem key={s.name} value={s.name} disabled={!s.available}>
-                            {s.name}{s.available ? "" : " (missing)"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Language</Label>
-                    <Input value={supertonicPresetForm.language} onChange={(event) => setSupertonicPresetForm((prev) => ({ ...prev, language: event.target.value }))} placeholder="ko" />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">Notes</Label>
-                    <Input value={supertonicPresetForm.notes} onChange={(event) => setSupertonicPresetForm((prev) => ({ ...prev, notes: event.target.value }))} />
-                  </div>
-                </div>
-              </WorkspaceCard>
-            </div>
-            <aside className="flex flex-col gap-4">
-              <WorkspaceCard className="flex flex-col gap-2">
-                <div className="text-xs font-medium text-ink-muted">저장된 프리셋 ({supertonicPresets.length})</div>
-                {supertonicPresets.length === 0 ? (
-                  <div className="text-xs text-ink-muted">아직 저장된 프리셋이 없습니다.</div>
-                ) : (
-                  supertonicPresets.map((preset) => (
-                    <div key={preset.name} className="flex items-center justify-between gap-2 text-xs">
-                      <button type="button" className="flex-1 truncate text-left hover:underline" onClick={() => handleSupertonicApplyPreset(preset)}>
-                        {preset.name} · {preset.voice_style}
-                      </button>
-                      <button type="button" className="text-rose-500 hover:underline" onClick={() => handleSupertonicDeletePreset(preset.name)}>
-                        삭제
-                      </button>
-                    </div>
-                  ))
-                )}
-              </WorkspaceCard>
-            </aside>
-          </form>
-        </WorkspaceShell>
-      ) : null}
-
       {activeTab === "supertonic_dataset" ? (
         <WorkspaceShell>
           <WorkspaceHeader
             eyebrow="SUPERTONIC"
             eyebrowIcon={AudioLines}
-            title="Supertonic 3 데이터셋"
-            subtitle="참조 음성 묶음을 정리해 Supertonic 스타일 클로닝/실험 학습 입력으로 넘깁니다."
+            title="Supertonic 3 참조 음성"
+            subtitle="새 스타일을 만들 때 사용할 기준 음성을 모읍니다."
             action={{
-              label: "클로닝 탭으로 보내기",
+              label: "스타일 만들기로 보내기",
               onClick: () => {
                 const latest = toolDatasetLastBuild?.target === "supertonic" ? toolDatasetLastBuild : null;
                 if (!supertonicTrainForm.dataset_id.trim() && latest) {
@@ -11634,8 +11610,8 @@ function StudioApp() {
             }}
           />
           <ToolDatasetBuilder
-            title="Supertonic 스타일 데이터셋 만들기"
-            subtitle="갤러리 음성 또는 폴더를 정리해 참조 오디오 특징을 추출할 수 있는 manifest/train.jsonl 구조로 만듭니다."
+            title="참조 음성 묶음 만들기"
+            subtitle="갤러리 음성이나 폴더를 골라 한 목소리의 기준 샘플로 정리합니다."
             source={toolDatasetSource.supertonic ?? "gallery"}
             setSource={(value) => setToolDatasetSource((prev) => ({ ...prev, supertonic: value }))}
             assets={generatedAudioAssets}
@@ -11660,24 +11636,24 @@ function StudioApp() {
           <WorkspaceHeader
             eyebrow="SUPERTONIC"
             eyebrowIcon={AudioLines}
-            title="Supertonic 3 클로닝 / 실험 학습"
-            subtitle="공개 ONNX style vector를 기반으로 참조 음성 특징을 반영한 새 voice style JSON을 생성합니다."
+            title="Supertonic 3 스타일 만들기"
+            subtitle="참조 음성을 바탕으로 TTS에서 바로 선택할 수 있는 새 스타일을 저장합니다."
             action={{
-              label: "Supertonic 스타일 생성",
+              label: "스타일 저장",
               formId: "supertonic-train-form",
-              disabled: loading || (!supertonicTrainForm.dataset_id.trim() && !supertonicTrainForm.reference_audio_path.trim()),
+              disabled: loading || !supertonicReady || (!supertonicTrainForm.dataset_id.trim() && !supertonicTrainForm.reference_audio_path.trim()),
               loading,
             }}
           />
           <form id="supertonic-train-form" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]" onSubmit={handleSupertonicTrain}>
             <div className="flex flex-col gap-5">
               <TrainingDatasetConnector
-                title="클로닝 데이터셋 선택"
+                title="참조 음성 선택"
                 target="supertonic"
                 datasets={audioDatasets}
                 activePath={supertonicTrainForm.dataset_id}
                 pathLabel="dataset_id"
-                guidance="Supertonic 데이터셋 탭에서 만든 샘플 묶음을 선택하면 참조 오디오 특징을 평균 내 새 스타일 벡터를 만듭니다."
+                guidance="Supertonic 참조 음성 탭에서 만든 묶음을 선택하세요."
                 onCreateDataset={() => setActiveTab("supertonic_dataset")}
                 onUse={(dataset) => {
                   setSupertonicTrainForm((prev) => ({
@@ -11691,7 +11667,7 @@ function StudioApp() {
               <WorkspaceCard className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">스타일 이름</Label>
+                    <Label className="text-xs font-medium text-ink-muted">저장할 스타일 이름</Label>
                     <Input value={supertonicTrainForm.output_name} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, output_name: event.target.value }))} />
                   </div>
                   <AudioSourceField
@@ -11699,12 +11675,12 @@ function StudioApp() {
                     value={supertonicTrainForm.reference_audio_path}
                     onChange={(reference_audio_path) => setSupertonicTrainForm((prev) => ({ ...prev, reference_audio_path: normalizeDatasetPath(reference_audio_path) }))}
                     assets={generatedAudioAssets}
-                    helper="데이터셋 대신 한 파일만 기준으로 스타일을 만들 때 사용합니다."
+                    helper="묶음 대신 한 파일만 기준으로 사용할 때 선택합니다."
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">기반 스타일</Label>
+                    <Label className="text-xs font-medium text-ink-muted">가까운 기본 목소리</Label>
                     <Select
                       value={supertonicTrainForm.base_voice_styles.join(",")}
                       onValueChange={(value) => setSupertonicTrainForm((prev) => ({ ...prev, base_voice_styles: value.split(",").filter(Boolean) }))}
@@ -11731,17 +11707,17 @@ function StudioApp() {
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">adaptation_strength</Label>
+                    <Label className="text-xs font-medium text-ink-muted">반영 강도</Label>
                     <Input value={supertonicTrainForm.adaptation_strength} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, adaptation_strength: event.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">seed</Label>
+                    <Label className="text-xs font-medium text-ink-muted">변형값</Label>
                     <Input value={supertonicTrainForm.seed} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, seed: event.target.value }))} placeholder="random" />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs font-medium text-ink-muted">total_step</Label>
+                    <Label className="text-xs font-medium text-ink-muted">품질 단계</Label>
                     <Input value={supertonicTrainForm.total_step} onChange={(event) => setSupertonicTrainForm((prev) => ({ ...prev, total_step: event.target.value }))} />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -11769,15 +11745,15 @@ function StudioApp() {
                   checked={supertonicTrainForm.run_final_sample}
                   onChange={(run_final_sample) => setSupertonicTrainForm((prev) => ({ ...prev, run_final_sample }))}
                   label="샘플 음성까지 생성"
-                  description="스타일 생성 후 확인용 샘플을 바로 만듭니다."
+                  description="저장한 스타일로 확인용 샘플을 바로 만듭니다."
                 />
               </WorkspaceCard>
             </div>
             <aside className="flex flex-col gap-4">
               <WorkspaceCard className="flex flex-col gap-2 text-xs text-ink-muted">
-                <div className="font-medium text-ink">동작 방식</div>
-                <p>공개된 built-in voice style JSON을 평균/혼합하고, 참조 오디오의 pitch, energy, spectral 특징으로 style vector를 약하게 조정합니다.</p>
-                <p>완전한 모델 fine-tune은 아니지만 결과는 새 style JSON으로 저장되며 TTS 화면의 Voice style에서 바로 선택할 수 있습니다.</p>
+                <div className="font-medium text-ink">저장 후 사용</div>
+                <p>저장한 스타일은 Supertonic TTS의 Voice style 목록에 추가됩니다.</p>
+                <p>기본 목소리 M1~F4는 이미 준비되어 있으니 새로 만들 필요 없이 바로 선택하세요.</p>
               </WorkspaceCard>
               {lastSupertonicTrainResult ? (
                 <WorkspaceCard className="flex flex-col gap-3">
@@ -11806,6 +11782,7 @@ function StudioApp() {
               formId: "omnivoice-tts-form",
               disabled:
                 loading ||
+                !omniVoiceModelAvailable ||
                 !omnivoiceTtsForm.text.trim() ||
                 (omniVoiceTaskValue === "voice_design" && !omnivoiceTtsForm.instruct.trim()) ||
                 (omniVoiceTaskValue === "voice_cloning" && !omnivoiceTtsForm.ref_audio.trim()),
@@ -11921,7 +11898,7 @@ function StudioApp() {
                   <Select value={omnivoiceTtsForm.model_name} onValueChange={(model_name) => setOmniVoiceTtsForm((prev) => ({ ...prev, model_name }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(omnivoiceRuntime?.model_variants || [{ name: "OmniVoice", available: true }]).map((m) => (
+                      {(omnivoiceRuntime?.model_variants || [{ name: "OmniVoice", available: false }]).map((m) => (
                         <SelectItem key={m.name} value={m.name} disabled={!m.available}>
                           {m.name}{m.available ? "" : " (missing)"}
                         </SelectItem>
@@ -12254,7 +12231,7 @@ function StudioApp() {
             action={{
               label: "학습 실행",
               formId: "omnivoice-train-form",
-              disabled: loading || !omnivoiceTrainForm.train_config_json.trim() || !omnivoiceTrainForm.data_config_json.trim(),
+              disabled: loading || !omniVoiceTrainBaseModelAvailable || !omnivoiceTrainForm.train_config_json.trim() || !omnivoiceTrainForm.data_config_json.trim(),
               loading,
             }}
           />

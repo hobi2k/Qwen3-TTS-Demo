@@ -221,7 +221,7 @@ def fish_speech_status(*, check_server: bool = False, runtime_source: RuntimeSou
             server_error = str(exc)
 
     status = {
-        "available": api_key_configured if config and config.source == "fish_audio_api" else repo_root.exists() and model_dir.exists(),
+        "available": api_key_configured if config and config.source == "fish_audio_api" else repo_root.exists() and model_dir.exists() and not missing_model_files,
         "server_running": server_running,
         "source": config.source if config else "",
         "endpoint_url": config.endpoint_url if config else "",

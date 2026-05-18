@@ -43,6 +43,22 @@ DEFAULT_MODEL_VARIANTS = [
 # Languages CosyVoice 3 advertises explicit support for. Korean is part of
 # the cross-lingual mode (use task=cross_lingual for Korean text).
 SUPPORTED_LANGUAGES = ["zh", "en", "ja", "ko", "yue", "es", "fr", "de", "ru"]
+MODEL_MARKER_FILENAMES = {
+    "config.json",
+    "configuration.json",
+    "cosyvoice2.yaml",
+    "flow.pt",
+    "llm.pt",
+    "hift.pt",
+    "model.safetensors",
+}
+
+
+def has_usable_model_files(path: Path) -> bool:
+    return path.is_dir() and any(
+        item.is_file() and (item.name in MODEL_MARKER_FILENAMES or item.suffix.lower() in {".pt", ".onnx", ".safetensors"})
+        for item in path.rglob("*")
+    )
 
 
 def resolve_cosyvoice_root(repo_root: Path) -> Path:
@@ -105,7 +121,9 @@ class CosyVoice3Engine:
     def is_available(self) -> bool:
         """Return whether the CosyVoice checkout and runner are present."""
 
-        return self.cosyvoice_root.exists() and self.runner_path.exists()
+        return self.cosyvoice_root.exists() and self.runner_path.exists() and any(
+            item.get("available") for item in self.list_model_variants()
+        )
 
     def availability_notes(self) -> str:
         """Return a human-readable runtime status string."""
@@ -114,6 +132,8 @@ class CosyVoice3Engine:
             return f"CosyVoice repository not found: {self.cosyvoice_root}"
         if not self.runner_path.exists():
             return f"CosyVoice runner not found: {self.runner_path}"
+        if not any(item.get("available") for item in self.list_model_variants()):
+            return f"CosyVoice model weights not found under {self.model_dir}. Run ./scripts/download_models.sh cosyvoice."
         if Path(self.python_executable) == Path(sys.executable):
             return (
                 f"CosyVoice root: {self.cosyvoice_root} (using shared Python; create a"
@@ -130,14 +150,14 @@ class CosyVoice3Engine:
         if not self.model_dir.exists():
             return [{"name": name, "available": False} for name in DEFAULT_MODEL_VARIANTS]
         for name in DEFAULT_MODEL_VARIANTS:
-            available = (self.model_dir / name).exists()
+            available = has_usable_model_files(self.model_dir / name)
             results.append({"name": name, "available": available})
             seen.add(name)
         for child in sorted(self.model_dir.iterdir()):
             if not child.is_dir() or child.name in seen:
                 continue
             if "cosyvoice" in child.name.lower() or "fun-cosyvoice" in child.name.lower():
-                results.append({"name": child.name, "available": True})
+                results.append({"name": child.name, "available": has_usable_model_files(child)})
                 seen.add(child.name)
         return results
 
@@ -169,20 +189,20 @@ class CosyVoice3Engine:
 
         if requested:
             candidate = Path(requested).expanduser()
-            if candidate.is_absolute() and candidate.exists():
+            if candidate.is_absolute() and has_usable_model_files(candidate):
                 return candidate.resolve()
             local = self.model_dir / requested
-            if local.exists():
+            if has_usable_model_files(local):
                 return local.resolve()
             raise CosyVoiceError(f"CosyVoice model not found: {requested}")
 
         for name in DEFAULT_MODEL_VARIANTS:
             local = self.model_dir / name
-            if local.exists():
+            if has_usable_model_files(local):
                 return local.resolve()
         raise CosyVoiceError(
             f"No CosyVoice model checkpoint found under {self.model_dir}. "
-            "Download Fun-CosyVoice3-0.5B from ModelScope/HuggingFace first."
+            "Run ./scripts/download_models.sh cosyvoice first."
         )
 
     def run(
